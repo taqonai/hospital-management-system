@@ -1,0 +1,3768 @@
+// Hospital Management System - Prisma Schema
+// Multi-tenant SaaS Architecture
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== TENANT & ORGANIZATION ====================
+
+model Hospital {
+  id              String   @id @default(uuid())
+  name            String
+  code            String   @unique
+  address         String
+  city            String
+  state           String
+  country         String
+  zipCode         String
+  phone           String
+  email           String
+  website         String?
+  logo            String?
+  licenseNumber   String
+  accreditation   String?
+  bedCapacity     Int      @default(0)
+  isActive        Boolean  @default(true)
+  settings        Json     @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  departments     Department[]
+  users           User[]
+  patients        Patient[]
+  appointments    Appointment[]
+  admissions      Admission[]
+  invoices        Invoice[]
+  inventory       InventoryItem[]
+  beds            Bed[]
+  labOrders       LabOrder[]
+  imagingOrders   ImagingOrder[]
+  auditLogs       AuditLog[]
+  employees       Employee[]
+
+  @@map("hospitals")
+}
+
+model Department {
+  id           String   @id @default(uuid())
+  hospitalId   String
+  name         String
+  code         String
+  description  String?
+  floor        String?
+  phone        String?
+  email        String?
+  headDoctorId String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  hospital    Hospital @relation(fields: [hospitalId], references: [id])
+  doctors     Doctor[]
+  nurses      Nurse[]
+  beds        Bed[]
+
+  @@unique([hospitalId, code])
+  @@map("departments")
+}
+
+// ==================== USER MANAGEMENT ====================
+
+model User {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  email           String
+  password        String
+  firstName       String
+  lastName        String
+  phone           String?
+  avatar          String?
+  role            UserRole
+  isActive        Boolean   @default(true)
+  isEmailVerified Boolean   @default(false)
+  lastLogin       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  hospital        Hospital           @relation(fields: [hospitalId], references: [id])
+  doctor          Doctor?
+  nurse           Nurse?
+  patient         Patient?
+  employee        Employee?
+  permissions     UserPermission[]
+  sessions        Session[]
+  auditLogs       AuditLog[]
+  notifications   Notification[]
+
+  @@unique([hospitalId, email])
+  @@map("users")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  HOSPITAL_ADMIN
+  DOCTOR
+  NURSE
+  RECEPTIONIST
+  LAB_TECHNICIAN
+  PHARMACIST
+  RADIOLOGIST
+  ACCOUNTANT
+  PATIENT
+  HR_MANAGER
+  HR_STAFF
+  HOUSEKEEPING_MANAGER
+  HOUSEKEEPING_STAFF
+  MAINTENANCE_STAFF
+  SECURITY_STAFF
+  DIETARY_STAFF
+}
+
+model UserPermission {
+  id         String   @id @default(uuid())
+  userId     String
+  permission String
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, permission])
+  @@map("user_permissions")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  token        String   @unique
+  refreshToken String   @unique
+  userAgent    String?
+  ipAddress    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("sessions")
+}
+
+// ==================== MEDICAL STAFF ====================
+
+model Doctor {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  departmentId      String
+  specialization    String
+  qualification     String
+  experience        Int      @default(0)
+  licenseNumber     String
+  consultationFee   Decimal  @db.Decimal(10, 2)
+  bio               String?
+  availableDays     String[] // ["MONDAY", "TUESDAY", ...]
+  slotDuration      Int      @default(30) // minutes
+  maxPatientsPerDay Int      @default(30)
+  isAvailable       Boolean  @default(true)
+  rating            Decimal  @default(0) @db.Decimal(2, 1)
+  totalReviews      Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  user            User              @relation(fields: [userId], references: [id])
+  department      Department        @relation(fields: [departmentId], references: [id])
+  schedules       DoctorSchedule[]
+  appointments    Appointment[]
+  consultations   Consultation[]
+  prescriptions   Prescription[]
+  surgeries       Surgery[]
+  aiDiagnoses     AIDiagnosis[]
+
+  @@map("doctors")
+}
+
+model DoctorSchedule {
+  id         String   @id @default(uuid())
+  doctorId   String
+  dayOfWeek  DayOfWeek
+  startTime  String   // "09:00"
+  endTime    String   // "17:00"
+  breakStart String?  // "13:00"
+  breakEnd   String?  // "14:00"
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  doctor Doctor @relation(fields: [doctorId], references: [id])
+
+  @@unique([doctorId, dayOfWeek])
+  @@map("doctor_schedules")
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+model Nurse {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  departmentId String
+  qualification String
+  shift        NurseShift
+  licenseNumber String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  user         User         @relation(fields: [userId], references: [id])
+  department   Department   @relation(fields: [departmentId], references: [id])
+  nursingNotes NursingNote[]
+
+  @@map("nurses")
+}
+
+enum NurseShift {
+  MORNING
+  AFTERNOON
+  NIGHT
+}
+
+// ==================== PATIENT MANAGEMENT ====================
+
+model Patient {
+  id               String        @id @default(uuid())
+  oderId          String?       @unique
+  hospitalId       String
+  mrn              String        // Medical Record Number
+  firstName        String
+  lastName         String
+  dateOfBirth      DateTime
+  gender           Gender
+  bloodGroup       BloodGroup?
+  phone            String
+  email            String?
+  address          String
+  city             String
+  state            String
+  zipCode          String
+  emergencyContact String?
+  emergencyPhone   String?
+  occupation       String?
+  maritalStatus    MaritalStatus?
+  nationality      String?
+  photo            String?
+  isActive         Boolean       @default(true)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  // Relations
+  hospital            Hospital            @relation(fields: [hospitalId], references: [id])
+  user                User?               @relation(fields: [oderId], references: [id])
+  medicalHistory      MedicalHistory?
+  allergies           Allergy[]
+  vitals              Vital[]
+  appointments        Appointment[]
+  consultations       Consultation[]
+  prescriptions       Prescription[]
+  admissions          Admission[]
+  labOrders           LabOrder[]
+  imagingOrders       ImagingOrder[]
+  invoices            Invoice[]
+  insurances          PatientInsurance[]
+  aiPredictions       AIPrediction[]
+  aiDiagnoses         AIDiagnosis[]
+
+  @@unique([hospitalId, mrn])
+  @@map("patients")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum BloodGroup {
+  A_POSITIVE
+  A_NEGATIVE
+  B_POSITIVE
+  B_NEGATIVE
+  AB_POSITIVE
+  AB_NEGATIVE
+  O_POSITIVE
+  O_NEGATIVE
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+}
+
+model MedicalHistory {
+  id                  String   @id @default(uuid())
+  patientId           String   @unique
+  chronicConditions   String[]
+  pastSurgeries       String[]
+  familyHistory       String[]
+  currentMedications  String[]
+  immunizations       String[]
+  lifestyle           Json?    // smoking, alcohol, exercise
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  @@map("medical_histories")
+}
+
+model Allergy {
+  id          String       @id @default(uuid())
+  patientId   String
+  allergen    String
+  type        AllergyType
+  severity    AllergySeverity
+  reaction    String?
+  notes       String?
+  createdAt   DateTime     @default(now())
+
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  @@map("allergies")
+}
+
+enum AllergyType {
+  DRUG
+  FOOD
+  ENVIRONMENTAL
+  OTHER
+}
+
+enum AllergySeverity {
+  MILD
+  MODERATE
+  SEVERE
+  LIFE_THREATENING
+}
+
+model Vital {
+  id                String   @id @default(uuid())
+  patientId         String
+  temperature       Decimal? @db.Decimal(4, 1)
+  bloodPressureSys  Int?
+  bloodPressureDia  Int?
+  heartRate         Int?
+  respiratoryRate   Int?
+  oxygenSaturation  Decimal? @db.Decimal(4, 1)
+  weight            Decimal? @db.Decimal(5, 2)
+  height            Decimal? @db.Decimal(5, 2)
+  bmi               Decimal? @db.Decimal(4, 1)
+  bloodSugar        Decimal? @db.Decimal(5, 1)
+  notes             String?
+  recordedBy        String
+  recordedAt        DateTime @default(now())
+
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  @@map("vitals")
+}
+
+model PatientInsurance {
+  id              String   @id @default(uuid())
+  patientId       String
+  providerName    String
+  policyNumber    String
+  groupNumber     String?
+  subscriberName  String
+  subscriberId    String
+  relationship    String
+  effectiveDate   DateTime
+  expiryDate      DateTime?
+  coverageType    String
+  copay           Decimal? @db.Decimal(10, 2)
+  deductible      Decimal? @db.Decimal(10, 2)
+  isPrimary       Boolean  @default(true)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  @@map("patient_insurances")
+}
+
+// ==================== APPOINTMENTS ====================
+
+model Appointment {
+  id              String            @id @default(uuid())
+  hospitalId      String
+  patientId       String
+  doctorId        String
+  appointmentDate DateTime
+  startTime       String
+  endTime         String
+  type            AppointmentType
+  status          AppointmentStatus @default(SCHEDULED)
+  reason          String?
+  notes           String?
+  isFollowUp      Boolean           @default(false)
+  parentAppointmentId String?
+  tokenNumber     Int?
+  checkedInAt     DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  // Relations
+  hospital       Hospital      @relation(fields: [hospitalId], references: [id])
+  patient        Patient       @relation(fields: [patientId], references: [id])
+  doctor         Doctor        @relation(fields: [doctorId], references: [id])
+  consultation   Consultation?
+
+  @@map("appointments")
+}
+
+enum AppointmentType {
+  CONSULTATION
+  FOLLOW_UP
+  EMERGENCY
+  TELEMEDICINE
+  PROCEDURE
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  CHECKED_IN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+// ==================== CLINICAL ====================
+
+model Consultation {
+  id                String   @id @default(uuid())
+  appointmentId     String   @unique
+  patientId         String
+  doctorId          String
+  chiefComplaint    String
+  historyOfIllness  String?
+  examination       String?
+  diagnosis         String[]
+  icdCodes          String[]
+  treatmentPlan     String?
+  advice            String?
+  followUpDate      DateTime?
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  appointment   Appointment    @relation(fields: [appointmentId], references: [id])
+  patient       Patient        @relation(fields: [patientId], references: [id])
+  doctor        Doctor         @relation(fields: [doctorId], references: [id])
+  prescriptions Prescription[]
+  labOrders     LabOrder[]
+  imagingOrders ImagingOrder[]
+
+  @@map("consultations")
+}
+
+model Prescription {
+  id             String             @id @default(uuid())
+  consultationId String?
+  patientId      String
+  doctorId       String
+  admissionId    String?
+  prescriptionDate DateTime         @default(now())
+  status         PrescriptionStatus @default(ACTIVE)
+  notes          String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  // Relations
+  consultation    Consultation?        @relation(fields: [consultationId], references: [id])
+  patient         Patient              @relation(fields: [patientId], references: [id])
+  doctor          Doctor               @relation(fields: [doctorId], references: [id])
+  admission       Admission?           @relation(fields: [admissionId], references: [id])
+  medications     PrescriptionMedication[]
+
+  @@map("prescriptions")
+}
+
+enum PrescriptionStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+model PrescriptionMedication {
+  id              String   @id @default(uuid())
+  prescriptionId  String
+  drugId          String?
+  drugName        String
+  dosage          String
+  frequency       String
+  duration        String
+  quantity        Int
+  route           String   // oral, injection, topical
+  instructions    String?
+  beforeAfterFood String?
+  isDispensed     Boolean  @default(false)
+  dispensedAt     DateTime?
+  dispensedBy     String?
+
+  prescription Prescription @relation(fields: [prescriptionId], references: [id])
+  drug         Drug?        @relation(fields: [drugId], references: [id])
+
+  @@map("prescription_medications")
+}
+
+// ==================== INPATIENT (IPD) ====================
+
+model Bed {
+  id           String     @id @default(uuid())
+  hospitalId   String
+  departmentId String
+  wardId       String
+  bedNumber    String
+  bedType      BedType
+  status       BedStatus  @default(AVAILABLE)
+  dailyRate    Decimal    @db.Decimal(10, 2)
+  features     String[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // Relations
+  hospital   Hospital    @relation(fields: [hospitalId], references: [id])
+  department Department  @relation(fields: [departmentId], references: [id])
+  ward       Ward        @relation(fields: [wardId], references: [id])
+  admissions Admission[]
+
+  @@unique([hospitalId, bedNumber])
+  @@map("beds")
+}
+
+model Ward {
+  id           String   @id @default(uuid())
+  name         String
+  floor        Int
+  capacity     Int
+  type         WardType
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  beds Bed[]
+
+  @@map("wards")
+}
+
+enum WardType {
+  GENERAL
+  PRIVATE
+  SEMI_PRIVATE
+  ICU
+  NICU
+  PICU
+  CCU
+  ISOLATION
+}
+
+enum BedType {
+  STANDARD
+  ICU
+  ELECTRIC
+  PEDIATRIC
+  BARIATRIC
+}
+
+enum BedStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+  MAINTENANCE
+  CLEANING
+}
+
+model Admission {
+  id                String          @id @default(uuid())
+  hospitalId        String
+  patientId         String
+  bedId             String
+  admissionDate     DateTime
+  dischargeDate     DateTime?
+  admissionType     AdmissionType
+  admittingDoctorId String
+  status            AdmissionStatus @default(ADMITTED)
+  chiefComplaint    String
+  diagnosis         String[]
+  icdCodes          String[]
+  treatmentPlan     String?
+  estimatedDays     Int?
+  notes             String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  // Relations
+  hospital        Hospital          @relation(fields: [hospitalId], references: [id])
+  patient         Patient           @relation(fields: [patientId], references: [id])
+  bed             Bed               @relation(fields: [bedId], references: [id])
+  nursingNotes    NursingNote[]
+  prescriptions   Prescription[]
+  surgeries       Surgery[]
+  dischargeSummary DischargeSummary?
+
+  @@map("admissions")
+}
+
+enum AdmissionType {
+  EMERGENCY
+  ELECTIVE
+  TRANSFER
+  MATERNITY
+}
+
+enum AdmissionStatus {
+  ADMITTED
+  DISCHARGED
+  TRANSFERRED
+  DECEASED
+  ABSCONDED
+}
+
+model NursingNote {
+  id           String   @id @default(uuid())
+  admissionId  String
+  nurseId      String
+  noteType     String
+  content      String
+  vitals       Json?
+  createdAt    DateTime @default(now())
+
+  admission Admission @relation(fields: [admissionId], references: [id])
+  nurse     Nurse     @relation(fields: [nurseId], references: [id])
+
+  @@map("nursing_notes")
+}
+
+model DischargeSummary {
+  id                     String   @id @default(uuid())
+  admissionId            String   @unique
+  dischargeDate          DateTime
+  dischargeType          String
+  finalDiagnosis         String[]
+  proceduresPerformed    String[]
+  conditionAtDischarge   String
+  medicationsOnDischarge String[]
+  followUpInstructions   String?
+  followUpDate           DateTime?
+  dietaryInstructions    String?
+  activityRestrictions   String?
+  warningSignsToWatch    String[]
+  preparedBy             String
+  createdAt              DateTime @default(now())
+
+  admission Admission @relation(fields: [admissionId], references: [id])
+
+  @@map("discharge_summaries")
+}
+
+// ==================== SURGERY / OPERATION THEATRE ====================
+
+model Surgery {
+  id               String        @id @default(uuid())
+  admissionId      String
+  patientId        String
+  surgeonId        String
+  surgeryType      String
+  procedureName    String
+  cptCode          String?
+  scheduledDate    DateTime
+  actualStartTime  DateTime?
+  actualEndTime    DateTime?
+  status           SurgeryStatus @default(SCHEDULED)
+  operationTheatre String
+  anesthesiaType   String?
+  preOpDiagnosis   String
+  postOpDiagnosis  String?
+  findings         String?
+  complications    String?
+  notes            String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  admission Admission @relation(fields: [admissionId], references: [id])
+  surgeon   Doctor    @relation(fields: [surgeonId], references: [id])
+
+  @@map("surgeries")
+}
+
+enum SurgeryStatus {
+  SCHEDULED
+  IN_PREPARATION
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  POSTPONED
+}
+
+// ==================== LABORATORY ====================
+
+model LabTest {
+  id             String   @id @default(uuid())
+  name           String
+  code           String   @unique
+  category       String
+  description    String?
+  sampleType     String
+  normalRange    String?
+  unit           String?
+  price          Decimal  @db.Decimal(10, 2)
+  turnaroundTime Int      // hours
+  instructions   String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  labOrderTests LabOrderTest[]
+
+  @@map("lab_tests")
+}
+
+model LabOrder {
+  id             String        @id @default(uuid())
+  hospitalId     String
+  patientId      String
+  consultationId String?
+  orderNumber    String        @unique
+  orderedBy      String
+  priority       LabPriority   @default(ROUTINE)
+  status         LabOrderStatus @default(ORDERED)
+  clinicalNotes  String?
+  specialInstructions String?
+  orderedAt      DateTime      @default(now())
+  collectedAt    DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // Relations
+  hospital     Hospital       @relation(fields: [hospitalId], references: [id])
+  patient      Patient        @relation(fields: [patientId], references: [id])
+  consultation Consultation?  @relation(fields: [consultationId], references: [id])
+  tests        LabOrderTest[]
+
+  @@map("lab_orders")
+}
+
+enum LabPriority {
+  STAT
+  URGENT
+  ROUTINE
+}
+
+enum LabOrderStatus {
+  ORDERED
+  SAMPLE_COLLECTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model LabOrderTest {
+  id           String          @id @default(uuid())
+  labOrderId   String
+  labTestId    String
+  status       LabTestStatus   @default(PENDING)
+  result       String?
+  resultValue  Decimal?        @db.Decimal(10, 3)
+  unit         String?
+  normalRange  String?
+  isAbnormal   Boolean         @default(false)
+  isCritical   Boolean         @default(false)
+  comments     String?
+  performedBy  String?
+  verifiedBy   String?
+  performedAt  DateTime?
+  verifiedAt   DateTime?
+
+  labOrder LabOrder @relation(fields: [labOrderId], references: [id])
+  labTest  LabTest  @relation(fields: [labTestId], references: [id])
+
+  @@map("lab_order_tests")
+}
+
+enum LabTestStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// ==================== RADIOLOGY ====================
+
+model ImagingOrder {
+  id              String              @id @default(uuid())
+  hospitalId      String
+  patientId       String
+  consultationId  String?
+  orderNumber     String              @unique
+  modalityType    ModalityType
+  bodyPart        String
+  priority        ImagingPriority     @default(ROUTINE)
+  status          ImagingOrderStatus  @default(ORDERED)
+  clinicalHistory String?
+  orderedBy       String
+  scheduledDate   DateTime?
+  performedDate   DateTime?
+  notes           String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  // Relations
+  hospital        Hospital              @relation(fields: [hospitalId], references: [id])
+  patient         Patient               @relation(fields: [patientId], references: [id])
+  consultation    Consultation?         @relation(fields: [consultationId], references: [id])
+  study           ImagingStudy?
+  aiAnalysis      AIImageAnalysis?
+
+  @@map("imaging_orders")
+}
+
+enum ModalityType {
+  XRAY
+  CT
+  MRI
+  ULTRASOUND
+  MAMMOGRAPHY
+  PET
+  FLUOROSCOPY
+}
+
+enum ImagingPriority {
+  STAT
+  URGENT
+  ROUTINE
+}
+
+enum ImagingOrderStatus {
+  ORDERED
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model ImagingStudy {
+  id              String   @id @default(uuid())
+  orderId         String   @unique
+  studyInstanceUid String  @unique
+  accessionNumber String
+  studyDate       DateTime
+  studyDescription String?
+  numberOfSeries  Int      @default(0)
+  numberOfImages  Int      @default(0)
+  modality        String
+  bodyPart        String
+  storageLocation String   // S3 path
+  findings        String?
+  impression      String?
+  radiologistId   String?
+  reportedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  order ImagingOrder @relation(fields: [orderId], references: [id])
+
+  @@map("imaging_studies")
+}
+
+// ==================== PHARMACY ====================
+
+model Drug {
+  id               String   @id @default(uuid())
+  name             String
+  genericName      String
+  brandName        String?
+  code             String   @unique
+  category         String
+  dosageForm       String   // tablet, capsule, syrup, injection
+  strength         String
+  manufacturer     String?
+  batchNumber      String?
+  expiryDate       DateTime?
+  price            Decimal  @db.Decimal(10, 2)
+  reorderLevel     Int      @default(10)
+  isControlled     Boolean  @default(false)
+  requiresPrescription Boolean @default(true)
+  sideEffects      String[]
+  contraindications String[]
+  interactions     String[]
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  inventory       DrugInventory[]
+  prescriptions   PrescriptionMedication[]
+
+  @@map("drugs")
+}
+
+model DrugInventory {
+  id          String   @id @default(uuid())
+  drugId      String
+  batchNumber String
+  quantity    Int
+  expiryDate  DateTime
+  location    String   // store, pharmacy counter
+  costPrice   Decimal  @db.Decimal(10, 2)
+  sellingPrice Decimal @db.Decimal(10, 2)
+  supplierId  String?
+  receivedDate DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  drug Drug @relation(fields: [drugId], references: [id])
+
+  @@map("drug_inventory")
+}
+
+// ==================== INVENTORY ====================
+
+model InventoryItem {
+  id           String   @id @default(uuid())
+  hospitalId   String
+  name         String
+  code         String
+  category     String
+  description  String?
+  unit         String
+  quantity     Int      @default(0)
+  minQuantity  Int      @default(0)
+  maxQuantity  Int?
+  reorderLevel Int      @default(10)
+  location     String?
+  costPrice    Decimal  @db.Decimal(10, 2)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  hospital Hospital @relation(fields: [hospitalId], references: [id])
+
+  @@unique([hospitalId, code])
+  @@map("inventory_items")
+}
+
+// ==================== BILLING ====================
+
+model Invoice {
+  id              String        @id @default(uuid())
+  hospitalId      String
+  patientId       String
+  invoiceNumber   String        @unique
+  invoiceDate     DateTime      @default(now())
+  dueDate         DateTime?
+  status          InvoiceStatus @default(PENDING)
+  subtotal        Decimal       @db.Decimal(10, 2)
+  discount        Decimal       @default(0) @db.Decimal(10, 2)
+  tax             Decimal       @default(0) @db.Decimal(10, 2)
+  totalAmount     Decimal       @db.Decimal(10, 2)
+  paidAmount      Decimal       @default(0) @db.Decimal(10, 2)
+  balanceAmount   Decimal       @db.Decimal(10, 2)
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  hospital   Hospital       @relation(fields: [hospitalId], references: [id])
+  patient    Patient        @relation(fields: [patientId], references: [id])
+  items      InvoiceItem[]
+  payments   Payment[]
+  claims     InsuranceClaim[]
+
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  PENDING
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+  REFUNDED
+}
+
+model InvoiceItem {
+  id          String   @id @default(uuid())
+  invoiceId   String
+  description String
+  category    String
+  quantity    Int      @default(1)
+  unitPrice   Decimal  @db.Decimal(10, 2)
+  discount    Decimal  @default(0) @db.Decimal(10, 2)
+  totalPrice  Decimal  @db.Decimal(10, 2)
+  createdAt   DateTime @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@map("invoice_items")
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  invoiceId     String
+  paymentDate   DateTime      @default(now())
+  amount        Decimal       @db.Decimal(10, 2)
+  paymentMethod PaymentMethod
+  referenceNumber String?
+  notes         String?
+  receivedBy    String
+  createdAt     DateTime      @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@map("payments")
+}
+
+enum PaymentMethod {
+  CASH
+  CREDIT_CARD
+  DEBIT_CARD
+  UPI
+  NET_BANKING
+  INSURANCE
+  CHEQUE
+}
+
+model InsuranceClaim {
+  id              String      @id @default(uuid())
+  invoiceId       String
+  claimNumber     String      @unique
+  insuranceProvider String
+  policyNumber    String
+  claimAmount     Decimal     @db.Decimal(10, 2)
+  approvedAmount  Decimal?    @db.Decimal(10, 2)
+  status          ClaimStatus @default(SUBMITTED)
+  submittedAt     DateTime    @default(now())
+  processedAt     DateTime?
+  notes           String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@map("insurance_claims")
+}
+
+enum ClaimStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  PARTIALLY_APPROVED
+  REJECTED
+  PAID
+}
+
+// ==================== AI MODULES ====================
+
+model AIDiagnosis {
+  id               String   @id @default(uuid())
+  patientId        String
+  doctorId         String?
+  symptoms         String[]
+  suggestedDiagnoses Json   // [{icd10: "", name: "", confidence: 0.95}]
+  recommendedTests String[]
+  treatmentSuggestions String[]
+  drugInteractionWarnings String[]
+  riskFactors      String[]
+  confidence       Decimal  @db.Decimal(3, 2)
+  modelVersion     String
+  isAccepted       Boolean?
+  feedback         String?
+  createdAt        DateTime @default(now())
+
+  patient Patient @relation(fields: [patientId], references: [id])
+  doctor  Doctor? @relation(fields: [doctorId], references: [id])
+
+  @@map("ai_diagnoses")
+}
+
+model AIPrediction {
+  id              String         @id @default(uuid())
+  patientId       String
+  predictionType  PredictionType
+  riskScore       Decimal        @db.Decimal(3, 2)
+  riskLevel       RiskLevel
+  factors         Json           // Contributing factors
+  recommendations String[]
+  timeframe       String?        // "30 days", "90 days"
+  modelVersion    String
+  createdAt       DateTime       @default(now())
+
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  @@map("ai_predictions")
+}
+
+enum PredictionType {
+  READMISSION
+  LENGTH_OF_STAY
+  MORTALITY
+  DISEASE_PROGRESSION
+  NO_SHOW
+  DETERIORATION
+}
+
+enum RiskLevel {
+  LOW
+  MODERATE
+  HIGH
+  CRITICAL
+}
+
+model AIImageAnalysis {
+  id               String   @id @default(uuid())
+  imagingOrderId   String   @unique
+  findings         Json     // [{region: "", finding: "", confidence: 0.95}]
+  impression       String?
+  heatmapUrl       String?
+  abnormalityDetected Boolean @default(false)
+  confidence       Decimal  @db.Decimal(3, 2)
+  modelVersion     String
+  isReviewed       Boolean  @default(false)
+  reviewedBy       String?
+  reviewedAt       DateTime?
+  feedback         String?
+  createdAt        DateTime @default(now())
+
+  imagingOrder ImagingOrder @relation(fields: [imagingOrderId], references: [id])
+
+  @@map("ai_image_analyses")
+}
+
+// ==================== SYSTEM ====================
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  hospitalId  String
+  userId      String?
+  action      String
+  entityType  String
+  entityId    String?
+  oldValues   Json?
+  newValues   Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  hospital Hospital @relation(fields: [hospitalId], references: [id])
+  user     User?    @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  type      NotificationType
+  isRead    Boolean          @default(false)
+  data      Json?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
+
+enum NotificationType {
+  APPOINTMENT
+  LAB_RESULT
+  PRESCRIPTION
+  ALERT
+  SYSTEM
+  AI_INSIGHT
+}
+
+// ==================== HR & STAFF MANAGEMENT ====================
+
+model Employee {
+  id                String         @id @default(uuid())
+  hospitalId        String
+  oderId           String?        @unique // Link to User if applicable
+  employeeCode      String
+  firstName         String
+  lastName          String
+  email             String
+  phone             String
+  dateOfBirth       DateTime
+  gender            Gender
+  address           String
+  city              String
+  state             String
+  zipCode           String
+  photo             String?
+
+  // Employment Details
+  departmentId      String?
+  designation       String
+  employeeType      EmployeeType
+  employmentStatus  EmploymentStatus @default(ACTIVE)
+  joiningDate       DateTime
+  confirmationDate  DateTime?
+  resignationDate   DateTime?
+  lastWorkingDate   DateTime?
+  reportingTo       String?        // Manager's employee ID
+
+  // Compensation
+  basicSalary       Decimal        @db.Decimal(12, 2)
+  currency          String         @default("USD")
+  payFrequency      PayFrequency   @default(MONTHLY)
+  bankName          String?
+  bankAccountNumber String?
+  bankIfscCode      String?
+  panNumber         String?
+  pfNumber          String?
+  esiNumber         String?
+
+  // Professional
+  qualification     String?
+  specialization    String?
+  experience        Int            @default(0)
+  licenseNumber     String?
+  licenseExpiry     DateTime?
+
+  // Shift & Attendance
+  shiftId           String?
+
+  // Emergency Contact
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  emergencyContactRelation String?
+
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  // Relations
+  hospital          Hospital       @relation(fields: [hospitalId], references: [id])
+  user              User?          @relation(fields: [oderId], references: [id])
+  shift             Shift?         @relation(fields: [shiftId], references: [id])
+  documents         EmployeeDocument[]
+  attendance        Attendance[]
+  leaveRequests     LeaveRequest[]
+  leaveBalances     LeaveBalance[]
+  payrolls          Payroll[]
+  performanceReviews PerformanceReview[]
+  trainings         EmployeeTraining[]
+  housekeepingTasks HousekeepingTask[] @relation("AssignedTasks")
+  supervisedTasks   HousekeepingTask[] @relation("SupervisedTasks")
+  qualityAudits     QualityAudit[]
+
+  @@unique([hospitalId, employeeCode])
+  @@map("employees")
+}
+
+enum EmployeeType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERN
+  CONSULTANT
+  TEMPORARY
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  ON_LEAVE
+  SUSPENDED
+  RESIGNED
+  TERMINATED
+  RETIRED
+  DECEASED
+}
+
+enum PayFrequency {
+  WEEKLY
+  BI_WEEKLY
+  MONTHLY
+}
+
+model EmployeeDocument {
+  id           String       @id @default(uuid())
+  employeeId   String
+  documentType DocumentType
+  documentName String
+  documentNumber String?
+  fileUrl      String
+  issueDate    DateTime?
+  expiryDate   DateTime?
+  isVerified   Boolean      @default(false)
+  verifiedBy   String?
+  verifiedAt   DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@map("employee_documents")
+}
+
+enum DocumentType {
+  ID_PROOF
+  ADDRESS_PROOF
+  PHOTO
+  RESUME
+  OFFER_LETTER
+  CONTRACT
+  DEGREE_CERTIFICATE
+  EXPERIENCE_LETTER
+  LICENSE
+  CERTIFICATION
+  PAN_CARD
+  PASSPORT
+  VISA
+  MEDICAL_CERTIFICATE
+  POLICE_CLEARANCE
+  OTHER
+}
+
+model Shift {
+  id          String    @id @default(uuid())
+  hospitalId  String
+  name        String
+  code        String
+  startTime   String    // "09:00"
+  endTime     String    // "17:00"
+  breakStart  String?   // "13:00"
+  breakEnd    String?   // "14:00"
+  workingHours Decimal  @db.Decimal(4, 2)
+  isNightShift Boolean  @default(false)
+  isActive    Boolean   @default(true)
+  color       String?   // For UI display
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  employees   Employee[]
+  schedules   ShiftSchedule[]
+
+  @@unique([hospitalId, code])
+  @@map("shifts")
+}
+
+model ShiftSchedule {
+  id          String    @id @default(uuid())
+  shiftId     String
+  employeeId  String
+  date        DateTime
+  status      ShiftStatus @default(SCHEDULED)
+  actualStart DateTime?
+  actualEnd   DateTime?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  shift       Shift     @relation(fields: [shiftId], references: [id])
+
+  @@map("shift_schedules")
+}
+
+enum ShiftStatus {
+  SCHEDULED
+  STARTED
+  COMPLETED
+  MISSED
+  SWAPPED
+}
+
+model Attendance {
+  id            String           @id @default(uuid())
+  employeeId    String
+  date          DateTime
+  checkIn       DateTime?
+  checkOut      DateTime?
+  checkInLocation String?        // GPS coordinates
+  checkOutLocation String?
+  status        AttendanceStatus @default(PRESENT)
+  workingHours  Decimal?         @db.Decimal(4, 2)
+  overtime      Decimal?         @db.Decimal(4, 2)
+  lateMinutes   Int?
+  earlyLeaveMinutes Int?
+  remarks       String?
+  approvedBy    String?
+  biometricId   String?
+  ipAddress     String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@unique([employeeId, date])
+  @@map("attendance")
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  HALF_DAY
+  LATE
+  ON_LEAVE
+  HOLIDAY
+  WEEK_OFF
+  WORK_FROM_HOME
+}
+
+model LeaveType {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  name            String
+  code            String
+  description     String?
+  defaultDays     Int       @default(0)
+  carryForward    Boolean   @default(false)
+  maxCarryForward Int?
+  isPaid          Boolean   @default(true)
+  requiresApproval Boolean  @default(true)
+  minNoticeDays   Int       @default(0)
+  maxConsecutiveDays Int?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  leaveBalances  LeaveBalance[]
+  leaveRequests  LeaveRequest[]
+
+  @@unique([hospitalId, code])
+  @@map("leave_types")
+}
+
+model LeaveBalance {
+  id            String    @id @default(uuid())
+  employeeId    String
+  leaveTypeId   String
+  year          Int
+  entitled      Decimal   @db.Decimal(5, 2)
+  taken         Decimal   @default(0) @db.Decimal(5, 2)
+  pending       Decimal   @default(0) @db.Decimal(5, 2)
+  balance       Decimal   @db.Decimal(5, 2)
+  carryForwarded Decimal  @default(0) @db.Decimal(5, 2)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  employee      Employee   @relation(fields: [employeeId], references: [id])
+  leaveType     LeaveType  @relation(fields: [leaveTypeId], references: [id])
+
+  @@unique([employeeId, leaveTypeId, year])
+  @@map("leave_balances")
+}
+
+model LeaveRequest {
+  id            String       @id @default(uuid())
+  employeeId    String
+  leaveTypeId   String
+  startDate     DateTime
+  endDate       DateTime
+  days          Decimal      @db.Decimal(5, 2)
+  reason        String
+  status        LeaveStatus  @default(PENDING)
+  appliedAt     DateTime     @default(now())
+  approvedBy    String?
+  approvedAt    DateTime?
+  rejectionReason String?
+  cancelledAt   DateTime?
+  attachmentUrl String?
+  isEmergency   Boolean      @default(false)
+  contactNumber String?
+  handoverTo    String?
+  handoverNotes String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  employee      Employee   @relation(fields: [employeeId], references: [id])
+  leaveType     LeaveType  @relation(fields: [leaveTypeId], references: [id])
+
+  @@map("leave_requests")
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  WITHDRAWN
+}
+
+model Payroll {
+  id              String        @id @default(uuid())
+  employeeId      String
+  month           Int
+  year            Int
+
+  // Earnings
+  basicSalary     Decimal       @db.Decimal(12, 2)
+  hra             Decimal       @default(0) @db.Decimal(12, 2)
+  conveyance      Decimal       @default(0) @db.Decimal(12, 2)
+  medicalAllowance Decimal      @default(0) @db.Decimal(12, 2)
+  specialAllowance Decimal      @default(0) @db.Decimal(12, 2)
+  overtime        Decimal       @default(0) @db.Decimal(12, 2)
+  bonus           Decimal       @default(0) @db.Decimal(12, 2)
+  otherEarnings   Decimal       @default(0) @db.Decimal(12, 2)
+  grossEarnings   Decimal       @db.Decimal(12, 2)
+
+  // Deductions
+  pfEmployee      Decimal       @default(0) @db.Decimal(12, 2)
+  pfEmployer      Decimal       @default(0) @db.Decimal(12, 2)
+  esi             Decimal       @default(0) @db.Decimal(12, 2)
+  professionalTax Decimal       @default(0) @db.Decimal(12, 2)
+  tds             Decimal       @default(0) @db.Decimal(12, 2)
+  loanDeduction   Decimal       @default(0) @db.Decimal(12, 2)
+  otherDeductions Decimal       @default(0) @db.Decimal(12, 2)
+  totalDeductions Decimal       @db.Decimal(12, 2)
+
+  // Net
+  netSalary       Decimal       @db.Decimal(12, 2)
+
+  // Working Days
+  totalWorkingDays Int
+  daysWorked      Int
+  leavesTaken     Int           @default(0)
+  lopDays         Int           @default(0)
+
+  status          PayrollStatus @default(DRAFT)
+  processedBy     String?
+  processedAt     DateTime?
+  paidAt          DateTime?
+  paymentMode     String?
+  transactionId   String?
+  remarks         String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+  components PayrollComponent[]
+
+  @@unique([employeeId, month, year])
+  @@map("payrolls")
+}
+
+enum PayrollStatus {
+  DRAFT
+  PROCESSING
+  PROCESSED
+  APPROVED
+  PAID
+  ON_HOLD
+  CANCELLED
+}
+
+model PayrollComponent {
+  id          String    @id @default(uuid())
+  payrollId   String
+  name        String
+  type        PayrollComponentType
+  amount      Decimal   @db.Decimal(12, 2)
+  description String?
+  createdAt   DateTime  @default(now())
+
+  payroll Payroll @relation(fields: [payrollId], references: [id])
+
+  @@map("payroll_components")
+}
+
+enum PayrollComponentType {
+  EARNING
+  DEDUCTION
+  REIMBURSEMENT
+}
+
+model PerformanceReview {
+  id              String    @id @default(uuid())
+  employeeId      String
+  reviewerId      String
+  reviewPeriodStart DateTime
+  reviewPeriodEnd DateTime
+  reviewDate      DateTime
+
+  // Scores (1-5)
+  workQuality     Int?
+  productivity    Int?
+  attendance      Int?
+  teamwork        Int?
+  communication   Int?
+  initiative      Int?
+  leadership      Int?
+  technicalSkills Int?
+  overallRating   Decimal   @db.Decimal(3, 2)
+
+  strengths       String[]
+  improvements    String[]
+  goals           String[]
+  employeeComments String?
+  reviewerComments String?
+
+  status          ReviewStatus @default(DRAFT)
+  acknowledgedAt  DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@map("performance_reviews")
+}
+
+enum ReviewStatus {
+  DRAFT
+  SUBMITTED
+  ACKNOWLEDGED
+  COMPLETED
+}
+
+model EmployeeTraining {
+  id              String    @id @default(uuid())
+  employeeId      String
+  trainingName    String
+  trainingType    String
+  provider        String?
+  startDate       DateTime
+  endDate         DateTime?
+  duration        Int?      // hours
+  status          TrainingStatus @default(SCHEDULED)
+  score           Decimal?  @db.Decimal(5, 2)
+  certificateUrl  String?
+  expiryDate      DateTime?
+  cost            Decimal?  @db.Decimal(10, 2)
+  remarks         String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@map("employee_trainings")
+}
+
+enum TrainingStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// ==================== HOUSEKEEPING ====================
+
+model HousekeepingZone {
+  id          String    @id @default(uuid())
+  hospitalId  String
+  name        String
+  code        String
+  floor       String
+  building    String?
+  description String?
+  roomCount   Int       @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tasks       HousekeepingTask[]
+  schedules   CleaningSchedule[]
+
+  @@unique([hospitalId, code])
+  @@map("housekeeping_zones")
+}
+
+model HousekeepingTask {
+  id              String             @id @default(uuid())
+  hospitalId      String
+  zoneId          String
+  roomNumber      String?
+  bedId           String?
+  taskType        HousekeepingTaskType
+  priority        TaskPriority       @default(NORMAL)
+  status          HousekeepingStatus @default(PENDING)
+
+  // Assignment
+  assignedTo      String?
+  assignedAt      DateTime?
+  supervisorId    String?
+
+  // Timing
+  scheduledStart  DateTime?
+  scheduledEnd    DateTime?
+  actualStart     DateTime?
+  actualEnd       DateTime?
+  estimatedMinutes Int               @default(30)
+
+  // Details
+  description     String?
+  specialInstructions String?
+  infectionControl Boolean           @default(false)
+  checklistCompleted Boolean         @default(false)
+
+  // Quality
+  qualityScore    Int?              // 1-10
+  verifiedBy      String?
+  verifiedAt      DateTime?
+
+  // Patient discharge related
+  isDischargeClean Boolean          @default(false)
+  patientId       String?
+
+  notes           String?
+  photosBefore    String[]
+  photosAfter     String[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  zone            HousekeepingZone  @relation(fields: [zoneId], references: [id])
+  assignee        Employee?         @relation("AssignedTasks", fields: [assignedTo], references: [id])
+  supervisor      Employee?         @relation("SupervisedTasks", fields: [supervisorId], references: [id])
+  checklistItems  TaskChecklistItem[]
+
+  @@map("housekeeping_tasks")
+}
+
+enum HousekeepingTaskType {
+  ROUTINE_CLEANING
+  DEEP_CLEANING
+  DISCHARGE_CLEANING
+  TERMINAL_CLEANING
+  SPILL_CLEANUP
+  WASTE_DISPOSAL
+  LINEN_CHANGE
+  BATHROOM_CLEANING
+  FLOOR_MOPPING
+  SANITIZATION
+  WINDOW_CLEANING
+  AC_VENT_CLEANING
+  EMERGENCY_CLEANING
+  INFECTION_CONTROL
+}
+
+enum TaskPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+  EMERGENCY
+}
+
+enum HousekeepingStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  VERIFIED
+  REJECTED
+  CANCELLED
+}
+
+model CleaningSchedule {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  zoneId          String
+  roomNumber      String?
+  taskType        HousekeepingTaskType
+  frequency       CleaningFrequency
+  dayOfWeek       DayOfWeek?
+  dayOfMonth      Int?
+  scheduledTime   String
+  duration        Int       @default(30) // minutes
+  assignedTeam    String?
+  isActive        Boolean   @default(true)
+  lastExecuted    DateTime?
+  nextScheduled   DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  zone            HousekeepingZone @relation(fields: [zoneId], references: [id])
+
+  @@map("cleaning_schedules")
+}
+
+enum CleaningFrequency {
+  HOURLY
+  TWICE_DAILY
+  DAILY
+  ALTERNATE_DAYS
+  WEEKLY
+  BI_WEEKLY
+  MONTHLY
+  QUARTERLY
+  AS_NEEDED
+}
+
+model TaskChecklistItem {
+  id          String    @id @default(uuid())
+  taskId      String
+  itemName    String
+  isCompleted Boolean   @default(false)
+  completedAt DateTime?
+  notes       String?
+  sequence    Int       @default(0)
+
+  task HousekeepingTask @relation(fields: [taskId], references: [id])
+
+  @@map("task_checklist_items")
+}
+
+model CleaningChecklist {
+  id          String    @id @default(uuid())
+  hospitalId  String
+  name        String
+  taskType    HousekeepingTaskType
+  items       Json      // Array of checklist items with sequence
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("cleaning_checklists")
+}
+
+model HousekeepingInventory {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  name            String
+  code            String
+  category        HousekeepingItemCategory
+  unit            String
+  currentStock    Int       @default(0)
+  minStock        Int       @default(10)
+  maxStock        Int?
+  reorderLevel    Int       @default(20)
+  lastRestocked   DateTime?
+  costPerUnit     Decimal   @db.Decimal(10, 2)
+  supplierId      String?
+  location        String?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  usageRecords    InventoryUsage[]
+
+  @@unique([hospitalId, code])
+  @@map("housekeeping_inventory")
+}
+
+enum HousekeepingItemCategory {
+  CLEANING_CHEMICAL
+  DISINFECTANT
+  SANITIZER
+  DETERGENT
+  FLOOR_CLEANER
+  GLASS_CLEANER
+  TOILET_CLEANER
+  AIR_FRESHENER
+  TRASH_BAG
+  MOP
+  BROOM
+  BUCKET
+  GLOVES
+  MASK
+  PPE
+  LINEN
+  TOWEL
+  TISSUE
+  SOAP
+  OTHER
+}
+
+model InventoryUsage {
+  id          String    @id @default(uuid())
+  inventoryId String
+  usedBy      String
+  quantity    Int
+  taskId      String?
+  usedAt      DateTime  @default(now())
+  notes       String?
+
+  inventory HousekeepingInventory @relation(fields: [inventoryId], references: [id])
+
+  @@map("inventory_usage")
+}
+
+model QualityAudit {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  zoneId          String?
+  roomNumber      String?
+  auditType       AuditType
+  auditorId       String
+  auditDate       DateTime
+
+  // Scores (1-10)
+  cleanlinessScore Int
+  sanitizationScore Int
+  organizationScore Int
+  safetyScore     Int
+  overallScore    Decimal   @db.Decimal(4, 2)
+
+  findings        String[]
+  recommendations String[]
+  photosUrl       String[]
+
+  status          AuditStatus @default(COMPLETED)
+  followUpDate    DateTime?
+  resolvedAt      DateTime?
+  resolvedBy      String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  auditor Employee @relation(fields: [auditorId], references: [id])
+
+  @@map("quality_audits")
+}
+
+enum AuditType {
+  ROUTINE
+  RANDOM
+  COMPLAINT_BASED
+  POST_INCIDENT
+  INFECTION_CONTROL
+  ACCREDITATION
+}
+
+enum AuditStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  REQUIRES_ACTION
+  RESOLVED
+}
+
+// ==================== AI EXTENSIONS FOR HR & HOUSEKEEPING ====================
+
+model AIShiftRecommendation {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  date            DateTime
+  recommendations Json      // AI-generated shift assignments
+  factors         Json      // Factors considered (leave, workload, skills)
+  confidence      Decimal   @db.Decimal(3, 2)
+  isApplied       Boolean   @default(false)
+  appliedBy       String?
+  appliedAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@map("ai_shift_recommendations")
+}
+
+model AICleaningPriority {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  date            DateTime
+  priorities      Json      // AI-prioritized cleaning tasks
+  factors         Json      // Infection risk, discharge schedule, etc.
+  confidence      Decimal   @db.Decimal(3, 2)
+  createdAt       DateTime  @default(now())
+
+  @@map("ai_cleaning_priorities")
+}
+
+// ==================== BLOOD BANK MODULE ====================
+
+model BloodDonor {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  donorId         String    @unique // BD-YYYYMMDD-XXX
+
+  // Personal Info
+  firstName       String
+  lastName        String
+  dateOfBirth     DateTime
+  gender          Gender
+  bloodGroup      BloodGroup
+  rhFactor        RhFactor
+
+  // Contact
+  phone           String
+  email           String?
+  address         String
+  city            String
+
+  // Medical
+  weight          Decimal   @db.Decimal(5, 2)
+  hemoglobin      Decimal?  @db.Decimal(4, 1)
+  lastDonationDate DateTime?
+  totalDonations  Int       @default(0)
+
+  // Eligibility
+  isEligible      Boolean   @default(true)
+  deferralReason  String?
+  deferralUntil   DateTime?
+
+  // Health Screening
+  hasTattoo       Boolean   @default(false)
+  hasRecentSurgery Boolean  @default(false)
+  hasChronicDisease Boolean @default(false)
+  isSmoker        Boolean   @default(false)
+  isAlcoholic     Boolean   @default(false)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  donations       BloodDonation[]
+
+  @@map("blood_donors")
+}
+
+enum RhFactor {
+  POSITIVE
+  NEGATIVE
+}
+
+model BloodDonation {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  donationNumber  String    @unique // DON-YYYYMMDD-XXX
+  donorId         String
+
+  donationDate    DateTime
+  donationType    DonationType
+
+  // Collection Details
+  bagNumber       String    @unique
+  volumeCollected Int       // ml
+  collectedBy     String
+
+  // Screening Results
+  hemoglobinLevel Decimal   @db.Decimal(4, 1)
+  bloodPressureSys Int
+  bloodPressureDia Int
+  pulseRate       Int
+  temperature     Decimal   @db.Decimal(4, 1)
+
+  // Testing Status
+  testingStatus   BloodTestStatus @default(PENDING)
+  hivTest         TestResult?
+  hbvTest         TestResult?
+  hcvTest         TestResult?
+  syphilisTest    TestResult?
+  malariaTest     TestResult?
+  testedAt        DateTime?
+  testedBy        String?
+
+  // Processing
+  isProcessed     Boolean   @default(false)
+  processedAt     DateTime?
+  processedBy     String?
+
+  // Adverse Reactions
+  hasReaction     Boolean   @default(false)
+  reactionDetails String?
+
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  donor           BloodDonor @relation(fields: [donorId], references: [id])
+  components      BloodComponent[]
+
+  @@map("blood_donations")
+}
+
+enum DonationType {
+  WHOLE_BLOOD
+  PLASMA
+  PLATELETS
+  DOUBLE_RED_CELLS
+  AUTOLOGOUS
+}
+
+enum BloodTestStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+enum TestResult {
+  NEGATIVE
+  POSITIVE
+  INDETERMINATE
+  NOT_DONE
+}
+
+model BloodComponent {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  componentId     String    @unique // COMP-YYYYMMDD-XXX
+  donationId      String
+
+  componentType   ComponentType
+  bloodGroup      BloodGroup
+  rhFactor        RhFactor
+  volume          Int       // ml
+
+  // Storage
+  bagNumber       String
+  storageLocation String
+  storageTemp     Decimal   @db.Decimal(4, 1)
+
+  // Dates
+  collectionDate  DateTime
+  expiryDate      DateTime
+
+  // Status
+  status          ComponentStatus @default(AVAILABLE)
+
+  // Quality
+  qualityChecked  Boolean   @default(false)
+  qualityScore    Int?      // 1-100
+
+  // Usage
+  reservedFor     String?   // Patient ID if reserved
+  reservedAt      DateTime?
+  issuedTo        String?
+  issuedAt        DateTime?
+  issuedBy        String?
+
+  // Discard
+  discardReason   String?
+  discardedAt     DateTime?
+  discardedBy     String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  donation        BloodDonation @relation(fields: [donationId], references: [id])
+  transfusions    BloodTransfusion[]
+
+  @@map("blood_components")
+}
+
+enum ComponentType {
+  WHOLE_BLOOD
+  PACKED_RED_CELLS
+  FRESH_FROZEN_PLASMA
+  PLATELET_CONCENTRATE
+  CRYOPRECIPITATE
+  LEUKOCYTE_POOR_RBC
+  WASHED_RBC
+  IRRADIATED_RBC
+}
+
+enum ComponentStatus {
+  AVAILABLE
+  RESERVED
+  ISSUED
+  TRANSFUSED
+  EXPIRED
+  DISCARDED
+  QUARANTINED
+}
+
+model BloodRequest {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  requestNumber   String    @unique // REQ-YYYYMMDD-XXX
+
+  // Patient Info
+  patientId       String
+  patientName     String
+  patientBloodGroup BloodGroup
+  patientRhFactor RhFactor
+
+  // Request Details
+  componentType   ComponentType
+  unitsRequired   Int
+  priority        BloodPriority
+  indication      String    // Reason for transfusion
+
+  // Requesting Doctor
+  requestedBy     String
+  requestedAt     DateTime  @default(now())
+  department      String
+
+  // Cross Match
+  crossMatchStatus CrossMatchStatus @default(PENDING)
+  crossMatchedBy  String?
+  crossMatchedAt  DateTime?
+  crossMatchNotes String?
+
+  // Approval
+  status          BloodRequestStatus @default(PENDING)
+  approvedBy      String?
+  approvedAt      DateTime?
+  rejectionReason String?
+
+  // Fulfillment
+  unitsFulfilled  Int       @default(0)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  transfusions    BloodTransfusion[]
+
+  @@map("blood_requests")
+}
+
+enum BloodPriority {
+  ROUTINE
+  URGENT
+  EMERGENCY
+  MASSIVE_TRANSFUSION
+}
+
+enum CrossMatchStatus {
+  PENDING
+  COMPATIBLE
+  INCOMPATIBLE
+  MINOR_INCOMPATIBLE
+}
+
+enum BloodRequestStatus {
+  PENDING
+  APPROVED
+  PARTIALLY_FULFILLED
+  FULFILLED
+  REJECTED
+  CANCELLED
+}
+
+model BloodTransfusion {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  transfusionNumber String  @unique // TRF-YYYYMMDD-XXX
+
+  requestId       String
+  componentId     String
+  patientId       String
+
+  // Transfusion Details
+  startTime       DateTime
+  endTime         DateTime?
+  volumeTransfused Int?     // ml
+
+  // Vital Signs Before
+  preBPSys        Int?
+  preBPDia        Int?
+  prePulse        Int?
+  preTemp         Decimal?  @db.Decimal(4, 1)
+
+  // Vital Signs After
+  postBPSys       Int?
+  postBPDia       Int?
+  postPulse       Int?
+  postTemp        Decimal?  @db.Decimal(4, 1)
+
+  // Staff
+  administeredBy  String
+  supervisedBy    String?
+
+  // Reactions
+  hasReaction     Boolean   @default(false)
+  reactionType    TransfusionReaction?
+  reactionSeverity ReactionSeverity?
+  reactionDetails String?
+  reactionTime    DateTime?
+  actionTaken     String?
+
+  status          TransfusionStatus @default(IN_PROGRESS)
+  notes           String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  request         BloodRequest @relation(fields: [requestId], references: [id])
+  component       BloodComponent @relation(fields: [componentId], references: [id])
+
+  @@map("blood_transfusions")
+}
+
+enum TransfusionReaction {
+  FEBRILE
+  ALLERGIC
+  HEMOLYTIC_ACUTE
+  HEMOLYTIC_DELAYED
+  TRANSFUSION_RELATED_LUNG_INJURY
+  CIRCULATORY_OVERLOAD
+  BACTERIAL_CONTAMINATION
+  ANAPHYLACTIC
+  OTHER
+}
+
+enum ReactionSeverity {
+  MILD
+  MODERATE
+  SEVERE
+  LIFE_THREATENING
+}
+
+enum TransfusionStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  STOPPED
+  REACTION_OCCURRED
+}
+
+// ==================== MEDICAL RECORDS / EMR ====================
+
+model MedicalDocument {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  documentNumber  String    @unique // DOC-YYYYMMDD-XXX
+  patientId       String
+
+  documentType    DocumentCategory
+  title           String
+  description     String?
+
+  // File Info
+  fileUrl         String
+  fileName        String
+  fileSize        Int       // bytes
+  mimeType        String
+
+  // Metadata
+  documentDate    DateTime
+  uploadedBy      String
+  uploadedAt      DateTime  @default(now())
+
+  // Source
+  sourceType      DocumentSource
+  encounterId     String?   // Admission, Appointment, etc.
+  departmentId    String?
+
+  // Verification
+  isVerified      Boolean   @default(false)
+  verifiedBy      String?
+  verifiedAt      DateTime?
+
+  // Access Control
+  isConfidential  Boolean   @default(false)
+  accessLevel     AccessLevel @default(NORMAL)
+
+  // AI Extracted Data
+  aiExtractedText String?
+  aiSummary       String?
+  aiTags          String[]
+
+  tags            String[]
+  notes           String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("medical_documents")
+}
+
+enum DocumentCategory {
+  CONSENT_FORM
+  DISCHARGE_SUMMARY
+  OPERATIVE_REPORT
+  LAB_REPORT
+  IMAGING_REPORT
+  PRESCRIPTION
+  REFERRAL_LETTER
+  MEDICAL_CERTIFICATE
+  INSURANCE_FORM
+  DEATH_CERTIFICATE
+  BIRTH_CERTIFICATE
+  VACCINATION_RECORD
+  ALLERGY_CARD
+  BLOOD_REPORT
+  PATHOLOGY_REPORT
+  ECG_REPORT
+  XRAY_IMAGE
+  CT_SCAN
+  MRI_SCAN
+  ULTRASOUND
+  OTHER
+}
+
+enum DocumentSource {
+  UPLOAD
+  SCAN
+  SYSTEM_GENERATED
+  EXTERNAL
+  FAX
+  EMAIL
+}
+
+enum AccessLevel {
+  PUBLIC
+  NORMAL
+  RESTRICTED
+  CONFIDENTIAL
+  HIGHLY_CONFIDENTIAL
+}
+
+model ConsentForm {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  consentNumber   String    @unique
+  patientId       String
+
+  consentType     ConsentType
+  procedureName   String?
+
+  // Content
+  consentText     String
+  language        String    @default("en")
+
+  // Signatures
+  patientSignature String?
+  patientSignedAt DateTime?
+  witnessName     String?
+  witnessSignature String?
+  witnessSignedAt DateTime?
+  doctorId        String?
+  doctorSignature String?
+  doctorSignedAt  DateTime?
+
+  // Status
+  status          ConsentStatus @default(PENDING)
+  expiryDate      DateTime?
+  revokedAt       DateTime?
+  revokedReason   String?
+
+  documentUrl     String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("consent_forms")
+}
+
+enum ConsentType {
+  GENERAL_TREATMENT
+  SURGICAL_PROCEDURE
+  ANESTHESIA
+  BLOOD_TRANSFUSION
+  HIV_TESTING
+  RESEARCH_PARTICIPATION
+  PHOTOGRAPHY
+  DATA_SHARING
+  LEAVE_AGAINST_ADVICE
+  DNR
+  ORGAN_DONATION
+}
+
+enum ConsentStatus {
+  PENDING
+  SIGNED
+  EXPIRED
+  REVOKED
+}
+
+// ==================== CSSD (Central Sterile Services) ====================
+
+model SterilizationItem {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  itemCode        String    @unique
+
+  name            String
+  category        InstrumentCategory
+  description     String?
+
+  // Specifications
+  manufacturer    String?
+  model           String?
+  serialNumber    String?
+
+  // Sterilization Requirements
+  sterilizationMethod SterilizationMethod
+  sterilizationTemp Int?    // Celsius
+  sterilizationTime Int?    // Minutes
+
+  // Tracking
+  currentLocation String
+  currentStatus   ItemSterilizationStatus @default(AVAILABLE)
+  lastSterilizedAt DateTime?
+  lastUsedAt      DateTime?
+
+  // Maintenance
+  totalUseCount   Int       @default(0)
+  maxUseCount     Int?
+  nextMaintenanceDate DateTime?
+
+  isActive        Boolean   @default(true)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  cycleItems      SterilizationCycleItem[]
+
+  @@map("sterilization_items")
+}
+
+enum InstrumentCategory {
+  SURGICAL_INSTRUMENT
+  SURGICAL_SET
+  ENDOSCOPE
+  LAPAROSCOPIC
+  ORTHOPEDIC
+  DENTAL
+  OPHTHALMIC
+  ENT
+  CARDIAC
+  NEURO
+  LINEN
+  CONTAINER
+  OTHER
+}
+
+enum SterilizationMethod {
+  STEAM_AUTOCLAVE
+  ETO_GAS
+  PLASMA
+  DRY_HEAT
+  CHEMICAL
+  RADIATION
+}
+
+enum ItemSterilizationStatus {
+  AVAILABLE
+  IN_USE
+  DIRTY
+  IN_WASHING
+  IN_STERILIZATION
+  STERILE
+  EXPIRED
+  MAINTENANCE
+  CONDEMNED
+}
+
+model SterilizationCycle {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  cycleNumber     String    @unique // CYC-YYYYMMDD-XXX
+
+  machineId       String
+  machineName     String
+  method          SterilizationMethod
+
+  // Cycle Parameters
+  temperature     Decimal   @db.Decimal(5, 1)
+  pressure        Decimal?  @db.Decimal(5, 2)
+  duration        Int       // Minutes
+
+  // Timing
+  startTime       DateTime
+  endTime         DateTime?
+
+  // Load Details
+  loadDescription String?
+  itemCount       Int
+
+  // Quality Indicators
+  chemicalIndicator ChemicalIndicatorResult?
+  biologicalIndicator BiologicalIndicatorResult?
+
+  // Operator
+  operatorId      String
+  verifiedBy      String?
+  verifiedAt      DateTime?
+
+  status          CycleStatus @default(IN_PROGRESS)
+  failureReason   String?
+
+  notes           String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  items           SterilizationCycleItem[]
+
+  @@map("sterilization_cycles")
+}
+
+enum ChemicalIndicatorResult {
+  PASS
+  FAIL
+  NOT_DONE
+}
+
+enum BiologicalIndicatorResult {
+  PASS
+  FAIL
+  PENDING
+  NOT_DONE
+}
+
+enum CycleStatus {
+  LOADING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model SterilizationCycleItem {
+  id              String    @id @default(uuid())
+  cycleId         String
+  itemId          String
+
+  quantity        Int       @default(1)
+
+  // Post-cycle status
+  postCycleStatus ItemSterilizationStatus @default(STERILE)
+  expiryDate      DateTime
+
+  createdAt       DateTime  @default(now())
+
+  cycle           SterilizationCycle @relation(fields: [cycleId], references: [id])
+  item            SterilizationItem @relation(fields: [itemId], references: [id])
+
+  @@map("sterilization_cycle_items")
+}
+
+// ==================== MORTUARY / DEATH MANAGEMENT ====================
+
+model MortuaryRecord {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  recordNumber    String    @unique // MORT-YYYYMMDD-XXX
+
+  // Deceased Info
+  patientId       String?
+  deceasedName    String
+  dateOfBirth     DateTime?
+  dateOfDeath     DateTime
+  timeOfDeath     DateTime
+  age             Int?
+  gender          Gender
+
+  // Death Details
+  placeOfDeath    String
+  causeOfDeath    String
+  mannerOfDeath   MannerOfDeath
+
+  // Medical Certification
+  certifyingDoctor String
+  certifiedAt     DateTime?
+  deathCertificateNumber String?
+  deathCertificateUrl String?
+
+  // Autopsy
+  autopsyRequired Boolean   @default(false)
+  autopsyStatus   AutopsyStatus?
+  autopsyFindings String?
+  autopsyDoctor   String?
+  autopsyDate     DateTime?
+
+  // Body Storage
+  compartmentNumber String?
+  storageLocation String?
+  bodyReceivedAt  DateTime?
+  receivedBy      String?
+  bodyCondition   String?
+
+  // Identification
+  identificationMarks String?
+  belongings      String[]
+  belongingsReceivedBy String?
+
+  // Next of Kin
+  nokName         String
+  nokRelationship String
+  nokPhone        String
+  nokAddress      String?
+  nokIdProof      String?
+
+  // Release
+  releaseStatus   ReleaseStatus @default(NOT_RELEASED)
+  releasedTo      String?
+  releasedAt      DateTime?
+  releaseAuthorizedBy String?
+  policeNocNumber String?
+  undertakerName  String?
+  undertakerLicense String?
+
+  notes           String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("mortuary_records")
+}
+
+enum MannerOfDeath {
+  NATURAL
+  ACCIDENT
+  SUICIDE
+  HOMICIDE
+  UNDETERMINED
+  PENDING_INVESTIGATION
+}
+
+enum AutopsyStatus {
+  NOT_REQUIRED
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  WAIVED
+}
+
+enum ReleaseStatus {
+  NOT_RELEASED
+  PENDING_DOCUMENTS
+  PENDING_NOC
+  APPROVED
+  RELEASED
+}
+
+// ==================== KITCHEN / DIETARY SERVICES ====================
+
+model DietPlan {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  planCode        String    @unique
+
+  name            String
+  description     String?
+  category        DietCategory
+
+  // Nutritional Info per day
+  calories        Int?
+  protein         Decimal?  @db.Decimal(6, 2)
+  carbohydrates   Decimal?  @db.Decimal(6, 2)
+  fat             Decimal?  @db.Decimal(6, 2)
+  fiber           Decimal?  @db.Decimal(6, 2)
+  sodium          Decimal?  @db.Decimal(6, 2)
+
+  // Restrictions
+  restrictions    String[]
+  allergens       String[]
+
+  // Meals
+  breakfastItems  String[]
+  lunchItems      String[]
+  dinnerItems     String[]
+  snackItems      String[]
+
+  isActive        Boolean   @default(true)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  patientDiets    PatientDiet[]
+
+  @@map("diet_plans")
+}
+
+enum DietCategory {
+  REGULAR
+  SOFT
+  LIQUID
+  CLEAR_LIQUID
+  NPO
+  DIABETIC
+  LOW_SODIUM
+  LOW_FAT
+  HIGH_PROTEIN
+  RENAL
+  CARDIAC
+  PEDIATRIC
+  GERIATRIC
+  VEGETARIAN
+  VEGAN
+  HALAL
+  KOSHER
+  GLUTEN_FREE
+  LACTOSE_FREE
+}
+
+model PatientDiet {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  patientId       String
+  admissionId     String?
+
+  dietPlanId      String
+
+  // Customizations
+  specialInstructions String?
+  allergies       String[]
+  preferences     String[]
+  avoidItems      String[]
+
+  // Feeding
+  feedingMethod   FeedingMethod @default(ORAL)
+  assistanceRequired Boolean @default(false)
+
+  // Schedule
+  startDate       DateTime
+  endDate         DateTime?
+
+  // Prescription
+  prescribedBy    String
+  prescribedAt    DateTime
+
+  status          DietStatus @default(ACTIVE)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  dietPlan        DietPlan @relation(fields: [dietPlanId], references: [id])
+  mealOrders      MealOrder[]
+
+  @@map("patient_diets")
+}
+
+enum FeedingMethod {
+  ORAL
+  NASOGASTRIC
+  PEG_TUBE
+  PARENTERAL
+  ASSISTED
+}
+
+enum DietStatus {
+  ACTIVE
+  SUSPENDED
+  COMPLETED
+  CANCELLED
+}
+
+model MealOrder {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  orderNumber     String    @unique
+
+  patientDietId   String
+  patientId       String
+  bedNumber       String
+  wardName        String
+
+  mealType        MealType
+  mealDate        DateTime
+
+  // Items
+  items           Json      // Array of meal items
+  specialRequest  String?
+
+  // Timing
+  scheduledTime   DateTime
+  preparedAt      DateTime?
+  deliveredAt     DateTime?
+
+  // Staff
+  preparedBy      String?
+  deliveredBy     String?
+
+  // Status
+  status          MealOrderStatus @default(PENDING)
+
+  // Consumption
+  consumptionPercent Int?    // 0-100
+  consumptionNotes String?
+  recordedBy      String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  patientDiet     PatientDiet @relation(fields: [patientDietId], references: [id])
+
+  @@map("meal_orders")
+}
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+  SPECIAL
+}
+
+enum MealOrderStatus {
+  PENDING
+  PREPARING
+  READY
+  DELIVERED
+  CONSUMED
+  RETURNED
+  CANCELLED
+}
+
+// ==================== TELEMEDICINE ====================
+
+model TeleconsultationSession {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  sessionId       String    @unique // TELE-YYYYMMDD-XXX
+
+  appointmentId   String?
+  patientId       String
+  doctorId        String
+
+  // Schedule
+  scheduledStart  DateTime
+  scheduledEnd    DateTime
+  actualStart     DateTime?
+  actualEnd       DateTime?
+
+  // Session Details
+  sessionType     TeleSessionType
+  platform        String    @default("internal")
+  meetingUrl      String?
+  meetingId       String?
+
+  // Technical
+  patientDeviceInfo Json?
+  doctorDeviceInfo Json?
+  connectionQuality ConnectionQuality?
+
+  // Clinical
+  chiefComplaint  String?
+  symptoms        String[]
+  diagnosis       String?
+  prescription    String?
+  followUpDate    DateTime?
+
+  // Notes
+  doctorNotes     String?
+  patientFeedback String?
+  rating          Int?      // 1-5
+
+  // Recording
+  isRecorded      Boolean   @default(false)
+  recordingUrl    String?
+
+  // AI Features
+  aiSymptomAnalysis Json?
+  aiTriageSuggestion String?
+  aiTranscript    String?
+
+  status          TeleSessionStatus @default(SCHEDULED)
+  cancellationReason String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("teleconsultation_sessions")
+}
+
+enum TeleSessionType {
+  VIDEO_CALL
+  AUDIO_CALL
+  CHAT
+  FOLLOW_UP
+  SECOND_OPINION
+  EMERGENCY
+}
+
+enum ConnectionQuality {
+  EXCELLENT
+  GOOD
+  FAIR
+  POOR
+}
+
+enum TeleSessionStatus {
+  SCHEDULED
+  WAITING
+  IN_PROGRESS
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+  TECHNICAL_ISSUE
+}
+
+// ==================== ASSET MANAGEMENT ====================
+
+model Asset {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  assetCode       String    @unique // AST-YYYYMMDD-XXX
+
+  name            String
+  category        AssetCategory
+  subCategory     String?
+  description     String?
+
+  // Identification
+  manufacturer    String?
+  model           String?
+  serialNumber    String?
+  barcode         String?
+
+  // Acquisition
+  purchaseDate    DateTime?
+  purchasePrice   Decimal?  @db.Decimal(12, 2)
+  vendor          String?
+  warrantyExpiry  DateTime?
+
+  // Location
+  department      String?
+  building        String?
+  floor           String?
+  room            String?
+
+  // Status
+  status          AssetStatus @default(ACTIVE)
+  condition       AssetCondition @default(GOOD)
+
+  // Depreciation
+  usefulLife      Int?      // Years
+  depreciationRate Decimal? @db.Decimal(5, 2)
+  currentValue    Decimal?  @db.Decimal(12, 2)
+
+  // AMC (Annual Maintenance Contract)
+  hasAMC          Boolean   @default(false)
+  amcVendor       String?
+  amcStartDate    DateTime?
+  amcEndDate      DateTime?
+  amcCost         Decimal?  @db.Decimal(10, 2)
+
+  // Calibration (for medical equipment)
+  requiresCalibration Boolean @default(false)
+  lastCalibrationDate DateTime?
+  nextCalibrationDate DateTime?
+
+  // Usage
+  lastUsedAt      DateTime?
+  totalUsageHours Int?
+
+  notes           String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  maintenanceRecords AssetMaintenance[]
+
+  @@map("assets")
+}
+
+enum AssetCategory {
+  MEDICAL_EQUIPMENT
+  DIAGNOSTIC_EQUIPMENT
+  SURGICAL_EQUIPMENT
+  MONITORING_EQUIPMENT
+  LIFE_SUPPORT
+  LABORATORY_EQUIPMENT
+  IMAGING_EQUIPMENT
+  FURNITURE
+  IT_EQUIPMENT
+  VEHICLE
+  BUILDING
+  OTHER
+}
+
+enum AssetStatus {
+  ACTIVE
+  INACTIVE
+  UNDER_MAINTENANCE
+  DISPOSED
+  TRANSFERRED
+  LOST
+}
+
+enum AssetCondition {
+  EXCELLENT
+  GOOD
+  FAIR
+  POOR
+  CONDEMNED
+}
+
+model AssetMaintenance {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  maintenanceNumber String  @unique
+  assetId         String
+
+  maintenanceType MaintenanceType
+  priority        TaskPriority @default(NORMAL)
+
+  // Schedule
+  scheduledDate   DateTime?
+  startDate       DateTime?
+  completionDate  DateTime?
+
+  // Details
+  description     String
+  findings        String?
+  actionTaken     String?
+  partsReplaced   String[]
+
+  // Cost
+  laborCost       Decimal?  @db.Decimal(10, 2)
+  partsCost       Decimal?  @db.Decimal(10, 2)
+  totalCost       Decimal?  @db.Decimal(10, 2)
+
+  // Vendor
+  performedBy     String?
+  vendorName      String?
+  vendorContact   String?
+
+  // Next Maintenance
+  nextMaintenanceDate DateTime?
+
+  status          MaintenanceStatus @default(SCHEDULED)
+
+  // AI Predictions
+  aiPredictedFailure DateTime?
+  aiRecommendations String[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  asset           Asset @relation(fields: [assetId], references: [id])
+
+  @@map("asset_maintenance")
+}
+
+enum MaintenanceType {
+  PREVENTIVE
+  CORRECTIVE
+  CALIBRATION
+  INSPECTION
+  EMERGENCY
+  AMC_SERVICE
+}
+
+enum MaintenanceStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  OVERDUE
+}
+
+// ==================== AMBULANCE / TRANSPORT ====================
+
+model Ambulance {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  vehicleNumber   String    @unique
+
+  // Vehicle Info
+  vehicleType     AmbulanceType
+  make            String?
+  model           String?
+  year            Int?
+
+  // Equipment
+  equipmentList   String[]
+  hasVentilator   Boolean   @default(false)
+  hasDefibrillator Boolean  @default(false)
+  hasOxygenSupply Boolean   @default(true)
+
+  // Status
+  status          AmbulanceStatus @default(AVAILABLE)
+  currentLocation String?
+  lastLatitude    Decimal?  @db.Decimal(10, 8)
+  lastLongitude   Decimal?  @db.Decimal(11, 8)
+  lastLocationUpdate DateTime?
+
+  // Crew
+  driverId        String?
+  paramedicId     String?
+
+  // Maintenance
+  lastServiceDate DateTime?
+  nextServiceDate DateTime?
+  mileage         Int?
+  fuelLevel       Int?      // Percentage
+
+  isActive        Boolean   @default(true)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  trips           AmbulanceTrip[]
+
+  @@map("ambulances")
+}
+
+enum AmbulanceType {
+  BASIC_LIFE_SUPPORT
+  ADVANCED_LIFE_SUPPORT
+  PATIENT_TRANSPORT
+  NEONATAL
+  BARIATRIC
+  AIR_AMBULANCE
+}
+
+enum AmbulanceStatus {
+  AVAILABLE
+  ON_CALL
+  EN_ROUTE_TO_SCENE
+  AT_SCENE
+  EN_ROUTE_TO_HOSPITAL
+  AT_HOSPITAL
+  OUT_OF_SERVICE
+  MAINTENANCE
+}
+
+model AmbulanceTrip {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  tripNumber      String    @unique // TRIP-YYYYMMDD-XXX
+
+  ambulanceId     String
+
+  // Request
+  requestType     TripRequestType
+  priority        TripPriority
+  requestedAt     DateTime
+  requestedBy     String
+
+  // Patient (if known)
+  patientName     String?
+  patientAge      Int?
+  patientGender   Gender?
+  patientCondition String?
+
+  // Pickup
+  pickupAddress   String
+  pickupLatitude  Decimal?  @db.Decimal(10, 8)
+  pickupLongitude Decimal?  @db.Decimal(11, 8)
+  pickupContact   String?
+
+  // Destination
+  destinationAddress String
+  destinationLatitude Decimal? @db.Decimal(10, 8)
+  destinationLongitude Decimal? @db.Decimal(11, 8)
+
+  // Timing
+  dispatchedAt    DateTime?
+  arrivedAtScene  DateTime?
+  departedScene   DateTime?
+  arrivedAtDestination DateTime?
+  completedAt     DateTime?
+
+  // Distance & Duration
+  distanceKm      Decimal?  @db.Decimal(8, 2)
+  durationMinutes Int?
+
+  // Crew
+  driverId        String?
+  paramedicIds    String[]
+
+  // Medical Care
+  treatmentProvided String?
+  medicationsGiven String[]
+  vitalsRecorded  Json?
+
+  // AI Routing
+  aiOptimalRoute  Json?
+  aiEstimatedTime Int?
+
+  status          TripStatus @default(REQUESTED)
+  cancellationReason String?
+
+  // Billing
+  chargeAmount    Decimal?  @db.Decimal(10, 2)
+  isPaid          Boolean   @default(false)
+
+  notes           String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  ambulance       Ambulance @relation(fields: [ambulanceId], references: [id])
+
+  @@map("ambulance_trips")
+}
+
+enum TripRequestType {
+  EMERGENCY_PICKUP
+  INTER_HOSPITAL_TRANSFER
+  SCHEDULED_TRANSPORT
+  DISCHARGE_TRANSPORT
+  DIALYSIS_TRANSPORT
+  OUTPATIENT_TRANSPORT
+}
+
+enum TripPriority {
+  EMERGENCY
+  URGENT
+  ROUTINE
+  SCHEDULED
+}
+
+enum TripStatus {
+  REQUESTED
+  DISPATCHED
+  EN_ROUTE_TO_PICKUP
+  AT_PICKUP
+  EN_ROUTE_TO_DESTINATION
+  AT_DESTINATION
+  COMPLETED
+  CANCELLED
+  NO_PATIENT
+}
+
+// ==================== QUALITY MANAGEMENT (NABH/JCI) ====================
+
+model QualityIndicator {
+  id              String    @id @default(uuid())
+  hospitalId      String
+
+  code            String
+  name            String
+  category        QICategory
+
+  // Definition
+  description     String
+  numeratorDef    String
+  denominatorDef  String
+  formula         String
+
+  // Target
+  targetValue     Decimal   @db.Decimal(8, 4)
+  thresholdGreen  Decimal   @db.Decimal(8, 4)
+  thresholdYellow Decimal   @db.Decimal(8, 4)
+  thresholdRed    Decimal   @db.Decimal(8, 4)
+
+  // Frequency
+  frequency       QIFrequency
+
+  // Benchmark
+  nationalBenchmark Decimal? @db.Decimal(8, 4)
+  internalBenchmark Decimal? @db.Decimal(8, 4)
+
+  isActive        Boolean   @default(true)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  measurements    QIMeasurement[]
+
+  @@unique([hospitalId, code])
+  @@map("quality_indicators")
+}
+
+enum QICategory {
+  PATIENT_SAFETY
+  CLINICAL_OUTCOMES
+  INFECTION_CONTROL
+  MEDICATION_SAFETY
+  SURGICAL_SAFETY
+  EMERGENCY_CARE
+  ICU_CARE
+  NURSING_CARE
+  DIAGNOSTIC_SERVICES
+  PATIENT_EXPERIENCE
+  ACCESS_TIMELINESS
+  OPERATIONAL_EFFICIENCY
+}
+
+enum QIFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+model QIMeasurement {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  indicatorId     String
+
+  periodStart     DateTime
+  periodEnd       DateTime
+
+  numerator       Int
+  denominator     Int
+  value           Decimal   @db.Decimal(8, 4)
+
+  status          QIStatus
+
+  // Analysis
+  trend           QITrend?
+  rootCause       String?
+  actionPlan      String?
+
+  // AI Analysis
+  aiAnalysis      String?
+  aiRecommendations String[]
+
+  recordedBy      String
+  verifiedBy      String?
+  verifiedAt      DateTime?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  indicator       QualityIndicator @relation(fields: [indicatorId], references: [id])
+
+  @@map("qi_measurements")
+}
+
+enum QIStatus {
+  ACHIEVED
+  NOT_ACHIEVED
+  BELOW_THRESHOLD
+  NEEDS_IMPROVEMENT
+}
+
+enum QITrend {
+  IMPROVING
+  STABLE
+  DECLINING
+}
+
+model IncidentReport {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  reportNumber    String    @unique // INC-YYYYMMDD-XXX
+
+  // Incident Details
+  incidentType    IncidentType
+  severity        IncidentSeverity
+
+  incidentDate    DateTime
+  incidentTime    DateTime
+  location        String
+  department      String?
+
+  description     String
+
+  // People Involved
+  patientId       String?
+  patientName     String?
+  staffInvolved   String[]
+  witnessNames    String[]
+
+  // Immediate Actions
+  immediateAction String?
+  patientHarm     PatientHarmLevel?
+
+  // Investigation
+  investigatorId  String?
+  investigationStarted DateTime?
+  investigationFindings String?
+  rootCause       String?
+  contributingFactors String[]
+
+  // Corrective Actions
+  correctiveActions Json?
+  preventiveActions Json?
+
+  // Status
+  status          IncidentStatus @default(REPORTED)
+  closedAt        DateTime?
+  closedBy        String?
+
+  // Reporting
+  reportedBy      String
+  reportedAt      DateTime  @default(now())
+  isAnonymous     Boolean   @default(false)
+
+  // AI Analysis
+  aiClassification String?
+  aiSeverityScore Int?
+  aiSimilarIncidents String[]
+  aiRecommendations String[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("incident_reports")
+}
+
+enum IncidentType {
+  MEDICATION_ERROR
+  FALL
+  PRESSURE_ULCER
+  SURGICAL_COMPLICATION
+  HOSPITAL_ACQUIRED_INFECTION
+  NEEDLE_STICK
+  BLOOD_TRANSFUSION_REACTION
+  DIAGNOSTIC_ERROR
+  EQUIPMENT_FAILURE
+  SECURITY_BREACH
+  PATIENT_COMPLAINT
+  ADVERSE_DRUG_REACTION
+  NEAR_MISS
+  OTHER
+}
+
+enum IncidentSeverity {
+  NEAR_MISS
+  MINOR
+  MODERATE
+  MAJOR
+  CATASTROPHIC
+}
+
+enum PatientHarmLevel {
+  NO_HARM
+  MILD
+  MODERATE
+  SEVERE
+  DEATH
+}
+
+enum IncidentStatus {
+  REPORTED
+  UNDER_INVESTIGATION
+  ACTION_REQUIRED
+  ACTIONS_IN_PROGRESS
+  CLOSED
+}
+
+// ==================== SMART QUEUE MANAGEMENT ====================
+
+model QueueCounter {
+  id              String         @id @default(uuid())
+  hospitalId      String
+  departmentId    String?
+  counterNumber   Int
+  counterName     String
+  counterType     CounterType
+  location        String?
+  floor           String?
+  isActive        Boolean        @default(true)
+  currentTicketId String?
+  currentStaffId  String?
+  avgServiceTime  Int            @default(10) // minutes
+  servicesOffered String[]       // service codes this counter handles
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  tickets         QueueTicket[]
+
+  @@unique([hospitalId, counterNumber])
+  @@map("queue_counters")
+}
+
+enum CounterType {
+  REGISTRATION
+  CONSULTATION
+  BILLING
+  PHARMACY
+  LABORATORY
+  RADIOLOGY
+  VACCINATION
+  BLOOD_COLLECTION
+  REPORT_COLLECTION
+  GENERAL
+}
+
+model QueueTicket {
+  id              String          @id @default(uuid())
+  hospitalId      String
+  ticketNumber    String          // e.g., "A001", "B045"
+  tokenDisplay    String          // Display format "A-001"
+  patientId       String?
+  patientName     String
+  patientPhone    String?
+  appointmentId   String?
+
+  // Queue Details
+  departmentId    String?
+  serviceType     String          // registration, consultation, billing, etc.
+  counterId       String?
+  priority        QueuePriority   @default(NORMAL)
+  status          QueueStatus     @default(WAITING)
+
+  // Timing
+  issuedAt        DateTime        @default(now())
+  calledAt        DateTime?
+  servedAt        DateTime?       // when service started
+  completedAt     DateTime?
+  cancelledAt     DateTime?
+  noShowAt        DateTime?
+
+  // Wait Time Tracking
+  estimatedWaitTime Int?          // minutes (AI predicted)
+  actualWaitTime  Int?            // minutes (calculated)
+  serviceTime     Int?            // minutes
+
+  // Position Tracking
+  queuePosition   Int             @default(0)
+  initialPosition Int             @default(0)
+
+  // AI Features
+  aiPriorityScore Float?          // AI-calculated priority
+  aiRecommendedCounter String?
+  urgencyLevel    String?         // from symptom analysis
+
+  // Notifications
+  smsNotified     Boolean         @default(false)
+  callCount       Int             @default(0)
+  lastCalledAt    DateTime?
+
+  // Additional Info
+  notes           String?
+  cancellationReason String?
+  servedBy        String?         // staff ID who served
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  counter         QueueCounter?   @relation(fields: [counterId], references: [id])
+
+  @@unique([hospitalId, ticketNumber, issuedAt])
+  @@index([hospitalId, status, issuedAt])
+  @@index([hospitalId, departmentId, status])
+  @@index([hospitalId, serviceType, status])
+  @@map("queue_tickets")
+}
+
+enum QueuePriority {
+  EMERGENCY
+  HIGH
+  NORMAL
+  LOW
+  VIP
+  SENIOR_CITIZEN
+  PREGNANT
+  DISABLED
+  CHILD
+}
+
+enum QueueStatus {
+  WAITING
+  CALLED
+  SERVING
+  ON_HOLD
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+  TRANSFERRED
+  SKIPPED
+}
+
+model QueueConfig {
+  id                  String    @id @default(uuid())
+  hospitalId          String
+  departmentId        String?
+  serviceType         String    @unique
+
+  // Queue Settings
+  prefix              String    // A, B, C for different queues
+  dailyReset          Boolean   @default(true)
+  maxDailyTickets     Int       @default(999)
+  operatingHoursStart String    @default("08:00")
+  operatingHoursEnd   String    @default("20:00")
+
+  // Priority Settings
+  priorityEnabled     Boolean   @default(true)
+  emergencyMultiplier Float     @default(3.0)
+  vipMultiplier       Float     @default(2.0)
+  seniorMultiplier    Float     @default(1.5)
+
+  // Wait Time Settings
+  avgServiceTime      Int       @default(10) // minutes
+  maxWaitTime         Int       @default(60) // minutes, trigger alert
+
+  // Notification Settings
+  smsAlertEnabled     Boolean   @default(true)
+  alertBeforePosition Int       @default(3) // notify when X positions away
+  noShowTimeout       Int       @default(5) // minutes to mark no-show
+  recallLimit         Int       @default(3) // max times to call
+
+  // Display Settings
+  displayMessage      String?
+  announcementEnabled Boolean   @default(true)
+
+  isActive            Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@map("queue_configs")
+}
+
+model QueueDisplayBoard {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  boardName       String
+  location        String
+  boardType       DisplayBoardType @default(DEPARTMENT)
+  departmentIds   String[]  // departments to show
+  counterIds      String[]  // specific counters to show
+  displayMode     String    @default("list") // list, grid, ticker
+  ticketsToShow   Int       @default(10)
+  refreshInterval Int       @default(5) // seconds
+  showEstimatedTime Boolean @default(true)
+  showCounter     Boolean   @default(true)
+  customMessage   String?
+  theme           String    @default("default")
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("queue_display_boards")
+}
+
+enum DisplayBoardType {
+  MAIN_LOBBY
+  DEPARTMENT
+  COUNTER
+  PHARMACY
+  LAB
+  BILLING
+}
+
+model QueueAnalytics {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  departmentId    String?
+  serviceType     String?
+  date            DateTime  @db.Date
+  hour            Int?      // 0-23, null for daily aggregate
+
+  // Counts
+  totalTickets    Int       @default(0)
+  servedTickets   Int       @default(0)
+  noShowTickets   Int       @default(0)
+  cancelledTickets Int      @default(0)
+
+  // Wait Times (minutes)
+  avgWaitTime     Float     @default(0)
+  minWaitTime     Int       @default(0)
+  maxWaitTime     Int       @default(0)
+
+  // Service Times (minutes)
+  avgServiceTime  Float     @default(0)
+  minServiceTime  Int       @default(0)
+  maxServiceTime  Int       @default(0)
+
+  // Peak Analysis
+  peakHour        Int?
+  peakWaitTime    Int?
+
+  // Staff Performance
+  staffPerformance Json?    // { staffId: { served, avgTime } }
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([hospitalId, departmentId, serviceType, date, hour])
+  @@index([hospitalId, date])
+  @@map("queue_analytics")
+}
+
+model QueueAnnouncement {
+  id              String    @id @default(uuid())
+  hospitalId      String
+  ticketId        String
+  ticketNumber    String
+  counterNumber   Int
+  counterName     String
+  patientName     String?
+  announcementText String
+  audioUrl        String?
+  playedAt        DateTime?
+  status          String    @default("pending") // pending, played, failed
+  createdAt       DateTime  @default(now())
+
+  @@index([hospitalId, status])
+  @@map("queue_announcements")
+}

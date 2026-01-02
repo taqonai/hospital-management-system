@@ -1,0 +1,162 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+Hospital Management System (HMS) - A multi-tenant Cloud SaaS platform with AI-integrated modules for clinical decision support, predictive analytics, and medical imaging analysis.
+
+## Development Commands
+
+### Backend (Node.js/Express/TypeScript)
+```bash
+cd hospital-management-system/backend
+npm install
+npx prisma generate          # Required after schema changes
+npx prisma migrate dev       # Run migrations
+npm run db:seed              # Seed test data
+npm run dev                  # Start dev server (port 3001)
+npm run build                # Production build
+npm test                     # Run tests
+npm run lint                 # ESLint
+```
+
+### Frontend (React/Vite/TypeScript)
+```bash
+cd hospital-management-system/frontend
+npm install
+npm run dev                  # Start dev server (port 3000)
+npm run build                # Production build (runs tsc first)
+npm run lint                 # ESLint
+```
+
+### AI Services (Python/FastAPI)
+```bash
+cd hospital-management-system/ai-services
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+```
+
+### Docker (Full Stack)
+```bash
+cd hospital-management-system
+docker-compose up -d                          # All services
+docker-compose --profile production up -d     # With nginx
+```
+
+## Architecture
+
+### Three-Tier Service Architecture
+
+1. **Frontend** (React 18 + TypeScript + TailwindCSS + Vite)
+   - Redux Toolkit for global state, TanStack Query for server state
+   - Entry: `frontend/src/main.tsx`, routes: `frontend/src/App.tsx`
+   - API client: `frontend/src/services/api.ts`
+   - Pages organized by module in `frontend/src/pages/`
+
+2. **Backend** (Node.js + Express + TypeScript + Prisma)
+   - RESTful API at `/api/v1/*`
+   - Entry: `backend/src/app.ts`, routes: `backend/src/routes/index.ts`
+   - Pattern: routes → services → Prisma client
+   - Middleware: `auth.ts` (JWT), `validation.ts`, `errorHandler.ts`
+
+3. **AI Services** (Python + FastAPI)
+   - Entry: `ai-services/main.py` (initializes all AI service instances)
+   - Each service in its own directory with `service.py` and optional `knowledge_base.py`
+
+### AI Service Modules
+Located in `ai-services/`:
+| Directory | Service Class | Purpose |
+|-----------|--------------|---------|
+| `diagnostic/` | DiagnosticAI | Symptom analysis, differential diagnosis |
+| `predictive/` | PredictiveAnalytics | Risk prediction, readmission risk |
+| `imaging/` | ImageAnalysisAI | X-ray, CT, MRI interpretation |
+| `chat/` | ChatAI | Conversational booking assistant |
+| `speech/` | SpeechToTextService | Whisper-based transcription |
+| `queue_ai/` | QueuePredictionAI | Wait time prediction |
+| `pharmacy/` | PharmacyAI | Drug interactions, dosing |
+| `clinical_notes/` | ClinicalNotesAI | Note generation from templates |
+| `symptom_checker/` | SymptomCheckerAI | Interactive symptom assessment |
+| `early_warning/` | EarlyWarningAI | Patient deterioration detection |
+| `med_safety/` | MedSafetyAI | Medication safety checks |
+| `smart_orders/` | SmartOrdersAI | Clinical order recommendations |
+| `ai_scribe/` | AIScribeService | Medical transcription |
+
+### Multi-Tenant Data Model
+
+All entities include `hospitalId` for tenant isolation. Prisma schema (`backend/prisma/schema.prisma`, ~3700 lines) covers 80+ models.
+
+### User Roles (UserRole enum)
+SUPER_ADMIN, HOSPITAL_ADMIN, DOCTOR, NURSE, RECEPTIONIST, LAB_TECHNICIAN, PHARMACIST, RADIOLOGIST, ACCOUNTANT, PATIENT, HR_MANAGER, HR_STAFF, HOUSEKEEPING_MANAGER, HOUSEKEEPING_STAFF, MAINTENANCE_STAFF, SECURITY_STAFF, DIETARY_STAFF
+
+### Backend Route Pattern
+Routes in `backend/src/routes/`, services in `backend/src/services/`. Each module follows:
+- `{module}Routes.ts` - Express router with endpoints
+- `{module}Service.ts` - Business logic with Prisma queries
+
+Key routes (`/api/v1/`):
+- `/auth` - Login, register, refresh, profile
+- `/patients`, `/doctors`, `/appointments` - Core entities
+- `/ai`, `/ai-scribe`, `/symptom-checker` - AI endpoints
+- `/laboratory`, `/radiology`, `/pharmacy` - Diagnostics
+- `/ipd`, `/opd`, `/emergency` - Clinical departments
+- `/hr`, `/billing`, `/blood-bank` - Support services
+- `/queue`, `/kiosk` - Patient flow
+- `/public` - Unauthenticated endpoints
+
+### Authentication
+- JWT access token (15m) + refresh token (7d)
+- `authenticate` middleware validates Bearer token
+- `authorize(...roles)` middleware for RBAC
+- `authorizeHospital` ensures tenant isolation
+- `optionalAuth` for endpoints with optional authentication
+
+## Configuration
+
+### Environment Variables
+**Backend** (`backend/.env`):
+- `DATABASE_URL` - PostgreSQL connection
+- `JWT_SECRET`, `JWT_REFRESH_SECRET`
+- `AI_SERVICE_URL` (default: http://localhost:8000)
+- `REDIS_HOST`, `REDIS_PORT`
+
+**Frontend** (`frontend/.env`):
+- `VITE_API_URL` (default: http://localhost:3001/api/v1)
+
+**AI Services** (`ai-services/.env`):
+- `OPENAI_API_KEY` - For Whisper STT
+
+### Default Dev Credentials
+- Email: admin@hospital.com
+- Password: password123
+
+### Ports
+| Service | Port |
+|---------|------|
+| Frontend | 3000 |
+| Backend | 3001 |
+| AI Services | 8000 |
+| PostgreSQL | 5433 (Docker) / 5432 (local) |
+| Redis | 6379 |
+| MinIO | 9000 (API), 9001 (Console) |
+
+## Key Dependencies
+
+### Backend
+- Prisma ORM for database access
+- express-validator and zod for request validation
+- jsonwebtoken for JWT auth
+- winston for logging
+- ioredis for Redis caching
+
+### Frontend
+- @tanstack/react-query for server state
+- react-hook-form with zod for form handling
+- chart.js for analytics visualizations
+- react-speech-recognition for voice input
+
+### AI Services
+- FastAPI with Pydantic models
+- Service classes instantiated in `main.py` and exposed via REST endpoints
