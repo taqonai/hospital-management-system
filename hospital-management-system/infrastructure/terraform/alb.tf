@@ -136,7 +136,7 @@ resource "aws_lb_target_group_attachment" "ai_services" {
   port             = 8000
 }
 
-# HTTP Listener - Redirects to HTTPS when domain is configured
+# HTTP Listener - Forward to frontend (HTTPS redirect enabled after certificate validation)
 resource "aws_lb_listener" "http" {
   count = var.create_alb ? 1 : 0
 
@@ -144,25 +144,35 @@ resource "aws_lb_listener" "http" {
   port              = 80
   protocol          = "HTTP"
 
-  dynamic "default_action" {
-    for_each = var.domain_name != "" ? [1] : []
-    content {
-      type = "redirect"
-      redirect {
-        port        = "443"
-        protocol    = "HTTPS"
-        status_code = "HTTP_301"
-      }
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.frontend[0].arn
+  }
+}
+
+# HTTP to HTTPS Redirect Listener Rule (only after HTTPS is ready)
+resource "aws_lb_listener_rule" "https_redirect" {
+  count = var.create_alb && var.domain_name != "" ? 1 : 0
+
+  listener_arn = aws_lb_listener.http[0].arn
+  priority     = 1
+
+  action {
+    type = "redirect"
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
     }
   }
 
-  dynamic "default_action" {
-    for_each = var.domain_name == "" ? [1] : []
-    content {
-      type             = "forward"
-      target_group_arn = aws_lb_target_group.frontend[0].arn
+  condition {
+    path_pattern {
+      values = ["/*"]
     }
   }
+
+  depends_on = [aws_lb_listener.https]
 }
 
 # ACM Certificate Validation (waits for DNS validation)
@@ -192,9 +202,9 @@ resource "aws_lb_listener" "https" {
   }
 }
 
-# Listener Rule for API (HTTP - only when no domain)
+# Listener Rule for API (HTTP - always enabled)
 resource "aws_lb_listener_rule" "api_http" {
-  count = var.create_alb && var.domain_name == "" ? 1 : 0
+  count = var.create_alb ? 1 : 0
 
   listener_arn = aws_lb_listener.http[0].arn
   priority     = 100
@@ -230,9 +240,9 @@ resource "aws_lb_listener_rule" "api_https" {
   }
 }
 
-# Listener Rule for AI Services (HTTP - only when no domain)
+# Listener Rule for AI Services (HTTP - always enabled)
 resource "aws_lb_listener_rule" "ai_http" {
-  count = var.create_alb && var.domain_name == "" ? 1 : 0
+  count = var.create_alb ? 1 : 0
 
   listener_arn = aws_lb_listener.http[0].arn
   priority     = 200
