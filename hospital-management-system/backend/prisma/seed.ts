@@ -133,7 +133,7 @@ async function main() {
   console.log(`Created ${departments.length} departments`);
 
   // Create Admin User
-  const adminPassword = await bcrypt.hash('password123', 12);
+  const adminPassword = await bcrypt.hash('HmsAdmin@2026!Secure', 12);
   const adminUser = await prisma.user.upsert({
     where: {
       hospitalId_email: { hospitalId: hospital.id, email: 'admin@hospital.com' },
@@ -155,7 +155,7 @@ async function main() {
   console.log(`Created admin user: ${adminUser.email}`);
 
   // Create Doctor Users and Profiles
-  const doctorPassword = await bcrypt.hash('password123', 12);
+  const doctorPassword = await bcrypt.hash('HmsDoctor@2026!Secure', 12);
 
   const doctorsData = [
     {
@@ -284,7 +284,7 @@ async function main() {
   }
 
   // Create Nurse Users
-  const nursePassword = await bcrypt.hash('password123', 12);
+  const nursePassword = await bcrypt.hash('HmsStaff@2026!Secure', 12);
   const nursesData = [
     { firstName: 'Nancy', lastName: 'Miller', departmentIndex: 0, shift: 'MORNING' },
     { firstName: 'Helen', lastName: 'Moore', departmentIndex: 4, shift: 'AFTERNOON' },
@@ -2199,19 +2199,6 @@ async function main() {
 
   console.log('\n========================================');
   console.log('Database seeding completed successfully!');
-  console.log('========================================');
-  console.log('\nLogin credentials (password: password123):');
-  console.log('Admin:          admin@hospital.com');
-  console.log('Doctor:         dr.smith@hospital.com');
-  console.log('Nurse:          nurse.miller@hospital.com');
-  console.log('Lab Technician: lab.tech@hospital.com');
-  console.log('Pharmacist:     pharmacist@hospital.com');
-  console.log('Radiologist:    radiologist@hospital.com');
-  console.log('Accountant:     accountant@hospital.com');
-  console.log('Receptionist:   receptionist@hospital.com');
-  console.log('HR Manager:     hr.manager@hospital.com');
-  console.log('HR Staff:       hr.staff@hospital.com');
-  console.log('Housekeeping:   housekeeping.manager@hospital.com');
   console.log('========================================\n');
 }
 
