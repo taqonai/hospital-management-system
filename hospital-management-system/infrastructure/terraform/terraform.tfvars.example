@@ -1,0 +1,27 @@
+# HMS Terraform Variables
+# Copy this file to terraform.tfvars and fill in your values
+
+# AWS Configuration
+aws_region  = "us-east-1"
+environment = "prod"
+
+# EC2 Configuration
+instance_type = "t3.small"
+key_name      = "your-ssh-key-name"  # Must exist in AWS
+
+# Database & Security (CHANGE THESE!)
+db_password        = "your-secure-database-password"
+jwt_secret         = "your-super-secret-jwt-key-min-32-chars"
+jwt_refresh_secret = "your-super-secret-refresh-key-min-32"
+
+# Optional: Domain name for Route53
+# domain_name = "hms.yourdomain.com"
+
+# SSH Access - Restrict to your IP in production!
+allowed_ssh_cidrs = ["0.0.0.0/0"]
+
+# ALB Configuration
+create_alb = true
+
+# EBS Volume size (GB)
+ebs_volume_size = 50
