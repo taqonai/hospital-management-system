@@ -37,12 +37,28 @@ output "alb_zone_id" {
 
 output "frontend_url" {
   description = "Frontend URL"
-  value       = var.create_alb ? "http://${aws_lb.main[0].dns_name}" : "http://${aws_eip.main.public_ip}:3000"
+  value       = var.domain_name != "" ? "https://${var.domain_name}" : (var.create_alb ? "http://${aws_lb.main[0].dns_name}" : "http://${aws_eip.main.public_ip}:3000")
 }
 
 output "backend_url" {
   description = "Backend API URL"
-  value       = var.create_alb ? "http://${aws_lb.main[0].dns_name}/api/v1" : "http://${aws_eip.main.public_ip}:3001/api/v1"
+  value       = var.domain_name != "" ? "https://${var.domain_name}/api/v1" : (var.create_alb ? "http://${aws_lb.main[0].dns_name}/api/v1" : "http://${aws_eip.main.public_ip}:3001/api/v1")
+}
+
+output "acm_certificate_arn" {
+  description = "ACM Certificate ARN"
+  value       = var.domain_name != "" ? aws_acm_certificate.main[0].arn : null
+}
+
+output "acm_certificate_validation" {
+  description = "ACM Certificate DNS validation records (add these to your DNS)"
+  value = var.domain_name != "" ? [
+    for dvo in aws_acm_certificate.main[0].domain_validation_options : {
+      name  = dvo.resource_record_name
+      type  = dvo.resource_record_type
+      value = dvo.resource_record_value
+    }
+  ] : null
 }
 
 output "ai_services_url" {

@@ -12,8 +12,24 @@ const app: Application = express();
 
 // Security middleware
 app.use(helmet());
+
+// CORS configuration
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'https://medint.taqon.ai',
+  process.env.CORS_ORIGIN,
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin) || process.env.CORS_ORIGIN === '*') {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
 }));
 

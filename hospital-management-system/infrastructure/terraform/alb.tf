@@ -17,6 +17,22 @@ resource "aws_lb" "main" {
   }
 }
 
+# ACM Certificate for HTTPS
+resource "aws_acm_certificate" "main" {
+  count = var.create_alb && var.domain_name != "" ? 1 : 0
+
+  domain_name       = var.domain_name
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-cert"
+  }
+}
+
 # Target Group for Frontend
 resource "aws_lb_target_group" "frontend" {
   count = var.create_alb ? 1 : 0
@@ -120,7 +136,7 @@ resource "aws_lb_target_group_attachment" "ai_services" {
   port             = 8000
 }
 
-# HTTP Listener (redirects to HTTPS or serves directly)
+# HTTP Listener - Redirects to HTTPS when domain is configured
 resource "aws_lb_listener" "http" {
   count = var.create_alb ? 1 : 0
 
@@ -128,15 +144,57 @@ resource "aws_lb_listener" "http" {
   port              = 80
   protocol          = "HTTP"
 
+  dynamic "default_action" {
+    for_each = var.domain_name != "" ? [1] : []
+    content {
+      type = "redirect"
+      redirect {
+        port        = "443"
+        protocol    = "HTTPS"
+        status_code = "HTTP_301"
+      }
+    }
+  }
+
+  dynamic "default_action" {
+    for_each = var.domain_name == "" ? [1] : []
+    content {
+      type             = "forward"
+      target_group_arn = aws_lb_target_group.frontend[0].arn
+    }
+  }
+}
+
+# ACM Certificate Validation (waits for DNS validation)
+resource "aws_acm_certificate_validation" "main" {
+  count = var.create_alb && var.domain_name != "" ? 1 : 0
+
+  certificate_arn = aws_acm_certificate.main[0].arn
+
+  timeouts {
+    create = "30m"
+  }
+}
+
+# HTTPS Listener
+resource "aws_lb_listener" "https" {
+  count = var.create_alb && var.domain_name != "" ? 1 : 0
+
+  load_balancer_arn = aws_lb.main[0].arn
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = aws_acm_certificate_validation.main[0].certificate_arn
+
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.frontend[0].arn
   }
 }
 
-# Listener Rule for API
-resource "aws_lb_listener_rule" "api" {
-  count = var.create_alb ? 1 : 0
+# Listener Rule for API (HTTP - only when no domain)
+resource "aws_lb_listener_rule" "api_http" {
+  count = var.create_alb && var.domain_name == "" ? 1 : 0
 
   listener_arn = aws_lb_listener.http[0].arn
   priority     = 100
@@ -153,11 +211,49 @@ resource "aws_lb_listener_rule" "api" {
   }
 }
 
-# Listener Rule for AI Services
-resource "aws_lb_listener_rule" "ai" {
-  count = var.create_alb ? 1 : 0
+# Listener Rule for API (HTTPS)
+resource "aws_lb_listener_rule" "api_https" {
+  count = var.create_alb && var.domain_name != "" ? 1 : 0
+
+  listener_arn = aws_lb_listener.https[0].arn
+  priority     = 100
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend[0].arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/*"]
+    }
+  }
+}
+
+# Listener Rule for AI Services (HTTP - only when no domain)
+resource "aws_lb_listener_rule" "ai_http" {
+  count = var.create_alb && var.domain_name == "" ? 1 : 0
 
   listener_arn = aws_lb_listener.http[0].arn
+  priority     = 200
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.ai_services[0].arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/ai/*"]
+    }
+  }
+}
+
+# Listener Rule for AI Services (HTTPS)
+resource "aws_lb_listener_rule" "ai_https" {
+  count = var.create_alb && var.domain_name != "" ? 1 : 0
+
+  listener_arn = aws_lb_listener.https[0].arn
   priority     = 200
 
   action {
