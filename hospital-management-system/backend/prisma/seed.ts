@@ -133,7 +133,7 @@ async function main() {
   console.log(`Created ${departments.length} departments`);
 
   // Create Admin User
-  const adminPassword = await bcrypt.hash('HmsAdmin@2026!Secure', 12);
+  const adminPassword = await bcrypt.hash('MedInt2026SecureAdmin', 12);
   const adminUser = await prisma.user.upsert({
     where: {
       hospitalId_email: { hospitalId: hospital.id, email: 'admin@hospital.com' },
@@ -155,7 +155,7 @@ async function main() {
   console.log(`Created admin user: ${adminUser.email}`);
 
   // Create Doctor Users and Profiles
-  const doctorPassword = await bcrypt.hash('HmsDoctor@2026!Secure', 12);
+  const doctorPassword = await bcrypt.hash('MedInt2026SecureDoctor', 12);
 
   const doctorsData = [
     {
@@ -284,7 +284,7 @@ async function main() {
   }
 
   // Create Nurse Users
-  const nursePassword = await bcrypt.hash('HmsStaff@2026!Secure', 12);
+  const nursePassword = await bcrypt.hash('MedInt2026SecureStaff', 12);
   const nursesData = [
     { firstName: 'Nancy', lastName: 'Miller', departmentIndex: 0, shift: 'MORNING' },
     { firstName: 'Helen', lastName: 'Moore', departmentIndex: 4, shift: 'AFTERNOON' },
