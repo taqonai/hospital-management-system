@@ -599,9 +599,9 @@ export class HousekeepingService {
       }),
       prisma.$queryRaw<any[]>`
         SELECT COUNT(*) as count FROM housekeeping_inventory
-        WHERE hospital_id = ${hospitalId}
-        AND is_active = true
-        AND current_stock <= reorder_level
+        WHERE "hospitalId" = ${hospitalId}
+        AND "isActive" = true
+        AND "currentStock" <= "reorderLevel"
       `,
       prisma.qualityAudit.count({
         where: { hospitalId, status: 'REQUIRES_ACTION' },
