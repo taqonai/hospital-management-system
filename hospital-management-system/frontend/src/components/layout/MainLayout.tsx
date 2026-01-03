@@ -52,6 +52,8 @@ const navigationGroups = [
       { name: 'OPD', href: '/opd', icon: ClipboardDocumentListIcon, color: 'from-indigo-500 to-indigo-600' },
       { name: 'IPD', href: '/ipd', icon: BuildingOffice2Icon, color: 'from-violet-500 to-violet-600' },
       { name: 'Emergency', href: '/emergency', icon: ExclamationTriangleIcon, color: 'from-red-500 to-red-600', badge: true },
+      { name: 'Early Warning', href: '/early-warning', icon: BellIcon, color: 'from-orange-500 to-red-600' },
+      { name: 'Med Safety', href: '/medication-safety', icon: ShieldCheckIcon, color: 'from-blue-500 to-cyan-600' },
       { name: 'Laboratory', href: '/laboratory', icon: BeakerIcon, color: 'from-amber-500 to-amber-600' },
       { name: 'Radiology', href: '/radiology', icon: PhotoIcon, color: 'from-pink-500 to-pink-600' },
       { name: 'Pharmacy', href: '/pharmacy', icon: BuildingStorefrontIcon, color: 'from-teal-500 to-teal-600' },
@@ -63,6 +65,8 @@ const navigationGroups = [
     name: 'AI Features',
     items: [
       { name: 'Diagnostic AI', href: '/diagnostic-assistant', icon: SparklesIcon, color: 'from-fuchsia-500 to-fuchsia-600' },
+      { name: 'AI Scribe', href: '/ai-scribe', icon: DocumentTextIcon, color: 'from-violet-500 to-violet-600' },
+      { name: 'Smart Orders', href: '/smart-orders', icon: SparklesIcon, color: 'from-indigo-500 to-purple-600' },
       { name: 'Clinical Notes', href: '/clinical-notes', icon: DocumentTextIcon, color: 'from-sky-500 to-sky-600' },
       { name: 'Patient Risk', href: '/patient-risk', icon: ShieldCheckIcon, color: 'from-orange-500 to-orange-600' },
       { name: 'Drug Checker', href: '/drug-interactions', icon: BeakerIcon, color: 'from-lime-500 to-lime-600' },

@@ -84,7 +84,7 @@ router.post(
 router.post(
   '/monitor',
   authenticate,
-  authorize('NURSE', 'DOCTOR', 'ADMIN'),
+  authorize('NURSE', 'DOCTOR', 'HOSPITAL_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId, vitals, vitalsHistory, patientData } = req.body;
     const result = await earlyWarningService.monitorVitals(
@@ -235,7 +235,7 @@ router.get(
 router.put(
   '/alerts/:alertId/acknowledge',
   authenticate,
-  authorize('NURSE', 'DOCTOR', 'ADMIN'),
+  authorize('NURSE', 'DOCTOR', 'HOSPITAL_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { notes } = req.body;
     const result = await earlyWarningService.acknowledgeAlert(

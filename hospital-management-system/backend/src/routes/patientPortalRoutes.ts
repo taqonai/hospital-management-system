@@ -74,12 +74,14 @@ router.post(
   '/symptom-check/start',
   validate(startSessionSchema),
   asyncHandler(async (req: Request, res: Response) => {
-    const { patientId, patientAge, patientGender } = req.body;
+    const { patientAge, patientGender, initialSymptoms } = req.body;
 
     const result = await symptomCheckerService.startSession({
-      patientId,
-      patientAge,
-      patientGender,
+      patientInfo: {
+        age: patientAge,
+        gender: patientGender,
+      },
+      initialSymptoms,
     });
 
     sendSuccess(res, result, 'Symptom check session started');

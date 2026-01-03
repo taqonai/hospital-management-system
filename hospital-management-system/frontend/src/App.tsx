@@ -71,6 +71,15 @@ import SymptomChecker from './pages/SymptomChecker';
 // AI Scribe for Doctors
 import AIScribe from './pages/AIScribe';
 
+// Early Warning System (NEWS2)
+import EarlyWarning from './pages/EarlyWarning';
+
+// Medication Safety (5 Rights)
+import MedicationSafety from './pages/MedicationSafety';
+
+// Smart Orders (AI-powered order recommendations)
+import SmartOrders from './pages/SmartOrders';
+
 // Protected Route Component
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -136,6 +145,9 @@ function App() {
         <Route path="/patient-risk" element={<PatientRisk />} />
         <Route path="/diagnostic-assistant" element={<DiagnosticAssistantPage />} />
         <Route path="/ai-scribe" element={<AIScribe />} />
+        <Route path="/early-warning" element={<EarlyWarning />} />
+        <Route path="/medication-safety" element={<MedicationSafety />} />
+        <Route path="/smart-orders" element={<SmartOrders />} />
         <Route path="/ipd" element={<IPD />} />
         <Route path="/emergency" element={<Emergency />} />
         <Route path="/laboratory" element={<Laboratory />} />

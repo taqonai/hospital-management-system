@@ -192,7 +192,7 @@ router.post(
       return res.status(400).json({ success: false, message: 'Orders are required' });
     }
 
-    const providerId = req.user?.id || 'unknown';
+    const providerId = req.user?.userId || 'unknown';
 
     const result = await smartOrderService.placeOrders({
       patientId,

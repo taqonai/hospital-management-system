@@ -30,6 +30,11 @@ import reportsRoutes from './reportsRoutes';
 import queueRoutes from './queueRoutes';
 import kioskRoutes from './kioskRoutes';
 import symptomCheckerRoutes from './symptomCheckerRoutes';
+// Clinical Safety & AI modules
+import earlyWarningRoutes from './earlyWarningRoutes';
+import medSafetyRoutes from './medSafetyRoutes';
+import smartOrderRoutes from './smartOrderRoutes';
+import patientPortalRoutes from './patientPortalRoutes';
 
 const router = Router();
 
@@ -78,5 +83,11 @@ router.use('/queue', queueRoutes);
 
 // Symptom Checker (public access with optional auth)
 router.use('/symptom-checker', symptomCheckerRoutes);
+
+// Clinical Safety & AI modules
+router.use('/early-warning', earlyWarningRoutes);
+router.use('/med-safety', medSafetyRoutes);
+router.use('/smart-orders', smartOrderRoutes);
+router.use('/patient-portal', patientPortalRoutes);
 
 export default router;
