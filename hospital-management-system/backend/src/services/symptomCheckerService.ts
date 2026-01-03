@@ -315,8 +315,8 @@ const FALLBACK_QUESTIONS: QuestionData[] = [
     id: 'main_symptoms',
     type: 'multitext',
     question: 'What symptoms are you experiencing today?',
-    placeholder: 'Describe your main symptoms...',
-    helpText: 'Please list all the symptoms you\'re currently experiencing',
+    placeholder: 'Type or speak your symptoms...',
+    helpText: 'Describe your main symptoms in your own words',
     required: true,
     priority: 1,
   },
@@ -325,15 +325,13 @@ const FALLBACK_QUESTIONS: QuestionData[] = [
     type: 'select',
     question: 'Which part of your body is primarily affected?',
     options: [
-      { value: 'head_neck', label: 'Head/Neck (headache, sore throat, ear pain)' },
-      { value: 'chest', label: 'Chest (breathing, heart, cough)' },
-      { value: 'abdomen', label: 'Abdomen/Stomach (digestive issues)' },
+      { value: 'head_neck', label: 'Head/Neck' },
+      { value: 'chest', label: 'Chest' },
+      { value: 'abdomen', label: 'Abdomen/Stomach' },
       { value: 'back_spine', label: 'Back/Spine' },
-      { value: 'arms_hands', label: 'Arms/Hands' },
-      { value: 'legs_feet', label: 'Legs/Feet' },
-      { value: 'skin', label: 'Skin (rash, itching)' },
-      { value: 'general', label: 'Whole Body/General (fever, fatigue)' },
-      { value: 'mental', label: 'Mental/Emotional' },
+      { value: 'limbs', label: 'Arms/Legs' },
+      { value: 'skin', label: 'Skin' },
+      { value: 'general', label: 'Whole Body' },
     ],
     required: true,
     priority: 2,
@@ -341,24 +339,23 @@ const FALLBACK_QUESTIONS: QuestionData[] = [
   {
     id: 'severity',
     type: 'scale',
-    question: 'On a scale of 1-10, how severe are your symptoms?',
+    question: 'How severe are your symptoms?',
     min: 1,
     max: 10,
-    labels: { '1': 'Barely noticeable', '5': 'Moderate', '10': 'Worst imaginable' },
+    labels: { '1': 'Mild', '10': 'Severe' },
     required: true,
     priority: 3,
   },
   {
     id: 'duration',
     type: 'select',
-    question: 'How long have you been experiencing these symptoms?',
+    question: 'How long have you had these symptoms?',
     options: [
-      { value: 'just_started', label: 'Just started (minutes to hours)' },
-      { value: 'today', label: 'Started today' },
+      { value: 'just_started', label: 'Just started' },
+      { value: 'today', label: 'Today' },
       { value: '1-3_days', label: '1-3 days' },
       { value: '4-7_days', label: '4-7 days' },
-      { value: '1-2_weeks', label: '1-2 weeks' },
-      { value: 'more_than_month', label: 'More than a month' },
+      { value: 'more_than_week', label: 'More than a week' },
     ],
     required: true,
     priority: 4,
@@ -366,20 +363,21 @@ const FALLBACK_QUESTIONS: QuestionData[] = [
   {
     id: 'associated_symptoms',
     type: 'multiselect',
-    question: 'Are you experiencing any of these additional symptoms?',
+    question: 'Any additional symptoms?',
     options: [
-      { value: 'fever', label: 'Fever or chills' },
-      { value: 'fatigue', label: 'Fatigue or weakness' },
-      { value: 'nausea', label: 'Nausea or vomiting' },
+      { value: 'fever', label: 'Fever/chills' },
+      { value: 'fatigue', label: 'Fatigue' },
+      { value: 'nausea', label: 'Nausea' },
       { value: 'headache', label: 'Headache' },
       { value: 'dizziness', label: 'Dizziness' },
-      { value: 'shortness_of_breath', label: 'Shortness of breath' },
-      { value: 'none', label: 'None of these' },
+      { value: 'none', label: 'None' },
     ],
     required: false,
     priority: 5,
   },
 ];
+
+const FALLBACK_QUESTION_FLOW = ['main_symptoms', 'body_location', 'severity', 'duration', 'associated_symptoms'];
 
 // =============================================================================
 // Symptom Checker Service
@@ -989,6 +987,7 @@ export class SymptomCheckerService {
         : SessionStatus.ACTIVE,
       patientInfo,
       initialSymptoms: data.initialSymptoms || [],
+      collectedSymptoms: data.initialSymptoms || [],
       answers: {},
       currentQuestionIndex: 0,
       redFlags,
@@ -1028,6 +1027,15 @@ export class SymptomCheckerService {
     for (const response of data.responses) {
       session.answers[response.questionId] = response.answer;
 
+      // Collect symptoms from main_symptoms
+      if (response.questionId === 'main_symptoms') {
+        const answer = response.answer;
+        if (typeof answer === 'string') {
+          const symptoms = answer.split(',').map((s: string) => s.trim());
+          session.collectedSymptoms = [...(session.collectedSymptoms || []), ...symptoms];
+        }
+      }
+
       if (typeof response.answer === 'string') {
         const text = response.answer.toLowerCase();
         for (const [keyword, flagData] of Object.entries(RED_FLAG_KEYWORDS)) {
@@ -1049,10 +1057,10 @@ export class SymptomCheckerService {
     }
 
     session.lastUpdatedAt = new Date().toISOString();
-    session.currentQuestionIndex++;
 
-    const answeredCount = Object.keys(session.answers).length;
-    const progress = Math.min(Math.round((answeredCount / FALLBACK_QUESTIONS.length) * 100), 100);
+    // Calculate progress based on answered questions in flow
+    const answeredInFlow = FALLBACK_QUESTION_FLOW.filter(qId => qId in session.answers);
+    const progress = Math.min(Math.round((answeredInFlow.length / FALLBACK_QUESTION_FLOW.length) * 100), 100);
 
     const emergencyFlags = session.redFlags.filter((rf: RedFlag) => rf.triageLevel === TriageLevel.EMERGENCY);
     if (emergencyFlags.length > 0) {
@@ -1068,18 +1076,33 @@ export class SymptomCheckerService {
       };
     }
 
-    const nextQuestions = FALLBACK_QUESTIONS.filter(q => !(q.id in session.answers));
+    // Get next unanswered questions from flow
+    const nextQuestionIds = FALLBACK_QUESTION_FLOW.filter(qId => !(qId in session.answers));
+    const nextQuestions = nextQuestionIds
+      .slice(0, 2)
+      .map(qId => FALLBACK_QUESTIONS.find(q => q.id === qId))
+      .filter(Boolean) as QuestionData[];
+
     const isComplete = nextQuestions.length === 0;
 
     if (isComplete) {
       session.status = SessionStatus.COMPLETED;
     }
 
+    // Generate contextual message
+    let message: string | undefined;
+    if (!isComplete && session.collectedSymptoms?.length > 0) {
+      const symptom = session.collectedSymptoms[0];
+      message = `Got it. Let me understand more about your ${symptom.toLowerCase()}.`;
+    } else if (isComplete) {
+      message = 'Assessment complete. Your results are ready.';
+    }
+
     return {
       sessionId: data.sessionId,
       status: session.status,
-      message: isComplete ? 'Thank you for answering all the questions. Your assessment is ready.' : undefined,
-      nextQuestions: isComplete ? undefined : nextQuestions.slice(0, 2),
+      message,
+      nextQuestions: isComplete ? undefined : nextQuestions,
       progress,
       isComplete,
       redFlagDetected: session.redFlags.length > 0,
@@ -1087,8 +1110,8 @@ export class SymptomCheckerService {
   }
 
   private formatFallbackSession(session: any): GetSessionResponse {
-    const answeredCount = Object.keys(session.answers).length;
-    const progress = Math.min(Math.round((answeredCount / FALLBACK_QUESTIONS.length) * 100), 100);
+    const answeredInFlow = FALLBACK_QUESTION_FLOW.filter(qId => qId in session.answers);
+    const progress = Math.min(Math.round((answeredInFlow.length / FALLBACK_QUESTION_FLOW.length) * 100), 100);
 
     return {
       sessionId: session.id,
@@ -1110,7 +1133,7 @@ export class SymptomCheckerService {
     }
 
     const severity = session.answers.severity || 5;
-    const symptoms = session.initialSymptoms || [];
+    const symptoms = session.collectedSymptoms || session.initialSymptoms || [];
     const redFlags = session.redFlags || [];
 
     let triageLevel = TriageLevel.ROUTINE;

@@ -708,17 +708,11 @@ QUESTION_BANK = {
 }
 
 QUESTION_FLOW = [
-    "initial",
+    "main_symptoms",
     "body_location",
     "severity",
     "duration",
-    "onset",
-    "pattern",
     "associated_symptoms",
-    "medical_history",
-    "current_medications",
-    "allergies",
-    "previous_treatment"
 ]
 
 
@@ -1138,7 +1132,8 @@ async def submit_response(request: RespondRequest):
             if isinstance(answer, str):
                 flags = check_red_flags(answer)
                 for flag in flags:
-                    if flag not in session["redFlags"]:
+                    existing_ids = [f.get("flagId") for f in session["redFlags"]]
+                    if flag["flagId"] not in existing_ids:
                         session["redFlags"].append(flag)
 
             # Collect symptoms from main_symptoms response
@@ -1146,12 +1141,16 @@ async def submit_response(request: RespondRequest):
                 if isinstance(answer, list):
                     session["collectedSymptoms"].extend(answer)
                 elif isinstance(answer, str):
-                    session["collectedSymptoms"].append(answer)
+                    # Parse comma-separated symptoms
+                    symptoms = [s.strip() for s in answer.split(',')]
+                    session["collectedSymptoms"].extend(symptoms)
 
     session["lastUpdatedAt"] = datetime.now().isoformat()
 
-    # Calculate progress
-    answered_count = len([q for q in QUESTION_FLOW if q in session["answers"]])
+    # Calculate progress based on answered questions
+    answered_questions = set(session["answers"].keys())
+    required_questions = set(QUESTION_FLOW)
+    answered_count = len(answered_questions.intersection(required_questions))
     progress = min(int((answered_count / len(QUESTION_FLOW)) * 100), 100)
 
     # Check for emergency red flags
@@ -1170,22 +1169,21 @@ async def submit_response(request: RespondRequest):
             triageLevel=TriageLevel.EMERGENCY.value
         )
 
-    # Determine next questions
+    # Determine next questions - only ask what hasn't been answered
     next_questions = []
-    current_index = session.get("currentQuestionIndex", 0)
-
-    for i, question_key in enumerate(QUESTION_FLOW):
+    for question_key in QUESTION_FLOW:
         if question_key not in session["answers"]:
-            if question_key in QUESTION_BANK:
+            # Map question key to QUESTION_BANK - handle "initial" -> "main_symptoms"
+            bank_key = "initial" if question_key == "main_symptoms" else question_key
+            if bank_key in QUESTION_BANK:
+                next_questions.append(QUESTION_BANK[bank_key])
+            elif question_key in QUESTION_BANK:
                 next_questions.append(QUESTION_BANK[question_key])
-            if len(next_questions) >= 2:  # Send 2 questions at a time
+            if len(next_questions) >= 2:  # Send 2 questions at a time for speed
                 break
-            current_index = i
-
-    session["currentQuestionIndex"] = current_index
 
     # Check if complete
-    is_complete = len(next_questions) == 0 or progress >= 100
+    is_complete = len(next_questions) == 0
 
     if is_complete:
         session["status"] = SessionStatus.COMPLETED.value
@@ -1195,7 +1193,7 @@ async def submit_response(request: RespondRequest):
         return RespondResponse(
             sessionId=request.sessionId,
             status=session["status"],
-            message="Thank you for answering all the questions. Your assessment is ready.",
+            message="Assessment complete. Your results are ready.",
             nextQuestions=None,
             progress=100,
             isComplete=True,
@@ -1204,12 +1202,14 @@ async def submit_response(request: RespondRequest):
             triageLevel=triage_level.value
         )
 
-    # Personalize message
+    # Generate contextual message based on symptoms
     message = None
-    if "main_symptoms" in session["answers"] and "body_location" not in session["answers"]:
-        symptoms = session["answers"]["main_symptoms"]
-        if isinstance(symptoms, list) and symptoms:
-            message = f"I understand you're experiencing {', '.join(symptoms[:2])}. Let me ask a few more questions."
+    symptoms = session.get("collectedSymptoms", [])
+    if symptoms and len(symptoms) > 0:
+        symptom_text = symptoms[0] if isinstance(symptoms[0], str) else str(symptoms[0])
+        if len(symptom_text) > 50:
+            symptom_text = symptom_text[:50] + "..."
+        message = f"Got it. Let me understand more about your {symptom_text.lower()}."
 
     return RespondResponse(
         sessionId=request.sessionId,
