@@ -81,6 +81,316 @@ const priorityConfig: Record<string, { bg: string; text: string }> = {
   STAT: { bg: 'bg-rose-500/10', text: 'text-rose-600' },
 };
 
+interface Patient {
+  id: string;
+  firstName: string;
+  lastName: string;
+  mrn: string;
+}
+
+interface LabTest {
+  id: string;
+  name: string;
+  code: string;
+  category: string;
+  price: number;
+}
+
+function NewLabOrderModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [availableTests, setAvailableTests] = useState<LabTest[]>([]);
+  const [selectedTests, setSelectedTests] = useState<string[]>([]);
+  const [priority, setPriority] = useState<'ROUTINE' | 'URGENT' | 'STAT'>('ROUTINE');
+  const [clinicalNotes, setClinicalNotes] = useState('');
+  const [loadingTests, setLoadingTests] = useState(true);
+
+  // Fetch available tests
+  useEffect(() => {
+    const fetchTests = async () => {
+      try {
+        setLoadingTests(true);
+        const response = await laboratoryApi.getTests({ limit: 100 });
+        setAvailableTests(response.data.data || []);
+      } catch (error) {
+        console.error('Failed to fetch lab tests:', error);
+        toast.error('Failed to load available tests');
+      } finally {
+        setLoadingTests(false);
+      }
+    };
+    fetchTests();
+  }, []);
+
+  // Search patients
+  const searchPatients = async (query: string) => {
+    if (!query.trim()) {
+      setPatients([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const { patientApi } = await import('../../services/api');
+      const response = await patientApi.getAll({ search: query, limit: 10 });
+      setPatients(response.data.data || []);
+    } catch (error) {
+      console.error('Failed to search patients:', error);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  useEffect(() => {
+    const debounce = setTimeout(() => {
+      searchPatients(searchQuery);
+    }, 300);
+    return () => clearTimeout(debounce);
+  }, [searchQuery]);
+
+  const toggleTestSelection = (testId: string) => {
+    setSelectedTests(prev =>
+      prev.includes(testId)
+        ? prev.filter(id => id !== testId)
+        : [...prev, testId]
+    );
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPatient) {
+      toast.error('Please select a patient');
+      return;
+    }
+    if (selectedTests.length === 0) {
+      toast.error('Please select at least one test');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await laboratoryApi.createOrder({
+        patientId: selectedPatient.id,
+        testIds: selectedTests,
+        priority,
+        clinicalNotes: clinicalNotes || undefined,
+      });
+      toast.success('Lab order created successfully');
+      onSuccess();
+    } catch (error: any) {
+      console.error('Failed to create lab order:', error);
+      toast.error(error.response?.data?.message || 'Failed to create lab order');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Group tests by category
+  const testsByCategory = availableTests.reduce((acc, test) => {
+    const category = test.category || 'General';
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(test);
+    return acc;
+  }, {} as Record<string, LabTest[]>);
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative w-full max-w-3xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-yellow-500 px-6 py-4">
+            <h2 className="text-xl font-bold text-white">Create New Lab Order</h2>
+            <p className="text-white/80 text-sm">Order laboratory tests for a patient</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+            {/* Patient Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Patient <span className="text-red-500">*</span>
+              </label>
+              {selectedPatient ? (
+                <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-xl">
+                  <div>
+                    <span className="font-medium text-gray-900">
+                      {selectedPatient.firstName} {selectedPatient.lastName}
+                    </span>
+                    <span className="ml-2 text-sm text-gray-500">MRN: {selectedPatient.mrn}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPatient(null)}
+                    className="text-sm text-red-600 hover:text-red-700"
+                  >
+                    Change
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search by name or MRN..."
+                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500"
+                  />
+                  {searching && (
+                    <div className="absolute right-3 top-3">
+                      <ArrowPathIcon className="h-5 w-5 animate-spin text-gray-400" />
+                    </div>
+                  )}
+                  {patients.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                      {patients.map((patient) => (
+                        <button
+                          key={patient.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedPatient(patient);
+                            setSearchQuery('');
+                            setPatients([]);
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl"
+                        >
+                          <span className="font-medium">{patient.firstName} {patient.lastName}</span>
+                          <span className="ml-2 text-sm text-gray-500">MRN: {patient.mrn}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Priority */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+              <div className="flex gap-3">
+                {(['ROUTINE', 'URGENT', 'STAT'] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setPriority(p)}
+                    className={clsx(
+                      'flex-1 py-2.5 px-4 rounded-xl font-medium text-sm transition-all border',
+                      priority === p
+                        ? p === 'STAT'
+                          ? 'bg-rose-500 text-white border-rose-500'
+                          : p === 'URGENT'
+                            ? 'bg-orange-500 text-white border-orange-500'
+                            : 'bg-amber-500 text-white border-amber-500'
+                        : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                    )}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Test Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Tests <span className="text-red-500">*</span>
+                {selectedTests.length > 0 && (
+                  <span className="ml-2 text-amber-600">({selectedTests.length} selected)</span>
+                )}
+              </label>
+              {loadingTests ? (
+                <div className="flex items-center justify-center py-8">
+                  <ArrowPathIcon className="h-6 w-6 animate-spin text-amber-500" />
+                  <span className="ml-2 text-gray-500">Loading tests...</span>
+                </div>
+              ) : (
+                <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-xl">
+                  {Object.entries(testsByCategory).map(([category, tests]) => (
+                    <div key={category} className="border-b border-gray-200 last:border-b-0">
+                      <div className="px-4 py-2 bg-gray-50 font-medium text-sm text-gray-600">
+                        {category}
+                      </div>
+                      <div className="divide-y divide-gray-100">
+                        {tests.map((test) => (
+                          <label
+                            key={test.id}
+                            className={clsx(
+                              'flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors',
+                              selectedTests.includes(test.id) && 'bg-amber-50'
+                            )}
+                          >
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="checkbox"
+                                checked={selectedTests.includes(test.id)}
+                                onChange={() => toggleTestSelection(test.id)}
+                                className="w-4 h-4 rounded border-gray-300 text-amber-500 focus:ring-amber-500"
+                              />
+                              <div>
+                                <span className="font-medium text-gray-900">{test.name}</span>
+                                <span className="ml-2 text-xs text-gray-500">({test.code})</span>
+                              </div>
+                            </div>
+                            <span className="text-sm text-gray-500">${test.price?.toFixed(2) || '0.00'}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  {Object.keys(testsByCategory).length === 0 && (
+                    <div className="p-4 text-center text-gray-500">No tests available</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Clinical Notes */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Clinical Notes (Optional)</label>
+              <textarea
+                value={clinicalNotes}
+                onChange={(e) => setClinicalNotes(e.target.value)}
+                placeholder="Reason for ordering, relevant symptoms, or special instructions..."
+                rows={3}
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 resize-none"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading || !selectedPatient || selectedTests.length === 0}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold hover:from-amber-600 hover:to-orange-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <BeakerIcon className="h-5 w-5" />
+                    Create Order
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Laboratory() {
   const [activeTab, setActiveTab] = useState<'orders' | 'results' | 'critical'>('orders');
   const [search, setSearch] = useState('');
@@ -96,6 +406,7 @@ export default function Laboratory() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [showNewOrderModal, setShowNewOrderModal] = useState(false);
   const { data: healthStatus } = useAIHealth();
 
   const isAIOnline = healthStatus?.status === 'connected';
@@ -202,7 +513,10 @@ export default function Laboratory() {
                 AI Suggest Tests
               </button>
             )}
-            <button className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-white/10 backdrop-blur-xl border border-white/20 text-white font-semibold hover:bg-white/20 transition-all hover:scale-105 group">
+            <button
+              onClick={() => setShowNewOrderModal(true)}
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-white/10 backdrop-blur-xl border border-white/20 text-white font-semibold hover:bg-white/20 transition-all hover:scale-105 group"
+            >
               <PlusIcon className="h-5 w-5 group-hover:rotate-90 transition-transform duration-300" />
               New Order
             </button>
@@ -478,6 +792,31 @@ export default function Laboratory() {
           </div>
         )}
       </div>
+
+      {/* New Order Modal */}
+      {showNewOrderModal && (
+        <NewLabOrderModal
+          onClose={() => setShowNewOrderModal(false)}
+          onSuccess={() => {
+            setShowNewOrderModal(false);
+            // Refresh orders
+            const fetchOrders = async () => {
+              try {
+                const response = await laboratoryApi.getOrders({
+                  page,
+                  limit: 20,
+                  status: statusFilter || undefined,
+                  search: search || undefined,
+                });
+                setLabOrders(response.data.data || []);
+              } catch (error) {
+                console.error('Failed to fetch lab orders:', error);
+              }
+            };
+            fetchOrders();
+          }}
+        />
+      )}
     </div>
   );
 }

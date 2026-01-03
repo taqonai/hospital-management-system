@@ -6,9 +6,10 @@ import {
   CheckCircleIcon,
   EyeIcon,
   ArrowPathIcon,
+  PlusIcon,
 } from '@heroicons/react/24/outline';
 import { useAIHealth } from '../../hooks/useAI';
-import { radiologyApi } from '../../services/api';
+import { radiologyApi, patientApi, doctorApi } from '../../services/api';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 
@@ -51,6 +52,277 @@ const statusConfig: Record<string, { bg: string; dot: string; text: string }> = 
   REPORTED: { bg: 'bg-green-100/80', dot: 'bg-green-500', text: 'text-green-700' },
 };
 
+interface Patient {
+  id: string;
+  firstName: string;
+  lastName: string;
+  mrn: string;
+}
+
+const modalityTypes = ['X_RAY', 'CT', 'MRI', 'ULTRASOUND', 'MAMMOGRAPHY', 'FLUOROSCOPY', 'PET', 'NUCLEAR'];
+const bodyParts = ['HEAD', 'NECK', 'CHEST', 'ABDOMEN', 'PELVIS', 'SPINE', 'UPPER_EXTREMITY', 'LOWER_EXTREMITY', 'WHOLE_BODY'];
+
+function NewImagingOrderModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [modalityType, setModalityType] = useState('');
+  const [bodyPart, setBodyPart] = useState('');
+  const [priority, setPriority] = useState<'ROUTINE' | 'URGENT' | 'STAT'>('ROUTINE');
+  const [clinicalHistory, setClinicalHistory] = useState('');
+  const [contrastRequired, setContrastRequired] = useState(false);
+
+  // Search patients
+  const searchPatients = async (query: string) => {
+    if (!query.trim()) {
+      setPatients([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const response = await patientApi.getAll({ search: query, limit: 10 });
+      setPatients(response.data.data || []);
+    } catch (error) {
+      console.error('Failed to search patients:', error);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  useEffect(() => {
+    const debounce = setTimeout(() => {
+      searchPatients(searchQuery);
+    }, 300);
+    return () => clearTimeout(debounce);
+  }, [searchQuery]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPatient) {
+      toast.error('Please select a patient');
+      return;
+    }
+    if (!modalityType) {
+      toast.error('Please select a modality type');
+      return;
+    }
+    if (!bodyPart) {
+      toast.error('Please select a body part');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await radiologyApi.createOrder({
+        patientId: selectedPatient.id,
+        modalityType,
+        bodyPart,
+        priority,
+        clinicalHistory: clinicalHistory || undefined,
+        contrastRequired,
+      });
+      toast.success('Imaging order created successfully');
+      onSuccess();
+    } catch (error: any) {
+      console.error('Failed to create imaging order:', error);
+      toast.error(error.response?.data?.message || 'Failed to create imaging order');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500 px-6 py-4">
+            <h2 className="text-xl font-bold text-white">Create Imaging Order</h2>
+            <p className="text-white/80 text-sm">Request a new radiology imaging study</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+            {/* Patient Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Patient <span className="text-red-500">*</span>
+              </label>
+              {selectedPatient ? (
+                <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-xl">
+                  <div>
+                    <span className="font-medium text-gray-900">
+                      {selectedPatient.firstName} {selectedPatient.lastName}
+                    </span>
+                    <span className="ml-2 text-sm text-gray-500">MRN: {selectedPatient.mrn}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPatient(null)}
+                    className="text-sm text-red-600 hover:text-red-700"
+                  >
+                    Change
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search by name or MRN..."
+                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500"
+                  />
+                  {searching && (
+                    <div className="absolute right-3 top-3">
+                      <ArrowPathIcon className="h-5 w-5 animate-spin text-gray-400" />
+                    </div>
+                  )}
+                  {patients.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                      {patients.map((patient) => (
+                        <button
+                          key={patient.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedPatient(patient);
+                            setSearchQuery('');
+                            setPatients([]);
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl"
+                        >
+                          <span className="font-medium">{patient.firstName} {patient.lastName}</span>
+                          <span className="ml-2 text-sm text-gray-500">MRN: {patient.mrn}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Modality & Body Part */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Modality <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={modalityType}
+                  onChange={(e) => setModalityType(e.target.value)}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500"
+                  required
+                >
+                  <option value="">Select modality...</option>
+                  {modalityTypes.map((m) => (
+                    <option key={m} value={m}>{m.replace('_', ' ')}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Body Part <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={bodyPart}
+                  onChange={(e) => setBodyPart(e.target.value)}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500"
+                  required
+                >
+                  <option value="">Select body part...</option>
+                  {bodyParts.map((b) => (
+                    <option key={b} value={b}>{b.replace(/_/g, ' ')}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Priority */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+              <div className="flex gap-3">
+                {(['ROUTINE', 'URGENT', 'STAT'] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setPriority(p)}
+                    className={clsx(
+                      'flex-1 py-2.5 px-4 rounded-xl font-medium text-sm transition-all border',
+                      priority === p
+                        ? p === 'STAT'
+                          ? 'bg-red-500 text-white border-red-500'
+                          : p === 'URGENT'
+                            ? 'bg-orange-500 text-white border-orange-500'
+                            : 'bg-violet-500 text-white border-violet-500'
+                        : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                    )}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Contrast & Clinical History */}
+            <div className="space-y-4">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={contrastRequired}
+                  onChange={(e) => setContrastRequired(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-violet-500 focus:ring-violet-500"
+                />
+                <span className="text-sm font-medium text-gray-700">Contrast Required</span>
+              </label>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Clinical History</label>
+                <textarea
+                  value={clinicalHistory}
+                  onChange={(e) => setClinicalHistory(e.target.value)}
+                  placeholder="Relevant clinical history, indication for study..."
+                  rows={3}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading || !selectedPatient || !modalityType || !bodyPart}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-500 text-white font-semibold hover:from-violet-600 hover:to-purple-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <PhotoIcon className="h-5 w-5" />
+                    Create Order
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Radiology() {
   const [activeTab, setActiveTab] = useState<'worklist' | 'viewer' | 'reports'>('worklist');
   const [orders, setOrders] = useState<ImagingOrder[]>([]);
@@ -61,6 +333,7 @@ export default function Radiology() {
     completedToday: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [showNewOrderModal, setShowNewOrderModal] = useState(false);
   const { data: healthStatus } = useAIHealth();
   const isAIOnline = healthStatus?.status === 'connected';
 
@@ -139,16 +412,25 @@ export default function Radiology() {
               Imaging worklist, AI analysis, and reporting
             </p>
           </div>
-          {isAIOnline && (
-            <span className="inline-flex items-center gap-2 text-sm text-white bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full border border-white/30 shadow-lg">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-400"></span>
+          <div className="flex items-center gap-3">
+            {isAIOnline && (
+              <span className="inline-flex items-center gap-2 text-sm text-white bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full border border-white/30 shadow-lg">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-400"></span>
+                </span>
+                <SparklesIcon className="h-4 w-4" />
+                AI Analysis Active
               </span>
-              <SparklesIcon className="h-4 w-4" />
-              AI Analysis Active
-            </span>
-          )}
+            )}
+            <button
+              onClick={() => setShowNewOrderModal(true)}
+              className="group inline-flex items-center gap-2 px-5 py-2.5 bg-white/20 backdrop-blur-md border border-white/30 rounded-xl text-white font-semibold shadow-lg hover:bg-white/30 hover:scale-105 transition-all duration-300"
+            >
+              <PlusIcon className="h-5 w-5 group-hover:rotate-90 transition-transform duration-300" />
+              New Order
+            </button>
+          </div>
         </div>
       </div>
 
@@ -406,6 +688,26 @@ export default function Radiology() {
           }
         }
       `}</style>
+
+      {/* New Order Modal */}
+      {showNewOrderModal && (
+        <NewImagingOrderModal
+          onClose={() => setShowNewOrderModal(false)}
+          onSuccess={() => {
+            setShowNewOrderModal(false);
+            // Refresh orders
+            const fetchOrders = async () => {
+              try {
+                const response = await radiologyApi.getOrders({ limit: 50 });
+                setOrders(response.data.data || []);
+              } catch (error) {
+                console.error('Failed to fetch orders:', error);
+              }
+            };
+            fetchOrders();
+          }}
+        />
+      )}
     </div>
   );
 }

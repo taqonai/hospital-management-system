@@ -134,6 +134,271 @@ function GlassStatusBadge({ status }: { status: string }) {
   );
 }
 
+// Add Employee Modal Component
+function AddEmployeeModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [shifts, setShifts] = useState<{ id: string; name: string }[]>([]);
+  const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    dateOfBirth: '',
+    gender: 'MALE' as 'MALE' | 'FEMALE' | 'OTHER',
+    address: '',
+    city: '',
+    state: '',
+    zipCode: '',
+    designation: '',
+    employeeType: 'FULL_TIME' as 'FULL_TIME' | 'PART_TIME' | 'CONTRACT' | 'INTERN' | 'CONSULTANT',
+    joiningDate: new Date().toISOString().split('T')[0],
+    basicSalary: '',
+    shiftId: '',
+  });
+
+  useEffect(() => {
+    hrApi.getShifts().then(res => {
+      setShifts(res.data.data || []);
+    }).catch(console.error);
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.firstName || !formData.lastName || !formData.email || !formData.phone) {
+      toast.error('Please fill all required fields');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await hrApi.createEmployee({
+        ...formData,
+        dateOfBirth: new Date(formData.dateOfBirth).toISOString(),
+        joiningDate: new Date(formData.joiningDate).toISOString(),
+        basicSalary: parseFloat(formData.basicSalary) || 0,
+      });
+      toast.success('Employee created successfully');
+      onSuccess();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to create employee');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="relative overflow-hidden rounded-2xl backdrop-blur-xl bg-white border border-gray-200 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
+
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-gray-900">Add New Employee</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <XCircleIcon className="h-5 w-5 text-gray-500" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Personal Information */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Personal Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">First Name *</label>
+                <input
+                  type="text"
+                  value={formData.firstName}
+                  onChange={e => setFormData({ ...formData, firstName: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Last Name *</label>
+                <input
+                  type="text"
+                  value={formData.lastName}
+                  onChange={e => setFormData({ ...formData, lastName: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Email *</label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={e => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Phone *</label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Date of Birth *</label>
+                <input
+                  type="date"
+                  value={formData.dateOfBirth}
+                  onChange={e => setFormData({ ...formData, dateOfBirth: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Gender *</label>
+                <select
+                  value={formData.gender}
+                  onChange={e => setFormData({ ...formData, gender: e.target.value as any })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="MALE">Male</option>
+                  <option value="FEMALE">Female</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Address */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Address</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-600 mb-1">Street Address</label>
+                <input
+                  type="text"
+                  value={formData.address}
+                  onChange={e => setFormData({ ...formData, address: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">City</label>
+                <input
+                  type="text"
+                  value={formData.city}
+                  onChange={e => setFormData({ ...formData, city: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">State</label>
+                <input
+                  type="text"
+                  value={formData.state}
+                  onChange={e => setFormData({ ...formData, state: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Zip Code</label>
+                <input
+                  type="text"
+                  value={formData.zipCode}
+                  onChange={e => setFormData({ ...formData, zipCode: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Employment Details */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Employment Details</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Designation *</label>
+                <input
+                  type="text"
+                  value={formData.designation}
+                  onChange={e => setFormData({ ...formData, designation: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="e.g., Software Engineer"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Employee Type *</label>
+                <select
+                  value={formData.employeeType}
+                  onChange={e => setFormData({ ...formData, employeeType: e.target.value as any })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="FULL_TIME">Full Time</option>
+                  <option value="PART_TIME">Part Time</option>
+                  <option value="CONTRACT">Contract</option>
+                  <option value="INTERN">Intern</option>
+                  <option value="CONSULTANT">Consultant</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Joining Date *</label>
+                <input
+                  type="date"
+                  value={formData.joiningDate}
+                  onChange={e => setFormData({ ...formData, joiningDate: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Shift</label>
+                <select
+                  value={formData.shiftId}
+                  onChange={e => setFormData({ ...formData, shiftId: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Select Shift</option>
+                  {shifts.map(shift => (
+                    <option key={shift.id} value={shift.id}>{shift.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Basic Salary</label>
+                <input
+                  type="number"
+                  value={formData.basicSalary}
+                  onChange={e => setFormData({ ...formData, basicSalary: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-medium transition-all shadow-lg shadow-blue-500/25 disabled:opacity-50"
+            >
+              {loading ? 'Creating...' : 'Create Employee'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function HR() {
   const [activeTab, setActiveTab] = useState<'employees' | 'attendance' | 'leave' | 'payroll'>('employees');
   const [search, setSearch] = useState('');
@@ -934,27 +1199,18 @@ export default function HR() {
         </>
       )}
 
-      {/* Add Employee Modal with Glassmorphism */}
+      {/* Add Employee Modal with Form */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div
-            className="relative overflow-hidden rounded-2xl backdrop-blur-xl bg-white border border-gray-200 p-6 max-w-lg w-full mx-4 shadow-2xl"
-            style={{ animationDelay: '0ms' }}
-          >
-            {/* Shine line */}
-            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Add New Employee</h2>
-            <p className="text-gray-600">Employee form coming soon...</p>
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white font-medium transition-all hover:shadow-md"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+        <AddEmployeeModal
+          onClose={() => setShowAddModal(false)}
+          onSuccess={() => {
+            setShowAddModal(false);
+            // Refresh employees
+            hrApi.getEmployees({ page: 1, limit: 10 }).then(res => {
+              setEmployees(res.data.data || []);
+            });
+          }}
+        />
       )}
     </div>
   );

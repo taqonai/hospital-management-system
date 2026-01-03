@@ -113,6 +113,342 @@ const confidenceColors: Record<string, string> = {
   LOW: 'bg-orange-100/60 text-orange-800 border-orange-300/50',
 };
 
+interface InvoiceLineItem {
+  description: string;
+  category: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+interface Patient {
+  id: string;
+  firstName: string;
+  lastName: string;
+  mrn: string;
+}
+
+function NewInvoiceModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [lineItems, setLineItems] = useState<InvoiceLineItem[]>([
+    { description: '', category: 'CONSULTATION', quantity: 1, unitPrice: 0 }
+  ]);
+  const [notes, setNotes] = useState('');
+
+  const categories = [
+    'CONSULTATION',
+    'PROCEDURE',
+    'LAB_TEST',
+    'IMAGING',
+    'MEDICATION',
+    'ROOM_CHARGE',
+    'NURSING_CARE',
+    'SUPPLIES',
+    'EQUIPMENT',
+    'OTHER'
+  ];
+
+  // Search patients
+  const searchPatients = async (query: string) => {
+    if (!query.trim()) {
+      setPatients([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const { patientApi } = await import('../../services/api');
+      const response = await patientApi.getAll({ search: query, limit: 10 });
+      setPatients(response.data.data || []);
+    } catch (error) {
+      console.error('Failed to search patients:', error);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  useEffect(() => {
+    const debounce = setTimeout(() => {
+      searchPatients(searchQuery);
+    }, 300);
+    return () => clearTimeout(debounce);
+  }, [searchQuery]);
+
+  const addLineItem = () => {
+    setLineItems([...lineItems, { description: '', category: 'CONSULTATION', quantity: 1, unitPrice: 0 }]);
+  };
+
+  const removeLineItem = (index: number) => {
+    if (lineItems.length > 1) {
+      setLineItems(lineItems.filter((_, i) => i !== index));
+    }
+  };
+
+  const updateLineItem = (index: number, field: keyof InvoiceLineItem, value: string | number) => {
+    const updated = [...lineItems];
+    if (field === 'quantity' || field === 'unitPrice') {
+      updated[index][field] = Number(value);
+    } else {
+      updated[index][field] = value as string;
+    }
+    setLineItems(updated);
+  };
+
+  const calculateSubtotal = () => {
+    return lineItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPatient) {
+      toast.error('Please select a patient');
+      return;
+    }
+    if (lineItems.some(item => !item.description || item.unitPrice <= 0)) {
+      toast.error('Please fill in all line items with valid prices');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await billingApi.createInvoice({
+        patientId: selectedPatient.id,
+        items: lineItems.map(item => ({
+          description: item.description,
+          category: item.category,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.quantity * item.unitPrice
+        })),
+        notes: notes || undefined,
+        totalAmount: calculateSubtotal()
+      });
+      toast.success('Invoice created successfully');
+      onSuccess();
+    } catch (error: any) {
+      console.error('Failed to create invoice:', error);
+      toast.error(error.response?.data?.message || 'Failed to create invoice');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative w-full max-w-3xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 px-6 py-4">
+            <h2 className="text-xl font-bold text-white">Create New Invoice</h2>
+            <p className="text-white/80 text-sm">Generate a new billing invoice for a patient</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+            {/* Patient Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Patient <span className="text-red-500">*</span>
+              </label>
+              {selectedPatient ? (
+                <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-xl">
+                  <div>
+                    <span className="font-medium text-gray-900">
+                      {selectedPatient.firstName} {selectedPatient.lastName}
+                    </span>
+                    <span className="ml-2 text-sm text-gray-500">MRN: {selectedPatient.mrn}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPatient(null)}
+                    className="text-sm text-red-600 hover:text-red-700"
+                  >
+                    Change
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search by name or MRN..."
+                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                  />
+                  {searching && (
+                    <div className="absolute right-3 top-3">
+                      <ArrowPathIcon className="h-5 w-5 animate-spin text-gray-400" />
+                    </div>
+                  )}
+                  {patients.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                      {patients.map((patient) => (
+                        <button
+                          key={patient.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedPatient(patient);
+                            setSearchQuery('');
+                            setPatients([]);
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl"
+                        >
+                          <span className="font-medium">{patient.firstName} {patient.lastName}</span>
+                          <span className="ml-2 text-sm text-gray-500">MRN: {patient.mrn}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Line Items */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Invoice Items <span className="text-red-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={addLineItem}
+                  className="text-sm text-orange-600 hover:text-orange-700 font-medium flex items-center gap-1"
+                >
+                  <PlusIcon className="h-4 w-4" />
+                  Add Item
+                </button>
+              </div>
+              <div className="space-y-3">
+                {lineItems.map((item, index) => (
+                  <div key={index} className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                    <div className="grid grid-cols-12 gap-3">
+                      <div className="col-span-5">
+                        <label className="block text-xs text-gray-500 mb-1">Description</label>
+                        <input
+                          type="text"
+                          value={item.description}
+                          onChange={(e) => updateLineItem(index, 'description', e.target.value)}
+                          placeholder="Service or item description"
+                          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                          required
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <label className="block text-xs text-gray-500 mb-1">Category</label>
+                        <select
+                          value={item.category}
+                          onChange={(e) => updateLineItem(index, 'category', e.target.value)}
+                          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                        >
+                          {categories.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat.replace(/_/g, ' ')}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="col-span-1">
+                        <label className="block text-xs text-gray-500 mb-1">Qty</label>
+                        <input
+                          type="number"
+                          value={item.quantity}
+                          onChange={(e) => updateLineItem(index, 'quantity', e.target.value)}
+                          min="1"
+                          className="w-full rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                          required
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-xs text-gray-500 mb-1">Unit Price ($)</label>
+                        <input
+                          type="number"
+                          value={item.unitPrice || ''}
+                          onChange={(e) => updateLineItem(index, 'unitPrice', e.target.value)}
+                          min="0"
+                          step="0.01"
+                          placeholder="0.00"
+                          className="w-full rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                          required
+                        />
+                      </div>
+                      <div className="col-span-1 flex items-end justify-end">
+                        {lineItems.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeLineItem(index)}
+                            className="p-2 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                          >
+                            <ExclamationTriangleIcon className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="mt-2 text-right text-sm text-gray-600">
+                      Subtotal: <span className="font-medium text-gray-900">${(item.quantity * item.unitPrice).toFixed(2)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Notes (Optional)</label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Additional notes for this invoice..."
+                rows={2}
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 resize-none"
+              />
+            </div>
+
+            {/* Total */}
+            <div className="border-t border-gray-200 pt-4">
+              <div className="flex justify-between items-center text-lg">
+                <span className="font-medium text-gray-700">Total Amount:</span>
+                <span className="font-bold text-2xl bg-gradient-to-r from-orange-500 to-amber-500 bg-clip-text text-transparent">
+                  ${calculateSubtotal().toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading || !selectedPatient}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold hover:from-orange-600 hover:to-amber-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <DocumentTextIcon className="h-5 w-5" />
+                    Create Invoice
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Billing() {
   const [activeTab, setActiveTab] = useState<'invoices' | 'payments' | 'claims' | 'charge-capture' | 'estimator'>('invoices');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -153,6 +489,9 @@ export default function Billing() {
   const [costSubtotal, setCostSubtotal] = useState(0);
   const [patientResponsibility, setPatientResponsibility] = useState(0);
   const [estimatingCost, setEstimatingCost] = useState(false);
+
+  // Invoice Modal State
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
 
   // Fetch invoices
   useEffect(() => {
@@ -327,7 +666,9 @@ export default function Billing() {
                 AI Charge Capture
               </button>
             )}
-            <button className="group relative inline-flex items-center gap-2 px-5 py-2.5 bg-white hover:bg-white/90 text-orange-600 font-semibold rounded-xl transition-all duration-300 hover:scale-105 hover:shadow-lg">
+            <button
+              onClick={() => setShowInvoiceModal(true)}
+              className="group relative inline-flex items-center gap-2 px-5 py-2.5 bg-white hover:bg-white/90 text-orange-600 font-semibold rounded-xl transition-all duration-300 hover:scale-105 hover:shadow-lg">
               <PlusIcon className="h-5 w-5" />
               New Invoice
             </button>
@@ -1012,6 +1353,26 @@ export default function Billing() {
           }
         }
       `}</style>
+
+      {/* New Invoice Modal */}
+      {showInvoiceModal && (
+        <NewInvoiceModal
+          onClose={() => setShowInvoiceModal(false)}
+          onSuccess={() => {
+            setShowInvoiceModal(false);
+            // Refresh invoices
+            const fetchInvoices = async () => {
+              try {
+                const response = await billingApi.getInvoices({ limit: 50 });
+                setInvoices(response.data.data || []);
+              } catch (error) {
+                console.error('Failed to fetch invoices:', error);
+              }
+            };
+            fetchInvoices();
+          }}
+        />
+      )}
     </div>
   );
 }

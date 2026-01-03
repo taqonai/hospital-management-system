@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { bloodBankApi } from '../../services/api';
+import { bloodBankApi, patientApi } from '../../services/api';
 import {
   BeakerIcon,
   UserPlusIcon,
@@ -10,6 +10,8 @@ import {
   HeartIcon,
   ChartBarIcon,
 } from '@heroicons/react/24/outline';
+import toast from 'react-hot-toast';
+import clsx from 'clsx';
 
 interface BloodInventoryItem {
   bloodGroup: string;
@@ -26,12 +28,489 @@ interface DonorStats {
   pendingRequests: number;
 }
 
+interface Patient {
+  id: string;
+  firstName: string;
+  lastName: string;
+  mrn: string;
+}
+
+const bloodGroups = ['A', 'B', 'AB', 'O'];
+const rhFactors = ['POSITIVE', 'NEGATIVE'];
+const componentTypes = ['WHOLE_BLOOD', 'PACKED_RED_CELLS', 'PLATELETS', 'FRESH_FROZEN_PLASMA', 'CRYOPRECIPITATE'];
+
+function RegisterDonorModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    dateOfBirth: '',
+    gender: 'MALE' as 'MALE' | 'FEMALE',
+    bloodGroup: '',
+    rhFactor: '',
+    address: '',
+    city: '',
+    state: '',
+    zipCode: '',
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.firstName || !formData.lastName || !formData.bloodGroup || !formData.rhFactor) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await bloodBankApi.registerDonor({
+        ...formData,
+        dateOfBirth: formData.dateOfBirth ? new Date(formData.dateOfBirth).toISOString() : undefined,
+      });
+      toast.success('Donor registered successfully');
+      onSuccess();
+    } catch (error: any) {
+      console.error('Failed to register donor:', error);
+      toast.error(error.response?.data?.message || 'Failed to register donor');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+          <div className="bg-gradient-to-r from-red-500 via-rose-500 to-pink-500 px-6 py-4">
+            <h2 className="text-xl font-bold text-white">Register New Donor</h2>
+            <p className="text-white/80 text-sm">Add a new blood donor to the system</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+            {/* Personal Information */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">First Name <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={formData.firstName}
+                  onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Last Name <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={formData.lastName}
+                  onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Blood Group <span className="text-red-500">*</span></label>
+                <select
+                  value={formData.bloodGroup}
+                  onChange={(e) => setFormData({ ...formData, bloodGroup: e.target.value })}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
+                  required
+                >
+                  <option value="">Select...</option>
+                  {bloodGroups.map((bg) => (
+                    <option key={bg} value={bg}>{bg}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Rh Factor <span className="text-red-500">*</span></label>
+                <select
+                  value={formData.rhFactor}
+                  onChange={(e) => setFormData({ ...formData, rhFactor: e.target.value })}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
+                  required
+                >
+                  <option value="">Select...</option>
+                  {rhFactors.map((rh) => (
+                    <option key={rh} value={rh}>{rh}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Date of Birth</label>
+                <input
+                  type="date"
+                  value={formData.dateOfBirth}
+                  onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
+                <select
+                  value={formData.gender}
+                  onChange={(e) => setFormData({ ...formData, gender: e.target.value as 'MALE' | 'FEMALE' })}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
+                >
+                  <option value="MALE">Male</option>
+                  <option value="FEMALE">Female</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-rose-500 text-white font-semibold hover:from-red-600 hover:to-rose-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                    Registering...
+                  </>
+                ) : (
+                  <>
+                    <UserPlusIcon className="h-5 w-5" />
+                    Register Donor
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CreateBloodRequestModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [formData, setFormData] = useState({
+    bloodGroup: '',
+    rhFactor: '',
+    componentType: 'WHOLE_BLOOD',
+    units: 1,
+    urgency: 'NORMAL' as 'NORMAL' | 'URGENT' | 'EMERGENCY',
+    reason: '',
+    requiredBy: '',
+  });
+
+  const searchPatients = async (query: string) => {
+    if (!query.trim()) {
+      setPatients([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const response = await patientApi.getAll({ search: query, limit: 10 });
+      setPatients(response.data.data || []);
+    } catch (error) {
+      console.error('Failed to search patients:', error);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  useEffect(() => {
+    const debounce = setTimeout(() => {
+      searchPatients(searchQuery);
+    }, 300);
+    return () => clearTimeout(debounce);
+  }, [searchQuery]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPatient) {
+      toast.error('Please select a patient');
+      return;
+    }
+    if (!formData.bloodGroup || !formData.rhFactor) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await bloodBankApi.createBloodRequest({
+        patientId: selectedPatient.id,
+        bloodGroup: formData.bloodGroup,
+        rhFactor: formData.rhFactor,
+        componentType: formData.componentType,
+        units: formData.units,
+        urgency: formData.urgency,
+        reason: formData.reason || undefined,
+        requiredBy: formData.requiredBy ? new Date(formData.requiredBy).toISOString() : undefined,
+      });
+      toast.success('Blood request created successfully');
+      onSuccess();
+    } catch (error: any) {
+      console.error('Failed to create blood request:', error);
+      toast.error(error.response?.data?.message || 'Failed to create blood request');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+          <div className="bg-gradient-to-r from-red-500 via-rose-500 to-pink-500 px-6 py-4">
+            <h2 className="text-xl font-bold text-white">Create Blood Request</h2>
+            <p className="text-white/80 text-sm">Request blood products for a patient</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+            {/* Patient Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Patient <span className="text-red-500">*</span>
+              </label>
+              {selectedPatient ? (
+                <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-xl">
+                  <div>
+                    <span className="font-medium text-gray-900">
+                      {selectedPatient.firstName} {selectedPatient.lastName}
+                    </span>
+                    <span className="ml-2 text-sm text-gray-500">MRN: {selectedPatient.mrn}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPatient(null)}
+                    className="text-sm text-red-600 hover:text-red-700"
+                  >
+                    Change
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search by name or MRN..."
+                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
+                  />
+                  {searching && (
+                    <div className="absolute right-3 top-3">
+                      <ArrowPathIcon className="h-5 w-5 animate-spin text-gray-400" />
+                    </div>
+                  )}
+                  {patients.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                      {patients.map((patient) => (
+                        <button
+                          key={patient.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedPatient(patient);
+                            setSearchQuery('');
+                            setPatients([]);
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl"
+                        >
+                          <span className="font-medium">{patient.firstName} {patient.lastName}</span>
+                          <span className="ml-2 text-sm text-gray-500">MRN: {patient.mrn}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Blood Type */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Blood Group <span className="text-red-500">*</span></label>
+                <select
+                  value={formData.bloodGroup}
+                  onChange={(e) => setFormData({ ...formData, bloodGroup: e.target.value })}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
+                  required
+                >
+                  <option value="">Select...</option>
+                  {bloodGroups.map((bg) => (
+                    <option key={bg} value={bg}>{bg}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Rh Factor <span className="text-red-500">*</span></label>
+                <select
+                  value={formData.rhFactor}
+                  onChange={(e) => setFormData({ ...formData, rhFactor: e.target.value })}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
+                  required
+                >
+                  <option value="">Select...</option>
+                  {rhFactors.map((rh) => (
+                    <option key={rh} value={rh}>{rh}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Component & Units */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Component Type</label>
+                <select
+                  value={formData.componentType}
+                  onChange={(e) => setFormData({ ...formData, componentType: e.target.value })}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
+                >
+                  {componentTypes.map((ct) => (
+                    <option key={ct} value={ct}>{ct.replace(/_/g, ' ')}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Units Required</label>
+                <input
+                  type="number"
+                  value={formData.units}
+                  onChange={(e) => setFormData({ ...formData, units: parseInt(e.target.value) || 1 })}
+                  min="1"
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
+                />
+              </div>
+            </div>
+
+            {/* Urgency */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Urgency</label>
+              <div className="flex gap-3">
+                {(['NORMAL', 'URGENT', 'EMERGENCY'] as const).map((u) => (
+                  <button
+                    key={u}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, urgency: u })}
+                    className={clsx(
+                      'flex-1 py-2.5 px-4 rounded-xl font-medium text-sm transition-all border',
+                      formData.urgency === u
+                        ? u === 'EMERGENCY'
+                          ? 'bg-red-500 text-white border-red-500'
+                          : u === 'URGENT'
+                            ? 'bg-orange-500 text-white border-orange-500'
+                            : 'bg-rose-500 text-white border-rose-500'
+                        : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                    )}
+                  >
+                    {u}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Required By & Reason */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Required By</label>
+                <input
+                  type="datetime-local"
+                  value={formData.requiredBy}
+                  onChange={(e) => setFormData({ ...formData, requiredBy: e.target.value })}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Reason</label>
+                <input
+                  type="text"
+                  value={formData.reason}
+                  onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
+                  placeholder="Surgery, transfusion, etc."
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading || !selectedPatient}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-rose-500 text-white font-semibold hover:from-red-600 hover:to-rose-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <ClipboardDocumentCheckIcon className="h-5 w-5" />
+                    Create Request
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const BloodBank: React.FC = () => {
   const [activeTab, setActiveTab] = useState('inventory');
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState<DonorStats | null>(null);
   const [_inventory, setInventory] = useState<BloodInventoryItem[]>([]);
   void _inventory; // Used for future expansion
+  const [showDonorModal, setShowDonorModal] = useState(false);
+  const [showRequestModal, setShowRequestModal] = useState(false);
 
   // AI Feature states
   const [eligibilityForm, setEligibilityForm] = useState({
@@ -307,7 +786,10 @@ const BloodBank: React.FC = () => {
                 <UserPlusIcon className="h-12 w-12 text-gray-400" />
               </div>
               <p className="text-gray-500">Donor registration and management interface</p>
-              <button className="mt-4 px-6 py-2.5 bg-gradient-to-r from-red-500 to-rose-500 text-white rounded-xl hover:from-red-600 hover:to-rose-600 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-red-500/30 font-medium">
+              <button
+                onClick={() => setShowDonorModal(true)}
+                className="mt-4 px-6 py-2.5 bg-gradient-to-r from-red-500 to-rose-500 text-white rounded-xl hover:from-red-600 hover:to-rose-600 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-red-500/30 font-medium"
+              >
                 Register New Donor
               </button>
             </div>
@@ -322,7 +804,10 @@ const BloodBank: React.FC = () => {
                 <ClipboardDocumentCheckIcon className="h-12 w-12 text-gray-400" />
               </div>
               <p className="text-gray-500">Blood request management interface</p>
-              <button className="mt-4 px-6 py-2.5 bg-gradient-to-r from-red-500 to-rose-500 text-white rounded-xl hover:from-red-600 hover:to-rose-600 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-red-500/30 font-medium">
+              <button
+                onClick={() => setShowRequestModal(true)}
+                className="mt-4 px-6 py-2.5 bg-gradient-to-r from-red-500 to-rose-500 text-white rounded-xl hover:from-red-600 hover:to-rose-600 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-red-500/30 font-medium"
+              >
                 Create New Request
               </button>
             </div>
@@ -683,6 +1168,28 @@ const BloodBank: React.FC = () => {
           }
         }
       `}</style>
+
+      {/* Register Donor Modal */}
+      {showDonorModal && (
+        <RegisterDonorModal
+          onClose={() => setShowDonorModal(false)}
+          onSuccess={() => {
+            setShowDonorModal(false);
+            loadStats();
+          }}
+        />
+      )}
+
+      {/* Blood Request Modal */}
+      {showRequestModal && (
+        <CreateBloodRequestModal
+          onClose={() => setShowRequestModal(false)}
+          onSuccess={() => {
+            setShowRequestModal(false);
+            loadStats();
+          }}
+        />
+      )}
     </div>
   );
 };
