@@ -209,11 +209,11 @@ async function main() {
 
   // Create Leave Types
   const leaveTypesData = [
-    { name: 'Annual Leave', code: 'AL', description: 'Paid annual vacation', daysAllowed: 21, isPaid: true, requiresApproval: true, carryForward: true, maxCarryForward: 5 },
-    { name: 'Sick Leave', code: 'SL', description: 'Medical leave for illness', daysAllowed: 15, isPaid: true, requiresApproval: true, requiresDocument: true },
-    { name: 'Casual Leave', code: 'CL', description: 'Personal time off', daysAllowed: 10, isPaid: true, requiresApproval: true },
-    { name: 'Maternity Leave', code: 'ML', description: 'Leave for new mothers', daysAllowed: 90, isPaid: true, requiresApproval: true, requiresDocument: true },
-    { name: 'Paternity Leave', code: 'PL', description: 'Leave for new fathers', daysAllowed: 14, isPaid: true, requiresApproval: true, requiresDocument: true },
+    { name: 'Annual Leave', code: 'AL', description: 'Paid annual vacation', defaultDays: 21, isPaid: true, requiresApproval: true, carryForward: true, maxCarryForward: 5 },
+    { name: 'Sick Leave', code: 'SL', description: 'Medical leave for illness', defaultDays: 15, isPaid: true, requiresApproval: true },
+    { name: 'Casual Leave', code: 'CL', description: 'Personal time off', defaultDays: 10, isPaid: true, requiresApproval: true },
+    { name: 'Maternity Leave', code: 'ML', description: 'Leave for new mothers', defaultDays: 90, isPaid: true, requiresApproval: true },
+    { name: 'Paternity Leave', code: 'PL', description: 'Leave for new fathers', defaultDays: 14, isPaid: true, requiresApproval: true },
   ];
 
   for (const leaveType of leaveTypesData) {
