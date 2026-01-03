@@ -275,18 +275,18 @@ async function main() {
 
   // Create sample employees for HR
   const employeesData = [
-    { firstName: 'John', lastName: 'Smith', email: 'john.smith@hospital.com', employeeId: 'EMP001', position: 'Senior Nurse', department: 'GENM' },
-    { firstName: 'Sarah', lastName: 'Johnson', email: 'sarah.johnson@hospital.com', employeeId: 'EMP002', position: 'Staff Nurse', department: 'CARD' },
-    { firstName: 'Michael', lastName: 'Brown', email: 'michael.brown@hospital.com', employeeId: 'EMP003', position: 'Lab Technician', department: 'PATH' },
-    { firstName: 'Emily', lastName: 'Davis', email: 'emily.davis@hospital.com', employeeId: 'EMP004', position: 'Pharmacist', department: 'PHAR' },
-    { firstName: 'David', lastName: 'Wilson', email: 'david.wilson@hospital.com', employeeId: 'EMP005', position: 'Radiologist', department: 'RADI' },
+    { firstName: 'John', lastName: 'Smith', email: 'john.smith@hospital.com', employeeCode: 'EMP001', designation: 'Senior Nurse', department: 'GENM' },
+    { firstName: 'Sarah', lastName: 'Johnson', email: 'sarah.johnson@hospital.com', employeeCode: 'EMP002', designation: 'Staff Nurse', department: 'CARD' },
+    { firstName: 'Michael', lastName: 'Brown', email: 'michael.brown@hospital.com', employeeCode: 'EMP003', designation: 'Lab Technician', department: 'PATH' },
+    { firstName: 'Emily', lastName: 'Davis', email: 'emily.davis@hospital.com', employeeCode: 'EMP004', designation: 'Pharmacist', department: 'PHAR' },
+    { firstName: 'David', lastName: 'Wilson', email: 'david.wilson@hospital.com', employeeCode: 'EMP005', designation: 'Radiologist', department: 'RADI' },
   ];
 
   for (const emp of employeesData) {
     const dept = departments.find(d => d.code === emp.department);
     if (dept) {
       const existingEmp = await prisma.employee.findFirst({
-        where: { hospitalId: hospital.id, employeeId: emp.employeeId },
+        where: { hospitalId: hospital.id, employeeCode: emp.employeeCode },
       });
 
       if (!existingEmp) {
@@ -294,17 +294,22 @@ async function main() {
           data: {
             hospitalId: hospital.id,
             departmentId: dept.id,
-            userId: hrUser.id,
-            employeeId: emp.employeeId,
+            employeeCode: emp.employeeCode,
             firstName: emp.firstName,
             lastName: emp.lastName,
             email: emp.email,
-            phone: '+1-555-200-000' + emp.employeeId.slice(-1),
-            position: emp.position,
-            employmentType: 'FULL_TIME',
-            status: 'ACTIVE',
-            hireDate: new Date('2024-01-15'),
-            salary: 50000 + Math.random() * 30000,
+            phone: '+1-555-200-000' + emp.employeeCode.slice(-1),
+            dateOfBirth: new Date('1990-01-15'),
+            gender: 'MALE',
+            address: '123 Main St',
+            city: 'New York',
+            state: 'NY',
+            zipCode: '10001',
+            designation: emp.designation,
+            employeeType: 'PERMANENT',
+            employmentStatus: 'ACTIVE',
+            joiningDate: new Date('2024-01-15'),
+            basicSalary: 50000 + Math.random() * 30000,
           },
         });
       }
