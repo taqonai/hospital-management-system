@@ -83,6 +83,7 @@ Located in `ai-services/`:
 | `med_safety/` | MedSafetyAI | Medication safety checks |
 | `smart_orders/` | SmartOrdersAI | Clinical order recommendations |
 | `ai_scribe/` | AIScribeService | Medical transcription |
+| `entity_extraction/` | EntityExtractionAI | Medical entity extraction from text |
 
 ### Multi-Tenant Data Model
 
@@ -160,3 +161,22 @@ Key routes (`/api/v1/`):
 ### AI Services
 - FastAPI with Pydantic models
 - Service classes instantiated in `main.py` and exposed via REST endpoints
+
+## Infrastructure (AWS Deployment)
+
+Located in `infrastructure/`:
+```bash
+cd hospital-management-system/infrastructure/terraform
+cp terraform.tfvars.example terraform.tfvars  # Configure variables
+terraform init
+terraform plan
+terraform apply
+```
+
+Architecture: ALB → EC2 (t3.small) running Docker Compose with all services.
+
+Key files:
+- `terraform/` - Terraform IaC (VPC, EC2, ALB)
+- `scripts/user-data.sh` - EC2 bootstrap script
+- `docker/docker-compose.prod.yml` - Production compose
+- `nginx/nginx.conf` - Reverse proxy config
