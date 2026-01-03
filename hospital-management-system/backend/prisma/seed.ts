@@ -306,7 +306,7 @@ async function main() {
             state: 'NY',
             zipCode: '10001',
             designation: emp.designation,
-            employeeType: 'PERMANENT',
+            employeeType: 'FULL_TIME',
             employmentStatus: 'ACTIVE',
             joiningDate: new Date('2024-01-15'),
             basicSalary: 50000 + Math.random() * 30000,
