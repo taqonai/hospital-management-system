@@ -19,15 +19,18 @@ import toast from 'react-hot-toast';
 
 interface Employee {
   id: string;
-  employeeId: string;
+  employeeCode: string;
   firstName: string;
   lastName: string;
   email: string;
   phone: string;
-  department: string;
-  position: string;
+  departmentId: string;
+  department?: {
+    name: string;
+  };
+  designation: string;
   employeeType: string;
-  status: string;
+  employmentStatus: string;
   shift?: {
     name: string;
   };
@@ -39,7 +42,7 @@ interface Attendance {
   employee: {
     firstName: string;
     lastName: string;
-    employeeId: string;
+    employeeCode: string;
   };
   date: string;
   checkIn: string;
@@ -54,7 +57,7 @@ interface LeaveRequest {
   employee: {
     firstName: string;
     lastName: string;
-    employeeId: string;
+    employeeCode: string;
   };
   leaveType: {
     name: string;
@@ -71,7 +74,7 @@ interface Payroll {
   employee: {
     firstName: string;
     lastName: string;
-    employeeId: string;
+    employeeCode: string;
   };
   month: number;
   year: number;
@@ -603,21 +606,21 @@ export default function HR() {
                                 <div className="text-sm font-medium text-gray-900">
                                   {employee.firstName} {employee.lastName}
                                 </div>
-                                <div className="text-sm text-gray-500">{employee.employeeId}</div>
+                                <div className="text-sm text-gray-500">{employee.employeeCode}</div>
                               </div>
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {employee.department}
+                            {employee.department?.name || '-'}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {employee.position}
+                            {employee.designation}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                             {employeeTypes[employee.employeeType] || employee.employeeType}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <GlassStatusBadge status={employee.status} />
+                            <GlassStatusBadge status={employee.employmentStatus} />
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                             {employee.shift?.name || '-'}
@@ -688,7 +691,7 @@ export default function HR() {
                               <div className="text-sm font-medium text-gray-900">
                                 {record.employee.firstName} {record.employee.lastName}
                               </div>
-                              <div className="text-sm text-gray-500">{record.employee.employeeId}</div>
+                              <div className="text-sm text-gray-500">{record.employee.employeeCode}</div>
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -752,7 +755,7 @@ export default function HR() {
                             <GlassStatusBadge status={request.status} />
                           </div>
                           <p className="text-sm text-gray-500 mt-1">
-                            {request.employee.employeeId} | {request.leaveType.name}
+                            {request.employee.employeeCode} | {request.leaveType.name}
                           </p>
                           <div className="mt-2 text-sm">
                             <span className="text-gray-700">
@@ -855,7 +858,7 @@ export default function HR() {
                               <div className="text-sm font-medium text-gray-900">
                                 {payroll.employee.firstName} {payroll.employee.lastName}
                               </div>
-                              <div className="text-sm text-gray-500">{payroll.employee.employeeId}</div>
+                              <div className="text-sm text-gray-500">{payroll.employee.employeeCode}</div>
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">

@@ -35,9 +35,11 @@ interface Invoice {
 interface Claim {
   id: string;
   claimNumber: string;
-  patient: {
-    firstName: string;
-    lastName: string;
+  invoice: {
+    patient: {
+      firstName: string;
+      lastName: string;
+    };
   };
   insuranceProvider: string;
   claimAmount: number;
@@ -530,7 +532,7 @@ export default function Billing() {
                         <span className="text-sm text-gray-500">{claim.insuranceProvider}</span>
                       </div>
                       <h3 className="mt-2 font-medium text-gray-900">
-                        {claim.patient?.firstName} {claim.patient?.lastName}
+                        {claim.invoice?.patient?.firstName} {claim.invoice?.patient?.lastName}
                       </h3>
                       <p className="text-sm text-gray-500">
                         Amount: ${claim.claimAmount?.toLocaleString()}

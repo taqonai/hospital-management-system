@@ -279,7 +279,7 @@ export class BillingService {
     today.setHours(0, 0, 0, 0);
     const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
-    const [totalRevenue, pendingAmount, todayRevenue, monthRevenue, pendingClaims] = await Promise.all([
+    const [totalRevenue, pendingAmount, todayRevenue, monthRevenue, claimsSubmitted, deniedClaims] = await Promise.all([
       prisma.invoice.aggregate({
         where: { hospitalId, status: 'PAID' },
         _sum: { totalAmount: true },
@@ -299,14 +299,18 @@ export class BillingService {
       prisma.insuranceClaim.count({
         where: { invoice: { hospitalId }, status: { in: ['SUBMITTED', 'UNDER_REVIEW'] } },
       }),
+      prisma.insuranceClaim.count({
+        where: { invoice: { hospitalId }, status: 'DENIED' },
+      }),
     ]);
 
     return {
       totalRevenue: Number(totalRevenue._sum.totalAmount || 0),
-      pendingAmount: Number(pendingAmount._sum.balanceAmount || 0),
+      pendingPayments: Number(pendingAmount._sum.balanceAmount || 0),
       todayRevenue: Number(todayRevenue._sum.amount || 0),
       monthRevenue: Number(monthRevenue._sum.amount || 0),
-      pendingClaims,
+      claimsSubmitted,
+      deniedClaims,
     };
   }
 
