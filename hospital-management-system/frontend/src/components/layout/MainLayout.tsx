@@ -92,8 +92,12 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
   {
     name: 'AI Features',
     items: [
+      { name: 'AI Assistant', href: '/ai-assistant', icon: CpuChipIcon, color: 'from-purple-500 to-pink-600',
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'] },
       { name: 'Diagnostic AI', href: '/diagnostic-assistant', icon: SparklesIcon, color: 'from-fuchsia-500 to-fuchsia-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'] },
+      { name: 'Symptom Checker', href: '/symptom-checker', icon: MagnifyingGlassIcon, color: 'from-emerald-500 to-teal-600',
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'] },
       { name: 'AI Scribe', href: '/ai-scribe', icon: DocumentTextIcon, color: 'from-violet-500 to-violet-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR'] },
       { name: 'Smart Orders', href: '/smart-orders', icon: SparklesIcon, color: 'from-indigo-500 to-purple-600',

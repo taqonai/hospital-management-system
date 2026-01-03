@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import multer from 'multer';
 import { aiService } from '../services/aiService';
 import { authenticate, authorize } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
@@ -15,6 +16,23 @@ import {
 } from '../middleware/validation';
 
 const router = Router();
+
+// Configure multer for image upload
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB max file size
+  },
+  fileFilter: (req, file, cb) => {
+    // Accept image files and DICOM
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/dicom', 'application/dicom'];
+    if (allowedMimes.includes(file.mimetype) || file.originalname.endsWith('.dcm')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only JPEG, PNG, and DICOM files are allowed'));
+    }
+  },
+});
 
 // ============= Health Check =============
 
@@ -53,14 +71,53 @@ router.post(
   })
 );
 
-// Analyze medical image (requires imaging order in database)
+// Analyze medical image (supports both file upload and URL)
 router.post(
   '/analyze-image',
   authenticate,
-  authorize('DOCTOR', 'RADIOLOGIST'),
-  validate(aiAnalyzeImageSchema),
+  authorize('DOCTOR', 'RADIOLOGIST', 'NURSE', 'HOSPITAL_ADMIN'),
+  imageUpload.single('image'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const result = await aiService.analyzeImage(req.body);
+    const { modalityType, bodyPart, patientAge, patientGender, clinicalHistory, imageUrl, imagingOrderId } = req.body;
+
+    // Validate required fields
+    if (!modalityType || !bodyPart) {
+      return res.status(400).json({ error: 'Modality type and body part are required' });
+    }
+
+    let finalImageUrl = imageUrl;
+
+    // If file was uploaded, convert to base64 data URL
+    if (req.file) {
+      const base64 = req.file.buffer.toString('base64');
+      const mimeType = req.file.mimetype || 'image/jpeg';
+      finalImageUrl = `data:${mimeType};base64,${base64}`;
+    }
+
+    if (!finalImageUrl) {
+      return res.status(400).json({ error: 'Please provide an image file or URL' });
+    }
+
+    // If imagingOrderId is provided, use the database-backed method
+    if (imagingOrderId) {
+      const result = await aiService.analyzeImage({
+        imagingOrderId,
+        imageUrl: finalImageUrl,
+        modalityType,
+        bodyPart,
+      });
+      return sendSuccess(res, result, 'Image analysis complete');
+    }
+
+    // Use direct analysis method (no database record)
+    const result = await aiService.directAnalyzeImage({
+      imageUrl: finalImageUrl,
+      modalityType,
+      bodyPart,
+      patientAge: parseInt(patientAge) || 45,
+      patientGender: patientGender || 'male',
+      clinicalHistory: clinicalHistory || undefined,
+    });
     sendSuccess(res, result, 'Image analysis complete');
   })
 );
