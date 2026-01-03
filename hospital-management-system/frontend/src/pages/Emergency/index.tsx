@@ -6,9 +6,10 @@ import {
   SparklesIcon,
   ArrowPathIcon,
   CheckCircleIcon,
+  MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 import { useAIHealth } from '../../hooks/useAI';
-import { emergencyApi } from '../../services/api';
+import { emergencyApi, patientApi } from '../../services/api';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 
@@ -57,8 +58,246 @@ interface ESIResult {
   estimatedResources: number;
 }
 
+interface Patient {
+  id: string;
+  firstName: string;
+  lastName: string;
+  mrn: string;
+}
+
+// New ED Patient Modal Component
+function NewEDPatientModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [isNewPatient, setIsNewPatient] = useState(false);
+  const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
+    dateOfBirth: '',
+    gender: 'MALE',
+    phone: '',
+    chiefComplaint: '',
+    esiLevel: 3,
+    arrivalMode: 'WALK_IN',
+    notes: '',
+  });
+
+  // Search patients
+  const searchPatients = async (query: string) => {
+    if (!query.trim()) {
+      setPatients([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const response = await patientApi.getAll({ search: query, limit: 10 });
+      setPatients(response.data.data || []);
+    } catch (error) {
+      console.error('Failed to search patients:', error);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  useEffect(() => {
+    const debounce = setTimeout(() => {
+      searchPatients(searchQuery);
+    }, 300);
+    return () => clearTimeout(debounce);
+  }, [searchQuery]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPatient && !isNewPatient) {
+      toast.error('Please select a patient or create new');
+      return;
+    }
+    if (!formData.chiefComplaint.trim()) {
+      toast.error('Please enter chief complaint');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const data: any = {
+        chiefComplaint: formData.chiefComplaint,
+        esiLevel: formData.esiLevel,
+        arrivalMode: formData.arrivalMode,
+        triageNotes: formData.notes || undefined,
+      };
+
+      if (selectedPatient) {
+        data.patientId = selectedPatient.id;
+      } else if (isNewPatient) {
+        data.newPatient = {
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          dateOfBirth: formData.dateOfBirth,
+          gender: formData.gender,
+          phone: formData.phone,
+        };
+      }
+
+      await emergencyApi.registerPatient(data);
+      toast.success('Patient registered in ED');
+      onSuccess();
+    } catch (error: any) {
+      console.error('Failed to register patient:', error);
+      toast.error(error.response?.data?.message || 'Failed to register patient');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+          <div className="bg-gradient-to-r from-red-600 via-rose-500 to-red-700 px-6 py-4">
+            <h2 className="text-xl font-bold text-white">Register ED Patient</h2>
+            <p className="text-red-100 text-sm">Add a patient to the emergency department</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
+            {/* Mode Toggle */}
+            <div className="flex gap-2">
+              <button type="button" onClick={() => { setIsNewPatient(false); setSelectedPatient(null); }}
+                className={clsx('flex-1 py-2 px-4 rounded-xl font-medium text-sm transition-all', !isNewPatient ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
+                Existing Patient
+              </button>
+              <button type="button" onClick={() => { setIsNewPatient(true); setSelectedPatient(null); }}
+                className={clsx('flex-1 py-2 px-4 rounded-xl font-medium text-sm transition-all', isNewPatient ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}>
+                New Patient
+              </button>
+            </div>
+
+            {/* Patient Selection */}
+            {!isNewPatient ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Select Patient <span className="text-red-500">*</span></label>
+                {selectedPatient ? (
+                  <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-xl">
+                    <div>
+                      <span className="font-medium text-gray-900">{selectedPatient.firstName} {selectedPatient.lastName}</span>
+                      <span className="ml-2 text-sm text-gray-500">MRN: {selectedPatient.mrn}</span>
+                    </div>
+                    <button type="button" onClick={() => setSelectedPatient(null)} className="text-sm text-red-600 hover:text-red-700">Change</button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <div className="relative">
+                      <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                      <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search by name or MRN..."
+                        className="w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500/50" />
+                      {searching && <ArrowPathIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 animate-spin text-gray-400" />}
+                    </div>
+                    {patients.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                        {patients.map((patient) => (
+                          <button key={patient.id} type="button" onClick={() => { setSelectedPatient(patient); setSearchQuery(''); setPatients([]); }}
+                            className="w-full text-left px-4 py-2 hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl">
+                            <span className="font-medium">{patient.firstName} {patient.lastName}</span>
+                            <span className="ml-2 text-sm text-gray-500">MRN: {patient.mrn}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* New Patient Form */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">First Name <span className="text-red-500">*</span></label>
+                    <input type="text" value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                      className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50" required={isNewPatient} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Last Name <span className="text-red-500">*</span></label>
+                    <input type="text" value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                      className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50" required={isNewPatient} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Date of Birth</label>
+                    <input type="date" value={formData.dateOfBirth} onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+                      className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
+                    <select value={formData.gender} onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                      className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50">
+                      <option value="MALE">Male</option>
+                      <option value="FEMALE">Female</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                  <input type="tel" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50" />
+                </div>
+              </>
+            )}
+
+            {/* ED Details */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Chief Complaint <span className="text-red-500">*</span></label>
+              <textarea value={formData.chiefComplaint} onChange={(e) => setFormData({ ...formData, chiefComplaint: e.target.value })}
+                placeholder="e.g., Chest pain, difficulty breathing..." rows={2}
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500/50 resize-none" required />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">ESI Level</label>
+                <select value={formData.esiLevel} onChange={(e) => setFormData({ ...formData, esiLevel: Number(e.target.value) })}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50">
+                  <option value={1}>1 - Resuscitation</option>
+                  <option value={2}>2 - Emergent</option>
+                  <option value={3}>3 - Urgent</option>
+                  <option value={4}>4 - Less Urgent</option>
+                  <option value={5}>5 - Non-Urgent</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Arrival Mode</label>
+                <select value={formData.arrivalMode} onChange={(e) => setFormData({ ...formData, arrivalMode: e.target.value })}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50">
+                  <option value="WALK_IN">Walk-in</option>
+                  <option value="AMBULANCE">Ambulance</option>
+                  <option value="POLICE">Police</option>
+                  <option value="TRANSFER">Transfer</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+              <button type="button" onClick={onClose} className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors">Cancel</button>
+              <button type="submit" disabled={loading || (!selectedPatient && !isNewPatient)}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-rose-500 text-white font-semibold hover:from-red-600 hover:to-rose-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                {loading ? <><ArrowPathIcon className="h-5 w-5 animate-spin" />Registering...</> : <><UserPlusIcon className="h-5 w-5" />Register Patient</>}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Emergency() {
   const [activeTab, setActiveTab] = useState<'tracking' | 'triage' | 'waiting'>('tracking');
+  const [showNewPatientModal, setShowNewPatientModal] = useState(false);
   const [patients, setPatients] = useState<EDPatient[]>([]);
   const [stats, setStats] = useState<EmergencyStats>({
     inDepartment: 0,
@@ -235,7 +474,10 @@ export default function Emergency() {
                 AI Triage
               </button>
             )}
-            <button className="group relative inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-red-700 overflow-hidden transition-all duration-300 hover:scale-105 hover:shadow-lg bg-white backdrop-blur-sm border border-white/30">
+            <button
+              onClick={() => setShowNewPatientModal(true)}
+              className="group relative inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-red-700 overflow-hidden transition-all duration-300 hover:scale-105 hover:shadow-lg bg-white backdrop-blur-sm border border-white/30"
+            >
               <UserPlusIcon className="h-5 w-5 transition-transform group-hover:scale-110" />
               New Patient
             </button>
@@ -751,6 +993,22 @@ export default function Emergency() {
           </div>
         ))}
       </div>
+
+      {/* New Patient Modal */}
+      {showNewPatientModal && (
+        <NewEDPatientModal
+          onClose={() => setShowNewPatientModal(false)}
+          onSuccess={async () => {
+            setShowNewPatientModal(false);
+            try {
+              const response = await emergencyApi.getPatients();
+              setPatients(response.data.data || []);
+            } catch (error) {
+              console.error('Failed to refresh patients:', error);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

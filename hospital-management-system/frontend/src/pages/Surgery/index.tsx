@@ -9,9 +9,10 @@ import {
   ShieldExclamationIcon,
   ExclamationTriangleIcon,
   BeakerIcon,
+  MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 import { useAIHealth } from '../../hooks/useAI';
-import { surgeryApi } from '../../services/api';
+import { surgeryApi, patientApi, doctorApi } from '../../services/api';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 
@@ -72,8 +73,273 @@ interface RiskResult {
   preOpRequirements: string[];
 }
 
+interface Patient {
+  id: string;
+  firstName: string;
+  lastName: string;
+  mrn: string;
+}
+
+interface Doctor {
+  id: string;
+  user: { firstName: string; lastName: string };
+  specialization: string;
+}
+
+// Schedule Surgery Modal Component
+function ScheduleSurgeryModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [formData, setFormData] = useState({
+    primarySurgeonId: '',
+    procedureName: '',
+    procedureType: 'ELECTIVE',
+    operationTheatre: 'OT-1',
+    scheduledStart: '',
+    estimatedDuration: 60,
+    anesthesiaType: 'GENERAL',
+    preOpDiagnosis: '',
+    notes: '',
+  });
+  const [loadingDoctors, setLoadingDoctors] = useState(true);
+
+  // Fetch doctors
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      try {
+        setLoadingDoctors(true);
+        const response = await doctorApi.getAll({ limit: 50 });
+        setDoctors(response.data.data || []);
+      } catch (error) {
+        console.error('Failed to fetch doctors:', error);
+        toast.error('Failed to load doctors');
+      } finally {
+        setLoadingDoctors(false);
+      }
+    };
+    fetchDoctors();
+  }, []);
+
+  // Search patients
+  const searchPatients = async (query: string) => {
+    if (!query.trim()) {
+      setPatients([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const response = await patientApi.getAll({ search: query, limit: 10 });
+      setPatients(response.data.data || []);
+    } catch (error) {
+      console.error('Failed to search patients:', error);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  useEffect(() => {
+    const debounce = setTimeout(() => {
+      searchPatients(searchQuery);
+    }, 300);
+    return () => clearTimeout(debounce);
+  }, [searchQuery]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPatient) {
+      toast.error('Please select a patient');
+      return;
+    }
+    if (!formData.primarySurgeonId) {
+      toast.error('Please select a surgeon');
+      return;
+    }
+    if (!formData.procedureName) {
+      toast.error('Please enter procedure name');
+      return;
+    }
+    if (!formData.scheduledStart) {
+      toast.error('Please select scheduled date/time');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await surgeryApi.create({
+        patientId: selectedPatient.id,
+        primarySurgeonId: formData.primarySurgeonId,
+        procedureName: formData.procedureName,
+        procedureType: formData.procedureType,
+        operationTheatre: formData.operationTheatre,
+        scheduledStart: new Date(formData.scheduledStart).toISOString(),
+        estimatedDuration: formData.estimatedDuration,
+        anesthesiaType: formData.anesthesiaType,
+        preOpDiagnosis: formData.preOpDiagnosis || undefined,
+        notes: formData.notes || undefined,
+      });
+      toast.success('Surgery scheduled successfully');
+      onSuccess();
+    } catch (error: any) {
+      console.error('Failed to schedule surgery:', error);
+      toast.error(error.response?.data?.message || 'Failed to schedule surgery');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+          <div className="bg-gradient-to-r from-rose-500 via-pink-500 to-fuchsia-500 px-6 py-4">
+            <h2 className="text-xl font-bold text-white">Schedule New Surgery</h2>
+            <p className="text-rose-100 text-sm">Schedule a surgical procedure</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
+            {/* Patient Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Patient <span className="text-red-500">*</span>
+              </label>
+              {selectedPatient ? (
+                <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-xl">
+                  <div>
+                    <span className="font-medium text-gray-900">{selectedPatient.firstName} {selectedPatient.lastName}</span>
+                    <span className="ml-2 text-sm text-gray-500">MRN: {selectedPatient.mrn}</span>
+                  </div>
+                  <button type="button" onClick={() => setSelectedPatient(null)} className="text-sm text-red-600 hover:text-red-700">Change</button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <div className="relative">
+                    <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search by name or MRN..."
+                      className="w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
+                    />
+                    {searching && <ArrowPathIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 animate-spin text-gray-400" />}
+                  </div>
+                  {patients.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                      {patients.map((patient) => (
+                        <button key={patient.id} type="button" onClick={() => { setSelectedPatient(patient); setSearchQuery(''); setPatients([]); }}
+                          className="w-full text-left px-4 py-2 hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl">
+                          <span className="font-medium">{patient.firstName} {patient.lastName}</span>
+                          <span className="ml-2 text-sm text-gray-500">MRN: {patient.mrn}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Surgeon Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Primary Surgeon <span className="text-red-500">*</span></label>
+              {loadingDoctors ? (
+                <div className="flex items-center justify-center py-4"><ArrowPathIcon className="h-5 w-5 animate-spin text-rose-500" /></div>
+              ) : (
+                <select value={formData.primarySurgeonId} onChange={(e) => setFormData({ ...formData, primarySurgeonId: e.target.value })}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-rose-500/50" required>
+                  <option value="">Select a surgeon...</option>
+                  {doctors.map((doc) => (
+                    <option key={doc.id} value={doc.id}>Dr. {doc.user.firstName} {doc.user.lastName} - {doc.specialization}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {/* Procedure Info */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Procedure Name <span className="text-red-500">*</span></label>
+                <input type="text" value={formData.procedureName} onChange={(e) => setFormData({ ...formData, procedureName: e.target.value })}
+                  placeholder="e.g., Hip Replacement" className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Procedure Type</label>
+                <select value={formData.procedureType} onChange={(e) => setFormData({ ...formData, procedureType: e.target.value })}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-rose-500/50">
+                  <option value="ELECTIVE">Elective</option>
+                  <option value="EMERGENCY">Emergency</option>
+                  <option value="URGENT">Urgent</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Schedule & OT */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Scheduled Date/Time <span className="text-red-500">*</span></label>
+                <input type="datetime-local" value={formData.scheduledStart} onChange={(e) => setFormData({ ...formData, scheduledStart: e.target.value })}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-rose-500/50" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Operation Theatre</label>
+                <select value={formData.operationTheatre} onChange={(e) => setFormData({ ...formData, operationTheatre: e.target.value })}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-rose-500/50">
+                  <option value="OT-1">OT-1</option>
+                  <option value="OT-2">OT-2</option>
+                  <option value="OT-3">OT-3</option>
+                  <option value="OT-4">OT-4</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Duration & Anesthesia */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Estimated Duration (mins)</label>
+                <input type="number" value={formData.estimatedDuration} onChange={(e) => setFormData({ ...formData, estimatedDuration: Number(e.target.value) })}
+                  min="15" max="720" className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-rose-500/50" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Anesthesia Type</label>
+                <select value={formData.anesthesiaType} onChange={(e) => setFormData({ ...formData, anesthesiaType: e.target.value })}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-rose-500/50">
+                  <option value="GENERAL">General</option>
+                  <option value="REGIONAL">Regional</option>
+                  <option value="LOCAL">Local</option>
+                  <option value="SEDATION">Sedation</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Pre-Op Diagnosis */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Pre-Op Diagnosis</label>
+              <textarea value={formData.preOpDiagnosis} onChange={(e) => setFormData({ ...formData, preOpDiagnosis: e.target.value })}
+                placeholder="Enter diagnosis..." rows={2} className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 resize-none" />
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+              <button type="button" onClick={onClose} className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors">Cancel</button>
+              <button type="submit" disabled={loading || !selectedPatient || !formData.primarySurgeonId || !formData.procedureName}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 text-white font-semibold hover:from-rose-600 hover:to-pink-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                {loading ? <><ArrowPathIcon className="h-5 w-5 animate-spin" />Scheduling...</> : <><PlusIcon className="h-5 w-5" />Schedule Surgery</>}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Surgery() {
   const [activeTab, setActiveTab] = useState<'schedule' | 'ot' | 'preop' | 'risk'>('schedule');
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [surgeries, setSurgeries] = useState<Surgery[]>([]);
   const [otStatus, setOtStatus] = useState<OTStatus[]>([]);
   const [stats, setStats] = useState<SurgeryStats>({
@@ -292,7 +558,10 @@ export default function Surgery() {
                 </button>
               </>
             )}
-            <button className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-rose-600 font-semibold hover:bg-rose-50 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105">
+            <button
+              onClick={() => setShowScheduleModal(true)}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-rose-600 font-semibold hover:bg-rose-50 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105"
+            >
               <PlusIcon className="h-5 w-5" />
               Schedule Surgery
             </button>
@@ -955,6 +1224,22 @@ export default function Surgery() {
           }
         }
       `}</style>
+
+      {/* Schedule Surgery Modal */}
+      {showScheduleModal && (
+        <ScheduleSurgeryModal
+          onClose={() => setShowScheduleModal(false)}
+          onSuccess={async () => {
+            setShowScheduleModal(false);
+            try {
+              const response = await surgeryApi.getTodaySchedule();
+              setSurgeries(response.data.data || []);
+            } catch (error) {
+              console.error('Failed to refresh schedule:', error);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
