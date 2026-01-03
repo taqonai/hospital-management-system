@@ -39,7 +39,8 @@ import {
   ExtractedEntities,
 } from '../../hooks/useAIScribe';
 
-const AI_SCRIBE_URL = import.meta.env.VITE_AI_SCRIBE_URL || 'http://localhost:8011';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
+const AI_SCRIBE_URL = `${API_URL}/ai-scribe`;
 
 // Note template types
 const NOTE_TEMPLATES = [
@@ -234,10 +235,16 @@ export default function AIScribe() {
 
   const checkServiceStatus = async () => {
     try {
-      const response = await fetch(`${AI_SCRIBE_URL}/health`);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${AI_SCRIBE_URL}/health`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
       if (response.ok) {
-        const data = await response.json();
-        setServiceStatus(data.openai_available ? 'online' : 'offline');
+        const result = await response.json();
+        const data = result.data || result;
+        // Check for available or openai_available field
+        const isAvailable = data.available || data.openai_available || data.status === 'connected';
+        setServiceStatus(isAvailable ? 'online' : 'offline');
       } else {
         setServiceStatus('offline');
       }
@@ -309,9 +316,13 @@ export default function AIScribe() {
 
     try {
       // Start session
-      const sessionResponse = await fetch(`${AI_SCRIBE_URL}/api/scribe/start-session`, {
+      const token = localStorage.getItem('token');
+      const sessionResponse = await fetch(`${AI_SCRIBE_URL}/start-session`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           patientId: selectedPatient?.id,
           patientName: selectedPatient ? `${selectedPatient.firstName} ${selectedPatient.lastName}` : undefined,
@@ -336,8 +347,9 @@ export default function AIScribe() {
       formData.append('suggestCptCodes', 'true');
       formData.append('audio', transcription.audioBlob, 'recording.webm');
 
-      const processResponse = await fetch(`${AI_SCRIBE_URL}/api/scribe/process`, {
+      const processResponse = await fetch(`${AI_SCRIBE_URL}/process`, {
         method: 'POST',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
         body: formData,
       });
 

@@ -999,7 +999,7 @@ PATIENT STATEMENTS:
 DOCTOR STATEMENTS:
 {' '.join(doctor_statements[:10])}
 
-{f'EXTRACTED ENTITIES:\n{entity_summary}' if entity_summary else ''}
+{'EXTRACTED ENTITIES:' + chr(10) + entity_summary if entity_summary else ''}
 
 Generate a complete SOAP note with these sections:
 - SUBJECTIVE: Chief complaint, history of present illness, symptoms from patient's perspective, relevant history
