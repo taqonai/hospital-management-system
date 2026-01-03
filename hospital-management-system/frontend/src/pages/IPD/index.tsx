@@ -151,7 +151,7 @@ export default function IPD() {
   useEffect(() => {
     const fetchAdmissions = async () => {
       try {
-        const response = await ipdApi.getAdmissions({ status: 'ACTIVE' });
+        const response = await ipdApi.getAdmissions({ status: 'ADMITTED' });
         setAdmissions(response.data.data || []);
       } catch (error) {
         console.error('Failed to fetch admissions:', error);
@@ -269,7 +269,7 @@ export default function IPD() {
       await ipdApi.discharge(admissionId, { dischargeNotes: 'Discharged by staff' });
       toast.success('Patient discharged successfully');
       // Refresh admissions
-      const response = await ipdApi.getAdmissions({ status: 'ACTIVE' });
+      const response = await ipdApi.getAdmissions({ status: 'ADMITTED' });
       setAdmissions(response.data.data || []);
     } catch (error) {
       console.error('Failed to discharge:', error);
