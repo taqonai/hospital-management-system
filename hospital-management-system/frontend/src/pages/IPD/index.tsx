@@ -13,9 +13,10 @@ import {
   ClockIcon,
   BellAlertIcon,
   BuildingOffice2Icon,
+  MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 import { useAIHealth } from '../../hooks/useAI';
-import { ipdApi } from '../../services/api';
+import { ipdApi, patientApi, doctorApi } from '../../services/api';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 
@@ -86,8 +87,365 @@ interface DeteriorationDashboard {
   patients: DeteriorationPatient[];
 }
 
+interface Patient {
+  id: string;
+  firstName: string;
+  lastName: string;
+  mrn: string;
+}
+
+interface Doctor {
+  id: string;
+  user: {
+    firstName: string;
+    lastName: string;
+  };
+  specialization: string;
+}
+
+interface Bed {
+  id: string;
+  bedNumber: string;
+  ward: {
+    id: string;
+    name: string;
+  };
+}
+
+// New Admission Modal Component
+function NewAdmissionModal({ onClose, onSuccess, wards }: { onClose: () => void; onSuccess: () => void; wards: Ward[] }) {
+  const [loading, setLoading] = useState(false);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [availableBeds, setAvailableBeds] = useState<Bed[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [selectedDoctor, setSelectedDoctor] = useState<string>('');
+  const [selectedBed, setSelectedBed] = useState<string>('');
+  const [admissionType, setAdmissionType] = useState<'EMERGENCY' | 'ELECTIVE' | 'TRANSFER'>('ELECTIVE');
+  const [admissionReason, setAdmissionReason] = useState('');
+  const [diagnosis, setDiagnosis] = useState('');
+  const [loadingDoctors, setLoadingDoctors] = useState(true);
+  const [loadingBeds, setLoadingBeds] = useState(true);
+
+  // Fetch doctors
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      try {
+        setLoadingDoctors(true);
+        const response = await doctorApi.getAll({ limit: 50 });
+        setDoctors(response.data.data || []);
+      } catch (error) {
+        console.error('Failed to fetch doctors:', error);
+        toast.error('Failed to load doctors');
+      } finally {
+        setLoadingDoctors(false);
+      }
+    };
+    fetchDoctors();
+  }, []);
+
+  // Fetch available beds
+  useEffect(() => {
+    const fetchBeds = async () => {
+      try {
+        setLoadingBeds(true);
+        const response = await ipdApi.getAvailableBeds();
+        setAvailableBeds(response.data.data || []);
+      } catch (error) {
+        console.error('Failed to fetch beds:', error);
+        toast.error('Failed to load available beds');
+      } finally {
+        setLoadingBeds(false);
+      }
+    };
+    fetchBeds();
+  }, []);
+
+  // Search patients
+  const searchPatients = async (query: string) => {
+    if (!query.trim()) {
+      setPatients([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const response = await patientApi.getAll({ search: query, limit: 10 });
+      setPatients(response.data.data || []);
+    } catch (error) {
+      console.error('Failed to search patients:', error);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  useEffect(() => {
+    const debounce = setTimeout(() => {
+      searchPatients(searchQuery);
+    }, 300);
+    return () => clearTimeout(debounce);
+  }, [searchQuery]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPatient) {
+      toast.error('Please select a patient');
+      return;
+    }
+    if (!selectedDoctor) {
+      toast.error('Please select an attending doctor');
+      return;
+    }
+    if (!selectedBed) {
+      toast.error('Please select a bed');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await ipdApi.createAdmission({
+        patientId: selectedPatient.id,
+        attendingDoctorId: selectedDoctor,
+        bedId: selectedBed,
+        admissionType,
+        admissionReason: admissionReason || undefined,
+        diagnosis: diagnosis || undefined,
+      });
+      toast.success('Patient admitted successfully');
+      onSuccess();
+    } catch (error: any) {
+      console.error('Failed to create admission:', error);
+      toast.error(error.response?.data?.message || 'Failed to admit patient');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Group beds by ward
+  const bedsByWard = availableBeds.reduce((acc, bed) => {
+    const wardName = bed.ward?.name || 'Unknown';
+    if (!acc[wardName]) acc[wardName] = [];
+    acc[wardName].push(bed);
+    return acc;
+  }, {} as Record<string, Bed[]>);
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-4">
+            <h2 className="text-xl font-bold text-white">New Patient Admission</h2>
+            <p className="text-indigo-100 text-sm">Admit a patient to the inpatient department</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+            {/* Patient Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Patient <span className="text-red-500">*</span>
+              </label>
+              {selectedPatient ? (
+                <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-xl">
+                  <div>
+                    <span className="font-medium text-gray-900">
+                      {selectedPatient.firstName} {selectedPatient.lastName}
+                    </span>
+                    <span className="ml-2 text-sm text-gray-500">MRN: {selectedPatient.mrn}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPatient(null)}
+                    className="text-sm text-red-600 hover:text-red-700"
+                  >
+                    Change
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <div className="relative">
+                    <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search by name or MRN..."
+                      className="w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
+                    />
+                    {searching && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <ArrowPathIcon className="h-5 w-5 animate-spin text-gray-400" />
+                      </div>
+                    )}
+                  </div>
+                  {patients.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                      {patients.map((patient) => (
+                        <button
+                          key={patient.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedPatient(patient);
+                            setSearchQuery('');
+                            setPatients([]);
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl"
+                        >
+                          <span className="font-medium">{patient.firstName} {patient.lastName}</span>
+                          <span className="ml-2 text-sm text-gray-500">MRN: {patient.mrn}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Bed Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Bed <span className="text-red-500">*</span>
+              </label>
+              {loadingBeds ? (
+                <div className="flex items-center justify-center py-4">
+                  <ArrowPathIcon className="h-5 w-5 animate-spin text-indigo-500" />
+                  <span className="ml-2 text-gray-500">Loading beds...</span>
+                </div>
+              ) : availableBeds.length === 0 ? (
+                <p className="text-sm text-red-600 py-3">No beds available. Please free up a bed first.</p>
+              ) : (
+                <select
+                  value={selectedBed}
+                  onChange={(e) => setSelectedBed(e.target.value)}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
+                  required
+                >
+                  <option value="">Select a bed...</option>
+                  {Object.entries(bedsByWard).map(([wardName, beds]) => (
+                    <optgroup key={wardName} label={wardName}>
+                      {beds.map((bed) => (
+                        <option key={bed.id} value={bed.id}>
+                          Bed {bed.bedNumber}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {/* Doctor Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Attending Doctor <span className="text-red-500">*</span>
+              </label>
+              {loadingDoctors ? (
+                <div className="flex items-center justify-center py-4">
+                  <ArrowPathIcon className="h-5 w-5 animate-spin text-indigo-500" />
+                  <span className="ml-2 text-gray-500">Loading doctors...</span>
+                </div>
+              ) : (
+                <select
+                  value={selectedDoctor}
+                  onChange={(e) => setSelectedDoctor(e.target.value)}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
+                  required
+                >
+                  <option value="">Select a doctor...</option>
+                  {doctors.map((doc) => (
+                    <option key={doc.id} value={doc.id}>
+                      Dr. {doc.user.firstName} {doc.user.lastName} - {doc.specialization}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {/* Admission Type */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Admission Type</label>
+              <div className="flex gap-3">
+                {['ELECTIVE', 'EMERGENCY', 'TRANSFER'].map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setAdmissionType(type as typeof admissionType)}
+                    className={clsx(
+                      'flex-1 py-2.5 px-4 rounded-xl font-medium text-sm transition-all border',
+                      admissionType === type
+                        ? type === 'EMERGENCY' ? 'bg-red-500 text-white border-red-500' : 'bg-indigo-500 text-white border-indigo-500'
+                        : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                    )}
+                  >
+                    {type.charAt(0) + type.slice(1).toLowerCase()}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Admission Reason */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Admission Reason</label>
+              <textarea
+                value={admissionReason}
+                onChange={(e) => setAdmissionReason(e.target.value)}
+                placeholder="Reason for admission..."
+                rows={2}
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 resize-none"
+              />
+            </div>
+
+            {/* Diagnosis */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Initial Diagnosis</label>
+              <input
+                type="text"
+                value={diagnosis}
+                onChange={(e) => setDiagnosis(e.target.value)}
+                placeholder="Enter diagnosis..."
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading || !selectedPatient || !selectedDoctor || !selectedBed}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-500 text-white font-semibold hover:from-indigo-600 hover:to-violet-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                    Admitting...
+                  </>
+                ) : (
+                  <>
+                    <PlusIcon className="h-5 w-5" />
+                    Admit Patient
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function IPD() {
   const [activeTab, setActiveTab] = useState<'beds' | 'admissions' | 'monitoring' | 'discharge'>('beds');
+  const [showAdmissionModal, setShowAdmissionModal] = useState(false);
   const [wards, setWards] = useState<Ward[]>([]);
   const [admissions, setAdmissions] = useState<Admission[]>([]);
   const [highRiskPatients, setHighRiskPatients] = useState<Admission[]>([]);
@@ -338,7 +696,10 @@ export default function IPD() {
                 </button>
               </>
             )}
-            <button className="group relative flex items-center gap-2 px-5 py-2.5 bg-white text-indigo-600 rounded-xl font-semibold hover:bg-indigo-50 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-white/25">
+            <button
+              onClick={() => setShowAdmissionModal(true)}
+              className="group relative flex items-center gap-2 px-5 py-2.5 bg-white text-indigo-600 rounded-xl font-semibold hover:bg-indigo-50 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-white/25"
+            >
               <PlusIcon className="h-5 w-5" />
               New Admission
             </button>
@@ -945,6 +1306,30 @@ export default function IPD() {
           </div>
         ))}
       </div>
+
+      {/* New Admission Modal */}
+      {showAdmissionModal && (
+        <NewAdmissionModal
+          wards={wards}
+          onClose={() => setShowAdmissionModal(false)}
+          onSuccess={async () => {
+            setShowAdmissionModal(false);
+            // Refresh data
+            try {
+              const [wardsRes, admissionsRes, statsRes] = await Promise.all([
+                ipdApi.getWards(),
+                ipdApi.getAdmissions({ status: 'ADMITTED' }),
+                ipdApi.getStats(),
+              ]);
+              setWards(wardsRes.data.data || []);
+              setAdmissions(admissionsRes.data.data || []);
+              setStats(statsRes.data.data || stats);
+            } catch (error) {
+              console.error('Failed to refresh data:', error);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

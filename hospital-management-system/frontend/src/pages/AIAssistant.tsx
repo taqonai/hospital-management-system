@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   CpuChipIcon,
   SparklesIcon,
@@ -9,6 +9,7 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   InformationCircleIcon,
+  CloudArrowUpIcon,
 } from '@heroicons/react/24/outline';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import clsx from 'clsx';
@@ -59,12 +60,17 @@ export default function AIAssistant() {
 
   // Imaging state
   const [imageUrl, setImageUrl] = useState('');
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [inputMode, setInputMode] = useState<'upload' | 'url'>('upload');
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [modality, setModality] = useState<'XRAY' | 'CT' | 'MRI' | 'ULTRASOUND'>('XRAY');
   const [bodyPart, setBodyPart] = useState('chest');
   const [imgAge, setImgAge] = useState(55);
   const [imgGender, setImgGender] = useState<'male' | 'female' | 'other'>('male');
   const [clinicalHistory, setClinicalHistory] = useState('');
   const [imagingResult, setImagingResult] = useState<AIImageAnalysis | null>(null);
+  const [imagingLoading, setImagingLoading] = useState(false);
 
   // Hooks
   const { data: healthStatus } = useAIHealth();
@@ -116,21 +122,94 @@ export default function AIAssistant() {
     );
   };
 
-  const handleImagingSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    imagingMutation.mutate(
-      {
-        imageUrl: imageUrl || 'https://hospital-storage.s3.amazonaws.com/sample.dcm',
-        modalityType: modality,
-        bodyPart,
-        patientAge: imgAge,
-        patientGender: imgGender,
-        clinicalHistory,
-      },
-      {
-        onSuccess: (data) => setImagingResult(data),
+  // Handle file upload
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const validTypes = ['image/jpeg', 'image/png', 'image/dicom', 'application/dicom'];
+      if (!validTypes.includes(file.type) && !file.name.endsWith('.dcm')) {
+        toast.error('Please upload a valid image file (JPEG, PNG, or DICOM)');
+        return;
       }
-    );
+      if (file.size > 50 * 1024 * 1024) {
+        toast.error('File size must be less than 50MB');
+        return;
+      }
+      setUploadedFile(file);
+      setImageUrl('');
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => setImagePreview(e.target?.result as string);
+        reader.readAsDataURL(file);
+      } else {
+        setImagePreview(null);
+      }
+      setImagingResult(null);
+    }
+  };
+
+  const handleImagingSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!uploadedFile && !imageUrl) {
+      // Use demo analysis if nothing provided
+    }
+
+    setImagingLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
+
+      if (uploadedFile) {
+        // Upload file via FormData
+        const formData = new FormData();
+        formData.append('image', uploadedFile);
+        formData.append('modalityType', modality);
+        formData.append('bodyPart', bodyPart);
+        formData.append('patientAge', imgAge.toString());
+        formData.append('patientGender', imgGender);
+        if (clinicalHistory) {
+          formData.append('clinicalHistory', clinicalHistory);
+        }
+
+        const response = await fetch(`${API_URL}/ai/analyze-image`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || 'Failed to analyze image');
+        }
+
+        const data = await response.json();
+        setImagingResult(data.data || data);
+        toast.success('Image analysis complete');
+      } else {
+        // Use URL or demo analysis
+        imagingMutation.mutate(
+          {
+            imageUrl: imageUrl || 'https://hospital-storage.s3.amazonaws.com/sample.dcm',
+            modalityType: modality,
+            bodyPart,
+            patientAge: imgAge,
+            patientGender: imgGender,
+            clinicalHistory,
+          },
+          {
+            onSuccess: (data) => setImagingResult(data),
+          }
+        );
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to analyze image');
+      console.error('Imaging error:', err);
+    } finally {
+      setImagingLoading(false);
+    }
   };
 
   return (
@@ -373,6 +452,102 @@ export default function AIAssistant() {
 
             {activeTab === 'imaging' && (
               <form onSubmit={handleImagingSubmit} className="space-y-4">
+                {/* Input Mode Toggle */}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setInputMode('upload')}
+                    className={clsx(
+                      'flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all',
+                      inputMode === 'upload'
+                        ? 'bg-purple-500 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    )}
+                  >
+                    Upload File
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInputMode('url')}
+                    className={clsx(
+                      'flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all',
+                      inputMode === 'url'
+                        ? 'bg-purple-500 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    )}
+                  >
+                    Image URL
+                  </button>
+                </div>
+
+                {/* File Upload */}
+                {inputMode === 'upload' && (
+                  <div>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileUpload}
+                      accept="image/*,.dcm"
+                      className="hidden"
+                    />
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center cursor-pointer hover:border-purple-400 hover:bg-purple-50/50 transition-all"
+                    >
+                      {uploadedFile ? (
+                        <div>
+                          <PhotoIcon className="h-10 w-10 text-purple-500 mx-auto mb-2" />
+                          <p className="text-sm font-medium text-gray-900">{uploadedFile.name}</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setUploadedFile(null);
+                              setImagePreview(null);
+                            }}
+                            className="mt-2 text-xs text-red-500 hover:text-red-600"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : (
+                        <div>
+                          <CloudArrowUpIcon className="h-10 w-10 text-gray-400 mx-auto mb-2" />
+                          <p className="text-sm text-gray-600">Click to upload image</p>
+                          <p className="text-xs text-gray-400 mt-1">JPEG, PNG, or DICOM (max 50MB)</p>
+                        </div>
+                      )}
+                    </div>
+                    {imagePreview && (
+                      <div className="mt-3 rounded-lg overflow-hidden border border-gray-200">
+                        <img src={imagePreview} alt="Preview" className="w-full h-40 object-contain bg-gray-50" />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* URL Input */}
+                {inputMode === 'url' && (
+                  <div>
+                    <label className="label">Image URL (optional)</label>
+                    <input
+                      type="text"
+                      value={imageUrl}
+                      onChange={(e) => {
+                        setImageUrl(e.target.value);
+                        setUploadedFile(null);
+                        setImagePreview(null);
+                      }}
+                      placeholder="https://..."
+                      className="input"
+                    />
+                    <p className="mt-1 text-sm text-gray-500">Leave blank for demo analysis</p>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="label">Modality</label>
@@ -435,23 +610,12 @@ export default function AIAssistant() {
                     className="input"
                   />
                 </div>
-                <div>
-                  <label className="label">Image URL (optional)</label>
-                  <input
-                    type="text"
-                    value={imageUrl}
-                    onChange={(e) => setImageUrl(e.target.value)}
-                    placeholder="https://..."
-                    className="input"
-                  />
-                  <p className="mt-1 text-sm text-gray-500">Leave blank for demo analysis</p>
-                </div>
                 <button
                   type="submit"
-                  disabled={imagingMutation.isPending}
+                  disabled={imagingLoading || imagingMutation.isPending}
                   className="btn-primary w-full"
                 >
-                  {imagingMutation.isPending ? (
+                  {imagingLoading || imagingMutation.isPending ? (
                     <><LoadingSpinner size="sm" /><span className="ml-2">Analyzing...</span></>
                   ) : (
                     <><PhotoIcon className="h-5 w-5 mr-2" />Analyze Image</>
