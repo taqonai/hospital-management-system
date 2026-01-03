@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole, DayOfWeek } from '@prisma/client';
+import { PrismaClient, UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -56,7 +56,7 @@ async function main() {
 
   console.log(`Created ${departments.length} departments`);
 
-  // Create Admin User (with strong password)
+  // Create Admin User
   const adminPassword = await bcrypt.hash('MedInt2026SecureAdmin', 12);
   const adminUser = await prisma.user.upsert({
     where: {
@@ -78,7 +78,29 @@ async function main() {
 
   console.log(`Created admin user: ${adminUser.email}`);
 
-  // Create Lab Tests Catalog (Master Data)
+  // Create HR Manager
+  const hrPassword = await bcrypt.hash('MedInt2026HRManager', 12);
+  const hrUser = await prisma.user.upsert({
+    where: {
+      hospitalId_email: { hospitalId: hospital.id, email: 'hr.manager@hospital.com' },
+    },
+    update: {},
+    create: {
+      hospitalId: hospital.id,
+      email: 'hr.manager@hospital.com',
+      password: hrPassword,
+      firstName: 'HR',
+      lastName: 'Manager',
+      phone: '+1-555-100-0002',
+      role: UserRole.HR_MANAGER,
+      isActive: true,
+      isEmailVerified: true,
+    },
+  });
+
+  console.log(`Created HR user: ${hrUser.email}`);
+
+  // Create Lab Tests Catalog
   const labTestsData = [
     { name: 'Complete Blood Count (CBC)', code: 'CBC001', category: 'Hematology', sampleType: 'Blood', price: 50, turnaroundTime: 4 },
     { name: 'Basic Metabolic Panel', code: 'BMP001', category: 'Chemistry', sampleType: 'Blood', price: 75, turnaroundTime: 6 },
@@ -90,11 +112,6 @@ async function main() {
     { name: 'HbA1c', code: 'HBA001', category: 'Chemistry', sampleType: 'Blood', price: 55, turnaroundTime: 24 },
     { name: 'Troponin I', code: 'TRP001', category: 'Cardiac', sampleType: 'Blood', price: 120, turnaroundTime: 1 },
     { name: 'D-Dimer', code: 'DDM001', category: 'Coagulation', sampleType: 'Blood', price: 95, turnaroundTime: 2 },
-    { name: 'Prothrombin Time (PT)', code: 'PT001', category: 'Coagulation', sampleType: 'Blood', price: 45, turnaroundTime: 2 },
-    { name: 'Creatinine', code: 'CREA001', category: 'Chemistry', sampleType: 'Blood', price: 35, turnaroundTime: 4 },
-    { name: 'Blood Urea Nitrogen', code: 'BUN001', category: 'Chemistry', sampleType: 'Blood', price: 35, turnaroundTime: 4 },
-    { name: 'Electrolyte Panel', code: 'ELEC001', category: 'Chemistry', sampleType: 'Blood', price: 65, turnaroundTime: 4 },
-    { name: 'C-Reactive Protein', code: 'CRP001', category: 'Immunology', sampleType: 'Blood', price: 55, turnaroundTime: 6 },
   ];
 
   for (const test of labTestsData) {
@@ -107,7 +124,7 @@ async function main() {
 
   console.log(`Created ${labTestsData.length} lab tests`);
 
-  // Create Drugs Catalog (Master Data)
+  // Create Drugs Catalog
   const drugsData = [
     { name: 'Paracetamol', genericName: 'Acetaminophen', code: 'DRUG001', category: 'Analgesic', dosageForm: 'Tablet', strength: '500mg', price: 5 },
     { name: 'Amoxicillin', genericName: 'Amoxicillin', code: 'DRUG002', category: 'Antibiotic', dosageForm: 'Capsule', strength: '500mg', price: 15 },
@@ -119,11 +136,6 @@ async function main() {
     { name: 'Amlodipine', genericName: 'Amlodipine', code: 'DRUG008', category: 'Calcium Channel Blocker', dosageForm: 'Tablet', strength: '5mg', price: 14 },
     { name: 'Ibuprofen', genericName: 'Ibuprofen', code: 'DRUG009', category: 'NSAID', dosageForm: 'Tablet', strength: '400mg', price: 7 },
     { name: 'Ceftriaxone', genericName: 'Ceftriaxone', code: 'DRUG010', category: 'Antibiotic', dosageForm: 'Injection', strength: '1g', price: 45 },
-    { name: 'Ciprofloxacin', genericName: 'Ciprofloxacin', code: 'DRUG011', category: 'Antibiotic', dosageForm: 'Tablet', strength: '500mg', price: 20 },
-    { name: 'Prednisone', genericName: 'Prednisone', code: 'DRUG012', category: 'Corticosteroid', dosageForm: 'Tablet', strength: '10mg', price: 12 },
-    { name: 'Losartan', genericName: 'Losartan', code: 'DRUG013', category: 'ARB', dosageForm: 'Tablet', strength: '50mg', price: 15 },
-    { name: 'Pantoprazole', genericName: 'Pantoprazole', code: 'DRUG014', category: 'PPI', dosageForm: 'Tablet', strength: '40mg', price: 18 },
-    { name: 'Azithromycin', genericName: 'Azithromycin', code: 'DRUG015', category: 'Antibiotic', dosageForm: 'Tablet', strength: '250mg', price: 25 },
   ];
 
   for (const drug of drugsData) {
@@ -138,55 +150,58 @@ async function main() {
 
   // Create Wards
   const wardsData = [
-    { name: 'General Ward A', code: 'GEN-A', type: 'GENERAL', floor: '1st Floor', capacity: 30 },
-    { name: 'General Ward B', code: 'GEN-B', type: 'GENERAL', floor: '2nd Floor', capacity: 30 },
-    { name: 'ICU', code: 'ICU', type: 'ICU', floor: '3rd Floor', capacity: 15 },
-    { name: 'NICU', code: 'NICU', type: 'NICU', floor: '5th Floor', capacity: 10 },
-    { name: 'CCU', code: 'CCU', type: 'CCU', floor: '3rd Floor', capacity: 12 },
-    { name: 'Private Ward', code: 'PVT', type: 'PRIVATE', floor: '4th Floor', capacity: 20 },
-    { name: 'Pediatric Ward', code: 'PED', type: 'PEDIATRIC', floor: '5th Floor', capacity: 25 },
-    { name: 'Maternity Ward', code: 'MAT', type: 'MATERNITY', floor: '6th Floor', capacity: 20 },
+    { name: 'General Ward A', floor: 1, capacity: 30, type: 'GENERAL' as const },
+    { name: 'General Ward B', floor: 2, capacity: 30, type: 'GENERAL' as const },
+    { name: 'ICU', floor: 3, capacity: 15, type: 'ICU' as const },
+    { name: 'CCU', floor: 3, capacity: 12, type: 'CCU' as const },
+    { name: 'Private Ward', floor: 4, capacity: 20, type: 'PRIVATE' as const },
+    { name: 'Pediatric Ward', floor: 5, capacity: 25, type: 'GENERAL' as const },
   ];
 
   const wards: any[] = [];
   for (const ward of wardsData) {
-    const createdWard = await prisma.ward.upsert({
-      where: { hospitalId_code: { hospitalId: hospital.id, code: ward.code } },
-      update: {},
-      create: {
-        hospitalId: hospital.id,
-        name: ward.name,
-        code: ward.code,
-        type: ward.type as any,
-        floor: ward.floor,
-        capacity: ward.capacity,
-        currentOccupancy: 0,
-      },
+    const existingWard = await prisma.ward.findFirst({
+      where: { name: ward.name },
     });
-    wards.push(createdWard);
+
+    if (existingWard) {
+      wards.push(existingWard);
+    } else {
+      const createdWard = await prisma.ward.create({
+        data: ward,
+      });
+      wards.push(createdWard);
+    }
   }
 
   console.log(`Created ${wards.length} wards`);
 
   // Create Beds for each ward
+  const generalDept = departments.find(d => d.code === 'GENM');
   let totalBeds = 0;
+
   for (const ward of wards) {
-    const bedCount = ward.capacity;
+    const bedCount = Math.min(ward.capacity, 5); // Create just 5 beds per ward for demo
     for (let i = 1; i <= bedCount; i++) {
-      await prisma.bed.upsert({
-        where: {
-          wardId_bedNumber: { wardId: ward.id, bedNumber: `${ward.code}-${i.toString().padStart(2, '0')}` },
-        },
-        update: {},
-        create: {
-          wardId: ward.id,
-          bedNumber: `${ward.code}-${i.toString().padStart(2, '0')}`,
-          bedType: ward.type === 'ICU' || ward.type === 'CCU' ? 'ICU' : ward.type === 'PRIVATE' ? 'PRIVATE' : 'STANDARD',
-          status: 'AVAILABLE',
-          dailyRate: ward.type === 'PRIVATE' ? 500 : ward.type === 'ICU' || ward.type === 'CCU' ? 1500 : 200,
-        },
+      const bedNumber = `${ward.name.substring(0, 3).toUpperCase()}-${i.toString().padStart(2, '0')}`;
+      const existingBed = await prisma.bed.findFirst({
+        where: { hospitalId: hospital.id, bedNumber },
       });
-      totalBeds++;
+
+      if (!existingBed && generalDept) {
+        await prisma.bed.create({
+          data: {
+            hospitalId: hospital.id,
+            departmentId: generalDept.id,
+            wardId: ward.id,
+            bedNumber,
+            bedType: ward.type === 'ICU' || ward.type === 'CCU' ? 'ICU' : 'STANDARD',
+            status: 'AVAILABLE',
+            dailyRate: ward.type === 'PRIVATE' ? 500 : ward.type === 'ICU' ? 1500 : 200,
+          },
+        });
+        totalBeds++;
+      }
     }
   }
 
@@ -199,9 +214,6 @@ async function main() {
     { name: 'Casual Leave', code: 'CL', description: 'Personal time off', daysAllowed: 10, isPaid: true, requiresApproval: true },
     { name: 'Maternity Leave', code: 'ML', description: 'Leave for new mothers', daysAllowed: 90, isPaid: true, requiresApproval: true, requiresDocument: true },
     { name: 'Paternity Leave', code: 'PL', description: 'Leave for new fathers', daysAllowed: 14, isPaid: true, requiresApproval: true, requiresDocument: true },
-    { name: 'Unpaid Leave', code: 'UL', description: 'Leave without pay', daysAllowed: 30, isPaid: false, requiresApproval: true },
-    { name: 'Bereavement Leave', code: 'BL', description: 'Leave for family bereavement', daysAllowed: 5, isPaid: true, requiresApproval: true },
-    { name: 'Study Leave', code: 'STL', description: 'Leave for educational purposes', daysAllowed: 10, isPaid: true, requiresApproval: true },
   ];
 
   for (const leaveType of leaveTypesData) {
@@ -219,11 +231,10 @@ async function main() {
 
   // Create Shifts
   const shiftsData = [
-    { name: 'Morning Shift', code: 'MS', startTime: '07:00', endTime: '15:00', breakDuration: 60, isActive: true },
-    { name: 'Evening Shift', code: 'ES', startTime: '15:00', endTime: '23:00', breakDuration: 60, isActive: true },
-    { name: 'Night Shift', code: 'NS', startTime: '23:00', endTime: '07:00', breakDuration: 60, isActive: true },
-    { name: 'Day Shift', code: 'DS', startTime: '09:00', endTime: '17:00', breakDuration: 60, isActive: true },
-    { name: 'Split Shift', code: 'SS', startTime: '08:00', endTime: '20:00', breakDuration: 120, isActive: true },
+    { name: 'Morning Shift', code: 'MS', startTime: '07:00', endTime: '15:00', workingHours: 8.0, isNightShift: false },
+    { name: 'Evening Shift', code: 'ES', startTime: '15:00', endTime: '23:00', workingHours: 8.0, isNightShift: false },
+    { name: 'Night Shift', code: 'NS', startTime: '23:00', endTime: '07:00', workingHours: 8.0, isNightShift: true },
+    { name: 'Day Shift', code: 'DS', startTime: '09:00', endTime: '17:00', workingHours: 8.0, isNightShift: false },
   ];
 
   for (const shift of shiftsData) {
@@ -241,14 +252,12 @@ async function main() {
 
   // Create Housekeeping Zones
   const zonesData = [
-    { name: 'Emergency Department', code: 'ZONE-ED', type: 'CLINICAL', floor: 'Ground Floor', cleaningFrequency: 'EVERY_HOUR', priority: 1 },
-    { name: 'Operating Theaters', code: 'ZONE-OT', type: 'CLINICAL', floor: '6th Floor', cleaningFrequency: 'BETWEEN_PROCEDURES', priority: 1 },
-    { name: 'ICU', code: 'ZONE-ICU', type: 'CLINICAL', floor: '3rd Floor', cleaningFrequency: 'EVERY_2_HOURS', priority: 1 },
-    { name: 'General Wards', code: 'ZONE-GW', type: 'CLINICAL', floor: '1st-2nd Floor', cleaningFrequency: 'TWICE_DAILY', priority: 2 },
-    { name: 'Outpatient Area', code: 'ZONE-OPD', type: 'CLINICAL', floor: 'Ground Floor', cleaningFrequency: 'TWICE_DAILY', priority: 2 },
-    { name: 'Reception & Lobby', code: 'ZONE-LOBBY', type: 'PUBLIC', floor: 'Ground Floor', cleaningFrequency: 'EVERY_4_HOURS', priority: 2 },
-    { name: 'Cafeteria', code: 'ZONE-CAF', type: 'PUBLIC', floor: 'Ground Floor', cleaningFrequency: 'AFTER_MEALS', priority: 2 },
-    { name: 'Restrooms', code: 'ZONE-REST', type: 'PUBLIC', floor: 'All Floors', cleaningFrequency: 'EVERY_2_HOURS', priority: 1 },
+    { name: 'Emergency Department', code: 'ZONE-ED', floor: 'Ground Floor', roomCount: 20 },
+    { name: 'Operating Theaters', code: 'ZONE-OT', floor: '6th Floor', roomCount: 8 },
+    { name: 'ICU', code: 'ZONE-ICU', floor: '3rd Floor', roomCount: 15 },
+    { name: 'General Wards', code: 'ZONE-GW', floor: '1st-2nd Floor', roomCount: 60 },
+    { name: 'Outpatient Area', code: 'ZONE-OPD', floor: 'Ground Floor', roomCount: 30 },
+    { name: 'Reception & Lobby', code: 'ZONE-LOBBY', floor: 'Ground Floor', roomCount: 5 },
   ];
 
   for (const zone of zonesData) {
@@ -257,53 +266,60 @@ async function main() {
       update: {},
       create: {
         hospitalId: hospital.id,
-        name: zone.name,
-        code: zone.code,
-        type: zone.type as any,
-        floor: zone.floor,
-        priority: zone.priority,
+        ...zone,
       },
     });
   }
 
   console.log(`Created ${zonesData.length} housekeeping zones`);
 
-  // Create Quality Indicators
-  const qualityIndicatorsData = [
-    { name: 'Patient Fall Rate', code: 'QI-FALL', category: 'Patient Safety', targetValue: 2.0, unit: 'per 1000 patient days', frequency: 'MONTHLY' },
-    { name: 'Hospital-Acquired Infections', code: 'QI-HAI', category: 'Infection Control', targetValue: 1.0, unit: 'percentage', frequency: 'MONTHLY' },
-    { name: 'Medication Errors', code: 'QI-MEDERR', category: 'Medication Safety', targetValue: 0.5, unit: 'per 1000 doses', frequency: 'MONTHLY' },
-    { name: 'Readmission Rate (30 days)', code: 'QI-READM', category: 'Care Quality', targetValue: 5.0, unit: 'percentage', frequency: 'MONTHLY' },
-    { name: 'Average Length of Stay', code: 'QI-ALOS', category: 'Efficiency', targetValue: 4.5, unit: 'days', frequency: 'MONTHLY' },
-    { name: 'Bed Occupancy Rate', code: 'QI-BOR', category: 'Efficiency', targetValue: 85.0, unit: 'percentage', frequency: 'DAILY' },
-    { name: 'Patient Satisfaction Score', code: 'QI-PSS', category: 'Patient Experience', targetValue: 90.0, unit: 'percentage', frequency: 'MONTHLY' },
-    { name: 'ED Wait Time', code: 'QI-EDWT', category: 'Efficiency', targetValue: 30.0, unit: 'minutes', frequency: 'DAILY' },
+  // Create sample employees for HR
+  const employeesData = [
+    { firstName: 'John', lastName: 'Smith', email: 'john.smith@hospital.com', employeeId: 'EMP001', position: 'Senior Nurse', department: 'GENM' },
+    { firstName: 'Sarah', lastName: 'Johnson', email: 'sarah.johnson@hospital.com', employeeId: 'EMP002', position: 'Staff Nurse', department: 'CARD' },
+    { firstName: 'Michael', lastName: 'Brown', email: 'michael.brown@hospital.com', employeeId: 'EMP003', position: 'Lab Technician', department: 'PATH' },
+    { firstName: 'Emily', lastName: 'Davis', email: 'emily.davis@hospital.com', employeeId: 'EMP004', position: 'Pharmacist', department: 'PHAR' },
+    { firstName: 'David', lastName: 'Wilson', email: 'david.wilson@hospital.com', employeeId: 'EMP005', position: 'Radiologist', department: 'RADI' },
   ];
 
-  for (const indicator of qualityIndicatorsData) {
-    await prisma.qualityIndicator.upsert({
-      where: { hospitalId_code: { hospitalId: hospital.id, code: indicator.code } },
-      update: {},
-      create: {
-        hospitalId: hospital.id,
-        name: indicator.name,
-        code: indicator.code,
-        category: indicator.category,
-        targetValue: indicator.targetValue,
-        unit: indicator.unit,
-        frequency: indicator.frequency as any,
-        isActive: true,
-      },
-    });
+  for (const emp of employeesData) {
+    const dept = departments.find(d => d.code === emp.department);
+    if (dept) {
+      const existingEmp = await prisma.employee.findFirst({
+        where: { hospitalId: hospital.id, employeeId: emp.employeeId },
+      });
+
+      if (!existingEmp) {
+        await prisma.employee.create({
+          data: {
+            hospitalId: hospital.id,
+            departmentId: dept.id,
+            userId: hrUser.id,
+            employeeId: emp.employeeId,
+            firstName: emp.firstName,
+            lastName: emp.lastName,
+            email: emp.email,
+            phone: '+1-555-200-000' + emp.employeeId.slice(-1),
+            position: emp.position,
+            employmentType: 'FULL_TIME',
+            status: 'ACTIVE',
+            hireDate: new Date('2024-01-15'),
+            salary: 50000 + Math.random() * 30000,
+          },
+        });
+      }
+    }
   }
 
-  console.log(`Created ${qualityIndicatorsData.length} quality indicators`);
+  console.log(`Created ${employeesData.length} employees`);
 
   console.log('\n✅ Production database seeded successfully!');
   console.log('-------------------------------------------');
   console.log(`Hospital: ${hospital.name}`);
   console.log(`Admin Email: admin@hospital.com`);
   console.log(`Admin Password: MedInt2026SecureAdmin`);
+  console.log(`HR Email: hr.manager@hospital.com`);
+  console.log(`HR Password: MedInt2026HRManager`);
   console.log('-------------------------------------------');
 }
 
