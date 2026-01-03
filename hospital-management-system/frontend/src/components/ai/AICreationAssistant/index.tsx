@@ -185,7 +185,7 @@ export default function AICreationAssistant() {
                           lowerText.includes('check symptom') ||
                           actionType === 'symptoms';
 
-    if (isSymptomCheck || actionType === 'symptoms') {
+    if (isSymptomCheck || (actionType as string) === 'symptoms') {
       await processSymptoms(text);
       return;
     }
@@ -455,7 +455,7 @@ export default function AICreationAssistant() {
       }
 
       setStep('success');
-      const entityName = type === 'patient' ? 'Patient' : type === 'doctor' ? 'Doctor' : 'Appointment';
+      const entityName = (type as string) === 'patient' ? 'Patient' : (type as string) === 'doctor' ? 'Doctor' : 'Appointment';
       speakAndAdd(`✅ ${entityName} created successfully! What else can I help you with?`);
 
     } catch (error: any) {

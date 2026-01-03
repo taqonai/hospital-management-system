@@ -241,7 +241,7 @@ export default function MedSafety() {
 
     setCheckingCompat(true);
     try {
-      const response = await medSafetyApi.checkIVCompatibility(ivDrug1, ivDrug2);
+      const response = await medSafetyApi.checkIVCompatibility({ drug1: ivDrug1, drug2: ivDrug2 });
       setIvCompatResult(response.data);
     } catch (error) {
       console.error('IV compatibility check error:', error);

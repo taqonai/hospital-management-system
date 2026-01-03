@@ -250,31 +250,4 @@ router.post(
   })
 );
 
-// ============= Test Endpoints (No Auth) =============
-
-/**
- * Test recommendations endpoint (no auth required for testing)
- * POST /api/smart-orders/test/recommend
- */
-router.post(
-  '/test/recommend',
-  asyncHandler(async (req: Request, res: Response) => {
-    const { diagnosis, icdCode, symptoms, patientContext, includeAlternatives } = req.body;
-
-    if (!diagnosis) {
-      return res.status(400).json({ success: false, message: 'Diagnosis is required' });
-    }
-
-    const recommendations = await smartOrderService.getRecommendations({
-      diagnosis,
-      icdCode,
-      symptoms,
-      patientContext,
-      includeAlternatives,
-    });
-
-    sendSuccess(res, recommendations, 'Test recommendations generated successfully');
-  })
-);
-
 export default router;

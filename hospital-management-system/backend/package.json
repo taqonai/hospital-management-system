@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
     "build": "tsc",
+    "build:strict": "tsc --strict",
     "start": "node dist/app.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

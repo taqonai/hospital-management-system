@@ -466,9 +466,9 @@ export default function AIAssistant() {
         <div className="card">
           <div className="card-header flex items-center justify-between">
             <h2 className="text-lg font-semibold">AI Results</h2>
-            {(diagnosisResult?.modelVersion || riskResult?.modelVersion || imagingResult?.modelVersion) && (
+            {((diagnosisResult as any)?.modelVersion || (riskResult as any)?.modelVersion || (imagingResult as any)?.modelVersion) && (
               <span className="text-xs text-gray-500 font-mono">
-                Model: {diagnosisResult?.modelVersion || riskResult?.modelVersion || imagingResult?.modelVersion}
+                Model: {(diagnosisResult as any)?.modelVersion || (riskResult as any)?.modelVersion || (imagingResult as any)?.modelVersion}
               </span>
             )}
           </div>

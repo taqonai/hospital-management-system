@@ -38,10 +38,6 @@ export const telemedicineService = {
         symptoms: data.symptoms || [],
         meetingUrl,
       },
-      include: {
-        patient: true,
-        doctor: true,
-      },
     });
   },
 
@@ -77,10 +73,6 @@ export const telemedicineService = {
         skip,
         take: limit,
         orderBy: { scheduledStart: 'asc' },
-        include: {
-          patient: true,
-          doctor: true,
-        },
       }),
       prisma.teleconsultationSession.count({ where }),
     ]);
@@ -92,11 +84,6 @@ export const telemedicineService = {
   async getSessionById(id: string) {
     return prisma.teleconsultationSession.findUnique({
       where: { id },
-      include: {
-        patient: true,
-        doctor: true,
-        appointment: true,
-      },
     });
   },
 
@@ -107,10 +94,6 @@ export const telemedicineService = {
       data: {
         status: 'IN_PROGRESS',
         actualStart: new Date(),
-      },
-      include: {
-        patient: true,
-        doctor: true,
       },
     });
   },
@@ -137,10 +120,6 @@ export const telemedicineService = {
         prescription: data.prescription,
         doctorNotes: data.doctorNotes,
         followUpDate: data.followUpDate,
-      },
-      include: {
-        patient: true,
-        doctor: true,
       },
     });
   },

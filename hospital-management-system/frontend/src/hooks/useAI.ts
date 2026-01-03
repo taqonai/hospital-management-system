@@ -21,7 +21,7 @@ export function useAIHealth() {
   });
 }
 
-// Direct Diagnosis (no database required)
+// AI Diagnosis Analysis
 export function useDirectDiagnosis() {
   return useMutation({
     mutationFn: async (data: {
@@ -31,8 +31,9 @@ export function useDirectDiagnosis() {
       medicalHistory?: string[];
       currentMedications?: string[];
       allergies?: string[];
+      patientId?: string;
     }) => {
-      const response = await aiApi.testDiagnose(data);
+      const response = await aiApi.analyzeDiagnosis(data);
       return response.data.data as AIDiagnosisResponse;
     },
     onSuccess: () => {
@@ -45,12 +46,13 @@ export function useDirectDiagnosis() {
   });
 }
 
-// Direct Risk Prediction (no database required)
+// AI Risk Prediction
 export function useDirectRiskPrediction() {
   return useMutation({
     mutationFn: async (data: {
       predictionType: string;
       timeframe?: string;
+      patientId?: string;
       patientData: {
         age: number;
         gender: string;
@@ -61,7 +63,7 @@ export function useDirectRiskPrediction() {
         vitals?: Record<string, any>;
       };
     }) => {
-      const response = await aiApi.testPredictRisk(data);
+      const response = await aiApi.predictRisk(data);
       return response.data.data as AIPrediction;
     },
     onSuccess: () => {
@@ -74,7 +76,7 @@ export function useDirectRiskPrediction() {
   });
 }
 
-// Direct Image Analysis (no database required)
+// AI Image Analysis
 export function useDirectImageAnalysis() {
   return useMutation({
     mutationFn: async (data: {
@@ -84,8 +86,9 @@ export function useDirectImageAnalysis() {
       patientAge: number;
       patientGender: 'male' | 'female' | 'other';
       clinicalHistory?: string;
+      imagingOrderId?: string;
     }) => {
-      const response = await aiApi.testAnalyzeImage(data);
+      const response = await aiApi.analyzeImage(data);
       return response.data.data as AIImageAnalysis;
     },
     onSuccess: () => {

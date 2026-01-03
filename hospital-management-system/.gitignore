@@ -1,0 +1,72 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Environment variables (keep examples, ignore actual env files)
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.production.example
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+.pytest_cache/
+
+# Database
+*.sqlite
+*.db
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# Docker
+docker-compose.override.yml
+
+# Uploads (local development)
+uploads/
+media/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform/
+.terraform.lock.hcl
+
+# SSL certificates (production)
+ssl/
+*.pem
+*.key
+*.crt
+
+# Secrets
+secrets/
+*.secret

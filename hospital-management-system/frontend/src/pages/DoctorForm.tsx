@@ -172,7 +172,7 @@ export default function DoctorForm() {
     if (!formData.specialization) newErrors.specialization = 'Specialization is required';
     if (!formData.licenseNumber.trim()) newErrors.licenseNumber = 'License number is required';
 
-    setErrors(newErrors as Partial<DoctorFormData>);
+    setErrors(newErrors as unknown as Partial<DoctorFormData>);
     return Object.keys(newErrors).length === 0;
   };
 

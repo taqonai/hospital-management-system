@@ -86,7 +86,7 @@ export class SmartOrderService {
       if (patient) {
         patientContext = {
           age: this.calculateAge(patient.dateOfBirth),
-          weight: patient.vitals[0]?.weight || undefined,
+          weight: patient.vitals[0]?.weight ? Number(patient.vitals[0].weight) : undefined,
           gender: patient.gender,
           allergies: patient.allergies.map(a => a.allergen),
           currentMedications: patient.medicalHistory?.currentMedications || [],
@@ -190,7 +190,7 @@ export class SmartOrderService {
         enrichedContext = {
           ...request.patientContext,
           age: request.patientContext.age || this.calculateAge(patient.dateOfBirth),
-          weight: request.patientContext.weight || patient.vitals[0]?.weight || undefined,
+          weight: request.patientContext.weight || (patient.vitals[0]?.weight ? Number(patient.vitals[0].weight) : undefined),
           gender: request.patientContext.gender || patient.gender,
           allergies: [
             ...(request.patientContext.allergies || []),

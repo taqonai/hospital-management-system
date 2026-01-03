@@ -154,51 +154,43 @@ export const aiApi = {
   voiceCommand: (data: { transcript: string; context?: Record<string, unknown> }) =>
     api.post('/ai/voice-command', data),
 
-  // Production endpoints (authenticated, database-backed)
-  analyzeDiagnosis: (data: { patientId: string; symptoms: string[] }) =>
-    api.post('/ai/diagnose', data),
-  predictRisk: (data: { patientId: string; predictionType: string; timeframe?: string }) =>
-    api.post('/ai/predict-risk', data),
-  analyzeImage: (data: { imagingOrderId: string; imageUrl: string; modalityType: string; bodyPart: string }) =>
-    api.post('/ai/analyze-image', data),
-  getInsights: (patientId: string) => api.get(`/ai/insights/${patientId}`),
-  provideFeedback: (type: string, id: string, feedback: any) =>
-    api.post(`/ai/feedback/${type}/${id}`, feedback),
-
-  // Direct test endpoints (no database required)
-  testDiagnose: (data: {
+  // Production endpoints (authenticated)
+  analyzeDiagnosis: (data: {
+    patientId?: string;
     symptoms: string[];
-    patientAge: number;
-    gender: 'MALE' | 'FEMALE' | 'OTHER';
+    patientAge?: number;
+    gender?: string;
     medicalHistory?: string[];
     currentMedications?: string[];
     allergies?: string[];
-    vitalSigns?: Record<string, number | string>;
-  }) => api.post('/ai/test/diagnose', data),
-
-  testPredictRisk: (data: {
+  }) => api.post('/ai/diagnose', data),
+  predictRisk: (data: {
+    patientId?: string;
     predictionType: string;
     timeframe?: string;
-    patientData: {
-      age: number;
-      gender: string;
+    patientData?: {
+      age?: number;
+      gender?: string;
       chronicConditions?: string[];
       medications?: string[];
       recentAdmissions?: number;
       lengthOfStay?: number;
       vitals?: Record<string, any>;
-      labResults?: Record<string, any>;
     };
-  }) => api.post('/ai/test/predict-risk', data),
-
-  testAnalyzeImage: (data: {
+  }) => api.post('/ai/predict-risk', data),
+  analyzeImage: (data: {
+    imagingOrderId?: string;
     imageUrl: string;
-    modalityType: 'XRAY' | 'CT' | 'MRI' | 'ULTRASOUND';
+    modalityType: string;
     bodyPart: string;
-    patientAge: number;
-    patientGender: 'male' | 'female' | 'other';
+    patientAge?: number;
+    patientGender?: string;
     clinicalHistory?: string;
-  }) => api.post('/ai/test/analyze-image', data),
+  }) => api.post('/ai/analyze-image', data),
+  getInsights: (patientId: string) => api.get(`/ai/insights/${patientId}`),
+  provideFeedback: (type: string, id: string, feedback: any) =>
+    api.post(`/ai/feedback/${type}/${id}`, feedback),
+
 };
 
 // Laboratory APIs
@@ -935,6 +927,120 @@ export const symptomCheckerApi = {
 
   // Get available departments
   getDepartments: () => api.get('/ai/symptom-checker/departments'),
+};
+
+// Medication Safety APIs
+export const medSafetyApi = {
+  // Get medication safety checks
+  checkMedication: (data: {
+    patientId: string;
+    medications: string[];
+    allergies?: string[];
+  }) => api.post('/med-safety/check', data),
+
+  // Verify medication administration
+  verifyAdministration: (data: {
+    patientId: string;
+    medicationId: string;
+    scannedCode?: string;
+  }) => api.post('/med-safety/verify', data),
+
+  // Verify five rights (patient, drug, dose, route, time)
+  verifyFiveRights: (data: Record<string, any>) =>
+    api.post('/med-safety/verify-five-rights', data),
+
+  // Record override for safety alerts
+  recordOverride: (data: Record<string, any>) =>
+    api.post('/med-safety/record-override', data),
+
+  // Get patient medication alerts
+  getAlerts: (patientId: string) => api.get(`/med-safety/alerts/${patientId}`),
+
+  // Check drug interactions
+  checkInteractions: (medications: string[]) =>
+    api.post('/med-safety/interactions', { medications }),
+
+  // Get medication guidelines
+  getGuidelines: (medicationId: string) =>
+    api.get(`/med-safety/guidelines/${medicationId}`),
+
+  // Get high alert drugs list
+  getHighAlertDrugs: () => api.get('/med-safety/high-alert-drugs'),
+
+  // Get patient medications
+  getPatientMedications: (patientId: string) =>
+    api.get(`/med-safety/patient/${patientId}/medications`),
+
+  // Scan barcode
+  scanBarcode: (barcode: string, type?: string) =>
+    api.post('/med-safety/scan-barcode', { barcode, type }),
+
+  // Check IV compatibility
+  checkIVCompatibility: (data: any) =>
+    api.post('/med-safety/check-iv-compatibility', data),
+
+  // Calculate dose
+  calculateDose: (data: Record<string, any>) =>
+    api.post('/med-safety/calculate-dose', data),
+
+  // Perform safety verification
+  performSafetyVerification: (data: Record<string, any>) =>
+    api.post('/med-safety/safety-verification', data),
+
+  // Get due medications
+  getDueMedications: (params: any) =>
+    api.get('/med-safety/due-medications', { params }),
+
+  // Record administration
+  recordAdministration: (data: Record<string, any>) =>
+    api.post('/med-safety/record-administration', data),
+};
+
+// Smart Order APIs
+export const smartOrderApi = {
+  // Get order recommendations
+  getRecommendations: (data: {
+    diagnosis: string;
+    icdCode?: string;
+    symptoms?: string[];
+    patientId?: string;
+    patientContext?: Record<string, any>;
+    includeAlternatives?: boolean;
+  }) => api.post('/smart-orders/recommend', data),
+
+  // Get available bundles
+  getBundles: () => api.get('/smart-orders/bundles'),
+
+  // Get bundle details
+  getBundleDetails: (bundleId: string) =>
+    api.get(`/smart-orders/bundle/${bundleId}`),
+
+  // Customize orders for patient
+  customizeOrders: (data: {
+    bundleId?: string;
+    selectedOrders: any[];
+    patientId?: string;
+    patientContext: Record<string, any>;
+    customizations?: Record<string, any>;
+  }) => api.post('/smart-orders/customize', data),
+
+  // Place orders
+  placeOrders: (data: {
+    patientId: string;
+    orders: any[];
+    notes?: string;
+  }) => api.post('/smart-orders/place', data),
+
+  // Get order history
+  getOrderHistory: (patientId: string) =>
+    api.get(`/smart-orders/history/${patientId}`),
+
+  // Check drug interactions
+  checkInteractions: (medications: string[]) =>
+    api.post('/smart-orders/check-interactions', { medications }),
+
+  // Health check
+  getHealth: () => api.get('/smart-orders/health'),
 };
 
 export default api;

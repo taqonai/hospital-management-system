@@ -27,38 +27,6 @@ router.get(
   })
 );
 
-// ============= Direct Test Endpoints (No Database Required) =============
-
-// Direct diagnosis test - bypasses patient lookup
-router.post(
-  '/test/diagnose',
-  validate(aiDirectDiagnoseSchema),
-  asyncHandler(async (req: Request, res: Response) => {
-    const result = await aiService.directDiagnose(req.body);
-    sendSuccess(res, result, 'Direct diagnosis analysis complete');
-  })
-);
-
-// Direct risk prediction test
-router.post(
-  '/test/predict-risk',
-  validate(aiDirectPredictRiskSchema),
-  asyncHandler(async (req: Request, res: Response) => {
-    const result = await aiService.directPredictRisk(req.body);
-    sendSuccess(res, result, 'Direct risk prediction complete');
-  })
-);
-
-// Direct image analysis test
-router.post(
-  '/test/analyze-image',
-  validate(aiDirectAnalyzeImageSchema),
-  asyncHandler(async (req: Request, res: Response) => {
-    const result = await aiService.directAnalyzeImage(req.body);
-    sendSuccess(res, result, 'Direct image analysis complete');
-  })
-);
-
 // ============= Production Endpoints (Authenticated, Database-Backed) =============
 
 // Analyze symptoms for diagnosis (requires patient in database)
@@ -110,10 +78,11 @@ router.get(
 
 // ============= Chat and Voice Command Endpoints =============
 
-// AI Chat endpoint (no auth required for testing)
+// AI Chat endpoint
 router.post(
   '/chat',
-  asyncHandler(async (req: Request, res: Response) => {
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { message, context } = req.body;
 
     if (!message) {
@@ -129,10 +98,11 @@ router.post(
   })
 );
 
-// Voice command endpoint (no auth required for testing)
+// Voice command endpoint
 router.post(
   '/voice-command',
-  asyncHandler(async (req: Request, res: Response) => {
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { transcript, context } = req.body;
 
     if (!transcript) {
