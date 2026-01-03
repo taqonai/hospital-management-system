@@ -300,7 +300,7 @@ export class BillingService {
         where: { invoice: { hospitalId }, status: { in: ['SUBMITTED', 'UNDER_REVIEW'] } },
       }),
       prisma.insuranceClaim.count({
-        where: { invoice: { hospitalId }, status: 'DENIED' },
+        where: { invoice: { hospitalId }, status: 'REJECTED' },
       }),
     ]);
 

@@ -88,7 +88,7 @@ const getStatusBadgeClasses = (status: string) => {
     PAID: 'bg-green-100/60 text-green-800 border-green-300/50',
     SUBMITTED: 'bg-blue-100/60 text-blue-800 border-blue-300/50',
     APPROVED: 'bg-green-100/60 text-green-800 border-green-300/50',
-    DENIED: 'bg-red-100/60 text-red-800 border-red-300/50',
+    REJECTED: 'bg-red-100/60 text-red-800 border-red-300/50',
     CANCELLED: 'bg-gray-100/60 text-gray-800 border-gray-300/50',
   };
   return `${baseClasses} ${statusStyles[status] || statusStyles.CANCELLED}`;
@@ -101,7 +101,7 @@ const getStatusDotColor = (status: string) => {
     PAID: 'bg-green-500',
     SUBMITTED: 'bg-blue-500',
     APPROVED: 'bg-green-500',
-    DENIED: 'bg-red-500',
+    REJECTED: 'bg-red-500',
     CANCELLED: 'bg-gray-500',
   };
   return dotColors[status] || 'bg-gray-500';
@@ -286,7 +286,7 @@ export default function Billing() {
     toast.success('AI is analyzing claim for optimization...');
   };
 
-  const deniedClaimsList = claims.filter(c => c.status === 'DENIED');
+  const deniedClaimsList = claims.filter(c => c.status === 'REJECTED');
 
   const tabs = [
     { id: 'invoices', label: 'Invoices', count: invoices.length },
@@ -515,7 +515,7 @@ export default function Billing() {
                   key={claim.id}
                   className={clsx(
                     'p-4 transition-colors duration-200',
-                    claim.status === 'DENIED'
+                    claim.status === 'REJECTED'
                       ? 'bg-red-50/50 hover:bg-red-100/50'
                       : 'hover:bg-gray-50/50'
                   )}
@@ -554,7 +554,7 @@ export default function Billing() {
                           Submit Claim
                         </button>
                       )}
-                      {claim.status === 'DENIED' && isAIOnline && (
+                      {claim.status === 'REJECTED' && isAIOnline && (
                         <button
                           onClick={() => handleOptimizeClaim(claim.id)}
                           className="px-4 py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white shadow-lg shadow-purple-500/25 transition-all duration-200 hover:scale-105 flex items-center gap-1"
