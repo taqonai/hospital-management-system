@@ -146,8 +146,12 @@ export const storageService = {
   getFileUrl(key: string): string {
     const bucketName = getBucketName();
 
-    // For MinIO or custom endpoint
-    if (process.env.MINIO_ENDPOINT) {
+    // Check if using AWS S3 (same logic as getS3Client)
+    const useAwsS3 = process.env.AWS_S3_BUCKET &&
+      (process.env.AWS_ACCESS_KEY_ID || !process.env.MINIO_ENDPOINT);
+
+    // For MinIO or custom endpoint (only if not using AWS S3)
+    if (process.env.MINIO_ENDPOINT && !useAwsS3) {
       const endpoint = process.env.MINIO_ENDPOINT.replace(/\/$/, '');
       return `${endpoint}/${bucketName}/${key}`;
     }
