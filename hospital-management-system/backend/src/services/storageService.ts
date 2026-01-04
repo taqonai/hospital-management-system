@@ -11,20 +11,26 @@ function getS3Client(): S3Client {
       region: process.env.AWS_REGION || 'us-east-1',
     };
 
-    // If using MinIO (local development)
-    if (process.env.MINIO_ENDPOINT) {
+    // Check if AWS S3 is explicitly configured (takes priority over MinIO)
+    const useAwsS3 = process.env.AWS_S3_BUCKET &&
+      (process.env.AWS_ACCESS_KEY_ID || !process.env.MINIO_ENDPOINT);
+
+    if (useAwsS3 && process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+      // AWS S3 with explicit credentials
+      s3Config.credentials = {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      };
+      console.log('Using AWS S3 with explicit credentials');
+    } else if (process.env.MINIO_ENDPOINT && !useAwsS3) {
+      // MinIO for local development (only if AWS S3 is not configured)
       s3Config.endpoint = process.env.MINIO_ENDPOINT;
       s3Config.forcePathStyle = true; // Required for MinIO
       s3Config.credentials = {
         accessKeyId: process.env.MINIO_ACCESS_KEY || 'minioadmin',
         secretAccessKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
       };
-    } else if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
-      // AWS S3 with explicit credentials
-      s3Config.credentials = {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-      };
+      console.log('Using MinIO endpoint:', process.env.MINIO_ENDPOINT);
     }
     // Note: If no credentials are provided, AWS SDK will use the EC2 instance profile (IAM role)
 
@@ -33,6 +39,7 @@ function getS3Client(): S3Client {
       region: s3Config.region,
       endpoint: s3Config.endpoint || 'AWS S3',
       hasCredentials: !!s3Config.credentials,
+      bucket: getBucketName(),
     });
   }
   return s3Client;
