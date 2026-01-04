@@ -2,32 +2,45 @@ import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } fro
 import { Upload } from '@aws-sdk/lib-storage';
 import { v4 as uuidv4 } from 'uuid';
 
-// S3 Client Configuration
-// Supports both AWS S3 (with IAM role or explicit credentials) and MinIO (S3-compatible)
-const s3Config: any = {
-  region: process.env.AWS_REGION || 'us-east-1',
-};
+// Lazy initialization of S3 client to ensure environment variables are loaded
+let s3Client: S3Client | null = null;
 
-// If using MinIO (local development)
-if (process.env.MINIO_ENDPOINT) {
-  s3Config.endpoint = process.env.MINIO_ENDPOINT;
-  s3Config.forcePathStyle = true; // Required for MinIO
-  s3Config.credentials = {
-    accessKeyId: process.env.MINIO_ACCESS_KEY || 'minioadmin',
-    secretAccessKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
-  };
-} else if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
-  // AWS S3 with explicit credentials
-  s3Config.credentials = {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  };
+function getS3Client(): S3Client {
+  if (!s3Client) {
+    const s3Config: any = {
+      region: process.env.AWS_REGION || 'us-east-1',
+    };
+
+    // If using MinIO (local development)
+    if (process.env.MINIO_ENDPOINT) {
+      s3Config.endpoint = process.env.MINIO_ENDPOINT;
+      s3Config.forcePathStyle = true; // Required for MinIO
+      s3Config.credentials = {
+        accessKeyId: process.env.MINIO_ACCESS_KEY || 'minioadmin',
+        secretAccessKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
+      };
+    } else if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+      // AWS S3 with explicit credentials
+      s3Config.credentials = {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      };
+    }
+    // Note: If no credentials are provided, AWS SDK will use the EC2 instance profile (IAM role)
+
+    s3Client = new S3Client(s3Config);
+    console.log('S3 Client initialized with config:', {
+      region: s3Config.region,
+      endpoint: s3Config.endpoint || 'AWS S3',
+      hasCredentials: !!s3Config.credentials,
+    });
+  }
+  return s3Client;
 }
-// Note: If no credentials are provided, AWS SDK will use the EC2 instance profile (IAM role)
 
-const s3Client = new S3Client(s3Config);
-
-const BUCKET_NAME = process.env.AWS_S3_BUCKET || process.env.MINIO_BUCKET || 'hospital-medical-images';
+function getBucketName(): string {
+  return process.env.AWS_S3_BUCKET || process.env.MINIO_BUCKET || 'hospital-medical-images';
+}
 
 export interface UploadResult {
   url: string;
@@ -62,11 +75,13 @@ export const storageService = {
     const key = `${folder}/${uuidv4()}.${ext}`;
 
     try {
+      const bucketName = getBucketName();
+
       // Use Upload for larger files (multipart)
       const upload = new Upload({
-        client: s3Client,
+        client: getS3Client(),
         params: {
-          Bucket: BUCKET_NAME,
+          Bucket: bucketName,
           Key: key,
           Body: file,
           ContentType: contentType,
@@ -82,7 +97,7 @@ export const storageService = {
       return {
         url,
         key,
-        bucket: BUCKET_NAME,
+        bucket: bucketName,
         size: file.length,
         contentType,
       };
@@ -122,15 +137,17 @@ export const storageService = {
    * Get file URL
    */
   getFileUrl(key: string): string {
+    const bucketName = getBucketName();
+
     // For MinIO or custom endpoint
     if (process.env.MINIO_ENDPOINT) {
       const endpoint = process.env.MINIO_ENDPOINT.replace(/\/$/, '');
-      return `${endpoint}/${BUCKET_NAME}/${key}`;
+      return `${endpoint}/${bucketName}/${key}`;
     }
 
     // For AWS S3
     const region = process.env.AWS_REGION || 'us-east-1';
-    return `https://${BUCKET_NAME}.s3.${region}.amazonaws.com/${key}`;
+    return `https://${bucketName}.s3.${region}.amazonaws.com/${key}`;
   },
 
   /**
@@ -138,9 +155,9 @@ export const storageService = {
    */
   async deleteFile(key: string): Promise<void> {
     try {
-      await s3Client.send(
+      await getS3Client().send(
         new DeleteObjectCommand({
-          Bucket: BUCKET_NAME,
+          Bucket: getBucketName(),
           Key: key,
         })
       );
@@ -154,10 +171,7 @@ export const storageService = {
    * Check if S3/MinIO is configured and accessible
    */
   async checkHealth(): Promise<{ configured: boolean; accessible: boolean; message: string }> {
-    const isConfigured = !!(
-      process.env.MINIO_ENDPOINT ||
-      (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY)
-    );
+    const isConfigured = this.isStorageConfigured();
 
     if (!isConfigured) {
       return {
@@ -169,9 +183,9 @@ export const storageService = {
 
     try {
       // Try a simple operation to check accessibility
-      await s3Client.send(
+      await getS3Client().send(
         new GetObjectCommand({
-          Bucket: BUCKET_NAME,
+          Bucket: getBucketName(),
           Key: 'health-check-test',
         })
       );
