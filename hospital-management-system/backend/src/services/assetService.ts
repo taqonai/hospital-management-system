@@ -29,6 +29,11 @@ const CALIBRATION_REQUIRED: string[] = [
 class AssetService {
   // ==================== ASSET MANAGEMENT ====================
 
+  // Alias for route compatibility
+  async addAsset(hospitalId: string, data: any) {
+    return this.createAsset(hospitalId, data);
+  }
+
   async createAsset(hospitalId: string, data: any) {
     const assetCode = `AST-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
 
@@ -153,7 +158,7 @@ class AssetService {
     return prisma.asset.update({
       where: { id },
       data: {
-        status,
+        status: status as any,
         notes: reason,
       },
     });
@@ -161,8 +166,16 @@ class AssetService {
 
   // ==================== MAINTENANCE MANAGEMENT ====================
 
-  async scheduleMaintenance(hospitalId: string, assetId: string, data: any) {
-    return this.scheduleMaintenanceInternal(hospitalId, assetId, data);
+  async scheduleMaintenance(assetId: string, data: any) {
+    // Get asset's hospitalId
+    const asset = await prisma.asset.findUnique({ where: { id: assetId } });
+    if (!asset) throw new Error('Asset not found');
+    return this.scheduleMaintenanceInternal(asset.hospitalId, assetId, data);
+  }
+
+  // Alias for route compatibility
+  async getMaintenanceRecords(hospitalId: string, params: any) {
+    return this.getMaintenanceSchedule(hospitalId, params);
   }
 
   private async scheduleMaintenanceInternal(hospitalId: string, assetId: string, data: any) {
@@ -264,6 +277,59 @@ class AssetService {
   }
 
   // ==================== AI FEATURES ====================
+
+  // Alias for route compatibility
+  predictAssetFailure(params: any) {
+    return this.predictEquipmentFailure(params);
+  }
+
+  // Alias for route compatibility
+  analyzeAssetLifecycle(params: any): {
+    currentPhase: string;
+    remainingLifePercentage: number;
+    depreciatedValue: number;
+    recommendations: string[];
+    replacementTimeframe: string;
+  } {
+    const { age = 0, usefulLife = 10, purchasePrice = 0, depreciationRate = 10 } = params;
+
+    const lifePercentage = Math.max(0, Math.min(100, ((usefulLife - age) / usefulLife) * 100));
+    const depreciation = purchasePrice * (depreciationRate / 100) * age;
+    const depreciatedValue = Math.max(0, purchasePrice - depreciation);
+
+    let currentPhase: string;
+    let replacementTimeframe: string;
+    const recommendations: string[] = [];
+
+    if (lifePercentage > 75) {
+      currentPhase = 'EARLY_LIFE';
+      replacementTimeframe = 'Not needed for 5+ years';
+      recommendations.push('Standard maintenance schedule recommended');
+    } else if (lifePercentage > 50) {
+      currentPhase = 'MID_LIFE';
+      replacementTimeframe = '3-5 years';
+      recommendations.push('Increase maintenance frequency');
+      recommendations.push('Begin budgeting for replacement');
+    } else if (lifePercentage > 25) {
+      currentPhase = 'LATE_LIFE';
+      replacementTimeframe = '1-3 years';
+      recommendations.push('Evaluate replacement options');
+      recommendations.push('Consider refurbishment');
+    } else {
+      currentPhase = 'END_OF_LIFE';
+      replacementTimeframe = 'Within 1 year';
+      recommendations.push('Plan immediate replacement');
+      recommendations.push('Assess for safety concerns');
+    }
+
+    return {
+      currentPhase,
+      remainingLifePercentage: Math.round(lifePercentage),
+      depreciatedValue: Math.round(depreciatedValue),
+      recommendations,
+      replacementTimeframe,
+    };
+  }
 
   // AI: Predict equipment failure
   predictEquipmentFailure(params: {
@@ -500,6 +566,41 @@ class AssetService {
   }
 
   // ==================== STATISTICS ====================
+
+  // Alias for route compatibility
+  async getDashboardStats(hospitalId: string) {
+    return this.getAssetStats(hospitalId);
+  }
+
+  async getAssetsDueForCalibration(hospitalId: string, daysAhead: number = 30) {
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + daysAhead);
+
+    return prisma.asset.findMany({
+      where: {
+        hospitalId,
+        requiresCalibration: true,
+        nextCalibrationDate: { lte: dueDate },
+      },
+      orderBy: { nextCalibrationDate: 'asc' },
+    });
+  }
+
+  async getWarrantyExpiringAssets(hospitalId: string, daysAhead: number = 90) {
+    const expiryDate = new Date();
+    expiryDate.setDate(expiryDate.getDate() + daysAhead);
+
+    return prisma.asset.findMany({
+      where: {
+        hospitalId,
+        warrantyExpiry: {
+          gte: new Date(),
+          lte: expiryDate,
+        },
+      },
+      orderBy: { warrantyExpiry: 'asc' },
+    });
+  }
 
   async getAssetStats(hospitalId: string) {
     const [

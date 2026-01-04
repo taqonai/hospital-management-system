@@ -1,6 +1,9 @@
 import prisma from '../config/database';
 import axios from 'axios';
-import { NotFoundError, BadRequestError } from '../middleware/errorHandler';
+import { NotFoundError, ValidationError } from '../middleware/errorHandler';
+
+// Alias for BadRequestError
+const BadRequestError = ValidationError;
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
@@ -106,7 +109,7 @@ export class MedSafetyService {
         orderedRoute: data.orderedRoute,
         scheduledTime: data.scheduledTime,
         currentTime: data.currentTime || new Date().toISOString(),
-        patientWeight: data.patientWeight || patient.weight,
+        patientWeight: data.patientWeight || (patient as any).weight,
         patientAge: data.patientAge || age,
         allergies,
         currentMedications,
@@ -743,7 +746,7 @@ export class MedSafetyService {
               if (isPRN) {
                 prnAvailable.push(medEntry);
               } else if (minutesFromNow < -30) {
-                medEntry.overdueMinutes = Math.abs(minutesFromNow);
+                (medEntry as any).overdueMinutes = Math.abs(minutesFromNow);
                 overdue.push(medEntry);
               } else if (minutesFromNow <= 30) {
                 dueNow.push(medEntry);

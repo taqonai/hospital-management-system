@@ -52,22 +52,28 @@ function RegisterDonorModal({ onClose, onSuccess }: { onClose: () => void; onSuc
     rhFactor: '',
     address: '',
     city: '',
-    state: '',
-    zipCode: '',
+    weight: '',
+    hemoglobin: '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.firstName || !formData.lastName || !formData.bloodGroup || !formData.rhFactor) {
+    if (!formData.firstName || !formData.lastName || !formData.bloodGroup || !formData.rhFactor || !formData.weight) {
       toast.error('Please fill in all required fields');
       return;
     }
 
     setLoading(true);
     try {
+      // Combine bloodGroup and rhFactor into full enum value (e.g., "A_POSITIVE")
+      const fullBloodGroup = `${formData.bloodGroup}_${formData.rhFactor}`;
+
       await bloodBankApi.registerDonor({
         ...formData,
+        bloodGroup: fullBloodGroup,
         dateOfBirth: formData.dateOfBirth ? new Date(formData.dateOfBirth).toISOString() : undefined,
+        weight: parseFloat(formData.weight) || 0,
+        hemoglobin: formData.hemoglobin ? parseFloat(formData.hemoglobin) : undefined,
       });
       toast.success('Donor registered successfully');
       onSuccess();
@@ -185,6 +191,37 @@ function RegisterDonorModal({ onClose, onSuccess }: { onClose: () => void; onSuc
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
+                />
+              </div>
+            </div>
+
+            {/* Medical Info */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Weight (kg) <span className="text-red-500">*</span></label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="30"
+                  max="200"
+                  value={formData.weight}
+                  onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
+                  required
+                  placeholder="e.g., 70"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Hemoglobin (g/dL)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="5"
+                  max="20"
+                  value={formData.hemoglobin}
+                  onChange={(e) => setFormData({ ...formData, hemoglobin: e.target.value })}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
+                  placeholder="e.g., 14.5"
                 />
               </div>
             </div>

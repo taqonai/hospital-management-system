@@ -17,7 +17,7 @@ import {
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
-const AI_API_URL = import.meta.env.VITE_AI_API_URL || 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
 
 // Types
 interface PatientData {
@@ -214,9 +214,13 @@ export default function PredictiveRiskAnalytics({
     setError(null);
 
     try {
-      const response = await fetch(`${AI_API_URL}/api/predict-risk`, {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/ai/predict-risk`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           patientId: patient?.id || 'demo',
           predictionType: type,

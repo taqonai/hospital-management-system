@@ -141,6 +141,12 @@ export const doctorApi = {
   getDashboard: (id: string) => api.get(`/doctors/${id}/dashboard`),
 };
 
+// Department APIs
+export const departmentApi = {
+  getAll: () => api.get('/departments'),
+  getById: (id: string) => api.get(`/departments/${id}`),
+};
+
 // AI APIs
 export const aiApi = {
   // Health check

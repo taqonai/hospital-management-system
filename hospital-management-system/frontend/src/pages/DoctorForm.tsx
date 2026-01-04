@@ -12,7 +12,7 @@ import {
   CheckCircleIcon,
   CurrencyDollarIcon,
 } from '@heroicons/react/24/outline';
-import { doctorApi } from '../services/api';
+import { doctorApi, departmentApi } from '../services/api';
 import toast from 'react-hot-toast';
 
 interface DoctorFormData {
@@ -20,11 +20,12 @@ interface DoctorFormData {
   lastName: string;
   email: string;
   phone: string;
+  password: string;
   specialization: string;
   qualification: string;
   experience: number;
   licenseNumber: string;
-  department: string;
+  departmentId: string;
   consultationFee: number;
   bio: string;
 }
@@ -33,12 +34,13 @@ const initialFormData: DoctorFormData = {
   firstName: '',
   lastName: '',
   email: '',
+  password: '',
   phone: '',
   specialization: '',
   qualification: '',
   experience: 0,
   licenseNumber: '',
-  department: '',
+  departmentId: '',
   consultationFee: 0,
   bio: '',
 };
@@ -68,19 +70,7 @@ const specializations = [
   'General Surgery',
 ];
 
-const departments = [
-  'OPD',
-  'IPD',
-  'Emergency',
-  'Surgery',
-  'ICU',
-  'Pediatrics',
-  'Gynecology',
-  'Cardiology',
-  'Orthopedics',
-  'Neurology',
-  'Oncology',
-];
+// Departments will be fetched from API
 
 export default function DoctorForm() {
   const navigate = useNavigate();
@@ -90,6 +80,15 @@ export default function DoctorForm() {
 
   const [formData, setFormData] = useState<DoctorFormData>(initialFormData);
   const [errors, setErrors] = useState<Partial<DoctorFormData>>({});
+
+  // Fetch departments
+  const { data: departmentsData } = useQuery({
+    queryKey: ['departments'],
+    queryFn: async () => {
+      const response = await departmentApi.getAll();
+      return response.data.data || [];
+    },
+  });
 
   // Fetch doctor data if editing
   const { data: doctorData, isLoading: loadingDoctor } = useQuery({
@@ -110,11 +109,12 @@ export default function DoctorForm() {
         lastName: doctorData.user?.lastName || doctorData.lastName || '',
         email: doctorData.user?.email || doctorData.email || '',
         phone: doctorData.user?.phone || doctorData.phone || '',
+        password: '', // Don't populate password on edit
         specialization: doctorData.specialization || '',
         qualification: doctorData.qualification || '',
         experience: doctorData.experience || 0,
         licenseNumber: doctorData.licenseNumber || '',
-        department: doctorData.department || '',
+        departmentId: doctorData.departmentId || doctorData.department?.id || '',
         consultationFee: doctorData.consultationFee || 0,
         bio: doctorData.bio || '',
       });
@@ -171,6 +171,10 @@ export default function DoctorForm() {
     if (!formData.phone.trim()) newErrors.phone = 'Phone number is required';
     if (!formData.specialization) newErrors.specialization = 'Specialization is required';
     if (!formData.licenseNumber.trim()) newErrors.licenseNumber = 'License number is required';
+    if (!formData.departmentId) newErrors.departmentId = 'Department is required';
+    if (!isEditMode && !formData.password.trim()) {
+      newErrors.password = 'Password is required for new doctors';
+    }
 
     setErrors(newErrors as unknown as Partial<DoctorFormData>);
     return Object.keys(newErrors).length === 0;
@@ -180,10 +184,15 @@ export default function DoctorForm() {
     e.preventDefault();
     if (!validate()) return;
 
+    // Only include password if creating new doctor
+    const submitData = isEditMode
+      ? { ...formData, password: undefined }
+      : formData;
+
     if (isEditMode) {
-      updateMutation.mutate(formData);
+      updateMutation.mutate(submitData);
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate(submitData);
     }
   };
 
@@ -293,6 +302,23 @@ export default function DoctorForm() {
               </div>
               {errors.phone && <p className="mt-1 text-sm text-red-500">{errors.phone}</p>}
             </div>
+
+            {!isEditMode && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Password <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  className={`w-full px-4 py-3 rounded-lg border ${errors.password ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
+                  placeholder="Enter password for login"
+                />
+                {errors.password && <p className="mt-1 text-sm text-red-500">{errors.password}</p>}
+              </div>
+            )}
           </div>
         </div>
 
@@ -373,22 +399,23 @@ export default function DoctorForm() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Department
+                Department <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <BuildingOfficeIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <select
-                  name="department"
-                  value={formData.department}
+                  name="departmentId"
+                  value={formData.departmentId}
                   onChange={handleChange}
-                  className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className={`w-full pl-10 pr-4 py-3 rounded-lg border ${errors.departmentId ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
                 >
                   <option value="">Select department</option>
-                  {departments.map(dept => (
-                    <option key={dept} value={dept}>{dept}</option>
+                  {(departmentsData || []).map((dept: { id: string; name: string }) => (
+                    <option key={dept.id} value={dept.id}>{dept.name}</option>
                   ))}
                 </select>
               </div>
+              {errors.departmentId && <p className="mt-1 text-sm text-red-500">{errors.departmentId}</p>}
             </div>
 
             <div>

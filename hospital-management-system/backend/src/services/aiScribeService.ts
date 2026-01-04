@@ -614,10 +614,10 @@ export class AIScribeService {
         const prescription = await prisma.prescription.create({
           data: {
             patientId: data.patientId,
-            prescribedById: data.doctorId,
+            doctorId: data.doctorId,
             consultationId: noteId,
             notes: `AI Scribe generated prescription - Session: ${data.sessionId}`,
-            status: 'PENDING',
+            status: 'ACTIVE',
           },
         });
 

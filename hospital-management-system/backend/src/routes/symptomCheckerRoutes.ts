@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { validate } from '../middleware/validation';
 import logger from '../utils/logger';
 import { symptomCheckerService, TriageLevel } from '../services/symptomCheckerService';
-import { authenticateToken, optionalAuth } from '../middleware/auth';
+import { authenticate, optionalAuth } from '../middleware/auth';
 import { AuthenticatedRequest } from '../types';
 
 const router = Router();

@@ -187,7 +187,7 @@ const DEMO_PATIENTS = [
   },
 ];
 
-const AI_SERVICE_URL = 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
 
 export default function PatientRiskPrediction() {
   const [selectedPrediction, setSelectedPrediction] = useState('READMISSION');
@@ -316,9 +316,13 @@ export default function PatientRiskPrediction() {
         },
       };
 
-      const response = await fetch(`${AI_SERVICE_URL}/api/predict-risk`, {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/ai/predict-risk`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify(requestData),
       });
 

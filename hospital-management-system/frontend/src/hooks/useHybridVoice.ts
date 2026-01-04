@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 import { useAudioRecorder } from './useAudioRecorder';
 
-const AI_SERVICE_URL = (import.meta as unknown as { env: Record<string, string> }).env?.VITE_AI_SERVICE_URL || 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
 
 export interface HybridVoiceResult {
   transcript: string;
@@ -76,7 +76,7 @@ export function useHybridVoice(options: UseHybridVoiceOptions = {}) {
   useEffect(() => {
     const checkWhisper = async () => {
       try {
-        const response = await fetch(`${AI_SERVICE_URL}/api/transcribe/status`);
+        const response = await fetch(`${API_URL}/ai/transcribe/status`);
         const data = await response.json();
         setWhisperAvailable(data.available);
       } catch {
@@ -101,8 +101,10 @@ export function useHybridVoice(options: UseHybridVoiceOptions = {}) {
       formData.append('language', language.split('-')[0]); // 'en-US' -> 'en'
       formData.append('context', JSON.stringify(context));
 
-      const response = await fetch(`${AI_SERVICE_URL}/api/transcribe`, {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/ai/transcribe`, {
         method: 'POST',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
         body: formData,
       });
 

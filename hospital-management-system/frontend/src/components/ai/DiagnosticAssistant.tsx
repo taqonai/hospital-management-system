@@ -15,7 +15,7 @@ import {
   ChevronUpIcon,
 } from '@heroicons/react/24/outline';
 
-const AI_API_URL = import.meta.env.VITE_AI_API_URL || 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
 
 interface PatientContext {
   id?: string;
@@ -139,9 +139,13 @@ export default function DiagnosticAssistant({
     setResult(null);
 
     try {
-      const response = await fetch(`${AI_API_URL}/api/diagnose`, {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/ai/diagnose`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           symptoms,
           patientAge: patient?.age || 35,

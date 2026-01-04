@@ -147,10 +147,16 @@ export default function PatientForm() {
     e.preventDefault();
     if (!validate()) return;
 
+    // Transform date to ISO 8601 format for backend validation
+    const submitData = {
+      ...formData,
+      dateOfBirth: formData.dateOfBirth ? new Date(formData.dateOfBirth).toISOString() : '',
+    };
+
     if (isEditMode) {
-      updateMutation.mutate(formData);
+      updateMutation.mutate(submitData);
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate(submitData);
     }
   };
 

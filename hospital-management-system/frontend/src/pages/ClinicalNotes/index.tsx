@@ -24,7 +24,7 @@ interface TemplatesResponse {
   modelVersion: string;
 }
 
-const AI_SERVICE_URL = 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
 
 const FEATURES = [
   {
@@ -96,10 +96,17 @@ export default function ClinicalNotes() {
 
   const checkServiceStatus = async () => {
     try {
-      const response = await fetch(`${AI_SERVICE_URL}/health`);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/ai/health`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
       if (response.ok) {
-        const data = await response.json();
-        setServiceStatus(data.services?.clinical_notes ? 'online' : 'offline');
+        const result = await response.json();
+        const data = result.data || result;
+        const isOnline = data.services?.clinical_notes === 'active' ||
+                        data.services?.clinical_notes === true ||
+                        data.status === 'connected';
+        setServiceStatus(isOnline ? 'online' : 'offline');
       } else {
         setServiceStatus('offline');
       }
@@ -110,9 +117,13 @@ export default function ClinicalNotes() {
 
   const fetchTemplates = async () => {
     try {
-      const response = await fetch(`${AI_SERVICE_URL}/api/notes/templates`);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/ai/clinical-notes/templates`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
       if (response.ok) {
-        const data = await response.json();
+        const result = await response.json();
+        const data = result.data || result;
         setTemplates(data);
       }
     } catch {

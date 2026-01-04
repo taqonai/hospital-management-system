@@ -45,11 +45,11 @@ interface AuthResponse {
 export class AuthService {
   private generateTokens(payload: JwtPayload): TokenPair {
     const accessToken = jwt.sign(payload, config.jwt.secret, {
-      expiresIn: config.jwt.expiresIn,
+      expiresIn: config.jwt.expiresIn as any,
     });
 
     const refreshToken = jwt.sign(payload, config.jwt.refreshSecret, {
-      expiresIn: config.jwt.refreshExpiresIn,
+      expiresIn: config.jwt.refreshExpiresIn as any,
     });
 
     return {

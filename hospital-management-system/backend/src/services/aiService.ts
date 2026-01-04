@@ -68,11 +68,11 @@ export class AIService {
         data: {
           patientId: data.patientId,
           symptoms: data.symptoms,
-          suggestedDiagnoses: aiResult.diagnoses,
+          suggestedDiagnoses: JSON.parse(JSON.stringify(aiResult.diagnoses)),
           recommendedTests: aiResult.recommendedTests || [],
           treatmentSuggestions: aiResult.treatmentSuggestions || [],
-          drugInteractionWarnings: aiResult.drugInteractions || [],
-          riskFactors: aiResult.riskFactors || [],
+          drugInteractionWarnings: (aiResult.drugInteractions || []).map((d: any) => d.message || String(d)),
+          riskFactors: (aiResult.riskFactors || []).map((r: any) => r.factor || String(r)),
           confidence: aiResult.confidence || 0.75,
           modelVersion: aiResult.modelVersion || '2.0.0-ml',
         },
@@ -316,7 +316,7 @@ export class AIService {
       const analysis = await prisma.aIImageAnalysis.create({
         data: {
           imagingOrderId: data.imagingOrderId,
-          findings: aiResult.findings,
+          findings: JSON.parse(JSON.stringify(aiResult.findings)),
           impression: aiResult.impression,
           heatmapUrl: aiResult.heatmapUrl,
           abnormalityDetected: aiResult.abnormalityDetected,

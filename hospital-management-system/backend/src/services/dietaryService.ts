@@ -73,13 +73,47 @@ class DietaryService {
     });
   }
 
-  async getDietPlans(hospitalId: string, category?: string) {
-    const where: any = { hospitalId, isActive: true };
-    if (category) where.category = category;
+  async getDietPlans(hospitalId: string, params: any = {}) {
+    const page = parseInt(params.page) || 1;
+    const limit = parseInt(params.limit) || 20;
+    const skip = (page - 1) * limit;
 
-    return prisma.dietPlan.findMany({
-      where,
-      orderBy: { name: 'asc' },
+    const where: any = { hospitalId, isActive: true };
+    if (params.category) where.category = params.category;
+
+    const [plans, total] = await Promise.all([
+      prisma.dietPlan.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { name: 'asc' },
+      }),
+      prisma.dietPlan.count({ where }),
+    ]);
+
+    return { plans, total, page, limit };
+  }
+
+  async updateDietPlan(id: string, data: any) {
+    return prisma.dietPlan.update({
+      where: { id },
+      data: {
+        name: data.name,
+        description: data.description,
+        category: data.category,
+        calories: data.calories,
+        protein: data.protein,
+        carbohydrates: data.carbohydrates,
+        fat: data.fat,
+        fiber: data.fiber,
+        sodium: data.sodium,
+        restrictions: data.restrictions,
+        allergens: data.allergens,
+        breakfastItems: data.breakfastItems,
+        lunchItems: data.lunchItems,
+        dinnerItems: data.dinnerItems,
+        snackItems: data.snackItems,
+      },
     });
   }
 
@@ -88,6 +122,10 @@ class DietaryService {
   }
 
   // ==================== PATIENT DIET ASSIGNMENT ====================
+
+  async assignPatientDiet(hospitalId: string, data: any) {
+    return this.assignDiet(hospitalId, data);
+  }
 
   async assignDiet(hospitalId: string, data: any) {
     // Get patient details for AI recommendations
@@ -125,7 +163,10 @@ class DietaryService {
     return { patientDiet, recommendations };
   }
 
-  async getPatientDiets(hospitalId: string, params: any) {
+  async getPatientDiets(hospitalId: string, params: any = {}) {
+    const page = parseInt(params.page) || 1;
+    const limit = parseInt(params.limit) || 20;
+    const skip = (page - 1) * limit;
     const { patientId, admissionId, status } = params;
 
     const where: any = { hospitalId };
@@ -133,10 +174,24 @@ class DietaryService {
     if (admissionId) where.admissionId = admissionId;
     if (status) where.status = status;
 
-    return prisma.patientDiet.findMany({
-      where,
+    const [diets, total] = await Promise.all([
+      prisma.patientDiet.findMany({
+        where,
+        skip,
+        take: limit,
+        include: { dietPlan: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.patientDiet.count({ where }),
+    ]);
+
+    return { diets, total, page, limit };
+  }
+
+  async getPatientDietById(id: string) {
+    return prisma.patientDiet.findUnique({
+      where: { id },
       include: { dietPlan: true },
-      orderBy: { createdAt: 'desc' },
     });
   }
 
@@ -177,7 +232,10 @@ class DietaryService {
     });
   }
 
-  async getMealOrders(hospitalId: string, params: any) {
+  async getMealOrders(hospitalId: string, params: any = {}) {
+    const page = parseInt(params.page) || 1;
+    const limit = parseInt(params.limit) || 20;
+    const skip = (page - 1) * limit;
     const { date, wardName, status, mealType } = params;
 
     const where: any = { hospitalId };
@@ -192,14 +250,21 @@ class DietaryService {
     if (status) where.status = status;
     if (mealType) where.mealType = mealType;
 
-    return prisma.mealOrder.findMany({
-      where,
-      include: { patientDiet: { include: { dietPlan: true } } },
-      orderBy: [{ scheduledTime: 'asc' }],
-    });
+    const [orders, total] = await Promise.all([
+      prisma.mealOrder.findMany({
+        where,
+        skip,
+        take: limit,
+        include: { patientDiet: { include: { dietPlan: true } } },
+        orderBy: [{ scheduledTime: 'asc' }],
+      }),
+      prisma.mealOrder.count({ where }),
+    ]);
+
+    return { orders, total, page, limit };
   }
 
-  async updateMealOrderStatus(id: string, status: string, data: any) {
+  async updateMealOrderStatus(id: string, status: string, data: any = {}) {
     const updateData: any = { status };
 
     if (status === 'PREPARING') {
@@ -330,6 +395,24 @@ class DietaryService {
   }
 
   // ==================== AI FEATURES ====================
+
+  // Alias for route compatibility
+  getAINutritionalRecommendations(params: any) {
+    return this.generateNutritionalRecommendations(
+      params.dietCategory || 'REGULAR',
+      params.allergies || [],
+      params.conditions || []
+    );
+  }
+
+  // Alias for route compatibility
+  analyzeNutritionIntake(params: any) {
+    const dateRange = {
+      start: params.startDate ? new Date(params.startDate) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      end: params.endDate ? new Date(params.endDate) : new Date(),
+    };
+    return this.analyzeNutritionIntakeByPatient(params.patientId, dateRange);
+  }
 
   // AI: Generate nutritional recommendations
   generateNutritionalRecommendations(
@@ -490,7 +573,7 @@ class DietaryService {
   }
 
   // AI: Analyze nutrition intake
-  async analyzeNutritionIntake(patientId: string, dateRange: { start: Date; end: Date }) {
+  async analyzeNutritionIntakeByPatient(patientId: string, dateRange: { start: Date; end: Date }) {
     const mealOrders = await prisma.mealOrder.findMany({
       where: {
         patientId,
@@ -551,6 +634,10 @@ class DietaryService {
   }
 
   // ==================== KITCHEN STATS ====================
+
+  async getDashboardStats(hospitalId: string) {
+    return this.getKitchenStats(hospitalId);
+  }
 
   async getKitchenStats(hospitalId: string) {
     const today = new Date();

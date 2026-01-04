@@ -46,14 +46,25 @@ class AmbulanceService {
     });
   }
 
-  async getAmbulances(hospitalId: string, status?: string) {
-    const where: any = { hospitalId, isActive: true };
-    if (status) where.status = status;
+  async getAmbulances(hospitalId: string, params: any = {}) {
+    const page = parseInt(params.page) || 1;
+    const limit = parseInt(params.limit) || 20;
+    const skip = (page - 1) * limit;
 
-    return prisma.ambulance.findMany({
-      where,
-      orderBy: { vehicleNumber: 'asc' },
-    });
+    const where: any = { hospitalId, isActive: true };
+    if (params.status) where.status = params.status;
+
+    const [ambulances, total] = await Promise.all([
+      prisma.ambulance.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { vehicleNumber: 'asc' },
+      }),
+      prisma.ambulance.count({ where }),
+    ]);
+
+    return { ambulances, total, page, limit };
   }
 
   async getAmbulanceById(id: string) {
@@ -181,6 +192,21 @@ class AmbulanceService {
     return trip;
   }
 
+  async getTripById(id: string) {
+    return prisma.ambulanceTrip.findUnique({
+      where: { id },
+      include: { ambulance: true },
+    });
+  }
+
+  async completeTrip(tripId: string, data: any) {
+    return this.updateTripStatus(tripId, 'COMPLETED', data);
+  }
+
+  async cancelTrip(tripId: string, reason: string) {
+    return this.updateTripStatus(tripId, 'CANCELLED', { reason });
+  }
+
   async updateTripStatus(tripId: string, status: string, data?: any) {
     const updateData: any = { status };
 
@@ -245,6 +271,21 @@ class AmbulanceService {
   }
 
   // ==================== AI FEATURES ====================
+
+  // Alias for route compatibility
+  async getOptimalAmbulance(hospitalId: string, request: any) {
+    return this.findOptimalAmbulance(hospitalId, request);
+  }
+
+  // Alias for route compatibility
+  async optimizeDispatch(hospitalId: string, params: any) {
+    return this.optimizeDispatchAlgorithm(params);
+  }
+
+  // Alias for route compatibility
+  async getDashboardStats(hospitalId: string) {
+    return this.getAmbulanceStats(hospitalId);
+  }
 
   // AI: Find optimal ambulance
   async findOptimalAmbulance(hospitalId: string, request: any): Promise<{
@@ -361,7 +402,7 @@ class AmbulanceService {
   }
 
   // AI: Optimize dispatch
-  optimizeDispatch(params: {
+  optimizeDispatchAlgorithm(params: {
     pendingRequests: any[];
     availableAmbulances: any[];
     currentTime: Date;

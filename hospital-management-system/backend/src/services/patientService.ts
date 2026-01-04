@@ -27,7 +27,8 @@ export class PatientService {
         hospitalId,
         mrn,
         dateOfBirth: new Date(data.dateOfBirth),
-      },
+        bloodGroup: data.bloodGroup as any,
+      } as any,
       include: {
         hospital: {
           select: { id: true, name: true, code: true },
@@ -166,7 +167,8 @@ export class PatientService {
       data: {
         ...data,
         dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : undefined,
-      },
+        bloodGroup: data.bloodGroup as any,
+      } as any,
     });
 
     return updated;

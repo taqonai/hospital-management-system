@@ -1,47 +1,62 @@
 import prisma from '../config/database';
+import { ReleaseStatus, AutopsyStatus, MannerOfDeath } from '@prisma/client';
 
 // ==================== MORTUARY RECORD MANAGEMENT ====================
 
 export const mortuaryService = {
   // Register death / create mortuary record
   async registerDeath(hospitalId: string, data: {
-    patientId: string;
-    admissionId?: string;
+    patientId?: string;
+    deceasedName: string;
+    dateOfBirth?: Date;
     dateOfDeath: Date;
-    timeOfDeath: string;
+    timeOfDeath: Date;
+    age?: number;
+    gender: string;
+    placeOfDeath: string;
     causeOfDeath: string;
     mannerOfDeath: string;
-    pronouncedBy: string;
-    witnessedBy?: string;
-    location: string;
-    autopsy: boolean;
-    organDonor: boolean;
-    nextOfKinName: string;
-    nextOfKinRelation: string;
-    nextOfKinPhone: string;
-    nextOfKinAddress?: string;
+    certifyingDoctor: string;
+    nokName: string;
+    nokRelationship: string;
+    nokPhone: string;
+    nokAddress?: string;
+    autopsyRequired?: boolean;
+    notes?: string;
   }) {
-    // Generate mortuary number
+    // Generate record number
     const count = await prisma.mortuaryRecord.count({ where: { hospitalId } });
-    const mortuaryNumber = `MR-${new Date().getFullYear()}-${String(count + 1).padStart(5, '0')}`;
+    const recordNumber = `MORT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(count + 1).padStart(3, '0')}`;
 
     return prisma.mortuaryRecord.create({
       data: {
-        ...data,
         hospitalId,
-        mortuaryNumber,
-        status: 'ADMITTED',
-        deathCertificateIssued: false,
-      },
-      include: {
-        patient: true,
+        recordNumber,
+        patientId: data.patientId,
+        deceasedName: data.deceasedName,
+        dateOfBirth: data.dateOfBirth,
+        dateOfDeath: data.dateOfDeath,
+        timeOfDeath: data.timeOfDeath,
+        age: data.age,
+        gender: data.gender as any,
+        placeOfDeath: data.placeOfDeath,
+        causeOfDeath: data.causeOfDeath,
+        mannerOfDeath: data.mannerOfDeath as MannerOfDeath,
+        certifyingDoctor: data.certifyingDoctor,
+        nokName: data.nokName,
+        nokRelationship: data.nokRelationship,
+        nokPhone: data.nokPhone,
+        nokAddress: data.nokAddress,
+        autopsyRequired: data.autopsyRequired || false,
+        notes: data.notes,
+        releaseStatus: ReleaseStatus.NOT_RELEASED,
       },
     });
   },
 
   // Get mortuary records
   async getRecords(hospitalId: string, filters: {
-    status?: string;
+    releaseStatus?: string;
     dateFrom?: Date;
     dateTo?: Date;
     search?: string;
@@ -53,7 +68,7 @@ export const mortuaryService = {
     const skip = (page - 1) * limit;
 
     const where: any = { hospitalId };
-    if (filters.status) where.status = filters.status;
+    if (filters.releaseStatus) where.releaseStatus = filters.releaseStatus;
     if (filters.dateFrom || filters.dateTo) {
       where.dateOfDeath = {};
       if (filters.dateFrom) where.dateOfDeath.gte = filters.dateFrom;
@@ -61,9 +76,8 @@ export const mortuaryService = {
     }
     if (filters.search) {
       where.OR = [
-        { mortuaryNumber: { contains: filters.search, mode: 'insensitive' } },
-        { patient: { firstName: { contains: filters.search, mode: 'insensitive' } } },
-        { patient: { lastName: { contains: filters.search, mode: 'insensitive' } } },
+        { recordNumber: { contains: filters.search, mode: 'insensitive' } },
+        { deceasedName: { contains: filters.search, mode: 'insensitive' } },
       ];
     }
 
@@ -73,7 +87,6 @@ export const mortuaryService = {
         skip,
         take: limit,
         orderBy: { dateOfDeath: 'desc' },
-        include: { patient: true },
       }),
       prisma.mortuaryRecord.count({ where }),
     ]);
@@ -85,150 +98,143 @@ export const mortuaryService = {
   async getRecordById(id: string) {
     return prisma.mortuaryRecord.findUnique({
       where: { id },
-      include: {
-        patient: true,
-        admission: true,
-      },
     });
   },
 
   // Update record
   async updateRecord(id: string, data: {
     causeOfDeath?: string;
-    autopsyResults?: string;
-    autopsyPerformedBy?: string;
-    autopsyDate?: Date;
     storageLocation?: string;
-    preservationMethod?: string;
+    compartmentNumber?: string;
+    bodyCondition?: string;
     notes?: string;
   }) {
     return prisma.mortuaryRecord.update({
       where: { id },
       data,
-      include: { patient: true },
     });
   },
 
-  // Update status
-  async updateStatus(id: string, status: string, data?: {
-    releasedTo?: string;
-    releaseDate?: Date;
-    releaseAuthorizedBy?: string;
-    funeralHome?: string;
+  // Receive body
+  async receiveBody(id: string, data: {
+    compartmentNumber: string;
+    storageLocation: string;
+    receivedBy: string;
+    bodyCondition?: string;
+    belongings?: string[];
+    belongingsReceivedBy?: string;
   }) {
     return prisma.mortuaryRecord.update({
       where: { id },
       data: {
-        status,
+        compartmentNumber: data.compartmentNumber,
+        storageLocation: data.storageLocation,
+        bodyReceivedAt: new Date(),
+        receivedBy: data.receivedBy,
+        bodyCondition: data.bodyCondition,
+        belongings: data.belongings || [],
+        belongingsReceivedBy: data.belongingsReceivedBy,
+      },
+    });
+  },
+
+  // Update status
+  async updateStatus(id: string, status: string, data?: any) {
+    return prisma.mortuaryRecord.update({
+      where: { id },
+      data: {
+        releaseStatus: status as any,
         ...data,
       },
-      include: { patient: true },
+    });
+  },
+
+  // Register organ donation
+  async registerOrganDonation(id: string, data: {
+    organs: string[];
+    consentForm?: string;
+    consentedBy: string;
+    relationship: string;
+    witnessedBy?: string;
+  }) {
+    return prisma.mortuaryRecord.update({
+      where: { id },
+      data: {
+        notes: `Organ Donation: ${data.organs.join(', ')}. Consented by: ${data.consentedBy} (${data.relationship})`,
+      },
     });
   },
 
   // Issue death certificate
   async issueDeathCertificate(id: string, data: {
     certificateNumber: string;
-    issuedBy: string;
+    certificateUrl?: string;
   }) {
     return prisma.mortuaryRecord.update({
       where: { id },
       data: {
-        deathCertificateIssued: true,
         deathCertificateNumber: data.certificateNumber,
-        certificateIssuedBy: data.issuedBy,
-        certificateIssuedAt: new Date(),
+        deathCertificateUrl: data.certificateUrl,
+        certifiedAt: new Date(),
       },
-      include: { patient: true },
     });
   },
 
   // Schedule autopsy
   async scheduleAutopsy(id: string, data: {
-    scheduledDate: Date;
-    pathologist: string;
-    reason: string;
+    autopsyDoctor: string;
+    autopsyDate?: Date;
   }) {
     return prisma.mortuaryRecord.update({
       where: { id },
       data: {
-        autopsy: true,
-        autopsyScheduledDate: data.scheduledDate,
-        autopsyPathologist: data.pathologist,
-        autopsyReason: data.reason,
-        status: 'AUTOPSY_PENDING',
+        autopsyRequired: true,
+        autopsyStatus: AutopsyStatus.PENDING,
+        autopsyDoctor: data.autopsyDoctor,
+        autopsyDate: data.autopsyDate,
       },
-      include: { patient: true },
     });
   },
 
   // Complete autopsy
   async completeAutopsy(id: string, data: {
-    results: string;
     findings: string;
-    performedBy: string;
+    doctor?: string;
     finalCauseOfDeath?: string;
   }) {
     return prisma.mortuaryRecord.update({
       where: { id },
       data: {
-        autopsyResults: data.results,
+        autopsyStatus: AutopsyStatus.COMPLETED,
         autopsyFindings: data.findings,
-        autopsyPerformedBy: data.performedBy,
+        autopsyDoctor: data.doctor,
         autopsyDate: new Date(),
         causeOfDeath: data.finalCauseOfDeath || undefined,
-        status: 'ADMITTED',
       },
-      include: { patient: true },
     });
   },
 
   // Release body
   async releaseBody(id: string, data: {
     releasedTo: string;
-    relationship: string;
-    idVerification: string;
-    funeralHome?: string;
-    authorizedBy: string;
+    releaseAuthorizedBy: string;
+    policeNocNumber?: string;
+    undertakerName?: string;
+    undertakerLicense?: string;
     notes?: string;
   }) {
     return prisma.mortuaryRecord.update({
       where: { id },
       data: {
-        status: 'RELEASED',
+        releaseStatus: ReleaseStatus.RELEASED,
         releasedTo: data.releasedTo,
-        releasedToRelation: data.relationship,
-        releaseIdVerification: data.idVerification,
-        funeralHome: data.funeralHome,
-        releaseAuthorizedBy: data.authorizedBy,
-        releaseDate: new Date(),
-        releaseNotes: data.notes,
+        releasedAt: new Date(),
+        releaseAuthorizedBy: data.releaseAuthorizedBy,
+        policeNocNumber: data.policeNocNumber,
+        undertakerName: data.undertakerName,
+        undertakerLicense: data.undertakerLicense,
+        notes: data.notes,
       },
-      include: { patient: true },
-    });
-  },
-
-  // ==================== ORGAN DONATION ====================
-
-  // Register organ donation consent
-  async registerOrganDonation(id: string, data: {
-    organs: string[];
-    consentForm: string;
-    consentedBy: string;
-    relationship: string;
-    witnessedBy: string;
-  }) {
-    return prisma.mortuaryRecord.update({
-      where: { id },
-      data: {
-        organDonor: true,
-        organsForDonation: data.organs,
-        organDonationConsent: data.consentForm,
-        organDonationConsentedBy: data.consentedBy,
-        organDonationConsentRelation: data.relationship,
-        organDonationWitnessedBy: data.witnessedBy,
-      },
-      include: { patient: true },
     });
   },
 
@@ -241,8 +247,7 @@ export const mortuaryService = {
       age: number;
       gender: string;
       dateOfDeath: Date;
-      location: string;
-      department: string;
+      placeOfDeath: string;
     }[];
   }): {
     topCauses: { cause: string; count: number; percentage: number }[];
@@ -290,13 +295,13 @@ export const mortuaryService = {
 
     // Demographic analysis
     const demographicAnalysis = Object.entries(ageGroups)
-      .filter(([_, data]) => data.count > 0)
-      .map(([group, data]) => {
-        const topCause = Object.entries(data.causes)
+      .filter(([_, groupData]) => groupData.count > 0)
+      .map(([group, groupData]) => {
+        const topCause = Object.entries(groupData.causes)
           .sort((a, b) => b[1] - a[1])[0];
         return {
           group,
-          count: data.count,
+          count: groupData.count,
           topCause: topCause ? topCause[0] : 'N/A',
         };
       });
@@ -347,88 +352,58 @@ export const mortuaryService = {
 
   // AI: Generate death summary report
   generateDeathSummary(data: {
-    patient: {
+    deceased: {
       name: string;
       age: number;
       gender: string;
-      medicalHistory: string[];
-    };
-    admission: {
-      diagnosis: string;
-      treatments: string[];
-      complications: string[];
     };
     death: {
       dateOfDeath: Date;
       causeOfDeath: string;
-      contributingFactors: string[];
+      mannerOfDeath: string;
+      placeOfDeath: string;
     };
   }): {
     summary: string;
-    timeline: { time: string; event: string }[];
     clinicalNotes: string;
   } {
-    const { patient, admission, death } = data;
+    const { deceased, death } = data;
 
     const summary = `
 DEATH SUMMARY REPORT
 
-Patient: ${patient.name}
-Age: ${patient.age} years | Gender: ${patient.gender}
+Deceased: ${deceased.name}
+Age: ${deceased.age} years | Gender: ${deceased.gender}
 Date of Death: ${death.dateOfDeath.toLocaleDateString()}
-
-MEDICAL HISTORY:
-${patient.medicalHistory.map(h => `• ${h}`).join('\n')}
-
-ADMISSION DIAGNOSIS:
-${admission.diagnosis}
-
-TREATMENTS PROVIDED:
-${admission.treatments.map(t => `• ${t}`).join('\n')}
-
-COMPLICATIONS:
-${admission.complications.map(c => `• ${c}`).join('\n')}
+Place of Death: ${death.placeOfDeath}
 
 CAUSE OF DEATH:
-Primary: ${death.causeOfDeath}
-${death.contributingFactors.length > 0 ? `Contributing Factors:\n${death.contributingFactors.map(f => `• ${f}`).join('\n')}` : ''}
-    `.trim();
+${death.causeOfDeath}
 
-    const timeline: { time: string; event: string }[] = [
-      { time: 'Admission', event: `Admitted with ${admission.diagnosis}` },
-      ...admission.treatments.map((t, i) => ({
-        time: `Day ${i + 1}`,
-        event: `Treatment: ${t}`,
-      })),
-      ...admission.complications.map((c, i) => ({
-        time: `Complication ${i + 1}`,
-        event: c,
-      })),
-      { time: death.dateOfDeath.toLocaleDateString(), event: `Death: ${death.causeOfDeath}` },
-    ];
+MANNER OF DEATH:
+${death.mannerOfDeath}
+    `.trim();
 
     const clinicalNotes = `
-Patient ${patient.name}, a ${patient.age}-year-old ${patient.gender.toLowerCase()},
-was admitted with ${admission.diagnosis}. Despite ${admission.treatments.length} treatment interventions,
-the patient developed ${admission.complications.length > 0 ? admission.complications.join(', ') : 'no documented complications'}.
-The patient expired on ${death.dateOfDeath.toLocaleDateString()} due to ${death.causeOfDeath}.
-${death.contributingFactors.length > 0 ? `Contributing factors included ${death.contributingFactors.join(', ')}.` : ''}
+${deceased.name}, a ${deceased.age}-year-old ${deceased.gender.toLowerCase()},
+expired on ${death.dateOfDeath.toLocaleDateString()} at ${death.placeOfDeath}.
+Cause of death: ${death.causeOfDeath}. Manner of death: ${death.mannerOfDeath}.
     `.trim();
 
-    return { summary, timeline, clinicalNotes };
+    return { summary, clinicalNotes };
   },
 
-  // AI: Suggest documentation completeness
+  // AI: Check documentation completeness
   checkDocumentationCompleteness(record: {
     causeOfDeath?: string;
     mannerOfDeath?: string;
-    pronouncedBy?: string;
-    timeOfDeath?: string;
-    nextOfKinName?: string;
-    nextOfKinPhone?: string;
-    autopsy?: boolean;
-    autopsyResults?: string;
-    deathCertificateIssued?: boolean;
+    certifyingDoctor?: string;
+    timeOfDeath?: Date;
+    nokName?: string;
+    nokPhone?: string;
+    autopsyRequired?: boolean;
+    autopsyFindings?: string;
+    deathCertificateNumber?: string;
   }): {
     completeness: number;
     missingFields: string[];
@@ -447,29 +422,29 @@ ${death.contributingFactors.length > 0 ? `Contributing factors included ${death.
     if (!record.mannerOfDeath) {
       missingFields.push('Manner of death');
     }
-    if (!record.pronouncedBy) {
-      missingFields.push('Pronounced by (physician)');
-      requiredForRelease.push('Death must be pronounced by physician');
+    if (!record.certifyingDoctor) {
+      missingFields.push('Certifying doctor');
+      requiredForRelease.push('Death must be certified by physician');
     }
     if (!record.timeOfDeath) {
       missingFields.push('Time of death');
     }
-    if (!record.nextOfKinName) {
+    if (!record.nokName) {
       missingFields.push('Next of kin name');
       requiredForRelease.push('Next of kin information required for release');
     }
-    if (!record.nextOfKinPhone) {
+    if (!record.nokPhone) {
       missingFields.push('Next of kin contact');
     }
 
     // Autopsy documentation
-    if (record.autopsy && !record.autopsyResults) {
-      missingFields.push('Autopsy results');
+    if (record.autopsyRequired && !record.autopsyFindings) {
+      missingFields.push('Autopsy findings');
       recommendations.push('Complete autopsy documentation before release');
     }
 
     // Death certificate
-    if (!record.deathCertificateIssued) {
+    if (!record.deathCertificateNumber) {
       requiredForRelease.push('Death certificate must be issued');
       recommendations.push('Process death certificate before body release');
     }
@@ -494,31 +469,30 @@ ${death.contributingFactors.length > 0 ? `Contributing factors included ${death.
     const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
     const [
-      totalAdmitted,
+      totalNotReleased,
       pendingAutopsy,
-      pendingRelease,
+      pendingCertificates,
       releasedThisMonth,
       totalThisMonth,
-      pendingCertificates,
     ] = await Promise.all([
       prisma.mortuaryRecord.count({
-        where: { hospitalId, status: 'ADMITTED' },
+        where: { hospitalId, releaseStatus: ReleaseStatus.NOT_RELEASED },
       }),
       prisma.mortuaryRecord.count({
-        where: { hospitalId, status: 'AUTOPSY_PENDING' },
+        where: { hospitalId, autopsyStatus: AutopsyStatus.PENDING },
       }),
       prisma.mortuaryRecord.count({
         where: {
           hospitalId,
-          status: 'ADMITTED',
-          deathCertificateIssued: true,
+          releaseStatus: ReleaseStatus.NOT_RELEASED,
+          deathCertificateNumber: null,
         },
       }),
       prisma.mortuaryRecord.count({
         where: {
           hospitalId,
-          status: 'RELEASED',
-          releaseDate: { gte: thisMonth },
+          releaseStatus: ReleaseStatus.RELEASED,
+          releasedAt: { gte: thisMonth },
         },
       }),
       prisma.mortuaryRecord.count({
@@ -527,21 +501,14 @@ ${death.contributingFactors.length > 0 ? `Contributing factors included ${death.
           dateOfDeath: { gte: thisMonth },
         },
       }),
-      prisma.mortuaryRecord.count({
-        where: {
-          hospitalId,
-          deathCertificateIssued: false,
-        },
-      }),
     ]);
 
     return {
-      totalAdmitted,
+      totalNotReleased,
       pendingAutopsy,
-      pendingRelease,
+      pendingCertificates,
       releasedThisMonth,
       totalThisMonth,
-      pendingCertificates,
     };
   },
 };

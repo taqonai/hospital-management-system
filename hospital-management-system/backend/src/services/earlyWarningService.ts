@@ -838,8 +838,8 @@ export class EarlyWarningService {
         title: `EWS Alert: ${assessment.riskLevel} Risk - ${alertType}`,
         message: alertMessage,
         type: 'ALERT',
-        priority: severityMap[assessment.riskLevel] || 'LOW',
-        metadata: {
+        data: {
+          priority: severityMap[assessment.riskLevel] || 'LOW',
           patientId,
           patientName: `${patient?.firstName} ${patient?.lastName}`,
           ward,
@@ -932,14 +932,9 @@ export class EarlyWarningService {
       },
     };
 
-    if (filters?.severity) {
-      where.priority = filters.severity.toUpperCase();
-    }
-
     const alerts = await prisma.notification.findMany({
       where,
       orderBy: [
-        { priority: 'desc' },
         { createdAt: 'desc' },
       ],
       take: 100,
@@ -947,35 +942,41 @@ export class EarlyWarningService {
 
     // Transform alerts
     const transformedAlerts = alerts.map(a => {
-      const metadata = a.metadata as any;
+      const alertData = a.data as any;
       return {
         id: a.id,
-        patientId: metadata?.patientId,
-        patientName: metadata?.patientName,
-        ward: metadata?.ward,
-        bed: metadata?.bed,
-        severity: a.priority?.toLowerCase() || 'low',
+        patientId: alertData?.patientId,
+        patientName: alertData?.patientName,
+        ward: alertData?.ward,
+        bed: alertData?.bed,
+        severity: alertData?.priority?.toLowerCase() || 'low',
         title: a.title,
         message: a.message,
-        news2Score: metadata?.news2Score,
-        riskLevel: metadata?.riskLevel,
-        sepsisRisk: metadata?.sepsisRisk,
-        fallRisk: metadata?.fallRisk,
-        deteriorationProbability: metadata?.deteriorationProbability,
-        escalationRequired: metadata?.escalationRequired,
-        recommendedActions: metadata?.recommendedActions,
-        alertType: metadata?.ewsAlertType,
+        news2Score: alertData?.news2Score,
+        riskLevel: alertData?.riskLevel,
+        sepsisRisk: alertData?.sepsisRisk,
+        fallRisk: alertData?.fallRisk,
+        deteriorationProbability: alertData?.deteriorationProbability,
+        escalationRequired: alertData?.escalationRequired,
+        recommendedActions: alertData?.recommendedActions,
+        alertType: alertData?.ewsAlertType,
         timestamp: a.createdAt,
-        status: a.read ? 'acknowledged' : 'active',
+        status: a.isRead ? 'acknowledged' : 'active',
       };
     });
 
-    // Filter by ward if specified
-    if (filters?.ward) {
-      return transformedAlerts.filter(a => a.ward === filters.ward);
+    // Filter by severity if specified
+    let filteredAlerts = transformedAlerts;
+    if (filters?.severity) {
+      filteredAlerts = transformedAlerts.filter(a => a.severity === filters.severity.toLowerCase());
     }
 
-    return transformedAlerts;
+    // Filter by ward if specified
+    if (filters?.ward) {
+      return filteredAlerts.filter(a => a.ward === filters.ward);
+    }
+
+    return filteredAlerts;
   }
 
   /**
@@ -985,7 +986,7 @@ export class EarlyWarningService {
     const alerts = await prisma.notification.findMany({
       where: {
         type: 'ALERT',
-        metadata: {
+        data: {
           path: ['patientId'],
           equals: patientId,
         },
@@ -995,27 +996,27 @@ export class EarlyWarningService {
     });
 
     return alerts.map(a => {
-      const metadata = a.metadata as any;
+      const alertData = a.data as any;
       return {
         id: a.id,
-        patientId: metadata?.patientId,
-        patientName: metadata?.patientName,
-        ward: metadata?.ward,
-        bed: metadata?.bed,
-        severity: a.priority?.toLowerCase() || 'low',
+        patientId: alertData?.patientId,
+        patientName: alertData?.patientName,
+        ward: alertData?.ward,
+        bed: alertData?.bed,
+        severity: alertData?.priority?.toLowerCase() || 'low',
         title: a.title,
         message: a.message,
-        news2Score: metadata?.news2Score,
-        riskLevel: metadata?.riskLevel,
-        sepsisRisk: metadata?.sepsisRisk,
-        fallRisk: metadata?.fallRisk,
-        deteriorationProbability: metadata?.deteriorationProbability,
-        escalationRequired: metadata?.escalationRequired,
-        recommendedActions: metadata?.recommendedActions,
-        alertType: metadata?.ewsAlertType,
+        news2Score: alertData?.news2Score,
+        riskLevel: alertData?.riskLevel,
+        sepsisRisk: alertData?.sepsisRisk,
+        fallRisk: alertData?.fallRisk,
+        deteriorationProbability: alertData?.deteriorationProbability,
+        escalationRequired: alertData?.escalationRequired,
+        recommendedActions: alertData?.recommendedActions,
+        alertType: alertData?.ewsAlertType,
         timestamp: a.createdAt,
-        status: a.read ? 'acknowledged' : 'active',
-        acknowledgedAt: a.readAt,
+        status: a.isRead ? 'acknowledged' : 'active',
+        acknowledgedAt: alertData?.acknowledgedAt,
       };
     });
   }
@@ -1029,11 +1030,10 @@ export class EarlyWarningService {
     const alert = await prisma.notification.update({
       where: { id: alertId },
       data: {
-        read: true,
-        readAt: new Date(),
-        metadata: {
-          // Preserve existing metadata
-          ...(existingAlert?.metadata as object || {}),
+        isRead: true,
+        data: {
+          // Preserve existing data
+          ...(existingAlert?.data as object || {}),
           acknowledgedBy,
           acknowledgedAt: new Date().toISOString(),
           acknowledgementNotes: notes,
@@ -1041,11 +1041,12 @@ export class EarlyWarningService {
       },
     });
 
+    const alertData = alert.data as any;
     return {
       alertId: alert.id,
       status: 'acknowledged',
       acknowledgedBy,
-      acknowledgedAt: alert.readAt,
+      acknowledgedAt: alertData?.acknowledgedAt,
       notes,
     };
   }

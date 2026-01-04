@@ -82,7 +82,7 @@ const ENHANCEMENT_TYPES = [
   { id: 'structure', name: 'Restructure', description: 'Reorganize into sections' },
 ];
 
-const AI_SERVICE_URL = 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
 
 export default function ClinicalNotesAI() {
   const [activeTab, setActiveTab] = useState<'generate' | 'enhance' | 'extract' | 'transcribe'>('generate');
@@ -140,9 +140,13 @@ export default function ClinicalNotesAI() {
     setGeneratedNote(null);
 
     try {
-      const response = await fetch(`${AI_SERVICE_URL}/api/notes/generate`, {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/ai/clinical-notes/generate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           noteType: selectedNoteType,
           patientInfo: {
@@ -185,9 +189,13 @@ export default function ClinicalNotesAI() {
     setEnhancedNote(null);
 
     try {
-      const response = await fetch(`${AI_SERVICE_URL}/api/notes/enhance`, {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/ai/clinical-notes/enhance`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           existingNote: existingNote,
           enhancementType: enhancementType,
@@ -215,19 +223,25 @@ export default function ClinicalNotesAI() {
     setSuggestedCodes(null);
 
     try {
+      const token = localStorage.getItem('token');
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      };
+
       // Extract entities
-      const entitiesResponse = await fetch(`${AI_SERVICE_URL}/api/notes/extract-entities`, {
+      const entitiesResponse = await fetch(`${API_URL}/ai/clinical-notes/extract-entities`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ noteText: noteToAnalyze }),
       });
       const entitiesData = await entitiesResponse.json();
       setExtractedEntities(entitiesData);
 
       // Suggest ICD codes
-      const codesResponse = await fetch(`${AI_SERVICE_URL}/api/notes/suggest-icd`, {
+      const codesResponse = await fetch(`${API_URL}/ai/clinical-notes/suggest-icd`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ noteText: noteToAnalyze }),
       });
       const codesData = await codesResponse.json();
@@ -250,9 +264,13 @@ export default function ClinicalNotesAI() {
     setTranscribedNote(null);
 
     try {
-      const response = await fetch(`${AI_SERVICE_URL}/api/notes/from-transcription`, {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/ai/clinical-notes/from-transcription`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           transcription: transcription,
           noteType: selectedNoteType,

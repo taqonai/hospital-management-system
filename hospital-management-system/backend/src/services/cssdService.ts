@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { CycleStatus, ItemSterilizationStatus } from '@prisma/client';
 
 // ==================== STERILIZATION ITEM MANAGEMENT ====================
 
@@ -7,26 +8,29 @@ export const cssdService = {
   async addItem(hospitalId: string, data: {
     name: string;
     category: string;
-    barcode?: string;
+    itemCode: string;
     description?: string;
     sterilizationMethod: string;
-    cycleTimeMinutes: number;
-    temperatureCelsius?: number;
-    pressureKpa?: number;
-    shelfLifeDays: number;
+    sterilizationTime?: number;
+    sterilizationTemp?: number;
+    currentLocation: string;
+    manufacturer?: string;
+    model?: string;
+    serialNumber?: string;
+    maxUseCount?: number;
   }) {
     return prisma.sterilizationItem.create({
       data: {
         ...data,
         hospitalId,
-        status: 'AVAILABLE',
-      },
+        currentStatus: ItemSterilizationStatus.AVAILABLE,
+      } as any,
     });
   },
 
   // Get items
   async getItems(hospitalId: string, filters: {
-    status?: string;
+    currentStatus?: string;
     category?: string;
     search?: string;
     page?: number;
@@ -37,12 +41,12 @@ export const cssdService = {
     const skip = (page - 1) * limit;
 
     const where: any = { hospitalId };
-    if (filters.status) where.status = filters.status;
+    if (filters.currentStatus) where.currentStatus = filters.currentStatus;
     if (filters.category) where.category = filters.category;
     if (filters.search) {
       where.OR = [
         { name: { contains: filters.search, mode: 'insensitive' } },
-        { barcode: { contains: filters.search, mode: 'insensitive' } },
+        { itemCode: { contains: filters.search, mode: 'insensitive' } },
       ];
     }
 
@@ -66,7 +70,7 @@ export const cssdService = {
       include: {
         cycleItems: {
           include: { cycle: true },
-          orderBy: { cycle: { startTime: 'desc' } },
+          orderBy: { createdAt: 'desc' },
           take: 10,
         },
       },
@@ -74,10 +78,10 @@ export const cssdService = {
   },
 
   // Update item status
-  async updateItemStatus(id: string, status: string) {
+  async updateItemStatus(id: string, currentStatus: string) {
     return prisma.sterilizationItem.update({
       where: { id },
-      data: { status },
+      data: { currentStatus } as any,
     });
   },
 
@@ -91,7 +95,10 @@ export const cssdService = {
     method: string;
     operatorId: string;
     itemIds: string[];
-    parameters?: any;
+    temperature: number;
+    pressure?: number;
+    duration: number;
+    loadDescription?: string;
   }) {
     const { itemIds, ...cycleData } = data;
 
@@ -100,23 +107,26 @@ export const cssdService = {
       data: {
         ...cycleData,
         hospitalId,
-        status: 'PENDING',
-        cycleItems: {
+        status: CycleStatus.LOADING,
+        startTime: new Date(),
+        itemCount: itemIds.length,
+        items: {
           create: itemIds.map(itemId => ({
             itemId,
-            status: 'PENDING',
+            postCycleStatus: ItemSterilizationStatus.IN_STERILIZATION,
+            expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // Default 30 days
           })),
         },
-      },
+      } as any,
       include: {
-        cycleItems: { include: { item: true } },
+        items: { include: { item: true } },
       },
     });
 
     // Update item statuses
     await prisma.sterilizationItem.updateMany({
       where: { id: { in: itemIds } },
-      data: { status: 'IN_STERILIZATION' },
+      data: { currentStatus: ItemSterilizationStatus.IN_STERILIZATION },
     });
 
     return cycle;
@@ -127,11 +137,11 @@ export const cssdService = {
     return prisma.sterilizationCycle.update({
       where: { id: cycleId },
       data: {
-        status: 'IN_PROGRESS',
+        status: CycleStatus.IN_PROGRESS,
         startTime: new Date(),
       },
       include: {
-        cycleItems: { include: { item: true } },
+        items: { include: { item: true } },
       },
     });
   },
@@ -139,21 +149,21 @@ export const cssdService = {
   // Complete cycle
   async completeCycle(cycleId: string, data: {
     passed: boolean;
-    actualParameters?: any;
-    biologicalIndicator?: string;
     chemicalIndicator?: string;
+    biologicalIndicator?: string;
     notes?: string;
+    verifiedBy?: string;
   }) {
     const cycle = await prisma.sterilizationCycle.findUnique({
       where: { id: cycleId },
-      include: { cycleItems: { include: { item: true } } },
+      include: { items: { include: { item: true } } },
     });
 
     if (!cycle) throw new Error('Cycle not found');
 
     const now = new Date();
-    const status = data.passed ? 'COMPLETED' : 'FAILED';
-    const itemStatus = data.passed ? 'STERILE' : 'FAILED';
+    const status = data.passed ? CycleStatus.COMPLETED : CycleStatus.FAILED;
+    const itemStatus = data.passed ? ItemSterilizationStatus.STERILE : ItemSterilizationStatus.AVAILABLE;
 
     // Update cycle
     const updatedCycle = await prisma.sterilizationCycle.update({
@@ -161,32 +171,38 @@ export const cssdService = {
       data: {
         status,
         endTime: now,
-        ...data,
+        notes: data.notes,
+        verifiedBy: data.verifiedBy,
+        verifiedAt: data.verifiedBy ? now : undefined,
+        chemicalIndicator: data.chemicalIndicator as any,
+        biologicalIndicator: data.biologicalIndicator as any,
+        failureReason: data.passed ? undefined : 'Cycle failed quality checks',
       },
       include: {
-        cycleItems: { include: { item: true } },
+        items: { include: { item: true } },
       },
     });
 
     // Update cycle items and items
-    for (const cycleItem of cycle.cycleItems) {
+    for (const cycleItem of cycle.items) {
+      const expiryDate = data.passed
+        ? new Date(now.getTime() + (cycleItem.item.sterilizationTime || 30) * 24 * 60 * 60 * 1000)
+        : now;
+
       await prisma.sterilizationCycleItem.update({
         where: { id: cycleItem.id },
         data: {
-          status: itemStatus,
-          sterilizedAt: data.passed ? now : null,
-          expiresAt: data.passed
-            ? new Date(now.getTime() + cycleItem.item.shelfLifeDays * 24 * 60 * 60 * 1000)
-            : null,
+          postCycleStatus: itemStatus,
+          expiryDate,
         },
       });
 
       await prisma.sterilizationItem.update({
         where: { id: cycleItem.itemId },
         data: {
-          status: data.passed ? 'STERILE' : 'AVAILABLE',
+          currentStatus: itemStatus,
           lastSterilizedAt: data.passed ? now : undefined,
-          sterilizationCount: data.passed ? { increment: 1 } : undefined,
+          totalUseCount: data.passed ? { increment: 1 } : undefined,
         },
       });
     }
@@ -223,7 +239,7 @@ export const cssdService = {
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
-          cycleItems: { include: { item: true } },
+          items: { include: { item: true } },
         },
       }),
       prisma.sterilizationCycle.count({ where }),
@@ -237,21 +253,21 @@ export const cssdService = {
     return prisma.sterilizationCycle.findUnique({
       where: { id },
       include: {
-        cycleItems: { include: { item: true } },
+        items: { include: { item: true } },
       },
     });
   },
 
   // ==================== TRACKING & TRACEABILITY ====================
 
-  // Track item by barcode
-  async trackItem(barcode: string) {
+  // Track item by itemCode
+  async trackItem(itemCode: string) {
     const item = await prisma.sterilizationItem.findFirst({
-      where: { barcode },
+      where: { itemCode },
       include: {
         cycleItems: {
           include: { cycle: true },
-          orderBy: { cycle: { startTime: 'desc' } },
+          orderBy: { createdAt: 'desc' },
           take: 20,
         },
       },
@@ -266,13 +282,12 @@ export const cssdService = {
         machine: ci.cycle.machineName,
         method: ci.cycle.method,
         date: ci.cycle.startTime,
-        status: ci.status,
-        sterilizedAt: ci.sterilizedAt,
-        expiresAt: ci.expiresAt,
+        status: ci.postCycleStatus,
+        expiryDate: ci.expiryDate,
       })),
-      currentStatus: item.status,
+      currentStatus: item.currentStatus,
       lastSterilized: item.lastSterilizedAt,
-      totalCycles: item.sterilizationCount,
+      totalCycles: item.totalUseCount,
     };
   },
 
@@ -284,8 +299,8 @@ export const cssdService = {
     const cycleItems = await prisma.sterilizationCycleItem.findMany({
       where: {
         cycle: { hospitalId },
-        status: 'STERILE',
-        expiresAt: {
+        postCycleStatus: ItemSterilizationStatus.STERILE,
+        expiryDate: {
           lte: expiryDate,
           gte: new Date(),
         },
@@ -294,15 +309,14 @@ export const cssdService = {
         item: true,
         cycle: true,
       },
-      orderBy: { expiresAt: 'asc' },
+      orderBy: { expiryDate: 'asc' },
     });
 
     return cycleItems.map(ci => ({
       item: ci.item,
-      sterilizedAt: ci.sterilizedAt,
-      expiresAt: ci.expiresAt,
+      expiryDate: ci.expiryDate,
       daysUntilExpiry: Math.ceil(
-        ((ci.expiresAt as Date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+        (ci.expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
       ),
       cycleNumber: ci.cycle.cycleNumber,
     }));
@@ -437,7 +451,7 @@ export const cssdService = {
 
     // Assign to machines
     const availableMachines = data.machines.filter(m => m.available);
-    let currentTime = new Date();
+    const currentTime = new Date();
 
     Object.entries(itemsByMethod).forEach(([method, items]) => {
       const compatibleMachines = availableMachines.filter(m => m.method === method);
@@ -478,7 +492,7 @@ export const cssdService = {
   },
 
   // AI: Quality analysis
-  analyzeQualityMetrics(hospitalId: string, data: {
+  analyzeQualityMetrics(_hospitalId: string, data: {
     totalCycles: number;
     failedCycles: number;
     biologicalFailures: number;
@@ -581,19 +595,19 @@ export const cssdService = {
       expiringItems,
     ] = await Promise.all([
       prisma.sterilizationItem.count({ where: { hospitalId } }),
-      prisma.sterilizationItem.count({ where: { hospitalId, status: 'STERILE' } }),
-      prisma.sterilizationItem.count({ where: { hospitalId, status: 'IN_STERILIZATION' } }),
+      prisma.sterilizationItem.count({ where: { hospitalId, currentStatus: ItemSterilizationStatus.STERILE } }),
+      prisma.sterilizationItem.count({ where: { hospitalId, currentStatus: ItemSterilizationStatus.IN_STERILIZATION } }),
       prisma.sterilizationCycle.count({
         where: { hospitalId, startTime: { gte: today } },
       }),
       prisma.sterilizationCycle.count({
-        where: { hospitalId, status: 'PENDING' },
+        where: { hospitalId, status: CycleStatus.LOADING },
       }),
       prisma.sterilizationCycleItem.count({
         where: {
           cycle: { hospitalId },
-          status: 'STERILE',
-          expiresAt: {
+          postCycleStatus: ItemSterilizationStatus.STERILE,
+          expiryDate: {
             lte: new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000),
             gte: today,
           },

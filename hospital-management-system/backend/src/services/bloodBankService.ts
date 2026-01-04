@@ -492,10 +492,10 @@ class BloodBankService {
     const components = await prisma.bloodComponent.findMany({
       where: {
         hospitalId,
-        componentType,
+        componentType: componentType as any,
         status: 'AVAILABLE',
         expiryDate: { gt: new Date() },
-        OR: compatibilityConditions,
+        OR: compatibilityConditions as any,
       },
       orderBy: [
         { expiryDate: 'asc' }, // FIFO - oldest first

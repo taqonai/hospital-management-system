@@ -8,7 +8,7 @@ import {
 } from '@heroicons/react/24/outline';
 import PatientRiskPrediction from '../../components/ai/PatientRiskPrediction';
 
-const AI_SERVICE_URL = 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
 
 const RISK_MODELS = [
   {
@@ -54,10 +54,17 @@ export default function PatientRisk() {
 
   const checkServiceStatus = async () => {
     try {
-      const response = await fetch(`${AI_SERVICE_URL}/health`);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/ai/health`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
       if (response.ok) {
-        const data = await response.json();
-        setServiceStatus(data.services?.predictive === 'active' ? 'online' : 'offline');
+        const result = await response.json();
+        const data = result.data || result;
+        const isOnline = data.services?.predictive === 'active' ||
+                        data.services?.predictive === true ||
+                        data.status === 'connected';
+        setServiceStatus(isOnline ? 'online' : 'offline');
       } else {
         setServiceStatus('offline');
       }

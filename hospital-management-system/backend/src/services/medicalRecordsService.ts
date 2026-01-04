@@ -347,7 +347,7 @@ class MedicalRecordsService {
       }),
       prisma.labOrder.findMany({
         where: { hospitalId, patientId },
-        orderBy: { orderDate: 'desc' },
+        orderBy: { orderedAt: 'desc' },
         take: 30,
       }),
       prisma.prescription.findMany({
@@ -376,7 +376,7 @@ class MedicalRecordsService {
       events.push({
         type: 'APPOINTMENT',
         date: apt.appointmentDate,
-        title: `${apt.appointmentType} with Dr. ${apt.doctor?.user?.lastName || 'Unknown'}`,
+        title: `${apt.type} with Dr. ${apt.doctor?.user?.lastName || 'Unknown'}`,
         subtype: apt.status,
         id: apt.id,
         details: apt.reason,
@@ -390,7 +390,7 @@ class MedicalRecordsService {
         title: `Admitted to ${adm.bed?.ward?.name || 'Ward'}`,
         subtype: adm.status,
         id: adm.id,
-        details: adm.admissionReason,
+        details: adm.chiefComplaint,
       });
       if (adm.dischargeDate) {
         events.push({
@@ -406,7 +406,7 @@ class MedicalRecordsService {
     labOrders.forEach(lab => {
       events.push({
         type: 'LAB_ORDER',
-        date: lab.orderDate,
+        date: lab.orderedAt,
         title: 'Laboratory Tests Ordered',
         subtype: lab.status,
         id: lab.id,
@@ -469,7 +469,7 @@ class MedicalRecordsService {
       },
       allergies: patient.allergies.map(a => ({
         allergen: a.allergen,
-        type: a.allergyType,
+        type: a.type,
         severity: a.severity,
       })),
       recentActivity: {
