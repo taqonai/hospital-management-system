@@ -386,7 +386,7 @@ function NewInvoiceModal({ onClose, onSuccess }: { onClose: () => void; onSucces
                       </div>
                     </div>
                     <div className="mt-2 text-right text-sm text-gray-600">
-                      Subtotal: <span className="font-medium text-gray-900">${(item.quantity * item.unitPrice).toFixed(2)}</span>
+                      Subtotal: <span className="font-medium text-gray-900">${(Number(item.quantity || 0) * Number(item.unitPrice || 0)).toFixed(2)}</span>
                     </div>
                   </div>
                 ))}
@@ -1008,7 +1008,7 @@ export default function Billing() {
                               Matched: "{charge.matchedKeyword}" | {charge.category}
                             </p>
                           </div>
-                          <span className="font-medium text-gray-900">${charge.price.toLocaleString()}</span>
+                          <span className="font-medium text-gray-900">${Number(charge.price || 0).toLocaleString()}</span>
                         </div>
                       </div>
                     ))}
@@ -1140,7 +1140,7 @@ export default function Billing() {
                           <p className="text-sm mt-1 text-gray-700">{code.description}</p>
                           <p className="text-xs text-gray-500 mt-1">{code.reason}</p>
                         </div>
-                        <span className="font-medium text-gray-900">${code.price.toLocaleString()}</span>
+                        <span className="font-medium text-gray-900">${Number(code.price || 0).toLocaleString()}</span>
                       </div>
                     ))}
                   </div>

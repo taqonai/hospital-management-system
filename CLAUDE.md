@@ -146,6 +146,11 @@ Key routes (`/api/v1/`):
 **AI Services** (`ai-services/.env`):
 - `OPENAI_API_KEY` - For Whisper STT
 
+**S3/Storage** (in `backend/.env`):
+- `AWS_REGION`, `AWS_S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` - For AWS S3
+- `MINIO_ENDPOINT` - For local MinIO (default: http://minio:9000)
+- S3 is prioritized over MinIO when AWS credentials are configured
+
 ### Default Dev Credentials
 - Email: admin@hospital.com
 - Password: password123
@@ -193,7 +198,19 @@ terraform apply
 Architecture: ALB → EC2 (t3.small) running Docker Compose with all services.
 
 Key files:
-- `terraform/` - Terraform IaC (VPC, EC2, ALB)
+- `terraform/` - Terraform IaC (VPC, EC2, ALB, S3)
 - `scripts/user-data.sh` - EC2 bootstrap script
 - `docker/docker-compose.prod.yml` - Production compose
 - `nginx/nginx.conf` - Reverse proxy config
+
+Maintenance commands (on EC2):
+```bash
+# View logs
+sudo docker-compose logs -f backend
+
+# Restart services
+cd /opt/hms/app && sudo docker-compose restart
+
+# Database backup
+sudo docker exec hms-postgres pg_dump -U postgres hospital_db > backup.sql
+```

@@ -48,7 +48,7 @@ router.get(
 router.post(
   '/recommend',
   authenticate,
-  authorize('DOCTOR', 'NURSE'),
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { diagnosis, icdCode, symptoms, patientId, patientContext, includeAlternatives } = req.body;
 
@@ -80,7 +80,7 @@ router.post(
 router.get(
   '/bundles',
   authenticate,
-  authorize('DOCTOR', 'NURSE'),
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const bundles = await smartOrderService.getBundles();
     sendSuccess(res, bundles, 'Order bundles retrieved successfully');
@@ -94,7 +94,7 @@ router.get(
 router.get(
   '/bundle/:id',
   authenticate,
-  authorize('DOCTOR', 'NURSE'),
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { id } = req.params;
     const bundle = await smartOrderService.getBundleDetails(id);
@@ -133,7 +133,7 @@ router.get(
 router.post(
   '/customize',
   authenticate,
-  authorize('DOCTOR', 'NURSE'),
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { bundleId, selectedOrders, patientId, patientContext, customizations } = req.body;
 
@@ -180,7 +180,7 @@ router.post(
 router.post(
   '/place',
   authenticate,
-  authorize('DOCTOR'),
+  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId, orders, notes } = req.body;
 
@@ -214,7 +214,7 @@ router.post(
 router.get(
   '/history/:patientId',
   authenticate,
-  authorize('DOCTOR', 'NURSE'),
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId } = req.params;
     const history = await smartOrderService.getOrderHistory(patientId);
@@ -234,7 +234,7 @@ router.get(
 router.post(
   '/check-interactions',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'PHARMACIST'),
+  authorize('DOCTOR', 'NURSE', 'PHARMACIST', 'HOSPITAL_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { medications } = req.body;
 

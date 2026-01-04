@@ -332,7 +332,7 @@ function NewLabOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                                 <span className="ml-2 text-xs text-gray-500">({test.code})</span>
                               </div>
                             </div>
-                            <span className="text-sm text-gray-500">${test.price?.toFixed(2) || '0.00'}</span>
+                            <span className="text-sm text-gray-500">${Number(test.price || 0).toFixed(2)}</span>
                           </label>
                         ))}
                       </div>

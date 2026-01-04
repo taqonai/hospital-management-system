@@ -60,15 +60,45 @@ router.post(
   })
 );
 
-// Predict patient risk (requires patient in database)
+// Predict patient risk (supports both database-backed and direct prediction)
 router.post(
   '/predict-risk',
   authenticate,
   authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
-  validate(aiPredictRiskSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const result = await aiService.predictRisk(req.body);
-    sendSuccess(res, result, 'Risk prediction complete');
+    const { patientId, predictionType, timeframe, patientData } = req.body;
+
+    // Validate predictionType is provided
+    if (!predictionType) {
+      return res.status(400).json({ error: 'Prediction type is required' });
+    }
+
+    // Check if patientId is a valid UUID (for database-backed prediction)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const hasValidPatientId = patientId && uuidRegex.test(patientId);
+
+    // If valid patientId is provided, use database-backed prediction
+    if (hasValidPatientId) {
+      const result = await aiService.predictRisk({
+        patientId,
+        predictionType: predictionType.toUpperCase(),
+        timeframe,
+      });
+      return sendSuccess(res, result, 'Risk prediction complete');
+    }
+
+    // If patientData is provided, use direct prediction (no database lookup)
+    if (patientData) {
+      const result = await aiService.directPredictRisk({
+        predictionType: predictionType.toLowerCase(),
+        timeframe: timeframe || '30 days',
+        patientData,
+      });
+      return sendSuccess(res, result, 'Risk prediction complete');
+    }
+
+    // Neither valid patientId nor patientData provided
+    return res.status(400).json({ error: 'Either a valid patientId (UUID) or patientData is required' });
   })
 );
 

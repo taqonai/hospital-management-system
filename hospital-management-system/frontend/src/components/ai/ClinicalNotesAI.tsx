@@ -141,13 +141,26 @@ export default function ClinicalNotesAI() {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/ai/clinical-notes/generate`, {
+      // Build text from clinical data for note generation
+      const clinicalText = [
+        clinicalData.chiefComplaint && `Chief Complaint: ${clinicalData.chiefComplaint}`,
+        clinicalData.historyOfPresentIllness && `History of Present Illness: ${clinicalData.historyOfPresentIllness}`,
+        clinicalData.vitalSigns && `Vital Signs: ${clinicalData.vitalSigns}`,
+        clinicalData.physicalExam && `Physical Examination: ${clinicalData.physicalExam}`,
+        clinicalData.assessment && `Assessment: ${clinicalData.assessment}`,
+        clinicalData.plan && `Plan: ${clinicalData.plan}`,
+        clinicalData.medications && `Current Medications: ${clinicalData.medications}`,
+        clinicalData.allergies && `Allergies: ${clinicalData.allergies}`,
+      ].filter(Boolean).join('\n\n');
+
+      const response = await fetch(`${API_URL}/ai-scribe/generate-note`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
+          text: clinicalText,
           noteType: selectedNoteType,
           patientInfo: {
             name: patientInfo.name || 'Unknown',
@@ -156,16 +169,8 @@ export default function ClinicalNotesAI() {
             age: patientInfo.age || 'N/A',
             gender: patientInfo.gender,
           },
-          clinicalData: {
-            chiefComplaint: clinicalData.chiefComplaint,
-            historyOfPresentIllness: clinicalData.historyOfPresentIllness,
-            vitalSigns: clinicalData.vitalSigns,
-            physicalExamination: clinicalData.physicalExam,
-            assessment: clinicalData.assessment,
-            plan: clinicalData.plan,
-            currentMedications: clinicalData.medications,
-            allergies: clinicalData.allergies,
-          },
+          extractEntities: true,
+          suggestCodes: true,
         }),
       });
 
@@ -190,15 +195,18 @@ export default function ClinicalNotesAI() {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/ai/clinical-notes/enhance`, {
+      // Use generate-note endpoint with enhancement context
+      const response = await fetch(`${API_URL}/ai-scribe/generate-note`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          existingNote: existingNote,
-          enhancementType: enhancementType,
+          text: `Please ${enhancementType} the following clinical note:\n\n${existingNote}`,
+          noteType: 'enhanced',
+          extractEntities: false,
+          suggestCodes: false,
         }),
       });
 
@@ -230,22 +238,38 @@ export default function ClinicalNotesAI() {
       };
 
       // Extract entities
-      const entitiesResponse = await fetch(`${API_URL}/ai/clinical-notes/extract-entities`, {
+      const entitiesResponse = await fetch(`${API_URL}/ai-scribe/extract-entities`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ noteText: noteToAnalyze }),
+        body: JSON.stringify({ text: noteToAnalyze }),
       });
       const entitiesData = await entitiesResponse.json();
       setExtractedEntities(entitiesData);
 
-      // Suggest ICD codes
-      const codesResponse = await fetch(`${API_URL}/ai/clinical-notes/suggest-icd`, {
+      // Generate note with ICD codes using the generate-note endpoint
+      const codesResponse = await fetch(`${API_URL}/ai-scribe/generate-note`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ noteText: noteToAnalyze }),
+        body: JSON.stringify({
+          text: noteToAnalyze,
+          noteType: 'analysis',
+          extractEntities: false,
+          suggestCodes: true,
+        }),
       });
       const codesData = await codesResponse.json();
-      setSuggestedCodes(codesData);
+      // Extract codes from the response
+      if (codesData.data?.icdCodes || codesData.icdCodes) {
+        setSuggestedCodes({
+          success: true,
+          codes: (codesData.data?.icdCodes || codesData.icdCodes || []).map((code: any) => ({
+            code: code.code || code,
+            description: code.description || '',
+            confidence: code.confidence || 'medium',
+          })),
+          aiGenerated: true,
+        });
+      }
     } catch (err) {
       setError('Failed to analyze note. Please check if AI services are running.');
     } finally {
@@ -265,16 +289,18 @@ export default function ClinicalNotesAI() {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/ai/clinical-notes/from-transcription`, {
+      const response = await fetch(`${API_URL}/ai-scribe/generate-note`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          transcription: transcription,
+          text: transcription,
           noteType: selectedNoteType,
           patientInfo: patientInfo.name ? patientInfo : null,
+          extractEntities: true,
+          suggestCodes: true,
         }),
       });
 
