@@ -88,6 +88,8 @@ resource "aws_instance" "main" {
     jwt_secret         = var.jwt_secret
     jwt_refresh_secret = var.jwt_refresh_secret
     environment        = var.environment
+    aws_region         = var.aws_region
+    s3_bucket          = aws_s3_bucket.medical_images.id
   }))
 
   tags = {

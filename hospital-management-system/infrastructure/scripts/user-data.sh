@@ -12,6 +12,8 @@ DB_PASSWORD="${db_password}"
 JWT_SECRET="${jwt_secret}"
 JWT_REFRESH_SECRET="${jwt_refresh_secret}"
 ENVIRONMENT="${environment}"
+AWS_REGION="${aws_region}"
+S3_BUCKET="${s3_bucket}"
 
 # Update system
 echo "Updating system packages..."
@@ -88,6 +90,10 @@ REDIS_PORT=6379
 
 # AI Services
 AI_SERVICE_URL=http://ai-services:8000
+
+# AWS S3 for Medical Images
+AWS_REGION=$AWS_REGION
+AWS_S3_BUCKET=$S3_BUCKET
 
 # Frontend
 VITE_API_URL=/api/v1

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { aiService } from '../services/aiService';
+import { storageService } from '../services/storageService';
 import { authenticate, authorize } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess } from '../utils/response';
@@ -86,12 +87,37 @@ router.post(
     }
 
     let finalImageUrl = imageUrl;
+    let uploadedToS3 = false;
+    let s3Key: string | null = null;
 
-    // If file was uploaded, convert to base64 data URL
+    // If file was uploaded, try to upload to S3 first
     if (req.file) {
-      const base64 = req.file.buffer.toString('base64');
-      const mimeType = req.file.mimetype || 'image/jpeg';
-      finalImageUrl = `data:${mimeType};base64,${base64}`;
+      // Check if S3/MinIO is configured
+      if (storageService.isStorageConfigured()) {
+        try {
+          const uploadResult = await storageService.uploadMedicalImage(req.file.buffer, {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype,
+            modality: modalityType,
+            bodyPart: bodyPart,
+          });
+          finalImageUrl = uploadResult.url;
+          s3Key = uploadResult.key;
+          uploadedToS3 = true;
+          console.log(`Image uploaded to S3: ${uploadResult.url}`);
+        } catch (s3Error: any) {
+          console.warn('S3 upload failed, falling back to base64:', s3Error.message);
+          // Fall back to base64 if S3 upload fails
+          const base64 = req.file.buffer.toString('base64');
+          const mimeType = req.file.mimetype || 'image/jpeg';
+          finalImageUrl = `data:${mimeType};base64,${base64}`;
+        }
+      } else {
+        // No S3 configured, use base64
+        const base64 = req.file.buffer.toString('base64');
+        const mimeType = req.file.mimetype || 'image/jpeg';
+        finalImageUrl = `data:${mimeType};base64,${base64}`;
+      }
     }
 
     if (!finalImageUrl) {
@@ -106,7 +132,7 @@ router.post(
         modalityType,
         bodyPart,
       });
-      return sendSuccess(res, result, 'Image analysis complete');
+      return sendSuccess(res, { ...result, uploadedToS3, s3Key }, 'Image analysis complete');
     }
 
     // Use direct analysis method (no database record)
@@ -118,7 +144,7 @@ router.post(
       patientGender: patientGender || 'male',
       clinicalHistory: clinicalHistory || undefined,
     });
-    sendSuccess(res, result, 'Image analysis complete');
+    sendSuccess(res, { ...result, uploadedToS3, s3Key, imageUrl: finalImageUrl }, 'Image analysis complete');
   })
 );
 
