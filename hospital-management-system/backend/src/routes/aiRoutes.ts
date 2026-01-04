@@ -48,15 +48,54 @@ router.get(
 
 // ============= Production Endpoints (Authenticated, Database-Backed) =============
 
-// Analyze symptoms for diagnosis (requires patient in database)
+// Analyze symptoms for diagnosis (supports both database-backed and direct diagnosis)
 router.post(
   '/diagnose',
   authenticate,
   authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
-  validate(aiDiagnoseSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const result = await aiService.analyzeSymptomsForDiagnosis(req.body);
-    sendSuccess(res, result, 'Diagnosis analysis complete');
+    const { patientId, symptoms, patientAge, gender, medicalHistory, currentMedications, allergies, vitalSigns } = req.body;
+
+    // Validate symptoms are provided
+    if (!symptoms || !Array.isArray(symptoms) || symptoms.length === 0) {
+      return res.status(400).json({ success: false, message: 'At least one symptom is required' });
+    }
+
+    // Check if patientId is a valid UUID (for database-backed diagnosis)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const hasValidPatientId = patientId && uuidRegex.test(patientId);
+
+    // If valid patientId is provided, use database-backed diagnosis
+    if (hasValidPatientId) {
+      const result = await aiService.analyzeSymptomsForDiagnosis({
+        patientId,
+        symptoms,
+        medicalHistory,
+        currentMedications,
+        vitalSigns,
+      });
+      return sendSuccess(res, result, 'Diagnosis analysis complete');
+    }
+
+    // If patientAge and gender are provided, use direct diagnosis (no database lookup)
+    if (patientAge !== undefined && gender) {
+      const result = await aiService.directDiagnose({
+        symptoms,
+        patientAge: Number(patientAge),
+        gender,
+        medicalHistory: medicalHistory || [],
+        currentMedications: currentMedications || [],
+        allergies: allergies || [],
+        vitalSigns: vitalSigns || undefined,
+      });
+      return sendSuccess(res, result, 'Diagnosis analysis complete');
+    }
+
+    // Neither valid patientId nor patientAge/gender provided
+    return res.status(400).json({
+      success: false,
+      message: 'Either a valid patientId (UUID) or patientAge and gender are required',
+    });
   })
 );
 

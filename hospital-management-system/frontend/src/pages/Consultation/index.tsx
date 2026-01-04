@@ -17,6 +17,16 @@ import DiagnosticAssistant from '../../components/ai/DiagnosticAssistant';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
+
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+  };
+};
+
 interface Patient {
   id: string;
   firstName: string;
@@ -78,49 +88,85 @@ export default function Consultation() {
     instructions: string;
   }>>([]);
 
-  // Mock data for demo (replace with actual API calls)
+  // Fetch real appointment and patient data from API
   useEffect(() => {
     const fetchConsultationData = async () => {
       setLoading(true);
       try {
-        // Mock data for demonstration
-        setPatient({
-          id: 'p1',
-          firstName: 'James',
-          lastName: 'Wilson',
-          mrn: 'MRN-100001',
-          dateOfBirth: '1985-03-15',
-          gender: 'MALE',
-          phone: '+1-555-123-4567',
-          bloodGroup: 'O+',
-          allergies: [
-            { allergen: 'Penicillin', severity: 'HIGH' },
-            { allergen: 'Peanuts', severity: 'MODERATE' },
-          ],
-          medicalHistory: [
-            { condition: 'Hypertension', diagnosedDate: '2020-05-10' },
-            { condition: 'Type 2 Diabetes', diagnosedDate: '2018-11-22' },
-          ],
+        if (!appointmentId) {
+          throw new Error('Appointment ID is required');
+        }
+
+        // Fetch appointment details (includes patient info)
+        const appointmentRes = await fetch(`${API_URL}/appointments/${appointmentId}`, {
+          headers: getAuthHeaders(),
         });
 
-        setVitals({
-          bloodPressure: '142/88',
-          heartRate: 78,
-          temperature: 37.2,
-          oxygenSaturation: 97,
-          respiratoryRate: 16,
-          weight: 82,
-          height: 175,
-        });
+        if (!appointmentRes.ok) {
+          throw new Error('Failed to fetch appointment');
+        }
+
+        const appointmentData = await appointmentRes.json();
+        const apt = appointmentData.data;
 
         setAppointment({
-          id: appointmentId || 'apt1',
-          reason: 'Chest discomfort and fatigue',
-          notes: 'Patient reports intermittent chest discomfort for the past week',
-          status: 'IN_PROGRESS',
+          id: apt.id,
+          reason: apt.reason || '',
+          notes: apt.notes || '',
+          status: apt.status,
         });
 
-        setChiefComplaint('Chest discomfort and fatigue for 1 week');
+        if (apt.reason) {
+          setChiefComplaint(apt.reason);
+        }
+
+        // Fetch patient details
+        if (apt.patientId) {
+          const patientRes = await fetch(`${API_URL}/patients/${apt.patientId}`, {
+            headers: getAuthHeaders(),
+          });
+
+          if (patientRes.ok) {
+            const patientData = await patientRes.json();
+            const pt = patientData.data;
+            setPatient({
+              id: pt.id,
+              firstName: pt.firstName,
+              lastName: pt.lastName,
+              mrn: pt.mrn,
+              dateOfBirth: pt.dateOfBirth,
+              gender: pt.gender,
+              phone: pt.phone,
+              bloodGroup: pt.bloodGroup,
+              allergies: pt.allergies || [],
+              medicalHistory: pt.medicalHistory || [],
+            });
+
+            // Fetch patient vitals
+            try {
+              const vitalsRes = await fetch(`${API_URL}/patients/${apt.patientId}/vitals?limit=1`, {
+                headers: getAuthHeaders(),
+              });
+              if (vitalsRes.ok) {
+                const vitalsData = await vitalsRes.json();
+                if (vitalsData.data && vitalsData.data.length > 0) {
+                  const v = vitalsData.data[0];
+                  setVitals({
+                    bloodPressure: v.bloodPressure,
+                    heartRate: v.heartRate,
+                    temperature: v.temperature,
+                    oxygenSaturation: v.oxygenSaturation,
+                    respiratoryRate: v.respiratoryRate,
+                    weight: v.weight,
+                    height: v.height,
+                  });
+                }
+              }
+            } catch (vitalsError) {
+              console.warn('Could not fetch vitals:', vitalsError);
+            }
+          }
+        }
       } catch (error) {
         console.error('Failed to fetch consultation data:', error);
         toast.error('Failed to load consultation data');
