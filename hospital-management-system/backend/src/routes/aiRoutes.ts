@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { aiService } from '../services/aiService';
+import { aiScribeService } from '../services/aiScribeService';
 import { storageService } from '../services/storageService';
 import { authenticate, authorize } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
@@ -35,6 +36,23 @@ const imageUpload = multer({
   },
 });
 
+// Configure multer for audio upload (for public transcription)
+const audioUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 25 * 1024 * 1024, // 25MB max for audio
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedMimes = ['audio/webm', 'audio/wav', 'audio/mp3', 'audio/mpeg', 'audio/ogg', 'audio/m4a'];
+    if (allowedMimes.includes(file.mimetype) ||
+        file.originalname.match(/\.(webm|wav|mp3|ogg|m4a)$/i)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only audio files (webm, wav, mp3, ogg, m4a) are allowed'));
+    }
+  },
+});
+
 // ============= Health Check =============
 
 // Check AI service health (no auth required)
@@ -43,6 +61,55 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const health = await aiService.checkHealth();
     sendSuccess(res, health, 'AI service health check');
+  })
+);
+
+// ============= Public Transcription (for Symptom Checker Voice) =============
+
+// Check transcription service status (public)
+router.get(
+  '/transcribe/status',
+  asyncHandler(async (req: Request, res: Response) => {
+    try {
+      const health = await aiService.checkHealth();
+      const isAvailable = health.status === 'healthy' || health.status === 'connected';
+      sendSuccess(res, {
+        available: isAvailable,
+        service: 'whisper',
+        status: isAvailable ? 'ready' : 'unavailable',
+      }, 'Transcription service status');
+    } catch (error) {
+      sendSuccess(res, {
+        available: false,
+        service: 'whisper',
+        status: 'unavailable',
+      }, 'Transcription service unavailable');
+    }
+  })
+);
+
+// Public transcribe endpoint (for symptom checker voice input)
+router.post(
+  '/transcribe',
+  audioUpload.single('audio'),
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'Audio file is required',
+      });
+    }
+
+    const result = await aiScribeService.transcribeAudio(
+      req.file.buffer,
+      req.file.originalname || 'audio.webm'
+    );
+
+    sendSuccess(res, {
+      transcript: result.transcript,
+      confidence: 0.95,
+      duration: result.duration,
+    }, 'Audio transcribed successfully');
   })
 );
 

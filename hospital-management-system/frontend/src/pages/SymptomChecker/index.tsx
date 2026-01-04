@@ -442,7 +442,16 @@ export default function SymptomChecker() {
         <div className="flex gap-3">
           {result.triageLevel !== 'SELF_CARE' && (
             <button
-              onClick={() => window.location.href = '/appointments?action=new'}
+              onClick={() => {
+                // Store triage result for booking form
+                sessionStorage.setItem('triageResult', JSON.stringify({
+                  department: result.recommendedDepartment,
+                  urgency: result.triageLevel,
+                  symptoms: result.possibleConditions?.map(c => c.name).join(', '),
+                }));
+                // Redirect to homepage booking section (public booking for patients)
+                window.location.href = `/#booking?department=${encodeURIComponent(result.recommendedDepartment || '')}`;
+              }}
               className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-medium hover:shadow-lg transition-all flex items-center justify-center gap-2 text-sm"
             >
               <CalendarDaysIcon className="w-4 h-4" />Book Appointment

@@ -410,6 +410,46 @@ export default function Home() {
     return () => clearInterval(timer);
   }, []);
 
+  // Handle department from symptom checker redirect
+  useEffect(() => {
+    // Check URL hash for department parameter
+    const hash = window.location.hash;
+    if (hash.includes('#booking')) {
+      const params = new URLSearchParams(hash.split('?')[1] || '');
+      const urlDepartment = params.get('department');
+
+      // Check sessionStorage for triage result
+      const storedTriage = sessionStorage.getItem('triageResult');
+      let triageData = null;
+      if (storedTriage) {
+        try {
+          triageData = JSON.parse(storedTriage);
+          sessionStorage.removeItem('triageResult'); // Clear after reading
+        } catch (e) {
+          console.error('Failed to parse triage result');
+        }
+      }
+
+      // Set department from URL or triage data
+      const department = urlDepartment || triageData?.department;
+      if (department) {
+        setBookingForm(prev => ({
+          ...prev,
+          department: department,
+          symptoms: triageData?.symptoms || prev.symptoms,
+        }));
+
+        // Scroll to booking section
+        setTimeout(() => {
+          const bookingSection = document.getElementById('booking');
+          if (bookingSection) {
+            bookingSection.scrollIntoView({ behavior: 'smooth' });
+          }
+        }, 100);
+      }
+    }
+  }, []);
+
   // Scroll chat to bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });

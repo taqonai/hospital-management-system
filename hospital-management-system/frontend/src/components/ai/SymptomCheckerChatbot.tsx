@@ -698,7 +698,16 @@ export default function SymptomCheckerChatbot() {
             {triageResult && triageResult.triageLevel !== 'SELF_CARE' && (
               <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
                 <button
-                  onClick={() => window.location.href = '/appointments?action=new'}
+                  onClick={() => {
+                    // Store triage result for booking form
+                    sessionStorage.setItem('triageResult', JSON.stringify({
+                      department: triageResult.recommendedDepartment,
+                      urgency: triageResult.triageLevel,
+                      symptoms: triageResult.possibleConditions?.map((c: any) => c.name).join(', '),
+                    }));
+                    // Redirect to homepage booking section (public booking for patients)
+                    window.location.href = `/#booking?department=${encodeURIComponent(triageResult.recommendedDepartment || '')}`;
+                  }}
                   className="w-full px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-medium hover:shadow-lg transition-all flex items-center justify-center gap-2"
                 >
                   <CheckCircleIcon className="w-5 h-5" />
