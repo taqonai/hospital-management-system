@@ -282,7 +282,7 @@ export default function Consultation() {
             <div className="flex items-center gap-4">
               <div className="w-16 h-16 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center">
                 <span className="text-2xl font-bold">
-                  {patient?.firstName[0]}{patient?.lastName[0]}
+                  {patient?.firstName?.[0] || ''}{patient?.lastName?.[0] || ''}
                 </span>
               </div>
               <div>
