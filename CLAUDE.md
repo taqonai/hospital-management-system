@@ -85,6 +85,19 @@ Located in `ai-services/`:
 | `ai_scribe/` | AIScribeService | Medical transcription |
 | `entity_extraction/` | EntityExtractionAI | Medical entity extraction from text |
 
+### AI Services API (FastAPI - port 8000)
+Direct AI endpoints (backend proxies these via `/api/v1/ai/*`):
+- `POST /api/diagnose` - Symptom analysis with ICD-10 codes
+- `POST /api/predict-risk` - Risk prediction (readmission, deterioration)
+- `POST /api/analyze-image` - Medical imaging analysis
+- `POST /api/chat`, `/api/voice-command` - Chat and voice processing
+- `POST /api/transcribe` - Whisper speech-to-text
+- `POST /api/queue/*` - Queue prediction endpoints
+- `POST /api/pharmacy/check-interactions` - Drug interaction checks
+- `POST /api/notes/*` - Clinical note generation/enhancement
+- `POST /api/symptom-checker/*` - Interactive symptom assessment
+- `POST /api/entity/*` - Entity extraction from natural language
+
 ### Multi-Tenant Data Model
 
 All entities include `hospitalId` for tenant isolation. Prisma schema (`backend/prisma/schema.prisma`, ~3700 lines) covers 80+ models.
@@ -99,12 +112,16 @@ Routes in `backend/src/routes/`, services in `backend/src/services/`. Each modul
 
 Key routes (`/api/v1/`):
 - `/auth` - Login, register, refresh, profile
-- `/patients`, `/doctors`, `/appointments` - Core entities
+- `/patients`, `/doctors`, `/appointments`, `/departments` - Core entities
 - `/ai`, `/ai-scribe`, `/symptom-checker` - AI endpoints
 - `/laboratory`, `/radiology`, `/pharmacy` - Diagnostics
-- `/ipd`, `/opd`, `/emergency` - Clinical departments
+- `/ipd`, `/opd`, `/emergency`, `/surgery` - Clinical departments
 - `/hr`, `/billing`, `/blood-bank` - Support services
 - `/queue`, `/kiosk` - Patient flow
+- `/telemedicine`, `/patient-portal` - Remote care
+- `/medical-records`, `/dietary`, `/assets`, `/ambulance` - Ancillary services
+- `/cssd`, `/mortuary`, `/housekeeping`, `/quality`, `/reports` - Operations
+- `/early-warning`, `/med-safety`, `/smart-orders` - Clinical safety AI
 - `/public` - Unauthenticated endpoints
 
 ### Authentication
