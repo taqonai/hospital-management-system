@@ -96,7 +96,7 @@ export default function ClinicalNotes() {
 
   const checkServiceStatus = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const response = await fetch(`${API_URL}/ai/health`, {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {},
       });
@@ -117,7 +117,7 @@ export default function ClinicalNotes() {
 
   const fetchTemplates = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const response = await fetch(`${API_URL}/ai/clinical-notes/templates`, {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {},
       });

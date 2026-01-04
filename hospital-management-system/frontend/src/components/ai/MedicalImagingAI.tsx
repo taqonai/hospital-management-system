@@ -226,7 +226,7 @@ export default function MedicalImagingAI({
 
     try {
       let analysisResult;
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
 
       if (uploadedFile) {
         // Upload file and analyze

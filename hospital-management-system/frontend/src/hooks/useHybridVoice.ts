@@ -101,7 +101,7 @@ export function useHybridVoice(options: UseHybridVoiceOptions = {}) {
       formData.append('language', language.split('-')[0]); // 'en-US' -> 'en'
       formData.append('context', JSON.stringify(context));
 
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const response = await fetch(`${API_URL}/ai/transcribe`, {
         method: 'POST',
         headers: token ? { 'Authorization': `Bearer ${token}` } : {},

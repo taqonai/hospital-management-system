@@ -241,7 +241,7 @@ export default function DrugInteractionChecker({
     setResult(null);
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const response = await fetch(`${API_URL}/ai/pharmacy/check-interactions`, {
         method: 'POST',
         headers: {

@@ -235,7 +235,7 @@ export default function AIScribe() {
 
   const checkServiceStatus = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const response = await fetch(`${AI_SCRIBE_URL}/health`, {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {},
       });
@@ -316,7 +316,7 @@ export default function AIScribe() {
 
     try {
       // Start session
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const sessionResponse = await fetch(`${AI_SCRIBE_URL}/start-session`, {
         method: 'POST',
         headers: {

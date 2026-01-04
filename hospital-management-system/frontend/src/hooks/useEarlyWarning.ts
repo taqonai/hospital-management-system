@@ -107,7 +107,7 @@ export interface TrendData {
 
 // Helper to get auth token
 const getAuthHeaders = () => {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
   return {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',

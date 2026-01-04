@@ -110,7 +110,7 @@ export default function QueueManagement() {
   });
 
   const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
     return {
       'Content-Type': 'application/json',
       ...(token && { Authorization: `Bearer ${token}` }),

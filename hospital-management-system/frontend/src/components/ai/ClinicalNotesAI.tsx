@@ -140,7 +140,7 @@ export default function ClinicalNotesAI() {
     setGeneratedNote(null);
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       // Build text from clinical data for note generation
       const clinicalText = [
         clinicalData.chiefComplaint && `Chief Complaint: ${clinicalData.chiefComplaint}`,
@@ -194,7 +194,7 @@ export default function ClinicalNotesAI() {
     setEnhancedNote(null);
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       // Use generate-note endpoint with enhancement context
       const response = await fetch(`${API_URL}/ai-scribe/generate-note`, {
         method: 'POST',
@@ -231,7 +231,7 @@ export default function ClinicalNotesAI() {
     setSuggestedCodes(null);
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const headers = {
         'Content-Type': 'application/json',
         ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
@@ -288,7 +288,7 @@ export default function ClinicalNotesAI() {
     setTranscribedNote(null);
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const response = await fetch(`${API_URL}/ai-scribe/generate-note`, {
         method: 'POST',
         headers: {

@@ -316,7 +316,7 @@ export default function PatientRiskPrediction() {
         },
       };
 
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const response = await fetch(`${API_URL}/ai/predict-risk`, {
         method: 'POST',
         headers: {

@@ -59,7 +59,7 @@ export default function QueueDisplayBoard() {
   // Fetch display data
   const fetchDisplayData = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const headers: HeadersInit = { 'Content-Type': 'application/json' };
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
@@ -80,7 +80,7 @@ export default function QueueDisplayBoard() {
   // Fetch announcements
   const fetchAnnouncements = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const headers: HeadersInit = { 'Content-Type': 'application/json' };
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
@@ -120,7 +120,7 @@ export default function QueueDisplayBoard() {
       utterance.onend = async () => {
         // Mark as played
         try {
-          const token = localStorage.getItem('token');
+          const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
           await fetch(`${API_URL}/queue/announcements/${announcement.id}/played`, {
             method: 'POST',
             headers: {

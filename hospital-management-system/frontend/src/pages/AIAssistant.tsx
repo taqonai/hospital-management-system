@@ -157,7 +157,7 @@ export default function AIAssistant() {
 
     setImagingLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
 
       if (uploadedFile) {
