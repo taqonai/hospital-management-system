@@ -11,7 +11,8 @@ This Hospital Management System integrates **Artificial Intelligence** at every 
 | Stage | Traditional HMS | AI-Powered HMS | Benefit |
 |-------|----------------|----------------|---------|
 | **Before Visit** | Patient calls hospital, waits on hold | AI Symptom Checker guides patient 24/7 | Faster triage, reduced wait times |
-| **Check-in** | Manual registration, unknown wait time | Smart Kiosk with AI queue prediction | Know exact wait time, priority routing |
+| **Booking** | Call receptionist, wait for callback | AI suggests best doctor & time slots | Optimal scheduling, no phone wait |
+| **Check-in** | Manual registration, unknown wait time | Kiosk scans QR, AI predicts wait time | Instant check-in, priority routing |
 | **Consultation** | Doctor manually writes notes | AI Scribe transcribes conversation | Doctor focuses on patient, not paperwork |
 | **Diagnosis** | Doctor relies on memory/experience | AI suggests diagnoses with confidence scores | Faster, more accurate diagnosis |
 | **Lab Tests** | Doctor decides which tests | AI recommends optimal test panel | No unnecessary tests, cost savings |
@@ -26,55 +27,77 @@ This Hospital Management System integrates **Artificial Intelligence** at every 
 ## End-to-End Patient Journey with AI
 
 ```
-PATIENT JOURNEY
-===============
+PATIENT JOURNEY (Online Booking Path)
+=====================================
 
-[1] SYMPTOM CHECKER        [2] SMART CHECK-IN         [3] AI CONSULTATION
-    (At Home)                  (Hospital Kiosk)           (Doctor's Office)
+[1] SYMPTOM CHECKER        [2] BOOK APPOINTMENT        [3] KIOSK CHECK-IN
+    (At Home)                  (Online)                    (Hospital)
          │                          │                           │
          ▼                          ▼                           ▼
     ┌─────────┐              ┌─────────┐                 ┌─────────┐
     │   AI    │              │   AI    │                 │   AI    │
-    │ Triage  │──────────────│  Queue  │─────────────────│ Scribe  │
-    │         │              │Predictor│                 │Diagnosis│
+    │ Triage  │─────────────▶│ Smart   │────────────────▶│  Queue  │
+    │         │              │Scheduler│                 │Predictor│
     └─────────┘              └─────────┘                 └─────────┘
          │                          │                           │
-    "You may have              "Wait time:                 Doctor speaks,
-     chest pain.                12 minutes.                 AI writes notes
-     See cardiology             Priority: HIGH"             & suggests diagnosis
-     urgently"                                              with 85% confidence
+    "You may have              "Based on triage:           Scan QR Code
+     chest pain.                See Dr. Ahmed              "Welcome back!
+     Urgency: HIGH              (Cardiology)                Wait time: 8 min
+     See cardiology"            Tomorrow 10:00 AM"          Priority: HIGH"
          │                          │                           │
          ▼                          ▼                           ▼
 
-[4] SMART ORDERS           [5] IMAGE ANALYSIS          [6] DRUG SAFETY
-    (Lab & Imaging)            (Radiology)                 (Pharmacy)
+[4] AI CONSULTATION        [5] SMART ORDERS            [6] IMAGE ANALYSIS
+    (Doctor's Office)          (Lab & Imaging)             (Radiology)
          │                          │                           │
          ▼                          ▼                           ▼
     ┌─────────┐              ┌─────────┐                 ┌─────────┐
     │   AI    │              │   AI    │                 │   AI    │
-    │ Suggests│              │ Reads   │                 │ Checks  │
-    │  Tests  │              │ X-rays  │                 │ Safety  │
+    │ Scribe  │              │ Suggests│                 │ Reads   │
+    │Diagnosis│              │  Tests  │                 │ X-rays  │
     └─────────┘              └─────────┘                 └─────────┘
          │                          │                           │
-    "Based on symptoms,        "Detected:                  "WARNING:
-     recommend CBC,             Possible pneumonia          Aspirin + Warfarin
-     Troponin, ECG"             in right lower lobe"        = bleeding risk"
-         │                          │                           │
-         ▼                          ▼                           ▼
+    Doctor speaks,             "Based on symptoms,         "Detected:
+    AI writes notes             recommend CBC,              Possible pneumonia
+    & suggests diagnosis        Troponin, ECG"              in right lower lobe"
+    with 85% confidence              │                           │
+         │                          ▼                           ▼
+         ▼
+                           [7] DRUG SAFETY             [8] PATIENT MONITORING
+                               (Pharmacy)                  (If Admitted)
+                                    │                           │
+                                    ▼                           ▼
+                             ┌─────────┐                 ┌─────────┐
+                             │   AI    │                 │   AI    │
+                             │ Checks  │                 │  NEWS2  │
+                             │ Safety  │                 │ Warning │
+                             └─────────┘                 └─────────┘
+                                    │                           │
+                              "WARNING:                    "ALERT: Patient
+                               Aspirin + Warfarin           vitals declining.
+                               = bleeding risk"             NEWS2 Score: 7"
+                                    │                           │
+                                    ▼                           ▼
 
-[7] PATIENT MONITORING     [8] RISK PREDICTION         [9] DISCHARGE
-    (If Admitted)              (Ongoing)                   (Going Home)
-         │                          │                           │
-         ▼                          ▼                           ▼
-    ┌─────────┐              ┌─────────┐                 ┌─────────┐
-    │   AI    │              │   AI    │                 │   AI    │
-    │  NEWS2  │              │  Risk   │                 │Follow-up│
-    │ Warning │              │ Predict │                 │Planning │
-    └─────────┘              └─────────┘                 └─────────┘
-         │                          │                           │
-    "ALERT: Patient             "30-day readmission        "Schedule cardiology
-     vitals declining.           risk: 23% (High)           follow-up in 7 days.
-     NEWS2 Score: 7"             Monitor closely"           Take medications daily"
+                           [9] RISK PREDICTION         [10] DISCHARGE
+                               (Ongoing)                    (Going Home)
+                                    │                           │
+                                    ▼                           ▼
+                             ┌─────────┐                 ┌─────────┐
+                             │   AI    │                 │   AI    │
+                             │  Risk   │                 │Follow-up│
+                             │ Predict │                 │Planning │
+                             └─────────┘                 └─────────┘
+                                    │                           │
+                              "30-day readmission         "Schedule cardiology
+                               risk: 23% (High)            follow-up in 7 days.
+                               Monitor closely"            Take medications daily"
+```
+
+### Alternative: Walk-in Patient Path
+```
+[1] HOSPITAL VISIT → [2] KIOSK REGISTRATION → [3] AI TRIAGE → [4] CONSULTATION → ...
+                          (New patient form)      (Urgency check)
 ```
 
 ---
@@ -93,19 +116,36 @@ PATIENT JOURNEY
 
 ---
 
-### 2. AI Queue Prediction
-**What it does:** Predicts exact wait time based on current patients, doctor schedules, and historical data.
+### 2. AI Smart Scheduling
+**What it does:** Recommends the best doctor and time slot based on symptom triage, doctor availability, and patient preferences.
 
 **Example:**
-> "Dr. Smith - Cardiology"
-> "Current wait: 18 minutes"
-> "Best time to visit: Tomorrow 9 AM (5 min wait)"
+> AI Triage Result: "Urgency HIGH - See Cardiology"
+> AI Scheduler:
+> - Recommended: Dr. Ahmed (Cardiology) - 95% match
+> - Available Slots: Tomorrow 10:00 AM, 2:00 PM, 4:00 PM
+> - Wait time prediction: 8 min (10 AM), 15 min (2 PM)
+> Patient books → Receives QR code for check-in
 
-**Benefit:** No more waiting hours without knowing. Patients can plan their time.
+**Benefit:** Right doctor, optimal time, no phone calls. Seamless booking after symptom check.
 
 ---
 
-### 3. AI Medical Scribe
+### 3. AI Queue Prediction
+**What it does:** Predicts exact wait time based on current patients, doctor schedules, and historical data.
+
+**Example:**
+> Patient scans QR at kiosk
+> "Welcome back, Mr. Ahmed!"
+> "Your appointment: Dr. Ahmed, Cardiology"
+> "Current wait: 8 minutes"
+> "You are #3 in queue"
+
+**Benefit:** No more waiting hours without knowing. Instant check-in with QR code.
+
+---
+
+### 4. AI Medical Scribe
 **What it does:** Listens to doctor-patient conversation, automatically writes clinical notes.
 
 **Example:**
@@ -119,7 +159,7 @@ PATIENT JOURNEY
 
 ---
 
-### 4. AI Diagnostic Assistant
+### 5. AI Diagnostic Assistant
 **What it does:** Analyzes symptoms, medical history, and vitals to suggest possible diagnoses.
 
 **Example:**
@@ -134,7 +174,7 @@ PATIENT JOURNEY
 
 ---
 
-### 5. AI Smart Orders
+### 6. AI Smart Orders
 **What it does:** Recommends appropriate lab tests and medications based on diagnosis.
 
 **Example:**
@@ -148,7 +188,7 @@ PATIENT JOURNEY
 
 ---
 
-### 6. AI Medical Imaging Analysis
+### 7. AI Medical Imaging Analysis
 **What it does:** Analyzes X-rays, CT scans, MRIs and highlights abnormalities.
 
 **Example:**
@@ -163,7 +203,7 @@ PATIENT JOURNEY
 
 ---
 
-### 7. AI Drug Interaction Checker
+### 8. AI Drug Interaction Checker
 **What it does:** Checks all patient medications for dangerous combinations.
 
 **Example:**
@@ -175,7 +215,7 @@ PATIENT JOURNEY
 
 ---
 
-### 8. AI Early Warning System (NEWS2)
+### 9. AI Early Warning System (NEWS2)
 **What it does:** Continuously monitors patient vitals and alerts staff to deterioration.
 
 **Example:**
@@ -190,7 +230,7 @@ PATIENT JOURNEY
 
 ---
 
-### 9. AI Risk Prediction
+### 10. AI Risk Prediction
 **What it does:** Predicts patient outcomes like readmission risk, length of stay.
 
 **Example:**
@@ -203,7 +243,7 @@ PATIENT JOURNEY
 
 ---
 
-### 10. AI Clinical Notes Enhancement
+### 11. AI Clinical Notes Enhancement
 **What it does:** Improves and completes clinical documentation.
 
 **Example:**
@@ -234,11 +274,12 @@ PATIENT JOURNEY
 
 | For Patients | For Doctors | For Hospital |
 |-------------|-------------|--------------|
-| Shorter wait times | Less paperwork | Reduced costs |
-| Faster diagnosis | AI second opinion | Fewer errors |
-| Safer medications | More patient time | Better outcomes |
-| Proactive care | Complete documentation | Higher satisfaction |
-| 24/7 symptom check | Evidence-based orders | Competitive advantage |
+| 24/7 symptom check | Less paperwork | Reduced costs |
+| Smart booking (no calls) | AI second opinion | Fewer errors |
+| Shorter wait times | More patient time | Better outcomes |
+| Faster diagnosis | Complete documentation | Higher satisfaction |
+| Safer medications | Evidence-based orders | Competitive advantage |
+| Proactive care | Smart order suggestions | Optimized scheduling |
 
 ---
 
