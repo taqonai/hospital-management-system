@@ -252,9 +252,9 @@ export default function SymptomChecker() {
             <div className="relative">
               <textarea
                 ref={isFirst ? textInputRef : undefined}
-                className="w-full px-4 py-3 pr-12 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                className="w-full px-4 py-3 pr-16 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
                 rows={2}
-                placeholder={listening ? "Listening..." : (question.placeholder || "Type or click the mic to speak...")}
+                placeholder={listening ? "Listening... speak now" : (question.placeholder || "Type your symptoms or click the blue mic button →")}
                 value={answers[question.id] || ''}
                 onChange={(e) => setAnswers(prev => ({ ...prev, [question.id]: e.target.value }))}
                 onKeyDown={handleKeyPress}
@@ -262,13 +262,21 @@ export default function SymptomChecker() {
               {browserSupportsSpeechRecognition && (
                 <button
                   type="button"
-                  onClick={listening ? stopVoiceInput : startVoiceInput}
-                  className={`absolute right-3 top-3 p-2 rounded-lg transition-all ${
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (listening) {
+                      stopVoiceInput();
+                    } else {
+                      startVoiceInput();
+                    }
+                  }}
+                  className={`absolute right-2 top-1/2 -translate-y-1/2 p-2.5 rounded-xl transition-all cursor-pointer z-10 border-2 ${
                     listening
-                      ? 'bg-red-100 text-red-600 animate-pulse'
-                      : 'bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-600'
+                      ? 'bg-red-500 text-white border-red-600 animate-pulse shadow-lg'
+                      : 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600 hover:shadow-lg'
                   }`}
-                  title={listening ? "Stop recording" : "Start voice input"}
+                  title={listening ? "Stop recording" : "Click to speak"}
                 >
                   {listening ? <StopIcon className="w-5 h-5" /> : <MicrophoneIcon className="w-5 h-5" />}
                 </button>
