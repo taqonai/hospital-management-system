@@ -16,8 +16,7 @@ npx prisma generate          # Required after schema changes
 npx prisma migrate dev       # Run migrations
 npm run db:seed              # Seed test data
 npm run dev                  # Start dev server (port 3001)
-npm run build                # Production build
-npm test                     # Run tests
+npm run build                # TypeScript compile
 npm run lint                 # ESLint
 ```
 
@@ -26,7 +25,7 @@ npm run lint                 # ESLint
 cd hospital-management-system/frontend
 npm install
 npm run dev                  # Start dev server (port 3000)
-npm run build                # Production build (runs tsc first)
+npm run build                # TypeScript + Vite build
 npm run lint                 # ESLint
 ```
 
@@ -44,6 +43,12 @@ uvicorn main:app --reload --port 8000
 cd hospital-management-system
 docker-compose up -d                          # All services
 docker-compose --profile production up -d     # With nginx
+```
+
+### Running Individual AI Microservices
+```bash
+cd hospital-management-system/ai-services
+uvicorn main:app --reload --port 8011        # AI Scribe on different port
 ```
 
 ## Architecture
@@ -214,3 +219,38 @@ cd /opt/hms/app && sudo docker-compose restart
 # Database backup
 sudo docker exec hms-postgres pg_dump -U postgres hospital_db > backup.sql
 ```
+
+## Common Issues
+
+### Frontend White Screen
+React crashes (white screen) are usually JavaScript runtime errors. Common causes:
+- API returns string but code calls number methods (e.g., `price.toFixed()` on a string)
+- Always wrap API numeric values with `Number()`: `Number(value || 0).toFixed(2)`
+
+### Permission Denied Errors
+Check route authorization in `backend/src/routes/{module}Routes.ts`. Ensure the user's role is included in the `authorize()` middleware call.
+
+### Prisma Issues
+After schema changes:
+```bash
+npx prisma generate
+npx prisma migrate dev
+```
+
+### AI Service Connection Errors
+- Backend proxies AI calls via `AI_SERVICE_URL` env var
+- In Docker, use container names: `http://hms-ai-services:8000`
+- Locally, use: `http://localhost:8000`
+
+### Adding New Backend Routes
+1. Create `{module}Routes.ts` in `backend/src/routes/`
+2. Create `{module}Service.ts` in `backend/src/services/`
+3. Register in `backend/src/routes/index.ts`
+4. Apply appropriate middleware: `authenticate`, `authorize(...roles)`, `authorizeHospital`
+
+### Adding New AI Service
+1. Create directory in `ai-services/{service_name}/`
+2. Add `service.py` with service class and `knowledge_base.py` if needed
+3. Import and instantiate in `ai-services/main.py`
+4. Add FastAPI endpoint in `main.py`
+5. Create backend proxy route in `backend/src/routes/aiRoutes.ts`

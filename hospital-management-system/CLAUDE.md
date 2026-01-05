@@ -230,3 +230,21 @@ After schema changes:
 npx prisma generate
 npx prisma migrate dev
 ```
+
+### AI Service Connection Errors
+- Backend proxies AI calls via `AI_SERVICE_URL` env var
+- In Docker, use container names: `http://hms-ai-services:8000`
+- Locally, use: `http://localhost:8000`
+
+### Adding New Backend Routes
+1. Create `{module}Routes.ts` in `backend/src/routes/`
+2. Create `{module}Service.ts` in `backend/src/services/`
+3. Register in `backend/src/routes/index.ts`
+4. Apply appropriate middleware: `authenticate`, `authorize(...roles)`, `authorizeHospital`
+
+### Adding New AI Service
+1. Create directory in `ai-services/{service_name}/`
+2. Add `service.py` with service class and `knowledge_base.py` if needed
+3. Import and instantiate in `ai-services/main.py`
+4. Add FastAPI endpoint in `main.py`
+5. Create backend proxy route in `backend/src/routes/aiRoutes.ts`
