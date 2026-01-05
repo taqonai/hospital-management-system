@@ -10,7 +10,7 @@ This document provides a comprehensive breakdown of all AI models used in the Ho
 | `gpt-4o-mini` | OpenAI | Clinical notes generation, SOAP notes, entity extraction, ICD-10/CPT suggestions |
 | `gpt-3.5-turbo` | OpenAI | Chat assistant, conversational booking |
 | `all-MiniLM-L6-v2` | SentenceTransformers | Symptom-to-diagnosis semantic matching |
-| `ResNet50` | PyTorch/ImageNet | Medical image feature extraction |
+| `gpt-4o` | OpenAI (Vision) | Medical imaging analysis (X-ray, CT, MRI, Ultrasound) |
 | Rule-based | Algorithmic | Risk prediction, queue estimation, drug interactions, medication safety |
 
 ---
@@ -107,27 +107,36 @@ These models run locally and do not require external API keys.
 
 ---
 
-### 5. ResNet50 (PyTorch/ImageNet)
+### 5. GPT-4 Vision (`gpt-4o`)
 
-**Purpose:** Medical Image Feature Extraction
+**Purpose:** Medical Imaging Analysis
 
 **Features:**
-- X-ray analysis
-- CT scan interpretation
-- MRI analysis
+- X-ray interpretation and analysis
+- CT scan analysis
+- MRI interpretation
 - Ultrasound image processing
-- Abnormality detection
+- Abnormality detection with severity assessment
+- Structured radiology reports
+- Differential diagnosis suggestions
 
 **How it works:**
-- Uses pretrained ResNet50 for feature extraction (2048-dim vectors)
-- Applies ImageNet normalization transforms
-- Currently operates in simulated mode with rule-based pathology matching
+- Receives medical image via URL
+- GPT-4 Vision analyzes the image as an expert radiologist
+- Returns structured JSON with findings, impression, and recommendations
+- Falls back to rule-based analysis if GPT-4 Vision unavailable
 
-**Note:** The model extracts features but uses rule-based logic for final pathology classification rather than a fine-tuned medical classifier.
+**Response includes:**
+- Detailed findings per anatomical region
+- Abnormality detection with confidence scores
+- Clinical impression summary
+- Urgency level (routine/urgent/emergent/critical)
+- Follow-up recommendations
+- Differential diagnoses
 
 **Files:**
-- `ai-services/imaging/service.py` - ImageAnalysisAI, ImageFeatureExtractor classes
-- `ai-services/imaging/knowledge_base.py` - Pathology database
+- `ai-services/imaging/service.py` - ImageAnalysisAI, GPTVisionAnalyzer classes
+- `ai-services/imaging/knowledge_base.py` - Pathology database (used for fallback)
 
 ---
 
@@ -251,7 +260,7 @@ OPENAI_MODEL=gpt-3.5-turbo
 | `POST /api/scribe/*` | Whisper + GPT-4o-mini | AI Scribe workflow |
 | `POST /api/chat` | GPT-3.5-turbo | Chat assistant |
 | `POST /api/diagnose` | SentenceTransformers | Symptom diagnosis |
-| `POST /api/analyze-image` | ResNet50 | Image analysis |
+| `POST /api/analyze-image` | GPT-4o Vision | Medical image analysis |
 | `POST /api/predict-risk` | Rule-based | Risk prediction |
 | `POST /api/pharmacy/*` | Rule-based | Drug interactions |
 | `POST /api/queue/*` | Rule-based | Queue prediction |

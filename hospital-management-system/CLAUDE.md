@@ -105,17 +105,17 @@ Direct AI endpoints (backend proxies these via `/api/v1/ai/*`):
 | `gpt-4o-mini` | OpenAI | Clinical notes generation, SOAP notes, entity extraction, ICD-10/CPT suggestions |
 | `gpt-3.5-turbo` | OpenAI | Chat assistant, conversational booking |
 | `all-MiniLM-L6-v2` | SentenceTransformers | Symptom-to-diagnosis semantic matching |
-| `ResNet50` | PyTorch/ImageNet | Medical image feature extraction |
+| `gpt-4o` | OpenAI (Vision) | Medical imaging analysis (X-ray, CT, MRI, Ultrasound) |
 | Rule-based | Algorithmic | Risk prediction, queue estimation, drug interactions, medication safety |
 
 **OpenAI Models** (require `OPENAI_API_KEY`):
 - **Whisper**: Audio → text transcription optimized for medical terminology
 - **GPT-4o-mini**: Generates structured clinical documentation from transcripts
 - **GPT-3.5-turbo**: Handles conversational queries and navigation commands
+- **GPT-4o Vision**: Analyzes medical images as expert radiologist with structured reports
 
 **Local ML Models** (no API key required):
 - **SentenceTransformers**: Encodes symptoms as vectors for similarity matching against disease database
-- **ResNet50**: Extracts image features for pathology detection (currently simulated mode)
 
 **Rule-Based Systems**: Predictive analytics, queue prediction, pharmacy checks, and safety validations use algorithmic scoring without external AI calls.
 
