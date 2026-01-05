@@ -152,7 +152,6 @@ class PathologyDetector:
     """Detects pathologies based on image features and clinical context"""
 
     def __init__(self):
-        self.feature_extractor = ImageFeatureExtractor()
         self.pathology_weights = self._initialize_pathology_weights()
 
     def _initialize_pathology_weights(self) -> Dict[str, np.ndarray]:
