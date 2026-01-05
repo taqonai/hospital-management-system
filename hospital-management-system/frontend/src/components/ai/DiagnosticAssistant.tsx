@@ -162,7 +162,8 @@ export default function DiagnosticAssistant({
       }
 
       const data = await response.json();
-      setResult(data);
+      // API returns { success: true, data: {...} } - extract the actual data
+      setResult(data.data || data);
     } catch (err) {
       console.error('Diagnosis error:', err);
       setError('Failed to analyze symptoms. Please ensure the AI service is running.');
@@ -342,7 +343,7 @@ export default function DiagnosticAssistant({
                   <ClipboardDocumentListIcon className="h-5 w-5 text-blue-600" />
                   <span className="font-medium">Differential Diagnoses</span>
                   <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs">
-                    {result.diagnoses.length}
+                    {result.diagnoses?.length || 0}
                   </span>
                 </div>
                 {expandedSections.diagnoses ? <ChevronUpIcon className="h-5 w-5" /> : <ChevronDownIcon className="h-5 w-5" />}
@@ -350,7 +351,7 @@ export default function DiagnosticAssistant({
 
               {expandedSections.diagnoses && (
                 <div className="p-4 space-y-3">
-                  {result.diagnoses.map((diag, idx) => (
+                  {(result.diagnoses || []).map((diag, idx) => (
                     <div
                       key={diag.icd10}
                       onClick={() => onDiagnosisSelect?.(diag)}
@@ -393,7 +394,7 @@ export default function DiagnosticAssistant({
                   <BeakerIcon className="h-5 w-5 text-green-600" />
                   <span className="font-medium">Recommended Tests</span>
                   <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">
-                    {result.recommendedTests.length}
+                    {result.recommendedTests?.length || 0}
                   </span>
                 </div>
                 {expandedSections.tests ? <ChevronUpIcon className="h-5 w-5" /> : <ChevronDownIcon className="h-5 w-5" />}
@@ -402,7 +403,7 @@ export default function DiagnosticAssistant({
               {expandedSections.tests && (
                 <div className="p-4">
                   <div className="flex flex-wrap gap-2">
-                    {result.recommendedTests.map((test) => (
+                    {(result.recommendedTests || []).map((test) => (
                       <span key={test} className="px-3 py-1.5 bg-green-50 text-green-700 rounded-lg text-sm border border-green-200">
                         {test}
                       </span>
@@ -413,7 +414,7 @@ export default function DiagnosticAssistant({
             </div>
 
             {/* Drug Interactions */}
-            {result.drugInteractions.length > 0 && (
+            {(result.drugInteractions?.length || 0) > 0 && (
               <div className="border border-red-200 bg-red-50 rounded-lg overflow-hidden">
                 <button
                   onClick={() => toggleSection('interactions')}
@@ -423,7 +424,7 @@ export default function DiagnosticAssistant({
                     <ShieldExclamationIcon className="h-5 w-5 text-red-600" />
                     <span className="font-medium text-red-700">Drug Interactions</span>
                     <span className="px-2 py-0.5 bg-red-200 text-red-700 rounded-full text-xs">
-                      {result.drugInteractions.length}
+                      {result.drugInteractions?.length || 0}
                     </span>
                   </div>
                   {expandedSections.interactions ? <ChevronUpIcon className="h-5 w-5 text-red-600" /> : <ChevronDownIcon className="h-5 w-5 text-red-600" />}
@@ -431,7 +432,7 @@ export default function DiagnosticAssistant({
 
                 {expandedSections.interactions && (
                   <div className="p-4 space-y-2">
-                    {result.drugInteractions.map((interaction, idx) => (
+                    {(result.drugInteractions || []).map((interaction, idx) => (
                       <div key={idx} className="p-3 bg-white rounded-lg border border-red-200">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-medium text-red-700">{interaction.drug1}</span>
@@ -467,7 +468,7 @@ export default function DiagnosticAssistant({
               {expandedSections.treatments && (
                 <div className="p-4">
                   <ul className="space-y-2">
-                    {result.treatmentSuggestions.map((suggestion, idx) => (
+                    {(result.treatmentSuggestions || []).map((suggestion, idx) => (
                       <li key={idx} className="flex items-start gap-2">
                         <CheckCircleIcon className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
                         <span className="text-gray-700">{suggestion}</span>
@@ -479,7 +480,7 @@ export default function DiagnosticAssistant({
             </div>
 
             {/* Risk Factors */}
-            {result.riskFactors.length > 0 && (
+            {(result.riskFactors?.length || 0) > 0 && (
               <div className="border border-gray-200 rounded-lg overflow-hidden">
                 <button
                   onClick={() => toggleSection('risks')}
@@ -489,7 +490,7 @@ export default function DiagnosticAssistant({
                     <HeartIcon className="h-5 w-5 text-rose-600" />
                     <span className="font-medium">Risk Factors</span>
                     <span className="px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full text-xs">
-                      {result.riskFactors.length}
+                      {result.riskFactors?.length || 0}
                     </span>
                   </div>
                   {expandedSections.risks ? <ChevronUpIcon className="h-5 w-5" /> : <ChevronDownIcon className="h-5 w-5" />}
@@ -497,7 +498,7 @@ export default function DiagnosticAssistant({
 
                 {expandedSections.risks && (
                   <div className="p-4 space-y-2">
-                    {result.riskFactors.map((risk, idx) => (
+                    {(result.riskFactors || []).map((risk, idx) => (
                       <div key={idx} className="p-3 bg-rose-50 rounded-lg">
                         <p className="font-medium text-rose-700">{risk.factor}</p>
                         <p className="text-sm text-gray-600">{risk.relevance}</p>
