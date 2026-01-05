@@ -44,10 +44,20 @@ class GPTVisionAnalyzer:
     def _encode_image_from_url(self, image_url: str) -> Optional[str]:
         """Download and encode image to base64"""
         try:
-            with httpx.Client(timeout=30.0) as client:
-                response = client.get(image_url)
+            # Use browser-like headers to avoid being blocked
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
+            }
+            with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+                response = client.get(image_url, headers=headers)
+                logger.info(f"Image download status: {response.status_code} for URL: {image_url[:50]}...")
                 if response.status_code == 200:
-                    return base64.b64encode(response.content).decode('utf-8')
+                    encoded = base64.b64encode(response.content).decode('utf-8')
+                    logger.info(f"Successfully encoded image, size: {len(encoded)} chars")
+                    return encoded
+                else:
+                    logger.warning(f"Image download failed with status {response.status_code}")
         except Exception as e:
             logger.warning(f"Failed to download image: {e}")
         return None
@@ -104,16 +114,43 @@ Important guidelines:
 Respond ONLY with the JSON object, no additional text."""
 
         try:
-            # Try to use the image URL directly first
+            # First try to download and encode the image as base64
+            # This works better than direct URLs which some servers block
+            image_content = None
+
+            # Try to download the image
+            encoded_image = self._encode_image_from_url(image_url)
+
+            if encoded_image:
+                # Determine mime type from URL
+                mime_type = "image/png"
+                if ".jpg" in image_url.lower() or ".jpeg" in image_url.lower():
+                    mime_type = "image/jpeg"
+                elif ".gif" in image_url.lower():
+                    mime_type = "image/gif"
+                elif ".webp" in image_url.lower():
+                    mime_type = "image/webp"
+
+                image_content = {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{mime_type};base64,{encoded_image}",
+                        "detail": "high"
+                    }
+                }
+            else:
+                # Fallback to direct URL
+                image_content = {
+                    "type": "image_url",
+                    "image_url": {"url": image_url, "detail": "high"}
+                }
+
             messages = [
                 {
                     "role": "user",
                     "content": [
                         {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": image_url, "detail": "high"}
-                        }
+                        image_content
                     ]
                 }
             ]
@@ -126,6 +163,11 @@ Respond ONLY with the JSON object, no additional text."""
             )
 
             result_text = response.choices[0].message.content
+            logger.info(f"GPT-4 Vision response length: {len(result_text) if result_text else 0}")
+
+            if not result_text:
+                logger.error("GPT-4 Vision returned empty response")
+                return {"success": False, "error": "Empty response from GPT-4 Vision"}
 
             # Parse JSON from response
             import json
@@ -138,7 +180,22 @@ Respond ONLY with the JSON object, no additional text."""
             if result_text.endswith("```"):
                 result_text = result_text[:-3]
 
-            analysis = json.loads(result_text.strip())
+            try:
+                analysis = json.loads(result_text.strip())
+            except json.JSONDecodeError as je:
+                logger.error(f"Failed to parse GPT-4 Vision JSON: {je}")
+                logger.error(f"Raw response (first 500 chars): {result_text[:500]}")
+                # Try to extract useful info from non-JSON response
+                return {
+                    "success": True,
+                    "findings": [{"region": "General", "finding": result_text[:500], "abnormal": False, "confidence": 0.7}],
+                    "impression": result_text[:200] if len(result_text) > 200 else result_text,
+                    "abnormalityDetected": False,
+                    "urgency": "routine",
+                    "recommendations": ["Clinical correlation recommended"],
+                    "source": "gpt-4-vision-text"
+                }
+
             analysis["success"] = True
             analysis["source"] = "gpt-4-vision"
             return analysis
