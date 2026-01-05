@@ -36,6 +36,21 @@ const imageUpload = multer({
   },
 });
 
+// Configure multer for PDF upload
+const pdfUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB max PDF size
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf' || file.originalname.endsWith('.pdf')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are allowed'));
+    }
+  },
+});
+
 // Configure multer for audio upload (for public transcription)
 const audioUpload = multer({
   storage: multer.memoryStorage(),
@@ -548,6 +563,71 @@ router.post(
       allergies,
     });
     sendSuccess(res, result, 'Drug interactions checked');
+  })
+);
+
+// ============= PDF Analysis Endpoints =============
+
+// Get PDF analyzer status (public)
+router.get(
+  '/pdf/status',
+  asyncHandler(async (req: Request, res: Response) => {
+    const result = await aiService.getPDFAnalyzerStatus();
+    sendSuccess(res, result, 'PDF analyzer status');
+  })
+);
+
+// Analyze PDF file upload
+router.post(
+  '/pdf/analyze',
+  authenticate,
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN', 'RADIOLOGIST', 'LAB_TECHNICIAN'),
+  pdfUpload.single('file'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'PDF file is required',
+      });
+    }
+
+    const { documentType, extractEntities, patientContext } = req.body;
+
+    const result = await aiService.analyzePDF({
+      pdfBuffer: req.file.buffer,
+      filename: req.file.originalname || 'document.pdf',
+      documentType: documentType || 'medical_report',
+      extractEntities: extractEntities !== 'false',
+      patientContext: patientContext ? JSON.parse(patientContext) : undefined,
+    });
+
+    sendSuccess(res, result, 'PDF analyzed successfully');
+  })
+);
+
+// Analyze PDF from URL
+router.post(
+  '/pdf/analyze-url',
+  authenticate,
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN', 'RADIOLOGIST', 'LAB_TECHNICIAN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { url, documentType, extractEntities, patientContext } = req.body;
+
+    if (!url) {
+      return res.status(400).json({
+        success: false,
+        error: 'PDF URL is required',
+      });
+    }
+
+    const result = await aiService.analyzePDFFromURL({
+      url,
+      documentType: documentType || 'medical_report',
+      extractEntities: extractEntities !== false,
+      patientContext,
+    });
+
+    sendSuccess(res, result, 'PDF analyzed successfully');
   })
 );
 

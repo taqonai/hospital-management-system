@@ -1081,6 +1081,102 @@ What would you like to do?`,
       throw new AppError('Pharmacy service error', 500);
     }
   }
+
+  // ============= PDF Analysis =============
+
+  async getPDFAnalyzerStatus() {
+    try {
+      const response = await this.aiClient.get('/api/pdf/status');
+      return response.data;
+    } catch (error) {
+      logger.error('PDF analyzer status error:', error);
+      return {
+        available: false,
+        error: 'PDF analysis service unavailable',
+      };
+    }
+  }
+
+  async analyzePDF(data: {
+    pdfBuffer: Buffer;
+    filename: string;
+    documentType?: string;
+    extractEntities?: boolean;
+    patientContext?: Record<string, any>;
+  }) {
+    try {
+      logger.info(`Analyzing PDF: ${data.filename}, type: ${data.documentType || 'medical_report'}`);
+
+      // Create form data for file upload
+      const FormData = require('form-data');
+      const form = new FormData();
+      form.append('file', data.pdfBuffer, {
+        filename: data.filename,
+        contentType: 'application/pdf',
+      });
+      form.append('document_type', data.documentType || 'medical_report');
+      form.append('extract_entities', String(data.extractEntities !== false));
+      if (data.patientContext) {
+        form.append('patient_context', JSON.stringify(data.patientContext));
+      }
+
+      const response = await axios.post(
+        `${config.ai.serviceUrl}/api/pdf/analyze`,
+        form,
+        {
+          headers: {
+            ...form.getHeaders(),
+            'Authorization': `Bearer ${config.ai.apiKey}`,
+          },
+          timeout: 120000, // 2 minutes for PDF processing
+          maxBodyLength: Infinity,
+          maxContentLength: Infinity,
+        }
+      );
+
+      return response.data;
+    } catch (error) {
+      logger.error('PDF analysis error:', error);
+      if (axios.isAxiosError(error)) {
+        if (!error.response) {
+          throw new AppError('PDF analysis service is not reachable', 503);
+        }
+        throw new AppError(`PDF analysis error: ${error.response?.data?.detail || error.message}`, error.response?.status || 500);
+      }
+      throw new AppError('PDF analysis service error', 500);
+    }
+  }
+
+  async analyzePDFFromURL(data: {
+    url: string;
+    documentType?: string;
+    extractEntities?: boolean;
+    patientContext?: Record<string, any>;
+  }) {
+    try {
+      logger.info(`Analyzing PDF from URL: ${data.url}, type: ${data.documentType || 'medical_report'}`);
+
+      const response = await this.aiClient.post('/api/pdf/analyze-url', {
+        url: data.url,
+        document_type: data.documentType || 'medical_report',
+        extract_entities: data.extractEntities !== false,
+        patient_context: data.patientContext,
+      }, {
+        timeout: 120000, // 2 minutes for PDF processing
+      });
+
+      return response.data;
+    } catch (error) {
+      logger.error('PDF URL analysis error:', error);
+      if (axios.isAxiosError(error)) {
+        if (!error.response) {
+          throw new AppError('PDF analysis service is not reachable', 503);
+        }
+        throw new AppError(`PDF analysis error: ${error.response?.data?.detail || error.message}`, error.response?.status || 500);
+      }
+      throw new AppError('PDF analysis service error', 500);
+    }
+  }
 }
 
 export const aiService = new AIService();
