@@ -102,13 +102,29 @@ class SpeechToTextService:
 
                 # Whisper doesn't provide confidence directly,
                 # but verbose_json gives us segments with confidence
-                segments = getattr(response, 'segments', [])
+                segments = getattr(response, 'segments', []) or []
                 if segments:
-                    avg_confidence = sum(
-                        seg.get('confidence', 0.9) for seg in segments
-                    ) / len(segments)
+                    # Handle both dict and object segments
+                    def get_confidence(seg):
+                        if isinstance(seg, dict):
+                            return seg.get('confidence', 0.9)
+                        return getattr(seg, 'confidence', 0.9) if hasattr(seg, 'confidence') else 0.9
+
+                    avg_confidence = sum(get_confidence(seg) for seg in segments) / len(segments)
                 else:
                     avg_confidence = 0.95  # Default high confidence for Whisper
+
+                # Convert segments to serializable format
+                serializable_segments = []
+                for seg in segments:
+                    if isinstance(seg, dict):
+                        serializable_segments.append(seg)
+                    else:
+                        serializable_segments.append({
+                            "text": getattr(seg, 'text', ''),
+                            "start": getattr(seg, 'start', 0),
+                            "end": getattr(seg, 'end', 0),
+                        })
 
                 return {
                     "success": True,
@@ -116,7 +132,7 @@ class SpeechToTextService:
                     "confidence": avg_confidence,
                     "language": language,
                     "duration": getattr(response, 'duration', None),
-                    "segments": segments
+                    "segments": serializable_segments
                 }
 
             finally:

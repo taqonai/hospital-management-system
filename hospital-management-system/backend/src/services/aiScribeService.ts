@@ -314,7 +314,7 @@ export class AIScribeService {
         formData.append('sessionId', sessionId);
       }
 
-      const response = await this.aiClient.post('/api/scribe/transcribe', formData, {
+      const response = await this.aiClient.post('/api/transcribe', formData, {
         headers: formData.getHeaders(),
       });
 

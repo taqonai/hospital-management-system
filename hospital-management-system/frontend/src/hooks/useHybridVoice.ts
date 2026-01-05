@@ -18,6 +18,8 @@ export interface UseHybridVoiceOptions {
   alwaysUseWhisper?: boolean;
   // Language code
   language?: string;
+  // Continuous listening mode (keeps listening until manually stopped)
+  continuous?: boolean;
   // Callback when transcription is complete
   onResult?: (result: HybridVoiceResult) => void;
   // Callback for errors
@@ -31,6 +33,7 @@ export function useHybridVoice(options: UseHybridVoiceOptions = {}) {
     confidenceThreshold = 0.8,
     alwaysUseWhisper = false,
     language = 'en-US',
+    continuous = true,
     onResult,
     onError,
     context = {},
@@ -147,7 +150,7 @@ export function useHybridVoice(options: UseHybridVoiceOptions = {}) {
 
       // Start both Web Speech and audio recording (for potential fallback)
       await SpeechRecognition.startListening({
-        continuous: false,
+        continuous,
         language,
       });
 
@@ -171,6 +174,7 @@ export function useHybridVoice(options: UseHybridVoiceOptions = {}) {
     startRecording,
     resetWebSpeech,
     language,
+    continuous,
     onError,
   ]);
 

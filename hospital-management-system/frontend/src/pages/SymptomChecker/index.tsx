@@ -1,5 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
+import { useState, useRef, useEffect } from 'react';
 import {
   ChatBubbleLeftRightIcon,
   PaperAirplaneIcon,
@@ -18,6 +17,7 @@ import {
   StopIcon,
 } from '@heroicons/react/24/outline';
 import { symptomCheckerApi } from '../../services/api';
+import { useAudioRecorder, formatDuration } from '../../hooks/useAudioRecorder';
 
 interface Message {
   id: string;
@@ -72,36 +72,76 @@ export default function SymptomChecker() {
   const [hasStarted, setHasStarted] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textInputRef = useRef<HTMLTextAreaElement>(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
 
-  // Voice recognition
+  // Audio recorder for Whisper
   const {
-    transcript,
-    listening,
-    resetTranscript,
-    browserSupportsSpeechRecognition,
-  } = useSpeechRecognition();
+    isRecording,
+    duration,
+    audioBlob,
+    startRecording,
+    stopRecording,
+    clearRecording,
+  } = useAudioRecorder({
+    maxDuration: 60000, // 60 seconds max
+  });
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   useEffect(() => { scrollToBottom(); }, [messages]);
 
-  // Update text input when voice transcript changes
+  // Transcribe audio with Whisper when recording stops
   useEffect(() => {
-    if (transcript && currentQuestions.length > 0) {
-      const firstQuestion = currentQuestions[0];
-      if (firstQuestion.type === 'text' || firstQuestion.type === 'multitext') {
-        setAnswers(prev => ({ ...prev, [firstQuestion.id]: transcript }));
+    const transcribeAudio = async () => {
+      if (!audioBlob || isRecording) return;
+
+      setIsTranscribing(true);
+      setVoiceError(null);
+
+      try {
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'recording.webm');
+        formData.append('language', 'en');
+
+        const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
+
+        const response = await fetch(`${API_URL}/ai/transcribe`, {
+          method: 'POST',
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error('Transcription failed');
+        }
+
+        const data = await response.json();
+        const transcribedText = data.transcript || data.data?.transcript || '';
+
+        if (transcribedText && currentQuestions.length > 0) {
+          const firstQuestion = currentQuestions[0];
+          if (firstQuestion.type === 'text' || firstQuestion.type === 'multitext') {
+            setAnswers(prev => {
+              const existingText = prev[firstQuestion.id] || '';
+              const newText = existingText
+                ? `${existingText}. ${transcribedText}`.replace(/\.\s*\./g, '.').trim()
+                : transcribedText;
+              return { ...prev, [firstQuestion.id]: newText };
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Transcription error:', err);
+        setVoiceError('Failed to transcribe audio. Please try again.');
+      } finally {
+        setIsTranscribing(false);
+        clearRecording();
       }
-    }
-  }, [transcript, currentQuestions]);
+    };
 
-  const startVoiceInput = useCallback(() => {
-    resetTranscript();
-    SpeechRecognition.startListening({ continuous: true, language: 'en-US' });
-  }, [resetTranscript]);
-
-  const stopVoiceInput = useCallback(() => {
-    SpeechRecognition.stopListening();
-  }, []);
+    transcribeAudio();
+  }, [audioBlob, isRecording, currentQuestions, clearRecording]);
 
   const startSession = async () => {
     setHasStarted(true);
@@ -141,9 +181,9 @@ export default function SymptomChecker() {
   const submitResponses = async () => {
     if (!sessionId || Object.keys(answers).length === 0) return;
 
-    // Stop voice if recording
-    if (listening) {
-      stopVoiceInput();
+    // Stop recording if active
+    if (isRecording) {
+      stopRecording();
     }
 
     setIsLoading(true);
@@ -170,7 +210,8 @@ export default function SymptomChecker() {
       const data = response.data.data;
       setProgress(data.progress || 0);
       setAnswers({});
-      resetTranscript();
+      clearRecording();
+      setVoiceError(null);
 
       if (data.redFlagDetected && data.redFlagMessage) {
         setMessages(prev => [...prev, { id: 'system-' + Date.now(), type: 'system', content: data.redFlagMessage, timestamp: new Date() }]);
@@ -223,7 +264,9 @@ export default function SymptomChecker() {
   };
 
   const resetChat = () => {
-    if (listening) stopVoiceInput();
+    if (isRecording) stopRecording();
+    clearRecording();
+    setVoiceError(null);
     setMessages([]);
     setSessionId(null);
     setCurrentQuestions([]);
@@ -231,7 +274,6 @@ export default function SymptomChecker() {
     setProgress(0);
     setIsComplete(false);
     setHasStarted(false);
-    resetTranscript();
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -249,43 +291,63 @@ export default function SymptomChecker() {
           <div key={question.id} className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">{question.question}</label>
             {question.helpText && <p className="text-xs text-gray-500 mb-2">{question.helpText}</p>}
-            <div className="relative">
+            <div className="flex items-start gap-2">
               <textarea
                 ref={isFirst ? textInputRef : undefined}
-                className="w-full px-4 py-3 pr-16 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                rows={2}
-                placeholder={listening ? "Listening... speak now" : (question.placeholder || "Type your symptoms or click the blue mic button →")}
+                className="flex-1 px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                rows={3}
+                placeholder={isRecording ? "Recording... speak now" : (question.placeholder || "Type your symptoms...")}
                 value={answers[question.id] || ''}
                 onChange={(e) => setAnswers(prev => ({ ...prev, [question.id]: e.target.value }))}
                 onKeyDown={handleKeyPress}
+                disabled={isRecording || isTranscribing}
               />
-              {browserSupportsSpeechRecognition && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (listening) {
-                      stopVoiceInput();
-                    } else {
-                      startVoiceInput();
-                    }
-                  }}
-                  className={`absolute right-2 top-1/2 -translate-y-1/2 p-2.5 rounded-xl transition-all cursor-pointer z-10 border-2 ${
-                    listening
-                      ? 'bg-red-500 text-white border-red-600 animate-pulse shadow-lg'
-                      : 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600 hover:shadow-lg'
-                  }`}
-                  title={listening ? "Stop recording" : "Click to speak"}
-                >
-                  {listening ? <StopIcon className="w-5 h-5" /> : <MicrophoneIcon className="w-5 h-5" />}
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setVoiceError(null);
+                  if (isRecording) {
+                    stopRecording();
+                  } else if (!isTranscribing) {
+                    startRecording();
+                  }
+                }}
+                disabled={isTranscribing}
+                className={`flex-shrink-0 p-3 rounded-xl transition-all border-2 ${
+                  isTranscribing
+                    ? 'bg-yellow-500 text-white border-yellow-600 cursor-wait'
+                    : isRecording
+                    ? 'bg-red-500 text-white border-red-600 animate-pulse shadow-lg cursor-pointer'
+                    : 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600 hover:shadow-lg cursor-pointer'
+                }`}
+                title={isTranscribing ? "Transcribing..." : isRecording ? "Click to stop" : "Click to speak (Whisper AI)"}
+              >
+                {isTranscribing ? (
+                  <ArrowPathIcon className="w-5 h-5 animate-spin" />
+                ) : isRecording ? (
+                  <StopIcon className="w-5 h-5" />
+                ) : (
+                  <MicrophoneIcon className="w-5 h-5" />
+                )}
+              </button>
             </div>
-            {listening && (
-              <div className="mt-2 flex items-center gap-2 text-sm text-blue-600">
-                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                Listening... speak clearly
+            {isRecording && (
+              <div className="mt-2 flex items-center gap-2 text-sm text-green-600 bg-green-50 px-3 py-2 rounded-lg">
+                <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                <span className="font-medium">Recording {formatDuration(duration)}</span> - Speak clearly. Click stop when done.
+              </div>
+            )}
+            {isTranscribing && (
+              <div className="mt-2 flex items-center gap-2 text-sm text-yellow-600 bg-yellow-50 px-3 py-2 rounded-lg">
+                <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                <span>Transcribing with Whisper AI...</span>
+              </div>
+            )}
+            {voiceError && (
+              <div className="mt-2 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+                {voiceError}
               </div>
             )}
           </div>
@@ -568,7 +630,7 @@ export default function SymptomChecker() {
             <div>
               <h1 className="text-lg font-bold text-gray-900">AI Symptom Checker</h1>
               <p className="text-xs text-gray-500">
-                {browserSupportsSpeechRecognition ? 'Voice & Text Input' : 'Text Input'}
+                Voice (Whisper AI) & Text Input
               </p>
             </div>
           </div>
