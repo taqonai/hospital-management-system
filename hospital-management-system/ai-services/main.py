@@ -26,6 +26,10 @@ from clinical_notes.service import ClinicalNotesAI
 from symptom_checker.service import SymptomCheckerAI
 from entity_extraction.service import EntityExtractionAI
 from pdf_analysis.service import PDFAnalysisService
+from early_warning.service import EarlyWarningAI
+from med_safety.service import MedicationSafetyAI
+from smart_orders.service import SmartOrdersAI
+from ai_scribe.service import AIScribeService
 
 app = FastAPI(
     title="HMS AI Services",
@@ -54,6 +58,10 @@ clinical_notes_ai = ClinicalNotesAI()
 symptom_checker_ai = SymptomCheckerAI()
 entity_extraction_ai = EntityExtractionAI()
 pdf_analyzer = PDFAnalysisService()
+early_warning_ai = EarlyWarningAI()
+med_safety_ai = MedicationSafetyAI()
+smart_orders_ai = SmartOrdersAI()
+ai_scribe = AIScribeService()
 
 
 # Request/Response Models
@@ -1442,6 +1450,432 @@ async def pdf_analyzer_status():
             "consultation_note"
         ]
     }
+
+
+# ============= Early Warning System (EWS) Endpoints =============
+
+class EWSVitalsRequest(BaseModel):
+    temperature: Optional[float] = None
+    heart_rate: Optional[int] = None
+    respiratory_rate: Optional[int] = None
+    systolic_bp: Optional[int] = None
+    oxygen_saturation: Optional[float] = None
+    consciousness: Optional[str] = "alert"
+    supplemental_oxygen: Optional[bool] = False
+
+
+class EWSAssessRequest(BaseModel):
+    patient_id: str
+    vitals: Dict[str, Any]
+    patient_info: Optional[Dict[str, Any]] = None
+
+
+class EWSMonitorRequest(BaseModel):
+    patient_id: str
+    vitals: Dict[str, Any]
+    vitals_history: Optional[List[Dict[str, Any]]] = []
+
+
+@app.post("/api/ews/calculate")
+async def calculate_news2(request: EWSVitalsRequest):
+    """Calculate NEWS2 score from vitals"""
+    try:
+        result = early_warning_ai.calculate_news2(request.dict())
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/ews/qsofa")
+async def calculate_qsofa(request: EWSVitalsRequest):
+    """Calculate qSOFA score"""
+    try:
+        result = early_warning_ai.calculate_qsofa(request.dict())
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/ews/fall-risk")
+async def calculate_fall_risk(request: Dict[str, Any]):
+    """Calculate fall risk score"""
+    try:
+        result = early_warning_ai.calculate_fall_risk(
+            patient_info=request.get("patient_info", {}),
+            mobility_status=request.get("mobility_status", "independent"),
+            medications=request.get("medications", []),
+            mental_status=request.get("mental_status", "alert"),
+            history=request.get("history", {})
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/ews/assess")
+async def comprehensive_assessment(request: EWSAssessRequest):
+    """Comprehensive patient assessment"""
+    try:
+        result = early_warning_ai.comprehensive_assessment(
+            patient_id=request.patient_id,
+            vitals=request.vitals,
+            patient_info=request.patient_info
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/ews/monitor")
+async def monitor_vitals(request: EWSMonitorRequest):
+    """Monitor patient vitals"""
+    try:
+        result = early_warning_ai.monitor_vitals(
+            patient_id=request.patient_id,
+            vitals=request.vitals,
+            vitals_history=request.vitals_history
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============= Medication Safety Endpoints =============
+
+class FiveRightsRequest(BaseModel):
+    patient_id: str
+    medication_id: str
+    dose: str
+    route: str
+    scheduled_time: str
+    patient_name: Optional[str] = None
+    patient_dob: Optional[str] = None
+    allergies: Optional[List[str]] = []
+
+
+class BarcodeScanRequest(BaseModel):
+    barcode: str
+    patient_id: str
+    expected_medication: Optional[str] = None
+
+
+class MedicationScheduleRequest(BaseModel):
+    patient_id: str
+    medications: List[Dict[str, Any]]
+    patient_info: Optional[Dict[str, Any]] = None
+
+
+class IVCompatibilityRequest(BaseModel):
+    drug1: str
+    drug2: str
+    concentration1: Optional[str] = None
+    concentration2: Optional[str] = None
+
+
+class DoseCalculationRequest(BaseModel):
+    medication: str
+    patient_weight: float
+    patient_age: Optional[int] = None
+    indication: Optional[str] = None
+    renal_function: Optional[float] = None
+
+
+@app.post("/api/med-safety/verify-five-rights")
+async def verify_five_rights(request: FiveRightsRequest):
+    """Verify the 5 rights of medication administration"""
+    try:
+        result = med_safety_ai.verify_five_rights(request.dict())
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/med-safety/scan-barcode")
+async def scan_barcode(request: BarcodeScanRequest):
+    """Scan and verify medication barcode"""
+    try:
+        result = med_safety_ai.process_barcode_scan(
+            barcode=request.barcode,
+            patient_id=request.patient_id,
+            expected_medication=request.expected_medication
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/med-safety/medication-schedule")
+async def create_medication_schedule(request: MedicationScheduleRequest):
+    """Create optimal medication schedule"""
+    try:
+        result = med_safety_ai.get_medication_schedule(
+            patient_id=request.patient_id,
+            medications=request.medications,
+            patient_info=request.patient_info
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/med-safety/high-alert-drugs")
+async def get_high_alert_drugs():
+    """Get list of high-alert medications"""
+    try:
+        result = med_safety_ai.get_high_alert_drugs()
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/med-safety/iv-compatibility")
+async def check_iv_compatibility(request: IVCompatibilityRequest):
+    """Check IV drug compatibility"""
+    try:
+        result = med_safety_ai.check_iv_compatibility(
+            drug1=request.drug1,
+            drug2=request.drug2,
+            concentration1=request.concentration1,
+            concentration2=request.concentration2
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/med-safety/calculate-dose")
+async def calculate_dose(request: DoseCalculationRequest):
+    """Calculate medication dose"""
+    try:
+        result = med_safety_ai.calculate_dose(request.dict())
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============= Smart Orders Endpoints =============
+
+class SmartOrderRecommendRequest(BaseModel):
+    diagnosis: str
+    patient_context: Optional[Dict[str, Any]] = None
+    severity: Optional[str] = "moderate"
+
+
+class SmartOrderCustomizeRequest(BaseModel):
+    bundle_id: str
+    patient_id: str
+    customizations: Optional[Dict[str, Any]] = None
+
+
+class SmartOrderPlaceRequest(BaseModel):
+    patient_id: str
+    orders: List[Dict[str, Any]]
+    provider_id: str
+
+
+@app.post("/api/recommend")
+async def get_order_recommendations(request: SmartOrderRecommendRequest):
+    """Get AI-powered order recommendations based on diagnosis"""
+    try:
+        result = smart_orders_ai.get_recommendations(
+            diagnosis=request.diagnosis,
+            patient_context=request.patient_context,
+            severity=request.severity
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/bundles")
+async def get_order_bundles():
+    """Get all available order bundles"""
+    try:
+        result = smart_orders_ai.get_bundles()
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/bundles/{bundle_id}")
+async def get_bundle_details(bundle_id: str):
+    """Get details of a specific order bundle"""
+    try:
+        result = smart_orders_ai.get_bundle_details(bundle_id)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/customize")
+async def customize_order_bundle(request: SmartOrderCustomizeRequest):
+    """Customize an order bundle for a specific patient"""
+    try:
+        result = smart_orders_ai.customize_bundle(
+            bundle_id=request.bundle_id,
+            patient_id=request.patient_id,
+            customizations=request.customizations
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/place")
+async def place_orders(request: SmartOrderPlaceRequest):
+    """Place orders for a patient (placeholder - orders stored in backend)"""
+    try:
+        # This is a placeholder - actual order placement is handled by backend
+        return {
+            "success": True,
+            "message": "Orders validated successfully",
+            "patient_id": request.patient_id,
+            "order_count": len(request.orders),
+            "provider_id": request.provider_id
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/history/{patient_id}")
+async def get_order_history(patient_id: str):
+    """Get order history for a patient (placeholder - history stored in backend)"""
+    try:
+        # This is a placeholder - actual history is stored in backend database
+        return {
+            "patient_id": patient_id,
+            "orders": [],
+            "message": "Order history is managed by the backend service"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/check-interactions")
+async def check_order_interactions(medications: List[str]):
+    """Check for drug interactions in proposed orders"""
+    try:
+        result = smart_orders_ai.check_drug_interactions(medications)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============= AI Scribe Endpoints =============
+
+# Import the request models from the AI Scribe service
+from ai_scribe.service import StartSessionRequest as ScribeStartSessionRequest
+
+
+class ScribeProcessRequest(BaseModel):
+    sessionId: str
+    generateSoapNote: bool = True
+    extractEntities: bool = True
+    suggestIcdCodes: bool = True
+    suggestCptCodes: bool = True
+
+
+class ScribeGenerateNoteRequest(BaseModel):
+    text: str
+    sessionType: str = "consultation"
+
+
+class ScribeExtractEntitiesRequest(BaseModel):
+    text: str
+
+
+@app.post("/api/scribe/start-session")
+async def start_scribe_session(request: ScribeStartSessionRequest):
+    """Start a new AI scribe session"""
+    try:
+        result = ai_scribe.start_session(request)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/scribe/upload-audio")
+async def upload_scribe_audio(
+    session_id: str = Form(...),
+    chunk_number: int = Form(default=0),
+    is_final: bool = Form(default=False),
+    audio: UploadFile = File(...)
+):
+    """Upload audio chunk for transcription"""
+    try:
+        audio_data = await audio.read()
+        result = await ai_scribe.upload_audio_chunk(
+            session_id=session_id,
+            audio_data=audio_data,
+            chunk_number=chunk_number,
+            is_final=is_final
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/scribe/process")
+async def process_scribe_recording(request: ScribeProcessRequest):
+    """Process recording and generate clinical documentation"""
+    try:
+        result = await ai_scribe.process_recording(
+            session_id=request.sessionId,
+            generate_soap=request.generateSoapNote,
+            extract_entities=request.extractEntities,
+            suggest_icd=request.suggestIcdCodes,
+            suggest_cpt=request.suggestCptCodes
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/scribe/generate-note")
+async def generate_note_from_text(request: ScribeGenerateNoteRequest):
+    """Generate clinical note from text"""
+    try:
+        result = await ai_scribe.generate_note_from_text(
+            text=request.text,
+            session_type=request.sessionType
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/scribe/extract-entities")
+async def extract_medical_entities(request: ScribeExtractEntitiesRequest):
+    """Extract medical entities from text"""
+    try:
+        result = await ai_scribe.extract_entities_from_text(request.text)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/scribe/session/{session_id}")
+async def get_scribe_session(session_id: str):
+    """Get scribe session details"""
+    try:
+        result = ai_scribe.get_session(session_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/scribe/templates")
+async def get_scribe_templates():
+    """Get available note templates"""
+    try:
+        result = ai_scribe.get_templates()
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
