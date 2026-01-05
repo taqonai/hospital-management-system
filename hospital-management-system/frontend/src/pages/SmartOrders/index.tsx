@@ -120,7 +120,8 @@ export default function SmartOrders() {
     setLoadingBundles(true);
     try {
       const response = await smartOrderApi.getBundles();
-      setBundles(response.data.bundles || []);
+      const data = response.data?.data || response.data;
+      setBundles(data?.bundles || []);
     } catch (err) {
       console.error('Error loading bundles:', err);
     } finally {
@@ -132,7 +133,8 @@ export default function SmartOrders() {
     setLoadingBundleDetails(true);
     try {
       const response = await smartOrderApi.getBundleDetails(bundleId);
-      setBundleDetails(response.data);
+      const data = response.data?.data || response.data;
+      setBundleDetails(data);
     } catch (err) {
       console.error('Error loading bundle details:', err);
     } finally {
@@ -162,7 +164,8 @@ export default function SmartOrders() {
         includeAlternatives: true,
       });
 
-      setRecommendations(response.data);
+      const data = response.data?.data || response.data;
+      setRecommendations(data);
       setSelectedOrders([]);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to get recommendations');
@@ -329,7 +332,7 @@ export default function SmartOrders() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Estimated Cost</p>
-              <p className="text-2xl font-bold text-gray-900">${totalCost.toFixed(2)}</p>
+              <p className="text-2xl font-bold text-gray-900">${(totalCost || 0).toFixed(2)}</p>
             </div>
             <div className="p-3 rounded-xl bg-emerald-100 text-emerald-600">
               <BeakerIcon className="h-6 w-6" />

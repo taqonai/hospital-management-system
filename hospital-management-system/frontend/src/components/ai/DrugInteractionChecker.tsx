@@ -260,7 +260,9 @@ export default function DrugInteractionChecker({
         throw new Error('Failed to check interactions');
       }
 
-      const checkResult = await response.json();
+      const responseData = await response.json();
+      // Handle API response wrapper: { success: true, data: {...} }
+      const checkResult = responseData.data || responseData;
       setResult(checkResult);
 
       if (onCheckComplete) {
@@ -484,21 +486,21 @@ export default function DrugInteractionChecker({
               <div
                 className={clsx(
                   'rounded-xl p-4 border-2',
-                  result.summary.overallRisk === 'CRITICAL' || result.summary.overallRisk === 'HIGH'
+                  result.summary?.overallRisk === 'CRITICAL' || result.summary?.overallRisk === 'HIGH'
                     ? 'bg-red-50 border-red-500'
-                    : result.summary.overallRisk === 'MODERATE'
+                    : result.summary?.overallRisk === 'MODERATE'
                     ? 'bg-orange-50 border-orange-500'
-                    : result.summary.overallRisk === 'LOW'
+                    : result.summary?.overallRisk === 'LOW'
                     ? 'bg-yellow-50 border-yellow-500'
                     : 'bg-green-50 border-green-500'
                 )}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    {result.summary.overallRisk === 'CRITICAL' ||
-                    result.summary.overallRisk === 'HIGH' ? (
+                    {result.summary?.overallRisk === 'CRITICAL' ||
+                    result.summary?.overallRisk === 'HIGH' ? (
                       <ExclamationCircleIcon className="h-8 w-8 text-red-500" />
-                    ) : result.summary.overallRisk === 'MODERATE' ? (
+                    ) : result.summary?.overallRisk === 'MODERATE' ? (
                       <ExclamationTriangleIcon className="h-8 w-8 text-orange-500" />
                     ) : (
                       <CheckCircleIcon className="h-8 w-8 text-green-500" />
@@ -507,36 +509,36 @@ export default function DrugInteractionChecker({
                       <h3
                         className={clsx(
                           'font-bold text-lg',
-                          result.summary.overallRisk === 'CRITICAL' ||
-                            result.summary.overallRisk === 'HIGH'
+                          result.summary?.overallRisk === 'CRITICAL' ||
+                            result.summary?.overallRisk === 'HIGH'
                             ? 'text-red-700'
-                            : result.summary.overallRisk === 'MODERATE'
+                            : result.summary?.overallRisk === 'MODERATE'
                             ? 'text-orange-700'
                             : 'text-green-700'
                         )}
                       >
-                        {getRiskConfig(result.summary.overallRisk).label}
+                        {getRiskConfig(result.summary?.overallRisk || 'MINIMAL').label}
                       </h3>
                       <p className="text-sm text-gray-600">
-                        {result.summary.totalInteractions} interaction(s) found
+                        {result.summary?.totalInteractions || 0} interaction(s) found
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="flex gap-2">
-                      {result.summary.criticalCount > 0 && (
+                      {(result.summary?.criticalCount || 0) > 0 && (
                         <span className="px-2 py-1 rounded bg-red-200 text-red-800 text-xs font-medium">
-                          {result.summary.criticalCount} Critical
+                          {result.summary?.criticalCount} Critical
                         </span>
                       )}
-                      {result.summary.severeCount > 0 && (
+                      {(result.summary?.severeCount || 0) > 0 && (
                         <span className="px-2 py-1 rounded bg-red-100 text-red-700 text-xs font-medium">
-                          {result.summary.severeCount} Severe
+                          {result.summary?.severeCount} Severe
                         </span>
                       )}
-                      {result.summary.moderateCount > 0 && (
+                      {(result.summary?.moderateCount || 0) > 0 && (
                         <span className="px-2 py-1 rounded bg-orange-100 text-orange-700 text-xs font-medium">
-                          {result.summary.moderateCount} Moderate
+                          {result.summary?.moderateCount} Moderate
                         </span>
                       )}
                     </div>
@@ -545,14 +547,14 @@ export default function DrugInteractionChecker({
               </div>
 
               {/* Allergy Alerts */}
-              {result.allergyAlerts.length > 0 && (
+              {(result.allergyAlerts?.length || 0) > 0 && (
                 <div className="rounded-xl p-4 backdrop-blur-xl bg-red-50 border-2 border-red-500">
                   <h3 className="text-lg font-semibold text-red-700 mb-3 flex items-center gap-2">
                     <ShieldExclamationIcon className="h-5 w-5" />
                     Allergy Alerts
                   </h3>
                   <div className="space-y-2">
-                    {result.allergyAlerts.map((alert, index) => (
+                    {(result.allergyAlerts || []).map((alert, index) => (
                       <div
                         key={index}
                         className="p-3 rounded-lg bg-white/70 border border-red-300"
@@ -568,7 +570,7 @@ export default function DrugInteractionChecker({
               )}
 
               {/* Drug-Drug Interactions */}
-              {result.interactions.length > 0 && (
+              {(result.interactions?.length || 0) > 0 && (
                 <div className="rounded-xl backdrop-blur-xl bg-white/70 border border-white/50 overflow-hidden">
                   <button
                     onClick={() => setShowInteractions(!showInteractions)}
@@ -576,7 +578,7 @@ export default function DrugInteractionChecker({
                   >
                     <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                       <ExclamationTriangleIcon className="h-5 w-5 text-orange-500" />
-                      Drug-Drug Interactions ({result.interactions.length})
+                      Drug-Drug Interactions ({result.interactions?.length || 0})
                     </h3>
                     {showInteractions ? (
                       <ChevronUpIcon className="h-5 w-5 text-gray-400" />
@@ -587,7 +589,7 @@ export default function DrugInteractionChecker({
 
                   {showInteractions && (
                     <div className="px-4 pb-4 space-y-3">
-                      {result.interactions.map((interaction, index) => {
+                      {(result.interactions || []).map((interaction, index) => {
                         const config = getSeverityConfig(interaction.severity);
                         const isExpanded = expandedInteraction === index;
 
@@ -674,7 +676,7 @@ export default function DrugInteractionChecker({
               )}
 
               {/* Food Interactions */}
-              {result.foodInteractions.length > 0 && (
+              {(result.foodInteractions?.length || 0) > 0 && (
                 <div className="rounded-xl backdrop-blur-xl bg-white/70 border border-white/50 overflow-hidden">
                   <button
                     onClick={() => setShowFoodInteractions(!showFoodInteractions)}
@@ -682,7 +684,7 @@ export default function DrugInteractionChecker({
                   >
                     <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                       <InformationCircleIcon className="h-5 w-5 text-blue-500" />
-                      Food Interactions ({result.foodInteractions.length})
+                      Food Interactions ({result.foodInteractions?.length || 0})
                     </h3>
                     {showFoodInteractions ? (
                       <ChevronUpIcon className="h-5 w-5 text-gray-400" />
@@ -693,7 +695,7 @@ export default function DrugInteractionChecker({
 
                   {showFoodInteractions && (
                     <div className="px-4 pb-4 space-y-2">
-                      {result.foodInteractions.map((food, index) => (
+                      {(result.foodInteractions || []).map((food, index) => (
                         <div
                           key={index}
                           className="p-3 rounded-lg bg-blue-50 border border-blue-200"
@@ -715,7 +717,7 @@ export default function DrugInteractionChecker({
               )}
 
               {/* Recommendations */}
-              {result.recommendations.length > 0 && (
+              {(result.recommendations?.length || 0) > 0 && (
                 <div className="rounded-xl backdrop-blur-xl bg-white/70 border border-white/50 overflow-hidden">
                   <button
                     onClick={() => setShowRecommendations(!showRecommendations)}
@@ -723,7 +725,7 @@ export default function DrugInteractionChecker({
                   >
                     <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                       <DocumentTextIcon className="h-5 w-5 text-purple-500" />
-                      Recommendations ({result.recommendations.length})
+                      Recommendations ({result.recommendations?.length || 0})
                     </h3>
                     {showRecommendations ? (
                       <ChevronUpIcon className="h-5 w-5 text-gray-400" />
@@ -734,7 +736,7 @@ export default function DrugInteractionChecker({
 
                   {showRecommendations && (
                     <div className="px-4 pb-4 space-y-2">
-                      {result.recommendations.map((rec, index) => (
+                      {(result.recommendations || []).map((rec, index) => (
                         <div
                           key={index}
                           className={clsx(
@@ -777,9 +779,9 @@ export default function DrugInteractionChecker({
               )}
 
               {/* No Interactions Found */}
-              {result.interactions.length === 0 &&
-                result.allergyAlerts.length === 0 &&
-                result.conditionContraindications.length === 0 && (
+              {(result.interactions?.length || 0) === 0 &&
+                (result.allergyAlerts?.length || 0) === 0 &&
+                (result.conditionContraindications?.length || 0) === 0 && (
                   <div className="rounded-xl p-8 backdrop-blur-xl bg-green-50 border border-green-200 text-center">
                     <CheckCircleIcon className="h-12 w-12 text-green-500 mx-auto mb-3" />
                     <h3 className="text-lg font-semibold text-green-700">

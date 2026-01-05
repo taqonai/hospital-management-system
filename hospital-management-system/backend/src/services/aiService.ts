@@ -1049,6 +1049,38 @@ What would you like to do?`,
       throw new AppError('Clinical notes service error', 500);
     }
   }
+
+  // ============= Pharmacy/Drug Interaction Methods =============
+
+  /**
+   * Check drug interactions for a list of medications
+   */
+  async checkDrugInteractions(data: {
+    medications: string[];
+    patientAge?: number;
+    patientConditions?: string[];
+    allergies?: string[];
+  }) {
+    try {
+      logger.info(`Checking drug interactions for ${data.medications.length} medications`);
+      const response = await this.aiClient.post('/api/pharmacy/check-interactions', {
+        medications: data.medications,
+        patient_age: data.patientAge,
+        patient_conditions: data.patientConditions || [],
+        allergies: data.allergies || [],
+      });
+      return response.data;
+    } catch (error) {
+      logger.error('Check drug interactions error:', error);
+      if (axios.isAxiosError(error)) {
+        if (!error.response) {
+          throw new AppError('Pharmacy AI service is not reachable', 503);
+        }
+        throw new AppError(`Pharmacy error: ${error.response?.data?.detail || error.message}`, error.response?.status || 500);
+      }
+      throw new AppError('Pharmacy service error', 500);
+    }
+  }
 }
 
 export const aiService = new AIService();

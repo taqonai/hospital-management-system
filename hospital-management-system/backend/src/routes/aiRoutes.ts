@@ -528,4 +528,27 @@ router.post(
   })
 );
 
+// ============= Pharmacy/Drug Interaction Endpoints =============
+
+// Check drug interactions
+router.post(
+  '/pharmacy/check-interactions',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { medications, patientAge, patientConditions, allergies } = req.body;
+
+    if (!medications || !Array.isArray(medications) || medications.length === 0) {
+      return res.status(400).json({ error: 'At least one medication is required' });
+    }
+
+    const result = await aiService.checkDrugInteractions({
+      medications,
+      patientAge,
+      patientConditions,
+      allergies,
+    });
+    sendSuccess(res, result, 'Drug interactions checked');
+  })
+);
+
 export default router;
