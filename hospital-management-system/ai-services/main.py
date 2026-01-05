@@ -146,6 +146,13 @@ class ChatRequest(BaseModel):
     context: Optional[Dict[str, Any]] = None
 
 
+class PDFAnalyzeUrlRequest(BaseModel):
+    url: str
+    document_type: str = "medical_report"
+    extract_entities: bool = True
+    patient_context: Optional[Dict[str, Any]] = None
+
+
 class ChatAction(BaseModel):
     type: str
     route: Optional[str] = None
@@ -1398,11 +1405,7 @@ async def analyze_pdf(
 
 
 @app.post("/api/pdf/analyze-url")
-async def analyze_pdf_url(
-    url: str,
-    document_type: str = "medical_report",
-    extract_entities: bool = True
-):
+async def analyze_pdf_url(request: PDFAnalyzeUrlRequest):
     """
     Analyze a PDF from URL
 
@@ -1410,9 +1413,10 @@ async def analyze_pdf_url(
     """
     try:
         result = pdf_analyzer.analyze_pdf_url(
-            pdf_url=url,
-            document_type=document_type,
-            extract_entities=extract_entities
+            pdf_url=request.url,
+            document_type=request.document_type,
+            extract_entities=request.extract_entities,
+            patient_context=request.patient_context
         )
         return result
     except Exception as e:
