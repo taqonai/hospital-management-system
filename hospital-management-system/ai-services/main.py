@@ -25,6 +25,7 @@ from pharmacy.service import PharmacyAI
 from clinical_notes.service import ClinicalNotesAI
 from symptom_checker.service import SymptomCheckerAI
 from entity_extraction.service import EntityExtractionAI
+from pdf_analysis.service import PDFAnalysisService
 
 app = FastAPI(
     title="HMS AI Services",
@@ -52,6 +53,7 @@ pharmacy_ai = PharmacyAI()
 clinical_notes_ai = ClinicalNotesAI()
 symptom_checker_ai = SymptomCheckerAI()
 entity_extraction_ai = EntityExtractionAI()
+pdf_analyzer = PDFAnalysisService()
 
 
 # Request/Response Models
@@ -1325,6 +1327,117 @@ async def extract_appointment_data(request: EntityExtractionRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============= PDF Analysis Endpoints =============
+
+class PDFAnalysisResponse(BaseModel):
+    success: bool
+    summary: Optional[str] = None
+    keyFindings: Optional[List[str]] = None
+    diagnoses: Optional[List[str]] = None
+    medications: Optional[List[str]] = None
+    labResults: Optional[List[Dict[str, Any]]] = None
+    recommendations: Optional[List[str]] = None
+    urgentFindings: Optional[List[str]] = None
+    pageCount: Optional[int] = None
+    analysisMethod: Optional[str] = None
+    documentType: Optional[str] = None
+    modelVersion: Optional[str] = None
+    error: Optional[str] = None
+
+
+@app.post("/api/pdf/analyze", response_model=PDFAnalysisResponse)
+async def analyze_pdf(
+    file: UploadFile = File(...),
+    document_type: str = Form("medical_report"),
+    extract_entities: bool = Form(True),
+    patient_name: Optional[str] = Form(None),
+    patient_age: Optional[int] = Form(None)
+):
+    """
+    Analyze a PDF medical document
+
+    Supports:
+    - Text-based PDFs (typed reports) - uses GPT-4 text analysis
+    - Image-based PDFs (scanned documents) - uses GPT-4 Vision
+
+    Document types: medical_report, lab_result, radiology_report, prescription,
+                   discharge_summary, pathology_report, consultation_note
+    """
+    try:
+        if not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="File must be a PDF")
+
+        # Read PDF content
+        pdf_data = await file.read()
+
+        # Build patient context if provided
+        patient_context = None
+        if patient_name or patient_age:
+            patient_context = {}
+            if patient_name:
+                patient_context["name"] = patient_name
+            if patient_age:
+                patient_context["age"] = patient_age
+
+        # Analyze PDF
+        result = pdf_analyzer.analyze_pdf(
+            pdf_data=pdf_data,
+            document_type=document_type,
+            extract_entities=extract_entities,
+            patient_context=patient_context
+        )
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/pdf/analyze-url")
+async def analyze_pdf_url(
+    url: str,
+    document_type: str = "medical_report",
+    extract_entities: bool = True
+):
+    """
+    Analyze a PDF from URL
+
+    Note: URL must be publicly accessible without authentication
+    """
+    try:
+        result = pdf_analyzer.analyze_pdf_url(
+            pdf_url=url,
+            document_type=document_type,
+            extract_entities=extract_entities
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/pdf/status")
+async def pdf_analyzer_status():
+    """Check if PDF analysis service is available"""
+    return {
+        "available": pdf_analyzer.is_available(),
+        "models": {
+            "text": "gpt-4o-mini",
+            "vision": "gpt-4o"
+        } if pdf_analyzer.is_available() else None,
+        "supportedTypes": [
+            "medical_report",
+            "lab_result",
+            "radiology_report",
+            "prescription",
+            "discharge_summary",
+            "pathology_report",
+            "consultation_note"
+        ]
+    }
 
 
 if __name__ == "__main__":

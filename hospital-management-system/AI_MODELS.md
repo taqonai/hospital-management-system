@@ -10,7 +10,7 @@ This document provides a comprehensive breakdown of all AI models used in the Ho
 | `gpt-4o-mini` | OpenAI | Clinical notes generation, SOAP notes, entity extraction, ICD-10/CPT suggestions |
 | `gpt-3.5-turbo` | OpenAI | Chat assistant, conversational booking |
 | `all-MiniLM-L6-v2` | SentenceTransformers | Symptom-to-diagnosis semantic matching |
-| `gpt-4o` | OpenAI (Vision) | Medical imaging analysis (X-ray, CT, MRI, Ultrasound) |
+| `gpt-4o` | OpenAI (Vision) | Medical imaging analysis, PDF document analysis (scanned) |
 | Rule-based | Algorithmic | Risk prediction, queue estimation, drug interactions, medication safety |
 
 ---
@@ -140,11 +140,51 @@ These models run locally and do not require external API keys.
 
 ---
 
+### 6. PDF Document Analysis
+
+**Purpose:** Medical Document Processing
+
+**Models Used:**
+- `gpt-4o-mini` - For text-based PDFs (typed/digital reports) - faster and cheaper
+- `gpt-4o` (Vision) - For image-based PDFs (scanned documents)
+
+**Features:**
+- Automatic detection of text vs scanned PDFs
+- Medical report analysis and summarization
+- Lab result extraction with abnormal flagging
+- Radiology report interpretation
+- Prescription parsing (medications, dosages, frequency)
+- Discharge summary analysis
+- Pathology report interpretation
+- Entity extraction (conditions, procedures, medications)
+- Urgent findings identification
+
+**Supported Document Types:**
+- `medical_report` - General medical reports
+- `lab_result` - Laboratory test results
+- `radiology_report` - Imaging/radiology reports
+- `prescription` - Medication prescriptions
+- `discharge_summary` - Hospital discharge summaries
+- `pathology_report` - Pathology/biopsy reports
+- `consultation_note` - Specialist consultation notes
+
+**How it works:**
+1. PDF is uploaded or fetched from URL
+2. System checks text density to determine if text-based or scanned
+3. Text-based PDFs: Extract text → GPT-4o-mini analysis
+4. Scanned PDFs: Convert pages to images → GPT-4 Vision analysis
+5. Returns structured JSON with findings, diagnoses, medications, recommendations
+
+**Files:**
+- `ai-services/pdf_analysis/service.py` - PDFAnalysisService class
+
+---
+
 ## Rule-Based Systems
 
 These systems use algorithmic scoring and medical knowledge bases without external AI calls.
 
-### 6. Predictive Analytics
+### 7. Predictive Analytics
 
 **Features:**
 - Readmission risk prediction
@@ -159,7 +199,7 @@ These systems use algorithmic scoring and medical knowledge bases without extern
 
 ---
 
-### 7. Queue Prediction
+### 8. Queue Prediction
 
 **Features:**
 - Wait time estimation
@@ -173,7 +213,7 @@ These systems use algorithmic scoring and medical knowledge bases without extern
 
 ---
 
-### 8. Pharmacy AI
+### 9. Pharmacy AI
 
 **Features:**
 - Drug interaction checking
@@ -188,7 +228,7 @@ These systems use algorithmic scoring and medical knowledge bases without extern
 
 ---
 
-### 9. Medication Safety
+### 10. Medication Safety
 
 **Features:**
 - Dose range validation
@@ -201,7 +241,7 @@ These systems use algorithmic scoring and medical knowledge bases without extern
 
 ---
 
-### 10. Smart Orders
+### 11. Smart Orders
 
 **Features:**
 - Clinical order recommendations
@@ -213,7 +253,7 @@ These systems use algorithmic scoring and medical knowledge bases without extern
 
 ---
 
-### 11. Symptom Checker
+### 12. Symptom Checker
 
 **Features:**
 - Interactive symptom assessment
@@ -225,7 +265,7 @@ These systems use algorithmic scoring and medical knowledge bases without extern
 
 ---
 
-### 12. Early Warning System
+### 13. Early Warning System
 
 **Features:**
 - Patient deterioration alerts
@@ -261,6 +301,7 @@ OPENAI_MODEL=gpt-3.5-turbo
 | `POST /api/chat` | GPT-3.5-turbo | Chat assistant |
 | `POST /api/diagnose` | SentenceTransformers | Symptom diagnosis |
 | `POST /api/analyze-image` | GPT-4o Vision | Medical image analysis |
+| `POST /api/pdf/analyze` | GPT-4o / GPT-4o-mini | PDF document analysis |
 | `POST /api/predict-risk` | Rule-based | Risk prediction |
 | `POST /api/pharmacy/*` | Rule-based | Drug interactions |
 | `POST /api/queue/*` | Rule-based | Queue prediction |
