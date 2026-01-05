@@ -484,18 +484,25 @@ class ExpandAbbreviationsResponse(BaseModel):
 # Health check
 @app.get("/health")
 async def health_check():
+    openai_available = speech_ai.is_available() if hasattr(speech_ai, 'is_available') else False
     return {
         "status": "healthy",
+        "openai_available": openai_available,
+        "version": "1.0.0",
         "services": {
             "diagnostic": "active",
             "predictive": "active",
             "imaging": "active",
             "chat": "active",
-            "speech": "active" if speech_ai.is_available() else "unavailable",
+            "speech": "active" if openai_available else "unavailable",
             "queue": "active",
             "pharmacy": "active",
             "clinical_notes": "active" if clinical_notes_ai.is_available() else "limited",
             "symptom_checker": "active",
+            "early_warning": "active",
+            "med_safety": "active",
+            "smart_orders": "active",
+            "ai_scribe": "active" if openai_available else "limited",
         }
     }
 

@@ -52,7 +52,7 @@ services:
       JWT_SECRET: your-super-secret-jwt-key-change-in-production
       JWT_REFRESH_SECRET: your-super-secret-refresh-key-change-in-production
       AI_SERVICE_URL: http://ai-services:8000
-      AI_SCRIBE_URL: http://hms-ai-scribe:8000
+      AI_SCRIBE_URL: http://ai-services:8000
       SYMPTOM_CHECKER_URL: http://hms-symptom-checker:8000
       SMART_ORDERS_URL: http://hms-smart-orders:8000
       # AWS S3 for Medical Images (set via .env or environment)
