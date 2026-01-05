@@ -976,6 +976,79 @@ What would you like to do?`,
       throw new AppError('Entity extraction service error', 500);
     }
   }
+
+  // ============= Clinical Notes Methods =============
+
+  /**
+   * Get available clinical note templates
+   */
+  async getClinicalNoteTemplates() {
+    try {
+      logger.info('Fetching clinical note templates');
+      const response = await this.aiClient.get('/api/notes/templates');
+      return response.data;
+    } catch (error) {
+      logger.error('Get clinical note templates error:', error);
+      if (axios.isAxiosError(error)) {
+        if (!error.response) {
+          throw new AppError('Clinical notes AI service is not reachable', 503);
+        }
+        throw new AppError(`Clinical notes error: ${error.response?.data?.detail || error.message}`, error.response?.status || 500);
+      }
+      throw new AppError('Clinical notes service error', 500);
+    }
+  }
+
+  /**
+   * Generate clinical note from template
+   */
+  async generateClinicalNote(data: {
+    templateType: string;
+    patientData?: Record<string, any>;
+    encounterData?: Record<string, any>;
+  }) {
+    try {
+      logger.info(`Generating clinical note with template: ${data.templateType}`);
+      const response = await this.aiClient.post('/api/notes/generate', {
+        template_type: data.templateType,
+        patient_data: data.patientData || {},
+        encounter_data: data.encounterData || {},
+      });
+      return response.data;
+    } catch (error) {
+      logger.error('Generate clinical note error:', error);
+      if (axios.isAxiosError(error)) {
+        if (!error.response) {
+          throw new AppError('Clinical notes AI service is not reachable', 503);
+        }
+        throw new AppError(`Clinical notes error: ${error.response?.data?.detail || error.message}`, error.response?.status || 500);
+      }
+      throw new AppError('Clinical notes service error', 500);
+    }
+  }
+
+  /**
+   * Enhance clinical note with AI
+   */
+  async enhanceClinicalNote(data: { noteText: string; enhancementType?: string }) {
+    try {
+      logger.info(`Enhancing clinical note with type: ${data.enhancementType || 'improve'}`);
+      const response = await this.aiClient.post('/api/notes/enhance', {
+        note_text: data.noteText,
+        enhancement_type: data.enhancementType || 'improve',
+      });
+      return response.data;
+    } catch (error) {
+      logger.error('Enhance clinical note error:', error);
+      if (axios.isAxiosError(error)) {
+        if (!error.response) {
+          throw new AppError('Clinical notes AI service is not reachable', 503);
+        }
+        throw new AppError(`Clinical notes error: ${error.response?.data?.detail || error.message}`, error.response?.status || 500);
+      }
+      throw new AppError('Clinical notes service error', 500);
+    }
+  }
 }
 
 export const aiService = new AIService();

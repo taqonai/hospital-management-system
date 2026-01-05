@@ -475,4 +475,57 @@ router.post(
   })
 );
 
+// ============= Clinical Notes Endpoints =============
+
+// Get clinical note templates
+router.get(
+  '/clinical-notes/templates',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const result = await aiService.getClinicalNoteTemplates();
+    sendSuccess(res, result, 'Templates retrieved');
+  })
+);
+
+// Generate clinical note from template
+router.post(
+  '/clinical-notes/generate',
+  authenticate,
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { templateType, patientData, encounterData } = req.body;
+
+    if (!templateType) {
+      return res.status(400).json({ error: 'Template type is required' });
+    }
+
+    const result = await aiService.generateClinicalNote({
+      templateType,
+      patientData,
+      encounterData,
+    });
+    sendSuccess(res, result, 'Clinical note generated');
+  })
+);
+
+// Enhance clinical note with AI
+router.post(
+  '/clinical-notes/enhance',
+  authenticate,
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { noteText, enhancementType } = req.body;
+
+    if (!noteText) {
+      return res.status(400).json({ error: 'Note text is required' });
+    }
+
+    const result = await aiService.enhanceClinicalNote({
+      noteText,
+      enhancementType: enhancementType || 'improve',
+    });
+    sendSuccess(res, result, 'Clinical note enhanced');
+  })
+);
+
 export default router;
