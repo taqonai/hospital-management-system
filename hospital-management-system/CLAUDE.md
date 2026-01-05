@@ -97,6 +97,28 @@ Direct AI endpoints (backend proxies these via `/api/v1/ai/*`):
 - `POST /api/symptom-checker/*` - Interactive symptom assessment
 - `POST /api/entity/*` - Entity extraction from natural language
 
+### AI Models in Use
+
+| Model | Type | Features |
+|-------|------|----------|
+| `whisper-1` | OpenAI | Voice transcription (Symptom Checker, AI Scribe) |
+| `gpt-4o-mini` | OpenAI | Clinical notes generation, SOAP notes, entity extraction, ICD-10/CPT suggestions |
+| `gpt-3.5-turbo` | OpenAI | Chat assistant, conversational booking |
+| `all-MiniLM-L6-v2` | SentenceTransformers | Symptom-to-diagnosis semantic matching |
+| `ResNet50` | PyTorch/ImageNet | Medical image feature extraction |
+| Rule-based | Algorithmic | Risk prediction, queue estimation, drug interactions, medication safety |
+
+**OpenAI Models** (require `OPENAI_API_KEY`):
+- **Whisper**: Audio → text transcription optimized for medical terminology
+- **GPT-4o-mini**: Generates structured clinical documentation from transcripts
+- **GPT-3.5-turbo**: Handles conversational queries and navigation commands
+
+**Local ML Models** (no API key required):
+- **SentenceTransformers**: Encodes symptoms as vectors for similarity matching against disease database
+- **ResNet50**: Extracts image features for pathology detection (currently simulated mode)
+
+**Rule-Based Systems**: Predictive analytics, queue prediction, pharmacy checks, and safety validations use algorithmic scoring without external AI calls.
+
 ### Multi-Tenant Data Model
 
 All entities include `hospitalId` for tenant isolation. Prisma schema (`backend/prisma/schema.prisma`, ~3700 lines) covers 80+ models.
