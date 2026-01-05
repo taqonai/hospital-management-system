@@ -327,7 +327,8 @@ export default function PatientRiskPrediction() {
       });
 
       const data = await response.json();
-      setPrediction(data);
+      // API returns { success: true, data: {...} } - extract the actual data
+      setPrediction(data.data || data);
     } catch (err) {
       setError('Failed to predict risk. Please check if AI services are running.');
     } finally {
@@ -883,7 +884,7 @@ export default function PatientRiskPrediction() {
                   Contributing Risk Factors
                 </h3>
                 <div className="space-y-2">
-                  {prediction.factors.map((factor, idx) => (
+                  {(prediction.factors || []).map((factor, idx) => (
                     <div
                       key={idx}
                       className="flex items-start gap-2 p-2 bg-gray-50 rounded-lg"
@@ -909,7 +910,7 @@ export default function PatientRiskPrediction() {
                   Recommended Interventions
                 </h3>
                 <div className="space-y-2">
-                  {prediction.recommendations
+                  {(prediction.recommendations || [])
                     .filter((r) => r.trim())
                     .map((rec, idx) => (
                       <div
