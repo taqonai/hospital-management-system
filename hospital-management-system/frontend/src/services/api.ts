@@ -1213,9 +1213,39 @@ export const smartOrderApi = {
     notes?: string;
   }) => api.post('/smart-orders/place', data),
 
-  // Get order history
-  getOrderHistory: (patientId: string) =>
-    api.get(`/smart-orders/history/${patientId}`),
+  // Get order history with pagination and filters
+  getOrderHistory: (params?: {
+    patientId?: string;
+    patientName?: string;
+    startDate?: string;
+    endDate?: string;
+    status?: string;
+    category?: string;
+    page?: number;
+    pageSize?: number;
+  }) => api.get('/smart-orders/history', { params }),
+
+  // Get order by ID
+  getOrderById: (orderId: string) =>
+    api.get(`/smart-orders/orders/${orderId}`),
+
+  // Update order status
+  updateOrderStatus: (orderId: string, status: string, executedBy?: string) =>
+    api.patch(`/smart-orders/orders/${orderId}/status`, { status, executedBy }),
+
+  // Cancel order
+  cancelOrder: (orderId: string, reason?: string) =>
+    api.post(`/smart-orders/orders/${orderId}/cancel`, { reason }),
+
+  // Get order statistics
+  getOrderStats: (params?: {
+    startDate?: string;
+    endDate?: string;
+  }) => api.get('/smart-orders/stats', { params }),
+
+  // Reorder - use existing order as template for new patient
+  reorder: (orderId: string, newPatientId: string) =>
+    api.post(`/smart-orders/orders/${orderId}/reorder`, { newPatientId }),
 
   // Check drug interactions
   checkInteractions: (medications: string[]) =>

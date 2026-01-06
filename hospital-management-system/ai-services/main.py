@@ -28,7 +28,7 @@ from entity_extraction.service import EntityExtractionAI
 from pdf_analysis.service import PDFAnalysisService
 from early_warning.service import EarlyWarningAI
 from med_safety.service import MedicationSafetyAI
-from smart_orders.service import SmartOrdersAI
+from smart_orders.service import SmartOrdersAI, PatientContext as SmartOrdersPatientContext
 from ai_scribe.service import AIScribeService
 
 app = FastAPI(
@@ -1985,6 +1985,151 @@ async def check_order_interactions(medications: List[str]):
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============= Enhanced Smart Orders Endpoints =============
+
+class SmartOrderInteractionCheckRequest(BaseModel):
+    medications: List[str]
+    patient_context: Optional[Dict[str, Any]] = None
+
+
+class SmartOrderContraindicationRequest(BaseModel):
+    orders: List[Dict[str, Any]]
+    patient_context: Dict[str, Any]
+
+
+class SmartOrderAIRequest(BaseModel):
+    diagnosis: str
+    patient_context: Optional[Dict[str, Any]] = None
+
+
+class SmartOrderEnhancedCustomizeRequest(BaseModel):
+    bundle_id: str
+    patient_context: Dict[str, Any]
+    customizations: Optional[Dict[str, Any]] = None
+
+
+def _dict_to_patient_context(data: Optional[Dict[str, Any]]) -> Optional[SmartOrdersPatientContext]:
+    """Convert dictionary to PatientContext model"""
+    if not data:
+        return None
+    return SmartOrdersPatientContext(
+        age=data.get("age"),
+        weight=data.get("weight"),
+        gender=data.get("gender"),
+        allergies=data.get("allergies"),
+        currentMedications=data.get("currentMedications") or data.get("current_medications"),
+        renalFunction=data.get("renalFunction") or data.get("renal_function"),
+        hepaticFunction=data.get("hepaticFunction") or data.get("hepatic_function"),
+        pregnancyStatus=data.get("pregnancyStatus") or data.get("pregnancy_status"),
+        comorbidities=data.get("comorbidities"),
+    )
+
+
+@app.post("/api/check-interactions-detailed")
+async def check_interactions_detailed(request: SmartOrderInteractionCheckRequest):
+    """
+    Enhanced drug interaction checking with severity levels and patient context.
+    Returns detailed analysis including severity categorization and recommendations.
+    """
+    try:
+        patient_ctx = _dict_to_patient_context(request.patient_context)
+        result = smart_orders_ai.check_medication_interactions_detailed(
+            medications=request.medications,
+            patient_context=patient_ctx,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/check-contraindications")
+async def check_contraindications(request: SmartOrderContraindicationRequest):
+    """
+    Comprehensive contraindication checking against patient allergies and conditions.
+    Returns safe and unsafe orders with detailed warnings.
+    """
+    try:
+        patient_ctx = _dict_to_patient_context(request.patient_context)
+        result = smart_orders_ai.check_contraindications(
+            orders=request.orders,
+            patient_context=patient_ctx,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/recommend-ai")
+async def get_ai_recommendations(request: SmartOrderAIRequest):
+    """
+    AI-enhanced order recommendations using GPT-4.
+    Provides personalized analysis with dosing adjustments, warnings, and alternatives.
+    Falls back to rule-based if OpenAI unavailable.
+    """
+    try:
+        patient_ctx = _dict_to_patient_context(request.patient_context)
+        result = await smart_orders_ai.get_ai_enhanced_recommendations(
+            diagnosis=request.diagnosis,
+            patient_context=patient_ctx,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/customize-enhanced")
+async def customize_bundle_enhanced(request: SmartOrderEnhancedCustomizeRequest):
+    """
+    Enhanced bundle customization with automatic patient-specific adjustments.
+    Features renal/hepatic dosing, weight-based calculations, and contraindication removal.
+    """
+    try:
+        patient_ctx = _dict_to_patient_context(request.patient_context)
+        result = smart_orders_ai.customize_bundle_enhanced(
+            bundle_id=request.bundle_id,
+            patient_context=patient_ctx,
+            customizations=request.customizations,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/smart-orders/ai-status")
+async def get_smart_orders_ai_status():
+    """Check if AI-enhanced features are available for smart orders"""
+    from smart_orders.service import DIAGNOSIS_ORDER_DATABASE, ORDER_BUNDLES
+    return {
+        "aiAvailable": smart_orders_ai.is_ai_available(),
+        "modelVersion": smart_orders_ai.model_version,
+        "features": {
+            "aiEnhancedRecommendations": smart_orders_ai.is_ai_available(),
+            "ruleBasedRecommendations": True,
+            "drugInteractionChecking": True,
+            "contraindicationChecking": True,
+            "enhancedBundleCustomization": True,
+        },
+        "supportedDiagnoses": list(DIAGNOSIS_ORDER_DATABASE.keys()),
+        "supportedBundles": list(ORDER_BUNDLES.keys()),
+    }
+
+
+@app.get("/api/smart-orders/diagnoses")
+async def get_supported_diagnoses():
+    """Get all supported diagnoses with their ICD codes"""
+    from smart_orders.service import DIAGNOSIS_ORDER_DATABASE
+    diagnoses = []
+    for icd_code, data in DIAGNOSIS_ORDER_DATABASE.items():
+        diagnoses.append({
+            "icdCode": icd_code,
+            "name": data["name"],
+            "category": data.get("category"),
+            "bundle": data.get("bundle"),
+            "evidenceLevel": data.get("evidenceLevel"),
+        })
+    return {"diagnoses": diagnoses, "count": len(diagnoses)}
 
 
 # ============= AI Scribe Endpoints =============

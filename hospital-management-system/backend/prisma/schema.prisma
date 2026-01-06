@@ -47,6 +47,7 @@ model Hospital {
   imagingOrders   ImagingOrder[]
   auditLogs       AuditLog[]
   employees       Employee[]
+  smartOrders     SmartOrder[]
 
   @@map("hospitals")
 }
@@ -103,6 +104,8 @@ model User {
   sessions        Session[]
   auditLogs       AuditLog[]
   notifications   Notification[]
+  orderedSmartOrders  SmartOrder[]     @relation("OrderedByUser")
+  executedOrderItems  SmartOrderItem[] @relation("ExecutedByUser")
 
   @@unique([hospitalId, email])
   @@map("users")
@@ -285,6 +288,7 @@ model Patient {
   insurances          PatientInsurance[]
   aiPredictions       AIPrediction[]
   aiDiagnoses         AIDiagnosis[]
+  smartOrders         SmartOrder[]
 
   @@unique([hospitalId, mrn])
   @@map("patients")
@@ -3766,4 +3770,118 @@ model QueueAnnouncement {
 
   @@index([hospitalId, status])
   @@map("queue_announcements")
+}
+
+// ==================== SMART ORDERS ====================
+
+model SmartOrder {
+  id            String   @id @default(uuid())
+  hospitalId    String
+  hospital      Hospital @relation(fields: [hospitalId], references: [id])
+  patientId     String
+  patient       Patient  @relation(fields: [patientId], references: [id])
+  orderedById   String
+  orderedBy     User     @relation("OrderedByUser", fields: [orderedById], references: [id])
+
+  // Order metadata
+  orderNumber   String   @unique @default(uuid())
+  diagnosis     String
+  icdCode       String?
+  symptoms      String[]
+
+  // AI metadata
+  aiRecommended Boolean  @default(false)
+  bundleId      String?
+  bundleName    String?
+
+  // Status tracking
+  status        SmartOrderStatus @default(PENDING)
+  priority      String   @default("ROUTINE")
+
+  // Cost and notes
+  totalEstimatedCost Float?
+  notes         String?
+
+  // Timestamps
+  orderedAt     DateTime @default(now())
+  completedAt   DateTime?
+  cancelledAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  items         SmartOrderItem[]
+
+  @@index([hospitalId, patientId])
+  @@index([hospitalId, status])
+  @@index([orderedById])
+  @@index([orderNumber])
+}
+
+model SmartOrderItem {
+  id            String   @id @default(uuid())
+  smartOrderId  String
+  smartOrder    SmartOrder @relation(fields: [smartOrderId], references: [id], onDelete: Cascade)
+
+  // Order item details
+  orderType     SmartOrderItemType
+  orderCode     String?
+  orderName     String
+  category      String
+  urgency       String   @default("ROUTINE")
+  quantity      Int      @default(1)
+
+  // AI recommendation data
+  aiRecommended Boolean  @default(false)
+  confidence    Float?
+  rationale     String?
+
+  // Dosing info (for medications)
+  dosing        Json?
+
+  // Warnings and alternatives
+  warnings      String[]
+  alternatives  Json?
+
+  // Status
+  status        SmartOrderItemStatus @default(PENDING)
+  estimatedCost Float?
+
+  // Execution tracking
+  executedAt    DateTime?
+  executedById  String?
+  executedBy    User?    @relation("ExecutedByUser", fields: [executedById], references: [id])
+  resultNotes   String?
+
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([smartOrderId])
+  @@index([orderType])
+  @@index([status])
+}
+
+enum SmartOrderStatus {
+  PENDING
+  PARTIALLY_COMPLETED
+  COMPLETED
+  CANCELLED
+}
+
+enum SmartOrderItemType {
+  LAB
+  IMAGING
+  MEDICATION
+  PROCEDURE
+  NURSING
+  CONSULT
+  REFERRAL
+}
+
+enum SmartOrderItemStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
 }

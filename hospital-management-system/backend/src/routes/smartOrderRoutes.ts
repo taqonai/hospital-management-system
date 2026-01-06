@@ -208,17 +208,127 @@ router.post(
 // ============= Order History =============
 
 /**
- * Get patient's order history
- * GET /api/smart-orders/history/:patientId
+ * Get order history with filters
+ * GET /api/smart-orders/history
+ * Query: patientId, patientName, startDate, endDate, status, category, page, pageSize
  */
 router.get(
-  '/history/:patientId',
+  '/history',
   authenticate,
   authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const { patientId } = req.params;
-    const history = await smartOrderService.getOrderHistory(patientId);
+    const hospitalId = req.user?.hospitalId;
+    const { patientId, patientName, startDate, endDate, status, category, page, pageSize } = req.query;
+
+    const history = await smartOrderService.getOrderHistory(hospitalId!, {
+      patientId: patientId as string,
+      patientName: patientName as string,
+      startDate: startDate ? new Date(startDate as string) : undefined,
+      endDate: endDate ? new Date(endDate as string) : undefined,
+      status: status as string,
+      category: category as string,
+      page: page ? parseInt(page as string) : 1,
+      limit: pageSize ? parseInt(pageSize as string) : 10,
+    });
+
     sendSuccess(res, history, 'Order history retrieved successfully');
+  })
+);
+
+/**
+ * Get order statistics
+ * GET /api/smart-orders/stats
+ */
+router.get(
+  '/stats',
+  authenticate,
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const hospitalId = req.user?.hospitalId;
+    const { startDate, endDate } = req.query;
+
+    const stats = await smartOrderService.getOrderStats(hospitalId!, {
+      startDate: startDate ? new Date(startDate as string) : undefined,
+      endDate: endDate ? new Date(endDate as string) : undefined,
+    });
+
+    sendSuccess(res, stats, 'Order statistics retrieved successfully');
+  })
+);
+
+/**
+ * Get single order by ID
+ * GET /api/smart-orders/orders/:orderId
+ */
+router.get(
+  '/orders/:orderId',
+  authenticate,
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { orderId } = req.params;
+    const hospitalId = req.user?.hospitalId;
+
+    const order = await smartOrderService.getOrderById(hospitalId!, orderId);
+    sendSuccess(res, order, 'Order retrieved successfully');
+  })
+);
+
+/**
+ * Update order status
+ * PATCH /api/smart-orders/orders/:orderId/status
+ */
+router.patch(
+  '/orders/:orderId/status',
+  authenticate,
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { orderId } = req.params;
+    const { status, executedBy } = req.body;
+    const hospitalId = req.user?.hospitalId;
+
+    const order = await smartOrderService.updateOrderStatus(hospitalId!, orderId, status, executedBy);
+    sendSuccess(res, order, 'Order status updated successfully');
+  })
+);
+
+/**
+ * Cancel order
+ * POST /api/smart-orders/orders/:orderId/cancel
+ */
+router.post(
+  '/orders/:orderId/cancel',
+  authenticate,
+  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { orderId } = req.params;
+    const { reason } = req.body;
+    const hospitalId = req.user?.hospitalId;
+
+    const order = await smartOrderService.updateOrderStatus(hospitalId!, orderId, 'CANCELLED', undefined, reason);
+    sendSuccess(res, order, 'Order cancelled successfully');
+  })
+);
+
+/**
+ * Reorder - copy existing order for new patient
+ * POST /api/smart-orders/orders/:orderId/reorder
+ */
+router.post(
+  '/orders/:orderId/reorder',
+  authenticate,
+  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { orderId } = req.params;
+    const { newPatientId } = req.body;
+    const hospitalId = req.user?.hospitalId;
+    const providerId = req.user?.userId;
+
+    if (!newPatientId) {
+      return res.status(400).json({ success: false, message: 'New patient ID is required' });
+    }
+
+    const newOrder = await smartOrderService.reorderFromExisting(hospitalId!, orderId, newPatientId, providerId!);
+    sendSuccess(res, newOrder, 'Order copied successfully');
   })
 );
 

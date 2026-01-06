@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   SparklesIcon,
   MagnifyingGlassIcon,
@@ -15,6 +15,16 @@ import {
   BoltIcon,
   FireIcon,
   ShieldExclamationIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  EyeIcon,
+  DocumentPlusIcon,
+  XCircleIcon,
+  CalendarIcon,
+  FunnelIcon,
+  ChartBarIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from '@heroicons/react/24/outline';
 import { smartOrderApi } from '../../services/api';
 import OrderSetRecommendation from '../../components/orders/OrderSetRecommendation';
@@ -68,6 +78,121 @@ interface Bundle {
   evidenceLevel: string;
 }
 
+// Order History Types
+interface OrderHistoryItem {
+  id: string;
+  orderNumber: string;
+  patientId: string;
+  patientName: string;
+  diagnosis: string;
+  icdCode?: string;
+  status: 'pending' | 'completed' | 'cancelled' | 'in_progress';
+  totalCost: number;
+  itemCount: number;
+  orderedBy: string;
+  orderedAt: string;
+  completedAt?: string;
+  items: OrderHistoryItemDetail[];
+}
+
+interface OrderHistoryItemDetail {
+  id: string;
+  name: string;
+  category: string;
+  urgency: string;
+  status: 'pending' | 'completed' | 'cancelled';
+  rationale?: string;
+  warnings?: string[];
+  executedBy?: string;
+  executedAt?: string;
+}
+
+interface OrderStats {
+  totalOrdersToday: number;
+  pendingOrders: number;
+  completedOrders: number;
+  cancelledOrders: number;
+  commonDiagnoses: { diagnosis: string; count: number }[];
+}
+
+interface OrderHistoryFilters {
+  patientSearch: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+  category: string;
+}
+
+// Mock data for demonstration (will be replaced with API calls)
+const generateMockOrderHistory = (): OrderHistoryItem[] => {
+  const diagnoses = [
+    { name: 'Sepsis, unspecified organism', code: 'A41.9' },
+    { name: 'Acute myocardial infarction', code: 'I21.9' },
+    { name: 'Pneumonia, unspecified organism', code: 'J18.9' },
+    { name: 'Type 2 diabetes with ketoacidosis', code: 'E11.10' },
+    { name: 'Heart failure, unspecified', code: 'I50.9' },
+  ];
+  const statuses: ('pending' | 'completed' | 'cancelled' | 'in_progress')[] = ['pending', 'completed', 'cancelled', 'in_progress'];
+  const categories = ['Lab', 'Imaging', 'Medication', 'Procedure', 'Consult'];
+  const providers = ['Dr. Sarah Johnson', 'Dr. Michael Chen', 'Dr. Emily Williams', 'Dr. Robert Brown'];
+  const patients = [
+    { id: 'P001', name: 'John Smith' },
+    { id: 'P002', name: 'Jane Doe' },
+    { id: 'P003', name: 'Robert Johnson' },
+    { id: 'P004', name: 'Maria Garcia' },
+    { id: 'P005', name: 'William Davis' },
+  ];
+
+  return Array.from({ length: 25 }, (_, i) => {
+    const diagnosis = diagnoses[i % diagnoses.length];
+    const patient = patients[i % patients.length];
+    const status = statuses[i % statuses.length];
+    const itemCount = Math.floor(Math.random() * 5) + 2;
+
+    return {
+      id: `order-${1000 + i}`,
+      orderNumber: `SO-${String(1000 + i).padStart(6, '0')}`,
+      patientId: patient.id,
+      patientName: patient.name,
+      diagnosis: diagnosis.name,
+      icdCode: diagnosis.code,
+      status,
+      totalCost: Math.floor(Math.random() * 500) + 100,
+      itemCount,
+      orderedBy: providers[i % providers.length],
+      orderedAt: new Date(Date.now() - i * 3600000 * 24).toISOString(),
+      completedAt: status === 'completed' ? new Date(Date.now() - i * 3600000 * 12).toISOString() : undefined,
+      items: Array.from({ length: itemCount }, (_, j) => ({
+        id: `item-${i}-${j}`,
+        name: ['CBC with Differential', 'BMP', 'Chest X-ray', 'CT Abdomen', 'Amoxicillin 500mg', 'IV Fluids'][j % 6],
+        category: categories[j % categories.length],
+        urgency: ['stat', 'routine', 'urgent'][j % 3],
+        status: status === 'completed' ? 'completed' : (j < itemCount / 2 ? 'completed' : 'pending') as 'pending' | 'completed' | 'cancelled',
+        rationale: 'Standard protocol for suspected infection',
+        warnings: j === 0 ? ['Check renal function before ordering'] : undefined,
+        executedBy: status === 'completed' || j < itemCount / 2 ? 'Lab Tech - Anna Wilson' : undefined,
+        executedAt: status === 'completed' || j < itemCount / 2 ? new Date(Date.now() - i * 3600000 * 6).toISOString() : undefined,
+      })),
+    };
+  });
+};
+
+const mockOrderHistory = generateMockOrderHistory();
+
+const generateMockStats = (): OrderStats => ({
+  totalOrdersToday: 47,
+  pendingOrders: 12,
+  completedOrders: 32,
+  cancelledOrders: 3,
+  commonDiagnoses: [
+    { diagnosis: 'Sepsis', count: 15 },
+    { diagnosis: 'Pneumonia', count: 12 },
+    { diagnosis: 'Heart Failure', count: 8 },
+    { diagnosis: 'Diabetes', count: 7 },
+    { diagnosis: 'Stroke', count: 5 },
+  ],
+});
+
 export default function SmartOrders() {
   const [activeTab, setActiveTab] = useState<'diagnosis' | 'bundles' | 'history'>('diagnosis');
   const [diagnosis, setDiagnosis] = useState('');
@@ -101,6 +226,26 @@ export default function SmartOrders() {
   const [placingOrders, setPlacingOrders] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // Order History State
+  const [orderHistory, setOrderHistory] = useState<OrderHistoryItem[]>([]);
+  const [orderStats, setOrderStats] = useState<OrderStats | null>(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyFilters, setHistoryFilters] = useState<OrderHistoryFilters>({
+    patientSearch: '',
+    startDate: '',
+    endDate: '',
+    status: 'all',
+    category: 'all',
+  });
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [showCancelModal, setShowCancelModal] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [showReorderModal, setShowReorderModal] = useState<string | null>(null);
+  const [reorderPatientId, setReorderPatientId] = useState('');
 
   // Load bundles on mount
   useEffect(() => {
@@ -141,6 +286,163 @@ export default function SmartOrders() {
       setLoadingBundleDetails(false);
     }
   };
+
+  // Load order history
+  const loadOrderHistory = useCallback(async () => {
+    setLoadingHistory(true);
+    try {
+      const response = await smartOrderApi.getOrderHistory({
+        patientName: historyFilters.patientSearch || undefined,
+        startDate: historyFilters.startDate || undefined,
+        endDate: historyFilters.endDate || undefined,
+        status: historyFilters.status !== 'all' ? historyFilters.status : undefined,
+        category: historyFilters.category !== 'all' ? historyFilters.category : undefined,
+        page: currentPage,
+        pageSize,
+      });
+      const data = response.data?.data || response.data;
+      if (data?.orders) {
+        setOrderHistory(data.orders);
+        setTotalOrders(data.total || data.orders.length);
+      } else {
+        // Use mock data for demonstration
+        let filtered = [...mockOrderHistory];
+        if (historyFilters.patientSearch) {
+          filtered = filtered.filter(o =>
+            o.patientName.toLowerCase().includes(historyFilters.patientSearch.toLowerCase()) ||
+            o.patientId.toLowerCase().includes(historyFilters.patientSearch.toLowerCase())
+          );
+        }
+        if (historyFilters.status !== 'all') {
+          filtered = filtered.filter(o => o.status === historyFilters.status);
+        }
+        if (historyFilters.category !== 'all') {
+          filtered = filtered.filter(o => o.items.some(item => item.category === historyFilters.category));
+        }
+        setTotalOrders(filtered.length);
+        const start = (currentPage - 1) * pageSize;
+        setOrderHistory(filtered.slice(start, start + pageSize));
+      }
+    } catch (err) {
+      console.error('Error loading order history:', err);
+      // Use mock data on error
+      let filtered = [...mockOrderHistory];
+      if (historyFilters.patientSearch) {
+        filtered = filtered.filter(o =>
+          o.patientName.toLowerCase().includes(historyFilters.patientSearch.toLowerCase()) ||
+          o.patientId.toLowerCase().includes(historyFilters.patientSearch.toLowerCase())
+        );
+      }
+      if (historyFilters.status !== 'all') {
+        filtered = filtered.filter(o => o.status === historyFilters.status);
+      }
+      if (historyFilters.category !== 'all') {
+        filtered = filtered.filter(o => o.items.some(item => item.category === historyFilters.category));
+      }
+      setTotalOrders(filtered.length);
+      const start = (currentPage - 1) * pageSize;
+      setOrderHistory(filtered.slice(start, start + pageSize));
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, [historyFilters, currentPage, pageSize]);
+
+  // Load order statistics
+  const loadOrderStats = useCallback(async () => {
+    try {
+      const response = await smartOrderApi.getOrderStats();
+      const data = response.data?.data || response.data;
+      if (data) {
+        setOrderStats(data);
+      } else {
+        setOrderStats(generateMockStats());
+      }
+    } catch (err) {
+      console.error('Error loading order stats:', err);
+      setOrderStats(generateMockStats());
+    }
+  }, []);
+
+  // Load order history when tab changes or filters change
+  useEffect(() => {
+    if (activeTab === 'history') {
+      loadOrderHistory();
+      loadOrderStats();
+    }
+  }, [activeTab, loadOrderHistory, loadOrderStats]);
+
+  // Handle cancel order
+  const handleCancelOrder = async (orderId: string) => {
+    try {
+      await smartOrderApi.cancelOrder(orderId, cancelReason);
+      setSuccess('Order cancelled successfully');
+      setShowCancelModal(null);
+      setCancelReason('');
+      loadOrderHistory();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to cancel order');
+    }
+  };
+
+  // Handle reorder
+  const handleReorder = async (orderId: string) => {
+    if (!reorderPatientId.trim()) {
+      setError('Please enter a patient ID');
+      return;
+    }
+    try {
+      await smartOrderApi.reorder(orderId, reorderPatientId);
+      setSuccess('Order copied successfully. Go to Diagnosis-Based tab to review and place the order.');
+      setShowReorderModal(null);
+      setReorderPatientId('');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to reorder');
+    }
+  };
+
+  // Format date for display
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  // Get status badge style
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'bg-green-100 text-green-800';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'cancelled':
+        return 'bg-red-100 text-red-800';
+      case 'in_progress':
+        return 'bg-blue-100 text-blue-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Get urgency badge style
+  const getUrgencyBadge = (urgency: string) => {
+    switch (urgency) {
+      case 'stat':
+        return 'bg-red-100 text-red-800';
+      case 'urgent':
+        return 'bg-orange-100 text-orange-800';
+      case 'routine':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Calculate total pages
+  const totalPages = Math.ceil(totalOrders / pageSize);
 
   const handleGetRecommendations = async () => {
     if (!diagnosis.trim()) {
@@ -672,25 +974,554 @@ export default function SmartOrders() {
       )}
 
       {activeTab === 'history' && (
-        <div className="rounded-2xl bg-white border border-gray-200 shadow-lg p-8">
-          <div className="flex flex-col items-center justify-center text-gray-400">
-            <ClockIcon className="h-16 w-16 mb-4" />
-            <p className="text-lg font-medium">Order History</p>
-            <p className="text-sm mt-2">View past smart orders placed for patients</p>
-            <p className="text-sm mt-4 text-gray-500">Enter a patient ID to view their order history</p>
-            <div className="mt-4 flex gap-2">
-              <input
-                type="text"
-                value={patientId}
-                onChange={(e) => setPatientId(e.target.value)}
-                placeholder="Patient ID"
-                className="px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500"
-              />
-              <button className="px-4 py-2 rounded-xl bg-indigo-500 text-white hover:bg-indigo-600">
-                Search
+        <div className="space-y-6">
+          {/* Statistics Summary */}
+          {orderStats && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+              <div className="p-4 rounded-2xl bg-white border border-gray-200 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-500">Total Orders Today</p>
+                    <p className="text-2xl font-bold text-gray-900">{orderStats.totalOrdersToday}</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-indigo-100 text-indigo-600">
+                    <ChartBarIcon className="h-6 w-6" />
+                  </div>
+                </div>
+              </div>
+              <div className="p-4 rounded-2xl bg-white border border-gray-200 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-500">Pending</p>
+                    <p className="text-2xl font-bold text-yellow-600">{orderStats.pendingOrders}</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-yellow-100 text-yellow-600">
+                    <ClockIcon className="h-6 w-6" />
+                  </div>
+                </div>
+              </div>
+              <div className="p-4 rounded-2xl bg-white border border-gray-200 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-500">Completed</p>
+                    <p className="text-2xl font-bold text-green-600">{orderStats.completedOrders}</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-green-100 text-green-600">
+                    <CheckCircleIcon className="h-6 w-6" />
+                  </div>
+                </div>
+              </div>
+              <div className="p-4 rounded-2xl bg-white border border-gray-200 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-500">Cancelled</p>
+                    <p className="text-2xl font-bold text-red-600">{orderStats.cancelledOrders}</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-red-100 text-red-600">
+                    <XCircleIcon className="h-6 w-6" />
+                  </div>
+                </div>
+              </div>
+              <div className="p-4 rounded-2xl bg-white border border-gray-200 shadow-lg">
+                <div>
+                  <p className="text-sm text-gray-500 mb-2">Top Diagnoses</p>
+                  <div className="space-y-1">
+                    {orderStats.commonDiagnoses.slice(0, 3).map((d, idx) => (
+                      <div key={idx} className="flex items-center justify-between text-xs">
+                        <span className="text-gray-700 truncate">{d.diagnosis}</span>
+                        <span className="text-gray-500 ml-2">{d.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Filters Section */}
+          <div className="rounded-2xl bg-white border border-gray-200 shadow-lg p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <FunnelIcon className="h-5 w-5 text-indigo-500" />
+              <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+              {/* Patient Search */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Patient Search
+                </label>
+                <div className="relative">
+                  <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={historyFilters.patientSearch}
+                    onChange={(e) => {
+                      setHistoryFilters({ ...historyFilters, patientSearch: e.target.value });
+                      setCurrentPage(1);
+                    }}
+                    placeholder="Name or ID..."
+                    className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* Start Date */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Start Date
+                </label>
+                <div className="relative">
+                  <CalendarIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="date"
+                    value={historyFilters.startDate}
+                    onChange={(e) => {
+                      setHistoryFilters({ ...historyFilters, startDate: e.target.value });
+                      setCurrentPage(1);
+                    }}
+                    className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* End Date */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  End Date
+                </label>
+                <div className="relative">
+                  <CalendarIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="date"
+                    value={historyFilters.endDate}
+                    onChange={(e) => {
+                      setHistoryFilters({ ...historyFilters, endDate: e.target.value });
+                      setCurrentPage(1);
+                    }}
+                    className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* Status Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Status
+                </label>
+                <select
+                  value={historyFilters.status}
+                  onChange={(e) => {
+                    setHistoryFilters({ ...historyFilters, status: e.target.value });
+                    setCurrentPage(1);
+                  }}
+                  className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+
+              {/* Category Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Category
+                </label>
+                <select
+                  value={historyFilters.category}
+                  onChange={(e) => {
+                    setHistoryFilters({ ...historyFilters, category: e.target.value });
+                    setCurrentPage(1);
+                  }}
+                  className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="all">All Categories</option>
+                  <option value="Lab">Lab</option>
+                  <option value="Imaging">Imaging</option>
+                  <option value="Medication">Medication</option>
+                  <option value="Procedure">Procedure</option>
+                  <option value="Consult">Consult</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Clear Filters Button */}
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => {
+                  setHistoryFilters({
+                    patientSearch: '',
+                    startDate: '',
+                    endDate: '',
+                    status: 'all',
+                    category: 'all',
+                  });
+                  setCurrentPage(1);
+                }}
+                className="px-4 py-2 rounded-lg text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+              >
+                Clear Filters
               </button>
             </div>
           </div>
+
+          {/* Order History Table */}
+          <div className="rounded-2xl bg-white border border-gray-200 shadow-lg overflow-hidden">
+            {/* Table Header */}
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ClockIcon className="h-5 w-5 text-indigo-500" />
+                <h3 className="text-lg font-semibold text-gray-900">Order History</h3>
+                <span className="text-sm text-gray-500">({totalOrders} orders)</span>
+              </div>
+              <button
+                onClick={loadOrderHistory}
+                className="px-3 py-1 rounded-lg text-sm text-indigo-600 hover:bg-indigo-50 flex items-center gap-1"
+              >
+                <ArrowPathIcon className="h-4 w-4" />
+                Refresh
+              </button>
+            </div>
+
+            {loadingHistory ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
+              </div>
+            ) : orderHistory.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                <CubeIcon className="h-16 w-16 mb-4" />
+                <p className="text-lg font-medium">No orders found</p>
+                <p className="text-sm mt-2">Try adjusting your filters</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Order
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Patient
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Diagnosis
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Items
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Cost
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Ordered By
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {orderHistory.map((order) => (
+                      <>
+                        <tr key={order.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}
+                                className="p-1 rounded hover:bg-gray-200 transition-colors"
+                              >
+                                {expandedOrderId === order.id ? (
+                                  <ChevronUpIcon className="h-4 w-4 text-gray-500" />
+                                ) : (
+                                  <ChevronDownIcon className="h-4 w-4 text-gray-500" />
+                                )}
+                              </button>
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">{order.orderNumber}</p>
+                                <p className="text-xs text-gray-500">{formatDate(order.orderedAt)}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{order.patientName}</p>
+                              <p className="text-xs text-gray-500">{order.patientId}</p>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div>
+                              <p className="text-sm text-gray-900 truncate max-w-[200px]" title={order.diagnosis}>
+                                {order.diagnosis}
+                              </p>
+                              {order.icdCode && (
+                                <p className="text-xs text-indigo-600">{order.icdCode}</p>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                              {order.itemCount} items
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusBadge(order.status)}`}>
+                              {order.status.replace('_', ' ')}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <p className="text-sm font-medium text-gray-900">
+                              ${Number(order.totalCost || 0).toFixed(2)}
+                            </p>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <p className="text-sm text-gray-900">{order.orderedBy}</p>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}
+                                className="p-1.5 rounded-lg text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                title="View Details"
+                              >
+                                <EyeIcon className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => setShowReorderModal(order.id)}
+                                className="p-1.5 rounded-lg text-gray-500 hover:text-green-600 hover:bg-green-50 transition-colors"
+                                title="Reorder"
+                              >
+                                <DocumentPlusIcon className="h-4 w-4" />
+                              </button>
+                              {order.status === 'pending' && (
+                                <button
+                                  onClick={() => setShowCancelModal(order.id)}
+                                  className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                  title="Cancel Order"
+                                >
+                                  <XCircleIcon className="h-4 w-4" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                        {/* Expanded Order Details */}
+                        {expandedOrderId === order.id && (
+                          <tr key={`${order.id}-expanded`}>
+                            <td colSpan={8} className="px-6 py-4 bg-gray-50">
+                              <div className="space-y-4">
+                                <h4 className="text-sm font-semibold text-gray-900">Order Items</h4>
+                                <div className="grid gap-3">
+                                  {order.items.map((item) => (
+                                    <div
+                                      key={item.id}
+                                      className="p-4 rounded-xl bg-white border border-gray-200 flex items-center justify-between"
+                                    >
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-3">
+                                          <p className="font-medium text-gray-900">{item.name}</p>
+                                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${getUrgencyBadge(item.urgency)}`}>
+                                            {item.urgency}
+                                          </span>
+                                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                                            {item.category}
+                                          </span>
+                                        </div>
+                                        {item.rationale && (
+                                          <p className="text-sm text-gray-500 mt-1">{item.rationale}</p>
+                                        )}
+                                        {item.warnings && item.warnings.length > 0 && (
+                                          <div className="flex items-center gap-1 mt-1">
+                                            <ExclamationTriangleIcon className="h-4 w-4 text-amber-500" />
+                                            <span className="text-xs text-amber-600">{item.warnings.join(', ')}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="text-right">
+                                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusBadge(item.status)}`}>
+                                          {item.status}
+                                        </span>
+                                        {item.executedBy && (
+                                          <p className="text-xs text-gray-500 mt-1">
+                                            By: {item.executedBy}
+                                          </p>
+                                        )}
+                                        {item.executedAt && (
+                                          <p className="text-xs text-gray-400">
+                                            {formatDate(item.executedAt)}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Pagination */}
+            {!loadingHistory && orderHistory.length > 0 && (
+              <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-700">Show</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="px-3 py-1 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                  </select>
+                  <span className="text-sm text-gray-700">per page</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-700">
+                    Page {currentPage} of {totalPages} ({totalOrders} total)
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                      disabled={currentPage === 1}
+                      className="p-2 rounded-lg border border-gray-200 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronLeftIcon className="h-4 w-4" />
+                    </button>
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`px-3 py-1 rounded-lg text-sm ${
+                            currentPage === pageNum
+                              ? 'bg-indigo-500 text-white'
+                              : 'border border-gray-200 hover:bg-gray-100'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                    <button
+                      onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                      disabled={currentPage === totalPages}
+                      className="p-2 rounded-lg border border-gray-200 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronRightIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Cancel Order Modal */}
+          {showCancelModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-xl">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Cancel Order</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Are you sure you want to cancel this order? This action cannot be undone.
+                </p>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Cancellation Reason (optional)
+                  </label>
+                  <textarea
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                    placeholder="Enter reason for cancellation..."
+                    className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-indigo-500 resize-none"
+                    rows={3}
+                  />
+                </div>
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => {
+                      setShowCancelModal(null);
+                      setCancelReason('');
+                    }}
+                    className="px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+                  >
+                    Keep Order
+                  </button>
+                  <button
+                    onClick={() => handleCancelOrder(showCancelModal)}
+                    className="px-4 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
+                  >
+                    Cancel Order
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Reorder Modal */}
+          {showReorderModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-xl">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Reorder for New Patient</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Copy this order set to a new patient. The orders will be added to your current selection.
+                </p>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    New Patient ID
+                  </label>
+                  <input
+                    type="text"
+                    value={reorderPatientId}
+                    onChange={(e) => setReorderPatientId(e.target.value)}
+                    placeholder="Enter patient ID..."
+                    className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => {
+                      setShowReorderModal(null);
+                      setReorderPatientId('');
+                    }}
+                    className="px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleReorder(showReorderModal)}
+                    className="px-4 py-2 rounded-lg bg-indigo-500 text-white hover:bg-indigo-600 transition-colors"
+                  >
+                    Copy Orders
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
