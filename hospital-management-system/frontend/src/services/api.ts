@@ -1100,6 +1100,22 @@ export const patientPortalApi = {
   // Dashboard
   getSummary: () => api.get('/patient-portal/summary'),
 
+  // Profile
+  getProfile: () => api.get('/patient-auth/profile'),
+  updateProfile: (data: any) => api.put('/patient-auth/profile', data),
+  changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    api.post('/patient-auth/change-password', data),
+
+  // Notification Preferences
+  getNotificationPreferences: () => api.get('/patient-portal/settings/notifications'),
+  updateNotificationPreferences: (data: any) =>
+    api.put('/patient-portal/settings/notifications', data),
+
+  // Communication Preferences
+  getCommunicationPreferences: () => api.get('/patient-portal/settings/communication'),
+  updateCommunicationPreferences: (data: any) =>
+    api.put('/patient-portal/settings/communication', data),
+
   // Appointments
   getAppointments: (params?: {
     type?: string;
@@ -1121,11 +1137,14 @@ export const patientPortalApi = {
   // Medical Records
   getMedicalRecords: (params?: {
     type?: string;
+    visitType?: string;
     search?: string;
     page?: number;
     limit?: number;
     startDate?: string;
     endDate?: string;
+    doctorId?: string;
+    departmentId?: string;
   }) => api.get('/patient-portal/records', { params }),
   getMedicalRecordById: (id: string) => api.get(`/patient-portal/records/${id}`),
   downloadMedicalRecord: (id: string) =>
@@ -1164,7 +1183,7 @@ export const patientPortalApi = {
 
   // Billing
   getBillingSummary: () => api.get('/patient-portal/billing/summary'),
-  getBills: (params?: { type?: 'pending' | 'history'; page?: number; limit?: number }) =>
+  getBills: (params?: { type?: 'pending' | 'history' | 'all'; page?: number; limit?: number }) =>
     api.get('/patient-portal/bills', { params }),
   getBillById: (id: string) => api.get(`/patient-portal/bills/${id}`),
   makePayment: (data: {
@@ -1177,6 +1196,10 @@ export const patientPortalApi = {
     api.get('/patient-portal/payments', { params }),
   downloadInvoice: (billId: string) =>
     api.get(`/patient-portal/bills/${billId}/download`, { responseType: 'blob' }),
+
+  // Insurance Claims
+  getInsuranceClaims: (params?: { status?: string; page?: number; limit?: number }) =>
+    api.get('/patient-portal/insurance-claims', { params }),
 
   // Reference data
   getDoctors: (params?: { departmentId?: string; search?: string }) =>

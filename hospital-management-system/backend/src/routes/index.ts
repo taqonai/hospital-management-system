@@ -40,6 +40,7 @@ import aiConsultationRoutes from './aiConsultationRoutes';
 import advancedPharmacyAIRoutes from './advancedPharmacyAIRoutes';
 import pdfRoutes from './pdfRoutes';
 import rbacRoutes from './rbacRoutes';
+import patientAuthRoutes from './patientAuthRoutes';
 
 const router = Router();
 
@@ -55,6 +56,7 @@ router.get('/health', (req, res) => {
 // Public routes (no authentication required)
 router.use('/public', publicRoutes);
 router.use('/kiosk', kioskRoutes);
+router.use('/patient-auth', patientAuthRoutes);
 
 // API routes (authentication required)
 router.use('/auth', authRoutes);

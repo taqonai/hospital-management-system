@@ -16,6 +16,7 @@ import {
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { patientPortalApi } from '../../services/api';
+import PatientPortalDashboard from './Dashboard';
 import AppointmentsList from './components/AppointmentsList';
 import MedicalRecords from './components/MedicalRecords';
 import Prescriptions from './components/Prescriptions';
@@ -116,7 +117,7 @@ export default function PatientPortal() {
 
         {/* Main Content */}
         <main className="flex-1 p-8">
-          {activeSection === 'dashboard' && <DashboardView summary={summary} isLoading={isLoading} setActiveSection={setActiveSection} />}
+          {activeSection === 'dashboard' && <PatientPortalDashboard />}
           {activeSection === 'appointments' && <AppointmentsList />}
           {activeSection === 'records' && <MedicalRecords />}
           {activeSection === 'prescriptions' && <Prescriptions />}
@@ -345,3 +346,4 @@ function formatDate(dateString: string): string {
 }
 
 export { default as SymptomChecker } from './SymptomChecker';
+export { default as Dashboard } from './Dashboard';

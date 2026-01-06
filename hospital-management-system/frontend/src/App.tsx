@@ -87,8 +87,16 @@ import PDFAnalysis from './pages/PDFAnalysis';
 // Quality Management
 import Quality from './pages/Quality';
 
-// Patient Portal
-import PatientPortal from './pages/PatientPortal';
+// Patient Portal (Separate public section with own auth)
+import PatientPortalLogin from './pages/PatientPortal/Login';
+import PatientPortalDashboard from './pages/PatientPortal/Dashboard';
+import PatientPortalAppointments from './pages/PatientPortal/Appointments';
+import PatientPortalMedicalRecords from './pages/PatientPortal/MedicalRecords';
+import PatientPortalPrescriptions from './pages/PatientPortal/Prescriptions';
+import PatientPortalLabResults from './pages/PatientPortal/LabResults';
+import PatientPortalBilling from './pages/PatientPortal/Billing';
+import PatientPortalSettings from './pages/PatientPortal/Settings';
+import PatientPortalLayout from './components/layout/PatientPortalLayout';
 
 // Asset Management
 import Assets from './pages/Assets';
@@ -166,7 +174,6 @@ function App() {
         <Route path="/smart-orders" element={<SmartOrders />} />
         <Route path="/pdf-analysis" element={<PDFAnalysis />} />
         <Route path="/quality" element={<Quality />} />
-        <Route path="/patient-portal" element={<PatientPortal />} />
         <Route path="/ipd" element={<IPD />} />
         <Route path="/emergency" element={<Emergency />} />
         <Route path="/laboratory" element={<Laboratory />} />
@@ -220,6 +227,19 @@ function App() {
 
       {/* Public AI Symptom Checker (Patient-facing) */}
       <Route path="/symptom-checker" element={<SymptomChecker />} />
+
+      {/* Patient Portal - Separate public section with own authentication */}
+      <Route path="/patient-portal/login" element={<PatientPortalLogin />} />
+      <Route path="/patient-portal" element={<PatientPortalLayout />}>
+        <Route index element={<PatientPortalDashboard />} />
+        <Route path="dashboard" element={<PatientPortalDashboard />} />
+        <Route path="appointments" element={<PatientPortalAppointments />} />
+        <Route path="records" element={<PatientPortalMedicalRecords />} />
+        <Route path="prescriptions" element={<PatientPortalPrescriptions />} />
+        <Route path="labs" element={<PatientPortalLabResults />} />
+        <Route path="billing" element={<PatientPortalBilling />} />
+        <Route path="settings" element={<PatientPortalSettings />} />
+      </Route>
 
       {/* Redirects */}
       <Route path="*" element={<Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />} />
