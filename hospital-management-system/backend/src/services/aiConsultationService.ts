@@ -363,7 +363,7 @@ export class AIConsultationService {
         : undefined,
       heartRate: latestVitals.heartRate || undefined,
       respiratoryRate: latestVitals.respiratoryRate || undefined,
-      oxygenSaturation: latestVitals.oxygenSaturation || undefined,
+      oxygenSaturation: latestVitals.oxygenSaturation ? Number(latestVitals.oxygenSaturation) : undefined,
     } : undefined;
 
     // Get AI risk assessment
@@ -683,7 +683,7 @@ export class AIConsultationService {
       if (allergyMatches.length > 0) {
         validations.allergyCheck = {
           isContraindicated: true,
-          allergenMatches,
+          allergenMatches: allergyMatches,
         };
         contraindications.push(
           `ALLERGY: Patient allergic to ${allergyMatches.join(', ')} - ${medication.drugName} contraindicated`

@@ -5,11 +5,13 @@ import { NotFoundError, AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
 import {
   SmartOrderStatus,
-  SmartOrderPriority,
   SmartOrderItemType,
   SmartOrderItemStatus,
   Prisma,
 } from '@prisma/client';
+
+// Define priority locally since it's not in Prisma schema
+type SmartOrderPriority = 'STAT' | 'URGENT' | 'ROUTINE';
 
 // Smart Order AI Service URL
 const SMART_ORDER_SERVICE_URL = process.env.SMART_ORDER_SERVICE_URL || 'http://localhost:8013';
@@ -137,8 +139,8 @@ export class SmartOrderService {
    */
   private mapCategoryToOrderType(category: string): SmartOrderItemType {
     const categoryMap: Record<string, SmartOrderItemType> = {
-      laboratory: SmartOrderItemType.LABORATORY,
-      lab: SmartOrderItemType.LABORATORY,
+      laboratory: SmartOrderItemType.LAB,
+      lab: SmartOrderItemType.LAB,
       imaging: SmartOrderItemType.IMAGING,
       radiology: SmartOrderItemType.IMAGING,
       medication: SmartOrderItemType.MEDICATION,
@@ -147,9 +149,10 @@ export class SmartOrderService {
       nursing: SmartOrderItemType.NURSING,
       consult: SmartOrderItemType.CONSULT,
       consultation: SmartOrderItemType.CONSULT,
+      referral: SmartOrderItemType.REFERRAL,
     };
 
-    return categoryMap[category.toLowerCase()] || SmartOrderItemType.OTHER;
+    return categoryMap[category.toLowerCase()] || SmartOrderItemType.LAB;
   }
 
   /**
@@ -354,12 +357,10 @@ export class SmartOrderService {
             bundleId: request.bundleId,
             bundleName: request.bundleName,
             status: SmartOrderStatus.PENDING,
-            priority: request.priority || SmartOrderPriority.ROUTINE,
+            priority: request.priority || 'ROUTINE',
             totalEstimatedCost: totalEstimatedCost > 0 ? totalEstimatedCost : null,
             notes: request.notes,
-            aiRecommendationId: request.aiRecommendationId,
-            aiConfidenceScore: request.aiConfidenceScore,
-            evidenceLevel: request.evidenceLevel,
+            aiRecommended: !!request.aiRecommendationId,
           },
         });
 
@@ -370,17 +371,17 @@ export class SmartOrderService {
               data: {
                 smartOrderId: order.id,
                 orderType: this.mapCategoryToOrderType(item.category),
-                name: item.name,
+                orderName: item.name,
                 category: item.category,
-                code: item.code,
-                urgency: item.urgency || 'routine',
+                orderCode: item.code,
+                urgency: item.urgency || 'ROUTINE',
                 confidence: item.confidence,
                 rationale: item.rationale,
                 warnings: item.warnings || [],
                 dosing: item.dosing as Prisma.InputJsonValue,
                 status: SmartOrderItemStatus.PENDING,
                 estimatedCost: item.estimatedCost,
-                notes: item.notes,
+                aiRecommended: !!item.confidence,
               },
             })
           )
@@ -668,11 +669,11 @@ export class SmartOrderService {
     };
 
     if (notes) {
-      updateData.notes = notes;
+      updateData.resultNotes = notes;
     }
 
     if (cancellationReason && status === SmartOrderItemStatus.CANCELLED) {
-      updateData.cancellationReason = cancellationReason;
+      updateData.resultNotes = cancellationReason;
     }
 
     // Set execution details if completed
@@ -941,9 +942,9 @@ export class SmartOrderService {
         items: {
           create: originalOrder.items.map((item) => ({
             orderType: item.orderType,
-            name: item.name,
+            orderName: item.orderName,
             category: item.category,
-            code: item.code,
+            orderCode: item.orderCode,
             urgency: item.urgency,
             confidence: item.confidence,
             rationale: item.rationale,

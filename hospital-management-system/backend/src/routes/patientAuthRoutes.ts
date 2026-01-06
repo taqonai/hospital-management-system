@@ -220,6 +220,61 @@ router.post(
   })
 );
 
+/**
+ * Claim existing patient account (for patients created by staff/booking)
+ * POST /api/v1/patient-auth/claim-account
+ * Body: { patientId, email, password }
+ * Returns: { patient, accessToken, refreshToken, claimed: true }
+ */
+const claimAccountSchema = z.object({
+  body: z.object({
+    patientId: z.string().uuid('Invalid patient ID'),
+    email: z.string().email('Invalid email address'),
+    password: z.string().min(8, 'Password must be at least 8 characters'),
+  }),
+});
+
+router.post(
+  '/claim-account',
+  validate(claimAccountSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { patientId, email, password } = req.body;
+    const result = await patientAuthService.claimExistingAccount(patientId, email, password);
+    sendCreated(res, {
+      patient: result.patient,
+      accessToken: result.tokens.accessToken,
+      refreshToken: result.tokens.refreshToken,
+      claimed: result.claimed,
+    }, 'Account claimed successfully. You can now login with your email and password.');
+  })
+);
+
+/**
+ * Check if a patient can be claimed
+ * POST /api/v1/patient-auth/can-claim
+ * Body: { email?, phone? }
+ * Returns: { canClaim, patient?, reason? }
+ */
+const canClaimSchema = z.object({
+  body: z.object({
+    email: z.string().email('Invalid email address').optional(),
+    phone: z.string().min(10, 'Valid phone number required').optional(),
+    hospitalId: z.string().uuid('Invalid hospital ID').optional(),
+  }).refine(data => data.email || data.phone, {
+    message: 'Either email or phone is required',
+  }),
+});
+
+router.post(
+  '/can-claim',
+  validate(canClaimSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { email, phone, hospitalId } = req.body;
+    const result = await patientAuthService.checkCanClaim(email, phone, hospitalId);
+    sendSuccess(res, result, result.canClaim ? 'Patient can be claimed' : 'Patient cannot be claimed');
+  })
+);
+
 // =============================================================================
 // Protected Routes (Patient Authentication Required)
 // =============================================================================

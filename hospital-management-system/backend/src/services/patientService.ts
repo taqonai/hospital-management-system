@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { CreatePatientDto, SearchParams } from '../types';
 import { NotFoundError, ConflictError } from '../middleware/errorHandler';
 import { v4 as uuidv4 } from 'uuid';
+import { patientLookupService } from './patientLookupService';
 
 export class PatientService {
   private generateMRN(hospitalCode: string): string {
@@ -11,6 +12,24 @@ export class PatientService {
   }
 
   async create(hospitalId: string, data: CreatePatientDto) {
+    // Check for existing patient first
+    const existingPatient = await patientLookupService.findExistingPatient(hospitalId, {
+      email: data.email,
+      phone: data.phone,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      dateOfBirth: data.dateOfBirth,
+    });
+
+    if (existingPatient) {
+      // Return existing patient with a flag
+      return {
+        ...existingPatient,
+        isExisting: true,
+        message: 'Patient already exists in the system'
+      };
+    }
+
     const hospital = await prisma.hospital.findUnique({
       where: { id: hospitalId },
     });
@@ -406,6 +425,87 @@ export class PatientService {
     ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     return timeline;
+  }
+
+  /**
+   * Find an existing patient or create a new one.
+   * Uses the lookup service to check for duplicates before creating.
+   */
+  async findOrCreate(hospitalId: string, data: CreatePatientDto): Promise<{ patient: any; isNew: boolean }> {
+    // Check for existing patient first
+    const existingPatient = await patientLookupService.findExistingPatient(hospitalId, {
+      email: data.email,
+      phone: data.phone,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      dateOfBirth: data.dateOfBirth,
+    });
+
+    if (existingPatient) {
+      return {
+        patient: existingPatient,
+        isNew: false,
+      };
+    }
+
+    // No existing patient found, create a new one
+    const hospital = await prisma.hospital.findUnique({
+      where: { id: hospitalId },
+    });
+
+    if (!hospital) {
+      throw new NotFoundError('Hospital not found');
+    }
+
+    const mrn = this.generateMRN(hospital.code);
+
+    const patient = await prisma.patient.create({
+      data: {
+        ...data,
+        hospitalId,
+        mrn,
+        dateOfBirth: new Date(data.dateOfBirth),
+        bloodGroup: data.bloodGroup as any,
+      } as any,
+      include: {
+        hospital: {
+          select: { id: true, name: true, code: true },
+        },
+      },
+    });
+
+    // Create empty medical history
+    await prisma.medicalHistory.create({
+      data: {
+        patientId: patient.id,
+        chronicConditions: [],
+        pastSurgeries: [],
+        familyHistory: [],
+        currentMedications: [],
+        immunizations: [],
+      },
+    });
+
+    return {
+      patient,
+      isNew: true,
+    };
+  }
+
+  /**
+   * Search for potential duplicate patients based on partial matching.
+   * Useful for staff to review before creating new patients.
+   */
+  async searchDuplicates(
+    hospitalId: string,
+    criteria: {
+      email?: string;
+      phone?: string;
+      firstName?: string;
+      lastName?: string;
+    }
+  ) {
+    return patientLookupService.findPotentialDuplicates(hospitalId, criteria);
   }
 }
 

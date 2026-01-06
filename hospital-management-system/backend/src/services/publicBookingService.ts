@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { NotFoundError, AppError } from '../middleware/errorHandler';
 import { v4 as uuidv4 } from 'uuid';
+import { patientLookupService } from './patientLookupService';
 
 interface PublicBookingDto {
   fullName: string;
@@ -52,12 +53,6 @@ function generateConfirmationCode(): string {
   return code;
 }
 
-// Generate MRN
-function generateMRN(): string {
-  const year = new Date().getFullYear().toString().slice(-2);
-  const random = Math.floor(100000 + Math.random() * 900000);
-  return `MRN${year}${random}`;
-}
 
 export class PublicBookingService {
   async createPublicBooking(data: PublicBookingDto) {
@@ -73,38 +68,19 @@ export class PublicBookingService {
     // Parse full name into first and last name
     const nameParts = data.fullName.trim().split(' ');
     const firstName = nameParts[0] || 'Unknown';
-    const lastName = nameParts.slice(1).join(' ') || 'Patient';
+    const lastName = nameParts.slice(1).join(' ') || '';
 
-    // Find or create patient
-    let patient = await prisma.patient.findFirst({
-      where: {
-        hospitalId: hospital.id,
-        OR: [
-          { email: data.email },
-          { phone: data.phone },
-        ],
+    // Find or create patient using the patient lookup service
+    const { patient, isExisting, matchedBy } = await patientLookupService.findOrCreatePatient(
+      hospital.id,
+      {
+        email: data.email,
+        phone: data.phone,
+        firstName,
+        lastName,
       },
-    });
-
-    if (!patient) {
-      // Create new patient
-      patient = await prisma.patient.create({
-        data: {
-          hospitalId: hospital.id,
-          mrn: generateMRN(),
-          firstName,
-          lastName,
-          email: data.email,
-          phone: data.phone,
-          dateOfBirth: new Date('1990-01-01'), // Default, can be updated later
-          gender: 'MALE', // Default, can be updated later
-          address: 'To be updated',
-          city: 'To be updated',
-          state: 'To be updated',
-          zipCode: '00000',
-        },
-      });
-    }
+      'BOOKING'
+    );
 
     // Get department name from mapping
     const departmentName = departmentMapping[data.department] || data.department;
@@ -182,6 +158,14 @@ export class PublicBookingService {
     // Create the appointment
     const confirmationCode = generateConfirmationCode();
 
+    // Build appointment notes with patient linkage information
+    let appointmentNotes = `Confirmation Code: ${confirmationCode}\nBooked online by patient.`;
+    if (isExisting) {
+      appointmentNotes += `\n[Linked to existing patient record - matched by ${matchedBy}]`;
+    } else {
+      appointmentNotes += `\n[New patient record created]`;
+    }
+
     const appointment = await prisma.appointment.create({
       data: {
         hospitalId: hospital.id,
@@ -192,7 +176,7 @@ export class PublicBookingService {
         endTime: endTime,
         type: 'CONSULTATION',
         reason: data.reason || 'Online booking',
-        notes: `Confirmation Code: ${confirmationCode}\nBooked online by patient.`,
+        notes: appointmentNotes,
         tokenNumber: todayAppointments + 1,
         status: 'SCHEDULED',
       },
@@ -231,6 +215,8 @@ export class PublicBookingService {
         email: patient.email,
         phone: patient.phone,
         mrn: patient.mrn,
+        isExisting,
+        matchedBy: isExisting ? matchedBy : undefined,
       },
       doctor: {
         name: `Dr. ${doctor.user.firstName} ${doctor.user.lastName}`,

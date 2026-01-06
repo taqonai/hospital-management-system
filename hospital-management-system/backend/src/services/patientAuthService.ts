@@ -5,6 +5,7 @@ import prisma from '../config/database';
 import { config } from '../config';
 import { AppError, UnauthorizedError, ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler';
 import { Gender, BloodGroup, MaritalStatus } from '@prisma/client';
+import { patientLookupService } from './patientLookupService';
 
 // Redis client for OTP storage
 const redis = new Redis({
@@ -52,6 +53,7 @@ interface PatientAuthResponse {
     photo: string | null;
   };
   tokens: PatientTokenPair;
+  claimed?: boolean; // True if an existing patient record was claimed
 }
 
 interface PatientRegisterData {
@@ -256,41 +258,78 @@ export class PatientAuthService {
       throw new NotFoundError('Hospital not found');
     }
 
-    // Check if email already exists for this hospital
-    if (data.email) {
-      const existingByEmail = await prisma.patient.findFirst({
-        where: {
-          hospitalId: data.hospitalId,
-          email: data.email,
-        },
-      });
-
-      if (existingByEmail) {
-        throw new ConflictError('A patient with this email already exists');
-      }
-    }
-
-    // Check if phone already exists for this hospital
-    const existingByPhone = await prisma.patient.findFirst({
-      where: {
-        hospitalId: data.hospitalId,
-        phone: data.phone,
-      },
-    });
-
-    if (existingByPhone) {
-      throw new ConflictError('A patient with this phone number already exists');
-    }
-
     // Validate password strength
     if (data.password.length < 8) {
       throw new ValidationError('Password must be at least 8 characters long');
     }
 
-    // Hash password
-    const hashedPassword = await this.hashPassword(data.password);
+    // Check for existing patient using the lookup service
+    const existingPatientResult = await patientLookupService.findExistingPatient(data.hospitalId, {
+      email: data.email,
+      phone: data.phone,
+    });
 
-    // Generate MRN
+    if (existingPatientResult) {
+      const existingPatient = existingPatientResult.patient;
+
+      // Check if the existing patient already has a user account linked
+      const existingUser = await prisma.user.findFirst({
+        where: { email: data.email || `patient_${data.phone}@patient.local` }
+      });
+
+      if (existingUser) {
+        throw new ConflictError('An account with this email already exists. Please login instead.');
+      }
+
+      // Patient exists but no user account - this is a "claim account" scenario
+      // Create user and link to existing patient
+      const hashedPassword = await this.hashPassword(data.password);
+
+      const user = await prisma.user.create({
+        data: {
+          email: data.email || `patient_${data.phone}@patient.local`,
+          password: hashedPassword,
+          firstName: existingPatient.firstName,
+          lastName: existingPatient.lastName,
+          phone: existingPatient.phone,
+          hospitalId: data.hospitalId,
+          role: 'PATIENT',
+          isActive: true,
+        },
+      });
+
+      // Link the user to the existing patient
+      await patientLookupService.linkUserToPatient(existingPatient.id, user.id);
+
+      // Generate tokens
+      const tokenPayload: PatientJwtPayload = {
+        patientId: existingPatient.id,
+        hospitalId: existingPatient.hospitalId,
+        email: existingPatient.email,
+        mobile: existingPatient.phone,
+        type: 'patient',
+      };
+
+      const tokens = this.generateTokens(tokenPayload);
+
+      return {
+        patient: {
+          id: existingPatient.id,
+          mrn: existingPatient.mrn,
+          firstName: existingPatient.firstName,
+          lastName: existingPatient.lastName,
+          email: existingPatient.email,
+          phone: existingPatient.phone,
+          hospitalId: existingPatient.hospitalId,
+          photo: existingPatient.photo || null,
+        },
+        tokens,
+        claimed: true,
+      };
+    }
+
+    // No existing patient - create new patient and user
+    const hashedPassword = await this.hashPassword(data.password);
     const mrn = this.generateMRN(hospital.code);
 
     // Create patient with linked user account for authentication
@@ -372,6 +411,111 @@ export class PatientAuthService {
         photo: patient.photo,
       },
       tokens,
+    };
+  }
+
+  /**
+   * Claim an existing patient account by creating a user account and linking it
+   * This is used when a patient record exists (e.g., from a booking) but has no login credentials
+   *
+   * @param patientId - The patient record to claim
+   * @param email - Email address for the new account
+   * @param password - Password for the new account
+   * @returns Authentication response with tokens
+   */
+  async claimExistingAccount(
+    patientId: string,
+    email: string,
+    password: string
+  ): Promise<PatientAuthResponse> {
+    // Verify patient exists and can be claimed
+    const patient = await prisma.patient.findFirst({
+      where: {
+        id: patientId,
+        isActive: true,
+      },
+      include: {
+        hospital: {
+          select: { id: true, name: true, code: true },
+        },
+      },
+    });
+
+    if (!patient) {
+      throw new NotFoundError('Patient not found');
+    }
+
+    // Check if patient already has a linked user account
+    if (patient.oderId) {
+      throw new ConflictError('This patient account already has login credentials. Please login instead.');
+    }
+
+    // Check if email is already in use
+    const existingUser = await prisma.user.findFirst({
+      where: { email }
+    });
+
+    if (existingUser) {
+      throw new ConflictError('An account with this email already exists.');
+    }
+
+    // Validate password strength
+    if (password.length < 8) {
+      throw new ValidationError('Password must be at least 8 characters long');
+    }
+
+    // Hash password
+    const hashedPassword = await this.hashPassword(password);
+
+    // Create user account
+    const user = await prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        firstName: patient.firstName,
+        lastName: patient.lastName,
+        phone: patient.phone,
+        hospitalId: patient.hospitalId,
+        role: 'PATIENT',
+        isActive: true,
+      },
+    });
+
+    // Link the user to the patient
+    await patientLookupService.linkUserToPatient(patientId, user.id);
+
+    // Update patient email if different
+    if (patient.email !== email) {
+      await prisma.patient.update({
+        where: { id: patientId },
+        data: { email },
+      });
+    }
+
+    // Generate tokens
+    const tokenPayload: PatientJwtPayload = {
+      patientId: patient.id,
+      hospitalId: patient.hospitalId,
+      email: email,
+      mobile: patient.phone,
+      type: 'patient',
+    };
+
+    const tokens = this.generateTokens(tokenPayload);
+
+    return {
+      patient: {
+        id: patient.id,
+        mrn: patient.mrn,
+        firstName: patient.firstName,
+        lastName: patient.lastName,
+        email: email,
+        phone: patient.phone,
+        hospitalId: patient.hospitalId,
+        photo: patient.photo,
+      },
+      tokens,
+      claimed: true,
     };
   }
 
@@ -1097,6 +1241,89 @@ export class PatientAuthService {
   }
 
   // ==================== Utility Methods ====================
+
+  /**
+   * Check if a patient account can be claimed
+   * A patient can be claimed if they exist but don't have a linked user account
+   * This is useful for patients created via online booking or by staff
+   */
+  async checkCanClaim(
+    email?: string,
+    phone?: string,
+    hospitalId?: string
+  ): Promise<{
+    canClaim: boolean;
+    patient?: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      phone: string;
+      email: string | null;
+    };
+    reason?: string;
+  }> {
+    if (!email && !phone) {
+      return { canClaim: false, reason: 'Either email or phone is required' };
+    }
+
+    // Build query conditions
+    const orConditions: any[] = [];
+    if (email) orConditions.push({ email });
+    if (phone) orConditions.push({ phone });
+
+    const whereClause: any = {
+      isActive: true,
+      OR: orConditions,
+    };
+
+    if (hospitalId) {
+      whereClause.hospitalId = hospitalId;
+    }
+
+    // Find patient
+    const patient = await prisma.patient.findFirst({
+      where: whereClause,
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        email: true,
+        oderId: true, // Check if user account exists
+      },
+    });
+
+    if (!patient) {
+      return { canClaim: false, reason: 'No patient found with this email or phone number' };
+    }
+
+    // Check if patient already has a linked user account
+    if (patient.oderId) {
+      return {
+        canClaim: false,
+        reason: 'This patient account already has login credentials. Please use login instead.',
+        patient: {
+          id: patient.id,
+          firstName: patient.firstName,
+          lastName: patient.lastName,
+          phone: patient.phone,
+          email: patient.email,
+        },
+      };
+    }
+
+    // Patient exists and can be claimed
+    return {
+      canClaim: true,
+      patient: {
+        id: patient.id,
+        firstName: patient.firstName,
+        lastName: patient.lastName,
+        phone: patient.phone,
+        email: patient.email,
+      },
+    };
+  }
 
   /**
    * Check if mobile number is registered

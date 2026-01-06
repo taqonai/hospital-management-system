@@ -38,9 +38,9 @@ router.get(
       return sendError(res, 'Patient ID is required', 400);
     }
 
-    const result = await aiConsultationService.getPatientContext(
-      patientId,
-      req.user!.hospitalId
+    const result = await aiConsultationService.getPatientAIContext(
+      req.user!.hospitalId,
+      patientId
     );
 
     sendSuccess(res, result, 'Patient context retrieved successfully');
@@ -98,14 +98,13 @@ router.post(
       );
     }
 
-    const result = await aiConsultationService.interpretVitals({
+    const result = aiConsultationService.interpretVitals({
       respiratoryRate: Number(respiratoryRate),
       oxygenSaturation: Number(oxygenSaturation),
       temperature: Number(temperature),
       systolicBP: Number(systolicBP),
       heartRate: Number(heartRate),
-      consciousness,
-      patientId,
+      consciousness: consciousness.toUpperCase() as 'ALERT' | 'VOICE' | 'PAIN' | 'UNRESPONSIVE',
     });
 
     sendSuccess(res, result, 'Vital signs interpreted successfully');
@@ -141,13 +140,11 @@ router.post(
       return sendError(res, 'At least one symptom is required', 400);
     }
 
-    const result = await aiConsultationService.suggestDiagnosis({
+    const result = await aiConsultationService.getDiagnosisSuggestions({
       symptoms,
-      patientId,
-      patientAge: patientAge ? Number(patientAge) : undefined,
-      patientGender,
+      patientAge: patientAge ? Number(patientAge) : 30,
+      patientGender: patientGender || 'unknown',
       medicalHistory,
-      hospitalId: req.user!.hospitalId,
     });
 
     sendSuccess(res, result, 'Diagnosis suggestions generated successfully');
@@ -181,12 +178,10 @@ router.post(
       return sendError(res, 'Diagnosis is required', 400);
     }
 
-    const result = await aiConsultationService.recommendTests({
+    const result = await aiConsultationService.getRecommendedTests(
       diagnosis,
-      patientId,
-      symptoms,
-      hospitalId: req.user!.hospitalId,
-    });
+      { symptoms }
+    );
 
     sendSuccess(res, result, 'Test recommendations generated successfully');
   })
@@ -235,9 +230,14 @@ router.post(
     }
 
     const result = await aiConsultationService.validatePrescription({
-      medications,
       patientId,
-      hospitalId: req.user!.hospitalId,
+      medications: medications.map((med: any) => ({
+        drugName: med.name,
+        dose: parseFloat(med.dosage) || 0,
+        unit: 'mg',
+        frequency: med.frequency,
+        route: med.route,
+      })),
     });
 
     sendSuccess(res, result, 'Prescription validated successfully');
@@ -281,15 +281,16 @@ router.post(
       return sendError(res, 'Treatment plan is required', 400);
     }
 
-    const result = await aiConsultationService.generateSOAPNote({
-      consultationId,
-      symptoms,
-      vitals,
-      diagnosis,
-      treatment,
-      notes,
-      generatedBy: req.user!.userId,
-      hospitalId: req.user!.hospitalId,
+    const result = await aiConsultationService.generateSOAPNotes({
+      patientId: '',
+      doctorId: req.user!.userId,
+      chiefComplaint: Array.isArray(symptoms) ? symptoms.join(', ') : symptoms,
+      symptoms: Array.isArray(symptoms) ? symptoms : [symptoms],
+      vitalSigns: vitals || undefined,
+      diagnosis: Array.isArray(diagnosis) ? diagnosis : [diagnosis],
+      icdCodes: [],
+      treatmentPlan: Array.isArray(treatment) ? treatment.join('; ') : treatment,
+      followUpPlan: notes,
     });
 
     sendSuccess(res, result, 'SOAP note generated successfully');
@@ -321,8 +322,7 @@ router.get(
     }
 
     const result = await aiConsultationService.getFollowUpRecommendations(
-      consultationId,
-      req.user!.hospitalId
+      consultationId
     );
 
     sendSuccess(res, result, 'Follow-up recommendations retrieved successfully');

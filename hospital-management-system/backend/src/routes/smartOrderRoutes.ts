@@ -196,6 +196,7 @@ router.post(
 
     const result = await smartOrderService.placeOrders({
       patientId,
+      hospitalId: req.user!.hospitalId,
       orders,
       providerId,
       notes,
@@ -220,16 +221,23 @@ router.get(
     const hospitalId = req.user?.hospitalId;
     const { patientId, patientName, startDate, endDate, status, category, page, pageSize } = req.query;
 
-    const history = await smartOrderService.getOrderHistory(hospitalId!, {
-      patientId: patientId as string,
-      patientName: patientName as string,
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined,
-      status: status as string,
-      category: category as string,
-      page: page ? parseInt(page as string) : 1,
-      limit: pageSize ? parseInt(pageSize as string) : 10,
-    });
+    // Note: getOrderHistory expects patientId as first param
+    if (!patientId) {
+      return sendSuccess(res, { data: [], pagination: { page: 1, limit: 10, total: 0, totalPages: 0 } }, 'Order history retrieved successfully');
+    }
+
+    const history = await smartOrderService.getOrderHistory(
+      patientId as string,
+      {
+        status: status as any,
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined,
+      },
+      {
+        page: page ? parseInt(page as string) : 1,
+        limit: pageSize ? parseInt(pageSize as string) : 10,
+      }
+    );
 
     sendSuccess(res, history, 'Order history retrieved successfully');
   })
@@ -247,10 +255,11 @@ router.get(
     const hospitalId = req.user?.hospitalId;
     const { startDate, endDate } = req.query;
 
-    const stats = await smartOrderService.getOrderStats(hospitalId!, {
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined,
-    });
+    const stats = await smartOrderService.getOrderStats(
+      hospitalId!,
+      startDate ? new Date(startDate as string) : undefined,
+      endDate ? new Date(endDate as string) : undefined
+    );
 
     sendSuccess(res, stats, 'Order statistics retrieved successfully');
   })
@@ -268,7 +277,7 @@ router.get(
     const { orderId } = req.params;
     const hospitalId = req.user?.hospitalId;
 
-    const order = await smartOrderService.getOrderById(hospitalId!, orderId);
+    const order = await smartOrderService.getOrderById(orderId);
     sendSuccess(res, order, 'Order retrieved successfully');
   })
 );
@@ -286,7 +295,7 @@ router.patch(
     const { status, executedBy } = req.body;
     const hospitalId = req.user?.hospitalId;
 
-    const order = await smartOrderService.updateOrderStatus(hospitalId!, orderId, status, executedBy);
+    const order = await smartOrderService.updateOrderStatus(orderId, status);
     sendSuccess(res, order, 'Order status updated successfully');
   })
 );
@@ -304,7 +313,7 @@ router.post(
     const { reason } = req.body;
     const hospitalId = req.user?.hospitalId;
 
-    const order = await smartOrderService.updateOrderStatus(hospitalId!, orderId, 'CANCELLED', undefined, reason);
+    const order = await smartOrderService.updateOrderStatus(orderId, 'CANCELLED' as any, reason);
     sendSuccess(res, order, 'Order cancelled successfully');
   })
 );
