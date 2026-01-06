@@ -48,6 +48,8 @@ model Hospital {
   auditLogs       AuditLog[]
   employees       Employee[]
   smartOrders     SmartOrder[]
+  clinicalNotes   ClinicalNote[]
+  aiScribeSessions AiScribeSession[]
 
   @@map("hospitals")
 }
@@ -106,6 +108,9 @@ model User {
   notifications   Notification[]
   orderedSmartOrders  SmartOrder[]     @relation("OrderedByUser")
   executedOrderItems  SmartOrderItem[] @relation("ExecutedByUser")
+  authoredClinicalNotes ClinicalNote[] @relation("ClinicalNoteAuthor")
+  signedClinicalNotes   ClinicalNote[] @relation("ClinicalNoteSigner")
+  aiScribeSessions      AiScribeSession[]
 
   @@unique([hospitalId, email])
   @@map("users")
@@ -289,6 +294,8 @@ model Patient {
   aiPredictions       AIPrediction[]
   aiDiagnoses         AIDiagnosis[]
   smartOrders         SmartOrder[]
+  clinicalNotes       ClinicalNote[]
+  aiScribeSessions    AiScribeSession[]
 
   @@unique([hospitalId, mrn])
   @@map("patients")
@@ -437,6 +444,7 @@ model Appointment {
   patient        Patient       @relation(fields: [patientId], references: [id])
   doctor         Doctor        @relation(fields: [doctorId], references: [id])
   consultation   Consultation?
+  clinicalNotes  ClinicalNote[] @relation("ClinicalNoteAppointment")
 
   @@map("appointments")
 }
@@ -485,6 +493,7 @@ model Consultation {
   prescriptions Prescription[]
   labOrders     LabOrder[]
   imagingOrders ImagingOrder[]
+  clinicalNotes ClinicalNote[]
 
   @@map("consultations")
 }
@@ -3884,4 +3893,162 @@ enum SmartOrderItemStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+}
+
+// ============= AI Scribe Clinical Notes =============
+
+model ClinicalNote {
+  id            String   @id @default(uuid())
+  hospitalId    String
+  hospital      Hospital @relation(fields: [hospitalId], references: [id])
+  patientId     String
+  patient       Patient  @relation(fields: [patientId], references: [id])
+  authorId      String
+  author        User     @relation("ClinicalNoteAuthor", fields: [authorId], references: [id])
+
+  // Optional links
+  consultationId String?
+  consultation   Consultation? @relation(fields: [consultationId], references: [id])
+  appointmentId  String?
+  appointment    Appointment?  @relation("ClinicalNoteAppointment", fields: [appointmentId], references: [id])
+
+  // Note content
+  noteType      ClinicalNoteType
+  subjective    String?  @db.Text
+  objective     String?  @db.Text
+  assessment    String?  @db.Text
+  plan          String?  @db.Text
+  fullText      String?  @db.Text
+
+  // Status and workflow
+  status        ClinicalNoteStatus @default(DRAFT)
+
+  // AI metadata
+  aiGenerated   Boolean  @default(false)
+  aiSessionId   String?
+  aiSession     AiScribeSession? @relation(fields: [aiSessionId], references: [id])
+  transcriptId  String?
+  modelVersion  String?
+
+  // Code suggestions
+  suggestedIcdCodes Json?
+  suggestedCptCodes Json?
+  keyFindings       String[]
+
+  // Signing
+  signedAt      DateTime?
+  signedById    String?
+  signedBy      User?    @relation("ClinicalNoteSigner", fields: [signedById], references: [id])
+
+  // Relations
+  diagnoses     NoteDiagnosis[]
+  prescriptions NoteExtractedPrescription[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([hospitalId, patientId])
+  @@index([hospitalId, authorId])
+  @@index([hospitalId, status])
+  @@index([aiSessionId])
+}
+
+model NoteDiagnosis {
+  id          String       @id @default(uuid())
+  noteId      String
+  note        ClinicalNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  diagnosis   String
+  isPrimary   Boolean      @default(false)
+  icdCode     String?
+  confidence  Float?
+
+  createdAt   DateTime @default(now())
+
+  @@index([noteId])
+}
+
+model NoteExtractedPrescription {
+  id           String       @id @default(uuid())
+  noteId       String
+  note         ClinicalNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  medication   String
+  dosage       String?
+  frequency    String?
+  duration     String?
+  route        String?
+  instructions String?
+  warnings     String[]
+  reason       String?
+
+  createdAt    DateTime @default(now())
+
+  @@index([noteId])
+}
+
+model AiScribeSession {
+  id            String   @id @default(uuid())
+  hospitalId    String
+  hospital      Hospital @relation(fields: [hospitalId], references: [id])
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  patientId     String?
+  patient       Patient? @relation(fields: [patientId], references: [id])
+  appointmentId String?
+
+  // Session metadata
+  sessionType   String   @default("consultation")
+  status        ScribeSessionStatus @default(ACTIVE)
+
+  // Patient context (stored for reference)
+  patientContext Json?
+
+  // Transcript data
+  transcriptText  String? @db.Text
+  transcriptSegments Json?
+
+  // Generated content
+  extractedEntities Json?
+  generatedNote     Json?
+
+  // Result
+  noteId        String?
+  notes         ClinicalNote[]
+
+  // Timestamps
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+
+  @@index([hospitalId, status])
+  @@index([hospitalId, userId])
+  @@index([patientId])
+}
+
+enum ClinicalNoteType {
+  SOAP
+  PROGRESS
+  PROCEDURE
+  DISCHARGE
+  ADMISSION
+  CONSULTATION
+  FOLLOW_UP
+  EMERGENCY
+  TELEHEALTH
+}
+
+enum ClinicalNoteStatus {
+  DRAFT
+  PENDING_REVIEW
+  SIGNED
+  AMENDED
+  ADDENDUM
+}
+
+enum ScribeSessionStatus {
+  ACTIVE
+  TRANSCRIBING
+  GENERATING_NOTE
+  NOTE_GENERATED
+  COMPLETED
+  CANCELLED
+  ERROR
 }

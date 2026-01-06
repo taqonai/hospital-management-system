@@ -751,7 +751,351 @@ export class AIScribeService {
     }
   }
 
+  // ============= Database Persistence Methods =============
+
+  /**
+   * Create a database session record when starting a scribe session
+   */
+  async createDbSession(hospitalId: string, userId: string, data: StartSessionRequest): Promise<any> {
+    const session = await prisma.aiScribeSession.create({
+      data: {
+        hospitalId,
+        userId,
+        patientId: data.patientId,
+        appointmentId: data.appointmentId,
+        sessionType: data.sessionType || 'consultation',
+        status: 'ACTIVE',
+        patientContext: {
+          patientName: data.patientName,
+          patientAge: data.patientAge,
+          patientGender: data.patientGender,
+          existingConditions: data.existingConditions,
+          currentMedications: data.currentMedications,
+          knownAllergies: data.knownAllergies,
+        },
+      },
+    });
+    return session;
+  }
+
+  /**
+   * Save transcript to database
+   */
+  async updateSessionTranscript(sessionId: string, transcript: string, segments?: any[]): Promise<void> {
+    await prisma.aiScribeSession.update({
+      where: { id: sessionId },
+      data: {
+        status: 'TRANSCRIBING',
+        transcriptText: transcript,
+        transcriptSegments: segments,
+      },
+    });
+  }
+
+  /**
+   * Full note persistence with transaction
+   */
+  async saveGeneratedNote(hospitalId: string, userId: string, input: {
+    sessionId: string;
+    patientId: string;
+    consultationId?: string;
+    appointmentId?: string;
+    noteType: string;
+    content: {
+      subjective?: string;
+      objective?: string;
+      assessment?: string;
+      plan?: string;
+      fullText?: string;
+    };
+    extractedEntities?: any;
+    icdCodes?: any[];
+    cptCodes?: any[];
+    keyFindings?: string[];
+    prescriptionSuggestions?: any[];
+    modelVersion?: string;
+  }): Promise<any> {
+    return prisma.$transaction(async (tx) => {
+      // Map noteType to enum
+      const noteTypeMap: Record<string, string> = {
+        'consultation': 'CONSULTATION',
+        'follow_up': 'FOLLOW_UP',
+        'procedure': 'PROCEDURE',
+        'discharge': 'DISCHARGE',
+        'admission': 'ADMISSION',
+        'emergency': 'EMERGENCY',
+        'telehealth': 'TELEHEALTH',
+        'soap': 'SOAP',
+        'progress': 'PROGRESS',
+      };
+
+      // Create clinical note
+      const clinicalNote = await tx.clinicalNote.create({
+        data: {
+          hospitalId,
+          patientId: input.patientId,
+          authorId: userId,
+          consultationId: input.consultationId,
+          appointmentId: input.appointmentId,
+          noteType: (noteTypeMap[input.noteType.toLowerCase()] || 'CONSULTATION') as any,
+          subjective: input.content.subjective,
+          objective: input.content.objective,
+          assessment: input.content.assessment,
+          plan: input.content.plan,
+          fullText: input.content.fullText || this.composeFullText(input.content),
+          status: 'DRAFT',
+          aiGenerated: true,
+          aiSessionId: input.sessionId,
+          modelVersion: input.modelVersion,
+          suggestedIcdCodes: input.icdCodes,
+          suggestedCptCodes: input.cptCodes,
+          keyFindings: input.keyFindings || [],
+        },
+      });
+
+      // Save diagnoses
+      const diagnoses = input.extractedEntities?.diagnoses || [];
+      if (diagnoses.length > 0) {
+        await tx.noteDiagnosis.createMany({
+          data: diagnoses.map((d: any, idx: number) => ({
+            noteId: clinicalNote.id,
+            diagnosis: typeof d === 'string' ? d : d.value,
+            isPrimary: idx === 0,
+            icdCode: input.icdCodes?.[idx]?.code,
+            confidence: typeof d === 'object' ? d.confidence : undefined,
+          })),
+        });
+      }
+
+      // Save prescription suggestions
+      const prescriptions = input.prescriptionSuggestions || [];
+      if (prescriptions.length > 0) {
+        await tx.noteExtractedPrescription.createMany({
+          data: prescriptions.map((p: any) => ({
+            noteId: clinicalNote.id,
+            medication: p.medication,
+            dosage: p.dosage,
+            frequency: p.frequency,
+            duration: p.duration,
+            route: p.route,
+            instructions: p.instructions,
+            warnings: p.warnings || [],
+            reason: p.reason,
+          })),
+        });
+      }
+
+      // Update session status
+      await tx.aiScribeSession.update({
+        where: { id: input.sessionId },
+        data: {
+          status: 'NOTE_GENERATED',
+          noteId: clinicalNote.id,
+          generatedNote: input.content,
+          extractedEntities: input.extractedEntities,
+          completedAt: new Date(),
+        },
+      });
+
+      return {
+        note: clinicalNote,
+        sessionId: input.sessionId,
+        status: 'saved',
+      };
+    });
+  }
+
+  /**
+   * Get clinical notes for a patient with pagination
+   */
+  async getClinicalNotes(hospitalId: string, params: {
+    patientId?: string;
+    authorId?: string;
+    noteType?: string;
+    status?: string;
+    startDate?: Date;
+    endDate?: Date;
+    page?: number;
+    limit?: number;
+  }): Promise<any> {
+    const where: any = { hospitalId };
+
+    if (params.patientId) where.patientId = params.patientId;
+    if (params.authorId) where.authorId = params.authorId;
+    if (params.noteType) where.noteType = params.noteType;
+    if (params.status) where.status = params.status;
+    if (params.startDate || params.endDate) {
+      where.createdAt = {};
+      if (params.startDate) where.createdAt.gte = params.startDate;
+      if (params.endDate) where.createdAt.lte = params.endDate;
+    }
+
+    const page = params.page || 1;
+    const limit = params.limit || 10;
+    const skip = (page - 1) * limit;
+
+    const [notes, total] = await Promise.all([
+      prisma.clinicalNote.findMany({
+        where,
+        include: {
+          patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
+          author: { select: { id: true, firstName: true, lastName: true } },
+          diagnoses: true,
+          prescriptions: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.clinicalNote.count({ where }),
+    ]);
+
+    return {
+      notes,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Get a single clinical note with full details
+   */
+  async getClinicalNoteById(hospitalId: string, noteId: string): Promise<any> {
+    const note = await prisma.clinicalNote.findFirst({
+      where: { id: noteId, hospitalId },
+      include: {
+        patient: { select: { id: true, firstName: true, lastName: true, mrn: true, dateOfBirth: true, gender: true } },
+        author: { select: { id: true, firstName: true, lastName: true } },
+        signedBy: { select: { id: true, firstName: true, lastName: true } },
+        diagnoses: true,
+        prescriptions: true,
+        aiSession: true,
+      },
+    });
+
+    if (!note) {
+      throw new NotFoundError('Clinical note not found');
+    }
+
+    return note;
+  }
+
+  /**
+   * Sign a clinical note
+   */
+  async signClinicalNote(hospitalId: string, noteId: string, userId: string): Promise<any> {
+    const note = await prisma.clinicalNote.findFirst({
+      where: { id: noteId, hospitalId },
+    });
+
+    if (!note) {
+      throw new NotFoundError('Clinical note not found');
+    }
+
+    if (note.status === 'SIGNED') {
+      throw new AppError('Note is already signed', 400);
+    }
+
+    return prisma.clinicalNote.update({
+      where: { id: noteId },
+      data: {
+        status: 'SIGNED',
+        signedAt: new Date(),
+        signedById: userId,
+      },
+    });
+  }
+
+  /**
+   * Update a draft clinical note
+   */
+  async updateClinicalNote(hospitalId: string, noteId: string, userId: string, updates: {
+    subjective?: string;
+    objective?: string;
+    assessment?: string;
+    plan?: string;
+  }): Promise<any> {
+    const note = await prisma.clinicalNote.findFirst({
+      where: { id: noteId, hospitalId },
+    });
+
+    if (!note) {
+      throw new NotFoundError('Clinical note not found');
+    }
+
+    if (note.status === 'SIGNED') {
+      throw new AppError('Cannot edit a signed note. Create an addendum instead.', 400);
+    }
+
+    return prisma.clinicalNote.update({
+      where: { id: noteId },
+      data: {
+        ...updates,
+        fullText: this.composeFullText({ ...note, ...updates }),
+      },
+    });
+  }
+
+  /**
+   * Get session history for a user
+   */
+  async getDbSessionHistory(hospitalId: string, userId: string, params: {
+    patientId?: string;
+    status?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<any> {
+    const where: any = { hospitalId, userId };
+
+    if (params.patientId) where.patientId = params.patientId;
+    if (params.status) where.status = params.status;
+
+    const page = params.page || 1;
+    const limit = params.limit || 10;
+    const skip = (page - 1) * limit;
+
+    const [sessions, total] = await Promise.all([
+      prisma.aiScribeSession.findMany({
+        where,
+        include: {
+          patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
+          notes: { select: { id: true, noteType: true, status: true, createdAt: true } },
+        },
+        orderBy: { startedAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.aiScribeSession.count({ where }),
+    ]);
+
+    return {
+      sessions,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
   // ============= Private Helper Methods =============
+
+  /**
+   * Compose full text from SOAP note sections
+   */
+  private composeFullText(content: any): string {
+    const sections = [];
+    if (content.subjective) sections.push(`SUBJECTIVE:\n${content.subjective}`);
+    if (content.objective) sections.push(`OBJECTIVE:\n${content.objective}`);
+    if (content.assessment) sections.push(`ASSESSMENT:\n${content.assessment}`);
+    if (content.plan) sections.push(`PLAN:\n${content.plan}`);
+    return sections.join('\n\n');
+  }
 
   private getAudioContentType(filename: string): string {
     const ext = filename.toLowerCase().split('.').pop();

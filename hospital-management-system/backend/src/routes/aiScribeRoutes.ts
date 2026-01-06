@@ -436,4 +436,265 @@ router.post(
   })
 );
 
+// ============= Clinical Notes Management =============
+
+/**
+ * Get clinical notes (with filters)
+ * GET /api/v1/ai-scribe/notes
+ */
+router.get(
+  '/notes',
+  authenticate,
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { patientId, authorId, noteType, status, startDate, endDate, page, limit } = req.query;
+
+    const result = await aiScribeService.getClinicalNotes(req.user?.hospitalId || '', {
+      patientId: patientId as string,
+      authorId: authorId as string,
+      noteType: noteType as string,
+      status: status as string,
+      startDate: startDate ? new Date(startDate as string) : undefined,
+      endDate: endDate ? new Date(endDate as string) : undefined,
+      page: page ? parseInt(page as string) : 1,
+      limit: limit ? parseInt(limit as string) : 10,
+    });
+
+    sendSuccess(res, result, 'Clinical notes retrieved');
+  })
+);
+
+/**
+ * Get clinical note by ID
+ * GET /api/v1/ai-scribe/notes/:noteId
+ */
+router.get(
+  '/notes/:noteId',
+  authenticate,
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { noteId } = req.params;
+    const note = await aiScribeService.getClinicalNoteById(req.user?.hospitalId || '', noteId);
+    sendSuccess(res, note, 'Clinical note retrieved');
+  })
+);
+
+/**
+ * Update clinical note (draft only)
+ * PUT /api/v1/ai-scribe/notes/:noteId
+ */
+router.put(
+  '/notes/:noteId',
+  authenticate,
+  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { noteId } = req.params;
+    const { subjective, objective, assessment, plan } = req.body;
+
+    const note = await aiScribeService.updateClinicalNote(
+      req.user?.hospitalId || '',
+      noteId,
+      req.user?.userId || '',
+      { subjective, objective, assessment, plan }
+    );
+
+    sendSuccess(res, note, 'Clinical note updated');
+  })
+);
+
+/**
+ * Sign clinical note
+ * POST /api/v1/ai-scribe/notes/:noteId/sign
+ */
+router.post(
+  '/notes/:noteId/sign',
+  authenticate,
+  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { noteId } = req.params;
+
+    const note = await aiScribeService.signClinicalNote(
+      req.user?.hospitalId || '',
+      noteId,
+      req.user?.userId || ''
+    );
+
+    sendSuccess(res, note, 'Clinical note signed');
+  })
+);
+
+/**
+ * Save AI-generated note to database
+ * POST /api/v1/ai-scribe/notes/save
+ */
+router.post(
+  '/notes/save',
+  authenticate,
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const {
+      sessionId,
+      patientId,
+      consultationId,
+      appointmentId,
+      noteType,
+      content,
+      extractedEntities,
+      icdCodes,
+      cptCodes,
+      keyFindings,
+      prescriptionSuggestions,
+      modelVersion,
+    } = req.body;
+
+    if (!sessionId || !patientId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Session ID and Patient ID are required',
+      });
+    }
+
+    if (!content || (!content.subjective && !content.assessment)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Note content with at least subjective or assessment is required',
+      });
+    }
+
+    const result = await aiScribeService.saveGeneratedNote(
+      req.user?.hospitalId || '',
+      req.user?.userId || '',
+      {
+        sessionId,
+        patientId,
+        consultationId,
+        appointmentId,
+        noteType: noteType || 'consultation',
+        content,
+        extractedEntities,
+        icdCodes,
+        cptCodes,
+        keyFindings,
+        prescriptionSuggestions,
+        modelVersion,
+      }
+    );
+
+    sendSuccess(res, result, 'Clinical note saved to database');
+  })
+);
+
+// ============= Session History =============
+
+/**
+ * Get scribe session history
+ * GET /api/v1/ai-scribe/sessions
+ */
+router.get(
+  '/sessions',
+  authenticate,
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { patientId, status, page, limit } = req.query;
+
+    const result = await aiScribeService.getDbSessionHistory(
+      req.user?.hospitalId || '',
+      req.user?.userId || '',
+      {
+        patientId: patientId as string,
+        status: status as string,
+        page: page ? parseInt(page as string) : 1,
+        limit: limit ? parseInt(limit as string) : 10,
+      }
+    );
+
+    sendSuccess(res, result, 'Session history retrieved');
+  })
+);
+
+/**
+ * Create and persist a new scribe session
+ * POST /api/v1/ai-scribe/sessions
+ */
+router.post(
+  '/sessions',
+  authenticate,
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const {
+      patientId,
+      patientName,
+      patientAge,
+      patientGender,
+      appointmentId,
+      sessionType,
+      existingConditions,
+      currentMedications,
+      knownAllergies,
+    } = req.body;
+
+    // Create database session
+    const dbSession = await aiScribeService.createDbSession(
+      req.user?.hospitalId || '',
+      req.user?.userId || '',
+      {
+        patientId,
+        patientName,
+        patientAge,
+        patientGender,
+        appointmentId,
+        sessionType: sessionType || 'consultation',
+        existingConditions,
+        currentMedications,
+        knownAllergies,
+      }
+    );
+
+    // Also start the AI service session
+    const aiSession = await aiScribeService.startSession({
+      patientId,
+      patientName,
+      patientAge,
+      patientGender,
+      doctorId: req.user?.userId,
+      appointmentId,
+      sessionType: sessionType || 'consultation',
+      existingConditions,
+      currentMedications,
+      knownAllergies,
+    });
+
+    sendSuccess(res, {
+      dbSessionId: dbSession.id,
+      aiSessionId: aiSession.sessionId,
+      status: dbSession.status,
+      createdAt: dbSession.startedAt,
+    }, 'Scribe session created and persisted');
+  })
+);
+
+/**
+ * Get patient's clinical notes
+ * GET /api/v1/ai-scribe/patients/:patientId/notes
+ */
+router.get(
+  '/patients/:patientId/notes',
+  authenticate,
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { patientId } = req.params;
+    const { noteType, status, page, limit } = req.query;
+
+    const result = await aiScribeService.getClinicalNotes(req.user?.hospitalId || '', {
+      patientId,
+      noteType: noteType as string,
+      status: status as string,
+      page: page ? parseInt(page as string) : 1,
+      limit: limit ? parseInt(limit as string) : 20,
+    });
+
+    sendSuccess(res, result, 'Patient clinical notes retrieved');
+  })
+);
+
 export default router;
