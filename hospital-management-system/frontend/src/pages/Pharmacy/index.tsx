@@ -11,11 +11,21 @@ import {
   CalculatorIcon,
   ShieldExclamationIcon,
   CheckCircleIcon,
+  ChartBarIcon,
+  CurrencyDollarIcon,
+  BeakerIcon as FlaskIcon,
+  ClipboardDocumentCheckIcon,
 } from '@heroicons/react/24/outline';
 import { useAIHealth } from '../../hooks/useAI';
 import { pharmacyApi } from '../../services/api';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
+
+// Advanced Pharmacy AI Components
+import TDMMonitoring from '../../components/pharmacy/TDMMonitoring';
+import CostAlternatives from '../../components/pharmacy/CostAlternatives';
+import PolypharmacyRisk from '../../components/pharmacy/PolypharmacyRisk';
+import IVCompatibility from '../../components/pharmacy/IVCompatibility';
 
 interface Prescription {
   id: string;
@@ -86,7 +96,7 @@ const statusConfig: Record<string, { bg: string; text: string; border: string; d
 };
 
 export default function Pharmacy() {
-  const [activeTab, setActiveTab] = useState<'prescriptions' | 'inventory' | 'interactions' | 'dosage'>('prescriptions');
+  const [activeTab, setActiveTab] = useState<'prescriptions' | 'inventory' | 'interactions' | 'dosage' | 'tdm' | 'alternatives' | 'polypharmacy' | 'iv-compatibility'>('prescriptions');
   const [search, setSearch] = useState('');
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [lowStock, setLowStock] = useState<LowStockItem[]>([]);
@@ -220,9 +230,13 @@ export default function Pharmacy() {
 
   const tabs = [
     { id: 'prescriptions', label: 'Prescriptions', count: prescriptions.length },
-    { id: 'inventory', label: 'Drug Inventory', count: stats.lowStockItems },
-    { id: 'interactions', label: 'Interaction Checker', icon: SparklesIcon },
-    { id: 'dosage', label: 'Dosage Calculator', icon: BeakerIcon },
+    { id: 'inventory', label: 'Inventory', count: stats.lowStockItems },
+    { id: 'interactions', label: 'Interactions', icon: SparklesIcon },
+    { id: 'dosage', label: 'Dosage', icon: BeakerIcon },
+    { id: 'tdm', label: 'TDM', icon: ChartBarIcon },
+    { id: 'alternatives', label: 'Alternatives', icon: CurrencyDollarIcon },
+    { id: 'polypharmacy', label: 'Polypharmacy', icon: ClipboardDocumentCheckIcon },
+    { id: 'iv-compatibility', label: 'IV Compat', icon: FlaskIcon },
   ];
 
   return (
@@ -421,6 +435,34 @@ export default function Pharmacy() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* TDM Monitoring Tab */}
+      {activeTab === 'tdm' && (
+        <div className="animate-fade-in-up">
+          <TDMMonitoring />
+        </div>
+      )}
+
+      {/* Cost Alternatives Tab */}
+      {activeTab === 'alternatives' && (
+        <div className="animate-fade-in-up">
+          <CostAlternatives />
+        </div>
+      )}
+
+      {/* Polypharmacy Risk Tab */}
+      {activeTab === 'polypharmacy' && (
+        <div className="animate-fade-in-up">
+          <PolypharmacyRisk />
+        </div>
+      )}
+
+      {/* IV Compatibility Tab */}
+      {activeTab === 'iv-compatibility' && (
+        <div className="animate-fade-in-up">
+          <IVCompatibility />
         </div>
       )}
     </div>

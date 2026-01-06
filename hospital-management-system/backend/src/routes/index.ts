@@ -37,6 +37,7 @@ import medSafetyRoutes from './medSafetyRoutes';
 import smartOrderRoutes from './smartOrderRoutes';
 import patientPortalRoutes from './patientPortalRoutes';
 import aiConsultationRoutes from './aiConsultationRoutes';
+import advancedPharmacyAIRoutes from './advancedPharmacyAIRoutes';
 
 const router = Router();
 
@@ -93,5 +94,6 @@ router.use('/med-safety', medSafetyRoutes);
 router.use('/smart-orders', smartOrderRoutes);
 router.use('/patient-portal', patientPortalRoutes);
 router.use('/ai-consultation', aiConsultationRoutes);
+router.use('/advanced-pharmacy-ai', advancedPharmacyAIRoutes);
 
 export default router;

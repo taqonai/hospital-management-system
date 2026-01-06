@@ -340,6 +340,115 @@ export const pharmacyApi = {
   getStats: () => api.get('/pharmacy/stats'),
 };
 
+// Advanced Pharmacy AI APIs
+export const advancedPharmacyAIApi = {
+  // Therapeutic Drug Monitoring
+  getTDMGuidance: (data: {
+    drugName: string;
+    patientWeight?: number;
+    serumCreatinine?: number;
+    currentLevel?: number;
+    lastDoseTime?: string;
+    patientAge?: number;
+  }) => api.post('/advanced-pharmacy-ai/tdm/guidance', data),
+
+  // CYP450 Enzyme Interactions
+  checkCYP450Interactions: (medications: string[]) =>
+    api.post('/advanced-pharmacy-ai/cyp450/check', { medications }),
+
+  // Cost-Effective Alternatives
+  getAlternatives: (data: {
+    drugName: string;
+    indication?: string;
+    formularyOnly?: boolean;
+  }) => api.post('/advanced-pharmacy-ai/alternatives', data),
+
+  // Renal Dosing Calculator
+  calculateRenalDose: (data: {
+    drugName: string;
+    serumCreatinine: number;
+    age: number;
+    weight: number;
+    gender: 'male' | 'female';
+    currentDose?: string;
+  }) => api.post('/advanced-pharmacy-ai/renal-dosing', data),
+
+  // IV Compatibility Check
+  checkIVCompatibility: (data: {
+    drugs: string[];
+    solution?: string;
+  }) => api.post('/advanced-pharmacy-ai/iv-compatibility', data),
+
+  // Drug-Lab Interactions
+  checkLabInteractions: (data: {
+    medications: string[];
+    labTests?: string[];
+  }) => api.post('/advanced-pharmacy-ai/lab-interactions', data),
+
+  // Polypharmacy Risk Assessment
+  assessPolypharmacyRisk: (data: {
+    medications: string[];
+    patientAge: number;
+    conditions?: string[];
+  }) => api.post('/advanced-pharmacy-ai/polypharmacy-risk', data),
+
+  // Enhanced Drug Info
+  getDrugInfo: (drugName: string) =>
+    api.get(`/advanced-pharmacy-ai/drug-info/${encodeURIComponent(drugName)}`),
+};
+
+// Python AI Pharmacy Endpoints (via AI service)
+export const pharmacyAIServiceApi = {
+  // AI-Enhanced Interaction Analysis
+  analyzeWithAI: (data: {
+    medications: string[];
+    patientContext?: {
+      age?: number;
+      weight?: number;
+      conditions?: string[];
+      allergies?: string[];
+      renal_function?: number;
+      hepatic_function?: string;
+    };
+  }) => api.post('/ai/pharmacy/ai-analyze', data),
+
+  // Medication Reconciliation
+  reconcileMedications: (data: {
+    currentMeds: Array<{ name: string; dose?: string; frequency?: string }>;
+    newPrescription: { name: string; dose?: string };
+    patientData?: {
+      chronicConditions?: string[];
+      admissionMedications?: Array<{ name: string }>;
+    };
+  }) => api.post('/ai/pharmacy/reconcile', data),
+
+  // Adherence Risk Prediction
+  predictAdherenceRisk: (data: {
+    medications: Array<{ name: string; frequency?: string }>;
+    patientDemographics?: {
+      age?: number;
+      cognitiveStatus?: string;
+      costConcern?: string;
+      previousNonAdherence?: boolean;
+    };
+  }) => api.post('/ai/pharmacy/adherence-risk', data),
+
+  // Antimicrobial Stewardship Review
+  reviewAntibiotic: (data: {
+    antibiotic: string;
+    indication: string;
+    duration: number;
+    cultures?: {
+      organism?: string;
+      sensitivities?: string[];
+    };
+    patientData?: {
+      age?: number;
+      renal_function?: number;
+    };
+  }) => api.post('/ai/pharmacy/antibiotic-review', data),
+};
+
 // IPD APIs
 export const ipdApi = {
   // Wards

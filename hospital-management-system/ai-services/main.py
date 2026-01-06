@@ -367,6 +367,129 @@ class DrugSearchRequest(BaseModel):
     limit: Optional[int] = 10
 
 
+# Enhanced Pharmacy AI Request/Response Models
+
+class AIInteractionAnalysisRequest(BaseModel):
+    medications: List[str]
+    patientContext: Optional[Dict[str, Any]] = None
+
+
+class AIInteractionAnalysisResponse(BaseModel):
+    interactions: List[Dict[str, Any]]
+    foodInteractions: List[Dict[str, Any]]
+    conditionContraindications: List[Dict[str, Any]]
+    allergyAlerts: List[Dict[str, Any]]
+    summary: Dict[str, Any]
+    recommendations: List[Dict[str, Any]]
+    drugInfo: List[Dict[str, Any]]
+    modelVersion: str
+    aiEnhanced: bool
+    aiAnalysis: Optional[Dict[str, Any]] = None
+    analysisMethod: str
+    message: Optional[str] = None
+    error: Optional[str] = None
+    timestamp: Optional[str] = None
+
+
+class MedicationEntry(BaseModel):
+    name: str
+    dose: Optional[str] = None
+    frequency: Optional[str] = None
+    indication: Optional[str] = None
+
+
+class MedicationReconciliationRequest(BaseModel):
+    currentMeds: List[Dict[str, Any]]
+    newPrescription: Optional[Dict[str, Any]] = None
+    patientData: Optional[Dict[str, Any]] = None
+
+
+class ReconciliationFinding(BaseModel):
+    duplicates: List[Dict[str, Any]]
+    therapeuticOverlaps: List[Dict[str, Any]]
+    missingChronicMeds: List[Dict[str, Any]]
+    doseDiscrepancies: List[Dict[str, Any]]
+    newInteractions: List[Dict[str, Any]]
+    recommendations: List[Dict[str, Any]]
+
+
+class MedicationReconciliationResponse(BaseModel):
+    status: str
+    statusMessage: str
+    totalIssues: int
+    findings: Dict[str, Any]
+    medicationCount: int
+    timestamp: str
+    modelVersion: str
+
+
+class AdherenceRiskRequest(BaseModel):
+    medications: List[Dict[str, Any]]
+    patientDemographics: Optional[Dict[str, Any]] = None
+
+
+class RiskFactor(BaseModel):
+    factor: str
+    description: str
+    contribution: int
+
+
+class Intervention(BaseModel):
+    type: str
+    intervention: str
+    priority: str
+
+
+class AdherenceRiskResponse(BaseModel):
+    riskScore: int
+    riskLevel: str
+    riskDescription: str
+    riskFactors: List[Dict[str, Any]]
+    interventions: List[Dict[str, Any]]
+    medicationCount: int
+    timestamp: str
+    modelVersion: str
+
+
+class AntibioticReviewRequest(BaseModel):
+    antibiotic: str
+    indication: str
+    duration: int
+    cultures: Optional[Dict[str, Any]] = None
+    patientData: Optional[Dict[str, Any]] = None
+
+
+class AntibioticAlert(BaseModel):
+    type: str
+    severity: str
+    message: str
+    recommendation: str
+
+
+class AntibioticRecommendation(BaseModel):
+    type: str
+    priority: str
+    message: str
+    typical_uses: Optional[List[str]] = None
+    de_escalation_options: Optional[List[str]] = None
+    parameters: Optional[List[str]] = None
+
+
+class AntibioticReviewResponse(BaseModel):
+    antibiotic: str
+    normalizedName: str
+    indication: str
+    prescribedDuration: int
+    appropriateness: str
+    spectrum: str
+    alerts: List[Dict[str, Any]]
+    recommendations: List[Dict[str, Any]]
+    drugInfo: Dict[str, Any]
+    cultureData: Optional[Dict[str, Any]] = None
+    timestamp: str
+    modelVersion: str
+
+
 # Clinical Notes Request/Response Models
 class GenerateNoteRequest(BaseModel):
     noteType: str
@@ -777,6 +900,102 @@ async def search_drugs(request: DrugSearchRequest):
             limit=request.limit or 10
         )
         return {"results": results, "count": len(results)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Enhanced Pharmacy AI Endpoints
+
+@app.post("/api/pharmacy/ai-analyze", response_model=AIInteractionAnalysisResponse)
+async def ai_analyze_interactions(request: AIInteractionAnalysisRequest):
+    """
+    AI-enhanced drug interaction analysis using GPT-4.
+    Falls back to rule-based analysis if OpenAI API key is not available.
+
+    Provides more nuanced analysis considering patient-specific factors:
+    - Age-related pharmacokinetic changes
+    - Renal/hepatic function adjustments
+    - Condition-specific risks
+    - Alternative medication suggestions
+    """
+    try:
+        result = pharmacy_ai.analyze_interactions_with_ai(
+            medications=request.medications,
+            patient_context=request.patientContext
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/pharmacy/reconcile", response_model=MedicationReconciliationResponse)
+async def reconcile_medications(request: MedicationReconciliationRequest):
+    """
+    Perform smart medication reconciliation to identify:
+    - Duplicate medications
+    - Therapeutic overlaps (same class medications)
+    - Missing chronic medications based on patient conditions
+    - Drug interactions with new prescriptions
+    - Medications missing from admission list
+
+    Essential for transitions of care and preventing medication errors.
+    """
+    try:
+        result = pharmacy_ai.reconcile_medications(
+            current_meds=request.currentMeds,
+            new_prescription=request.newPrescription,
+            patient_data=request.patientData
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/pharmacy/adherence-risk", response_model=AdherenceRiskResponse)
+async def predict_adherence_risk(request: AdherenceRiskRequest):
+    """
+    Predict medication adherence risk based on multiple factors:
+    - Regimen complexity (dosing frequency, number of medications)
+    - Pill burden
+    - Side effect profile of medications
+    - Patient demographics (age, cognitive status)
+    - Cost concerns
+    - History of non-adherence
+
+    Returns risk score (0-100), risk factors, and recommended interventions.
+    """
+    try:
+        result = pharmacy_ai.predict_adherence_risk(
+            medications=request.medications,
+            patient_demographics=request.patientDemographics
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/pharmacy/antibiotic-review", response_model=AntibioticReviewResponse)
+async def review_antibiotic(request: AntibioticReviewRequest):
+    """
+    Antimicrobial stewardship review for antibiotic prescriptions:
+    - Duration appropriateness based on indication
+    - De-escalation opportunities based on culture results
+    - Spectrum assessment (narrow vs broad)
+    - Contraindication checks
+    - Age and renal function considerations
+    - Restricted antibiotic alerts
+
+    Supports antimicrobial stewardship programs to optimize antibiotic use.
+    """
+    try:
+        result = pharmacy_ai.review_antibiotic(
+            antibiotic=request.antibiotic,
+            indication=request.indication,
+            duration=request.duration,
+            cultures=request.cultures,
+            patient_data=request.patientData
+        )
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
