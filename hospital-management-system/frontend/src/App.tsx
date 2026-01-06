@@ -83,6 +83,9 @@ import SmartOrders from './pages/SmartOrders';
 // Quality Management
 import Quality from './pages/Quality';
 
+// Patient Portal
+import PatientPortal from './pages/PatientPortal';
+
 // Protected Route Component
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -152,6 +155,7 @@ function App() {
         <Route path="/medication-safety" element={<MedicationSafety />} />
         <Route path="/smart-orders" element={<SmartOrders />} />
         <Route path="/quality" element={<Quality />} />
+        <Route path="/patient-portal" element={<PatientPortal />} />
         <Route path="/ipd" element={<IPD />} />
         <Route path="/emergency" element={<Emergency />} />
         <Route path="/laboratory" element={<Laboratory />} />

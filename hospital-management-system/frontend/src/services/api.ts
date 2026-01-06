@@ -1073,6 +1073,95 @@ export const publicApi = {
   aiGetDepartments: () => api.get('/public/ai/departments'),
 };
 
+// Patient Portal API
+export const patientPortalApi = {
+  // Dashboard
+  getSummary: () => api.get('/patient-portal/summary'),
+
+  // Appointments
+  getAppointments: (params?: {
+    type?: string;
+    status?: string;
+    page?: number;
+    limit?: number;
+    startDate?: string;
+    endDate?: string;
+  }) => api.get('/patient-portal/appointments', { params }),
+  getAppointmentById: (id: string) => api.get(`/patient-portal/appointments/${id}`),
+  bookAppointment: (data: any) => api.post('/patient-portal/appointments', data),
+  cancelAppointment: (id: string, reason?: string) =>
+    api.post(`/patient-portal/appointments/${id}/cancel`, { reason }),
+  rescheduleAppointment: (id: string, data: { appointmentDate: string; startTime: string }) =>
+    api.post(`/patient-portal/appointments/${id}/reschedule`, data),
+  getAvailableSlots: (doctorId: string, date: string) =>
+    api.get(`/patient-portal/doctors/${doctorId}/slots`, { params: { date } }),
+
+  // Medical Records
+  getMedicalRecords: (params?: {
+    type?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+    startDate?: string;
+    endDate?: string;
+  }) => api.get('/patient-portal/records', { params }),
+  getMedicalRecordById: (id: string) => api.get(`/patient-portal/records/${id}`),
+  downloadMedicalRecord: (id: string) =>
+    api.get(`/patient-portal/records/${id}/download`, { responseType: 'blob' }),
+
+  // Prescriptions
+  getPrescriptions: (params?: { status?: string; page?: number; limit?: number }) =>
+    api.get('/patient-portal/prescriptions', { params }),
+  getPrescriptionById: (id: string) => api.get(`/patient-portal/prescriptions/${id}`),
+  requestRefill: (id: string) => api.post(`/patient-portal/prescriptions/${id}/refill`),
+
+  // Lab Results
+  getLabResults: (params?: { status?: string; page?: number; limit?: number }) =>
+    api.get('/patient-portal/labs', { params }),
+  getLabResultById: (id: string) => api.get(`/patient-portal/labs/${id}`),
+  downloadLabReport: (id: string) =>
+    api.get(`/patient-portal/labs/${id}/download`, { responseType: 'blob' }),
+
+  // Messages
+  getMessages: (params?: { filter?: 'all' | 'unread'; page?: number; limit?: number }) =>
+    api.get('/patient-portal/messages', { params }),
+  getMessageThread: (threadId: string) =>
+    api.get(`/patient-portal/messages/${threadId}`),
+  sendMessage: (data: {
+    recipientId: string;
+    subject: string;
+    body: string;
+    threadId?: string;
+  }) => api.post('/patient-portal/messages', data),
+  markMessageRead: (threadId: string) =>
+    api.patch(`/patient-portal/messages/${threadId}/read`),
+  markMessageUnread: (threadId: string) =>
+    api.patch(`/patient-portal/messages/${threadId}/unread`),
+  getProviders: (params?: { search?: string; departmentId?: string }) =>
+    api.get('/patient-portal/providers', { params }),
+
+  // Billing
+  getBillingSummary: () => api.get('/patient-portal/billing/summary'),
+  getBills: (params?: { type?: 'pending' | 'history'; page?: number; limit?: number }) =>
+    api.get('/patient-portal/bills', { params }),
+  getBillById: (id: string) => api.get(`/patient-portal/bills/${id}`),
+  makePayment: (data: {
+    billId: string;
+    amount: number;
+    paymentMethod: string;
+    cardLast4?: string;
+  }) => api.post('/patient-portal/payments', data),
+  getPaymentHistory: (params?: { page?: number; limit?: number }) =>
+    api.get('/patient-portal/payments', { params }),
+  downloadInvoice: (billId: string) =>
+    api.get(`/patient-portal/bills/${billId}/download`, { responseType: 'blob' }),
+
+  // Reference data
+  getDoctors: (params?: { departmentId?: string; search?: string }) =>
+    api.get('/patient-portal/doctors', { params }),
+  getDepartments: () => api.get('/patient-portal/departments'),
+};
+
 // Symptom Checker APIs
 export const symptomCheckerApi = {
   // Start a new symptom checker session
@@ -1177,6 +1266,7 @@ export const medSafetyApi = {
   recordAdministration: (data: Record<string, any>) =>
     api.post('/med-safety/record-administration', data),
 };
+
 
 // Smart Order APIs
 export const smartOrderApi = {
