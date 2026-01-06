@@ -30,6 +30,7 @@ import Surgery from './pages/Surgery';
 import Billing from './pages/Billing';
 import HR from './pages/HR';
 import Housekeeping from './pages/Housekeeping';
+import Dietary from './pages/Dietary';
 
 // New Enterprise Modules
 import BloodBank from './pages/BloodBank';
@@ -172,6 +173,7 @@ function App() {
         <Route path="/billing" element={<Billing />} />
         <Route path="/hr" element={<HR />} />
         <Route path="/housekeeping" element={<Housekeeping />} />
+        <Route path="/dietary" element={<Dietary />} />
 
         {/* New Enterprise Modules */}
         <Route path="/blood-bank" element={<BloodBank />} />

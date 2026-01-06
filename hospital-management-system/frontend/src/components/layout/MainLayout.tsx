@@ -35,6 +35,7 @@ import {
   UserCircleIcon,
   DocumentMagnifyingGlassIcon,
   WrenchScrewdriverIcon,
+  CakeIcon,
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../../hooks/useAuth';
 import AICreationAssistant from '../ai/AICreationAssistant';
@@ -139,6 +140,8 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'] },
       { name: 'Assets', href: '/assets', icon: WrenchScrewdriverIcon, color: 'from-amber-500 to-orange-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'MAINTENANCE_STAFF'] },
+      { name: 'Dietary', href: '/dietary', icon: CakeIcon, color: 'from-lime-500 to-green-600',
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'DIETARY_STAFF'] },
     ],
   },
   {
