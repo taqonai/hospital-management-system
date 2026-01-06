@@ -206,7 +206,7 @@ const featuredServices = [
 const quickServices = [
   { icon: CalendarDaysIcon, title: 'Book Appointment', description: 'AI-powered scheduling', link: '#booking', color: 'from-blue-500 to-blue-600' },
   { icon: ChatBubbleBottomCenterTextIcon, title: 'Symptom Checker', description: 'Get instant assessment', link: '/symptom-checker', color: 'from-violet-500 to-purple-600' },
-  { icon: DocumentTextIcon, title: 'View Reports', description: 'Access your records', link: '/login', color: 'from-emerald-500 to-teal-600' },
+  { icon: DocumentTextIcon, title: 'Patient Portal', description: 'Access your records', link: '/patient-portal/login', color: 'from-teal-500 to-cyan-600' },
   { icon: TruckIcon, title: 'Ambulance', description: '24/7 Emergency', link: 'tel:108', color: 'from-red-500 to-rose-600' },
 ];
 
@@ -854,16 +854,24 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <Link
                 to="/symptom-checker"
-                className="hidden md:flex items-center gap-2 px-4 py-2.5 text-violet-600 hover:text-violet-700 font-semibold transition-colors"
+                className="hidden lg:flex items-center gap-2 px-4 py-2.5 text-violet-600 hover:text-violet-700 font-semibold transition-colors"
               >
                 <ChatBubbleBottomCenterTextIcon className="w-5 h-5" />
                 AI Chat
               </Link>
               <Link
-                to="/login"
-                className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl transition-all shadow-lg shadow-blue-500/30 hover:shadow-blue-500/40"
+                to="/patient-portal/login"
+                className="hidden md:flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 text-white font-semibold rounded-xl transition-all shadow-lg shadow-teal-500/30 hover:shadow-teal-500/40"
               >
-                Staff Login
+                <UserGroupIcon className="w-5 h-5" />
+                Patient Portal
+              </Link>
+              <Link
+                to="/login"
+                className="hidden md:flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-blue-600 font-medium transition-colors border border-gray-200 hover:border-blue-300 rounded-lg"
+              >
+                <ShieldCheckIcon className="w-4 h-4" />
+                Staff
               </Link>
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -894,6 +902,29 @@ export default function Home() {
                 <ChatBubbleBottomCenterTextIcon className="w-5 h-5" />
                 AI Symptom Checker
               </Link>
+              <div className="border-t border-gray-100 my-2 pt-3">
+                <p className="px-4 text-xs text-gray-400 uppercase tracking-wider mb-2">Login Options</p>
+                <Link
+                  to="/patient-portal/login"
+                  className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-teal-500 to-cyan-600 text-white rounded-lg mb-2"
+                >
+                  <UserGroupIcon className="w-5 h-5" />
+                  <div>
+                    <div className="font-semibold">Patient Portal</div>
+                    <div className="text-xs text-teal-100">Access your health records</div>
+                  </div>
+                </Link>
+                <Link
+                  to="/login"
+                  className="flex items-center gap-3 px-4 py-3 text-gray-600 hover:bg-gray-50 rounded-lg border border-gray-200"
+                >
+                  <ShieldCheckIcon className="w-5 h-5" />
+                  <div>
+                    <div className="font-medium">Staff Login</div>
+                    <div className="text-xs text-gray-400">Hospital employees only</div>
+                  </div>
+                </Link>
+              </div>
             </div>
           </div>
         )}
@@ -1661,7 +1692,8 @@ export default function Home() {
                 <li><a href="#ai-services" className="hover:text-white transition-colors">AI Features</a></li>
                 <li><a href="#booking" className="hover:text-white transition-colors">Book Appointment</a></li>
                 <li><Link to="/symptom-checker" className="hover:text-white transition-colors">AI Symptom Checker</Link></li>
-                <li><Link to="/login" className="hover:text-white transition-colors">Staff Login</Link></li>
+                <li><Link to="/patient-portal/login" className="hover:text-white transition-colors flex items-center gap-1"><UserGroupIcon className="w-4 h-4" />Patient Portal</Link></li>
+                <li><Link to="/login" className="hover:text-white transition-colors text-gray-500 text-xs">Staff Login</Link></li>
               </ul>
             </div>
 
