@@ -50,6 +50,8 @@ model Hospital {
   smartOrders     SmartOrder[]
   clinicalNotes   ClinicalNote[]
   aiScribeSessions AiScribeSession[]
+  customRoles      CustomRole[]
+  rbacAuditLogs    RBACauditLog[]
 
   @@map("hospitals")
 }
@@ -111,6 +113,7 @@ model User {
   authoredClinicalNotes ClinicalNote[] @relation("ClinicalNoteAuthor")
   signedClinicalNotes   ClinicalNote[] @relation("ClinicalNoteSigner")
   aiScribeSessions      AiScribeSession[]
+  customRoles           UserCustomRole[]
 
   @@unique([hospitalId, email])
   @@map("users")
@@ -146,6 +149,70 @@ model UserPermission {
 
   @@unique([userId, permission])
   @@map("user_permissions")
+}
+
+// Custom Role created by Hospital Admin
+model CustomRole {
+  id          String   @id @default(uuid())
+  hospitalId  String
+  name        String
+  description String?
+  isSystem    Boolean  @default(false)  // System roles can't be deleted
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String?
+
+  hospital    Hospital @relation(fields: [hospitalId], references: [id])
+  permissions RolePermission[]
+  userRoles   UserCustomRole[]
+
+  @@unique([hospitalId, name])
+  @@map("custom_roles")
+}
+
+// Permissions assigned to a role
+model RolePermission {
+  id           String   @id @default(uuid())
+  roleId       String
+  permission   String   // e.g., "patients:read", "patients:write", "appointments:delete"
+  createdAt    DateTime @default(now())
+
+  role CustomRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permission])
+  @@map("role_permissions")
+}
+
+// User's custom role assignments (in addition to their base UserRole)
+model UserCustomRole {
+  id        String   @id @default(uuid())
+  userId    String
+  roleId    String
+  createdAt DateTime @default(now())
+  createdBy String?
+
+  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role CustomRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@map("user_custom_roles")
+}
+
+// Audit log for RBAC changes
+model RBACauditLog {
+  id         String   @id @default(uuid())
+  hospitalId String
+  action     String   // CREATE_ROLE, UPDATE_ROLE, DELETE_ROLE, ASSIGN_ROLE, REVOKE_ROLE, etc.
+  entityType String   // ROLE, PERMISSION, USER_ROLE
+  entityId   String
+  details    Json?
+  performedBy String
+  createdAt  DateTime @default(now())
+
+  hospital Hospital @relation(fields: [hospitalId], references: [id])
+
+  @@map("rbac_audit_logs")
 }
 
 model Session {

@@ -142,6 +142,8 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'MAINTENANCE_STAFF'] },
       { name: 'Dietary', href: '/dietary', icon: CakeIcon, color: 'from-lime-500 to-green-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'DIETARY_STAFF'] },
+      { name: 'Access Control', href: '/rbac', icon: ShieldCheckIcon, color: 'from-indigo-500 to-purple-600',
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN'] },
     ],
   },
   {

@@ -93,6 +93,9 @@ import PatientPortal from './pages/PatientPortal';
 // Asset Management
 import Assets from './pages/Assets';
 
+// RBAC (Role-Based Access Control)
+import RBAC from './pages/RBAC';
+
 // Protected Route Component
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -181,6 +184,14 @@ function App() {
         <Route path="/telemedicine" element={<Telemedicine />} />
         <Route path="/queue" element={<Queue />} />
         <Route path="/assets" element={<Assets />} />
+        <Route
+          path="/rbac"
+          element={
+            <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'SUPER_ADMIN']}>
+              <RBAC />
+            </ProtectedRoute>
+          }
+        />
 
         <Route
           path="/ai-assistant"

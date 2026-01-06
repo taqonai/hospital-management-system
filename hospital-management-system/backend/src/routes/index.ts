@@ -39,6 +39,7 @@ import patientPortalRoutes from './patientPortalRoutes';
 import aiConsultationRoutes from './aiConsultationRoutes';
 import advancedPharmacyAIRoutes from './advancedPharmacyAIRoutes';
 import pdfRoutes from './pdfRoutes';
+import rbacRoutes from './rbacRoutes';
 
 const router = Router();
 
@@ -97,5 +98,8 @@ router.use('/patient-portal', patientPortalRoutes);
 router.use('/ai-consultation', aiConsultationRoutes);
 router.use('/advanced-pharmacy-ai', advancedPharmacyAIRoutes);
 router.use('/pdf', pdfRoutes);
+
+// RBAC (Role-Based Access Control) routes
+router.use('/rbac', rbacRoutes);
 
 export default router;

@@ -1310,6 +1310,52 @@ export const pdfApi = {
   }) => api.post('/ai/pdf/analyze-url', data),
 };
 
+// RBAC APIs
+export const rbacApi = {
+  // Permissions
+  getPermissions: () => api.get('/rbac/permissions'),
+  getAvailablePermissions: () => api.get('/rbac/permissions'),
+
+  // Roles
+  createRole: (data: any) => api.post('/rbac/roles', data),
+  getRoles: (params?: any) => api.get('/rbac/roles', { params }),
+  getRoleById: (id: string) => api.get(`/rbac/roles/${id}`),
+  updateRole: (id: string, data: any) => api.put(`/rbac/roles/${id}`, data),
+  deleteRole: (id: string) => api.delete(`/rbac/roles/${id}`),
+
+  // User Roles - extended for RBAC management page
+  getUsersWithRoles: (params?: { search?: string; role?: string; page?: number; limit?: number }) =>
+    api.get('/rbac/users', { params }),
+  assignRolesToUser: (userId: string, roleIds: string[]) =>
+    api.post(`/rbac/users/${userId}/roles`, { roleIds }),
+  assignRoleToUser: (userId: string, roleId: string) =>
+    api.post(`/rbac/users/${userId}/roles`, { roleId }),
+  removeRoleFromUser: (userId: string, roleId: string) =>
+    api.delete(`/rbac/users/${userId}/roles/${roleId}`),
+  getUserRoles: (userId: string) => api.get(`/rbac/users/${userId}/roles`),
+  getUsersByRole: (roleId: string) => api.get(`/rbac/roles/${roleId}/users`),
+  getUserEffectivePermissions: (userId: string) =>
+    api.get(`/rbac/users/${userId}/effective-permissions`),
+
+  // Direct Permissions
+  grantPermission: (userId: string, permission: string) =>
+    api.post(`/rbac/users/${userId}/permissions`, { permission }),
+  revokePermission: (userId: string, permission: string) =>
+    api.delete(`/rbac/users/${userId}/permissions/${permission}`),
+
+  // My Permissions
+  getMyPermissions: () => api.get('/rbac/my-permissions'),
+
+  // Audit Logs
+  getAuditLogs: (params?: {
+    action?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  }) => api.get('/rbac/audit-logs', { params }),
+};
+
 // Smart Order APIs
 export const smartOrderApi = {
   // Get order recommendations
