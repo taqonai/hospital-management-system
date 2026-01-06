@@ -199,6 +199,73 @@ export const aiApi = {
 
 };
 
+// AI Consultation APIs - Enhanced AI throughout consultation flow
+export const aiConsultationApi = {
+  // Get AI-enhanced patient context before consultation
+  getPatientContext: (patientId: string) =>
+    api.get(`/ai-consultation/patient-context/${patientId}`),
+
+  // Interpret vital signs with NEWS2 scoring
+  interpretVitals: (data: {
+    respiratoryRate?: number;
+    oxygenSaturation?: number;
+    temperature?: number;
+    systolicBP?: number;
+    heartRate?: number;
+    consciousness?: 'ALERT' | 'VOICE' | 'PAIN' | 'UNRESPONSIVE';
+    patientId?: string;
+  }) => api.post('/ai-consultation/interpret-vitals', data),
+
+  // Get AI diagnosis suggestions
+  suggestDiagnosis: (data: {
+    symptoms: string[];
+    patientId?: string;
+    patientAge?: number;
+    patientGender?: string;
+    medicalHistory?: string[];
+    vitalSigns?: Record<string, any>;
+  }) => api.post('/ai-consultation/suggest-diagnosis', data),
+
+  // Get recommended lab/imaging tests
+  recommendTests: (data: {
+    diagnosis: string;
+    symptoms?: string[];
+    patientId?: string;
+  }) => api.post('/ai-consultation/recommend-tests', data),
+
+  // Validate prescription in real-time
+  validatePrescription: (data: {
+    medications: Array<{
+      name: string;
+      dosage: string;
+      frequency: string;
+      route?: string;
+      duration?: string;
+    }>;
+    patientId: string;
+  }) => api.post('/ai-consultation/validate-prescription', data),
+
+  // Generate SOAP notes from consultation data
+  generateSOAP: (data: {
+    consultationId?: string;
+    symptoms: string[];
+    vitals?: Record<string, any>;
+    diagnosis?: string;
+    treatment?: string;
+    notes?: string;
+    prescriptions?: Array<{
+      medication: string;
+      dosage: string;
+      frequency: string;
+      duration: string;
+    }>;
+  }) => api.post('/ai-consultation/generate-soap', data),
+
+  // Get follow-up recommendations
+  getFollowUp: (consultationId: string) =>
+    api.get(`/ai-consultation/follow-up/${consultationId}`),
+};
+
 // Laboratory APIs
 export const laboratoryApi = {
   // Lab Tests

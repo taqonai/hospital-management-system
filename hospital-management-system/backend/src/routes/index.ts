@@ -36,6 +36,7 @@ import earlyWarningRoutes from './earlyWarningRoutes';
 import medSafetyRoutes from './medSafetyRoutes';
 import smartOrderRoutes from './smartOrderRoutes';
 import patientPortalRoutes from './patientPortalRoutes';
+import aiConsultationRoutes from './aiConsultationRoutes';
 
 const router = Router();
 
@@ -91,5 +92,6 @@ router.use('/early-warning', earlyWarningRoutes);
 router.use('/med-safety', medSafetyRoutes);
 router.use('/smart-orders', smartOrderRoutes);
 router.use('/patient-portal', patientPortalRoutes);
+router.use('/ai-consultation', aiConsultationRoutes);
 
 export default router;
