@@ -1268,6 +1268,26 @@ export const medSafetyApi = {
 };
 
 
+// PDF Analysis API (AI-powered document analysis)
+export const pdfApi = {
+  // Check if PDF analysis service is available
+  getStatus: () => api.get('/ai/pdf/status'),
+
+  // Analyze uploaded PDF file
+  analyze: (formData: FormData) =>
+    api.post('/ai/pdf/analyze', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
+  // Analyze PDF from URL
+  analyzeUrl: (data: {
+    url: string;
+    documentType?: string;
+    extractEntities?: boolean;
+    patientContext?: Record<string, any>;
+  }) => api.post('/ai/pdf/analyze-url', data),
+};
+
 // Smart Order APIs
 export const smartOrderApi = {
   // Get order recommendations

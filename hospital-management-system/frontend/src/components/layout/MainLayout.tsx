@@ -33,6 +33,7 @@ import {
   Squares2X2Icon,
   ClipboardDocumentCheckIcon,
   UserCircleIcon,
+  DocumentMagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../../hooks/useAuth';
 import AICreationAssistant from '../ai/AICreationAssistant';
@@ -112,6 +113,8 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'PHARMACIST'] },
       { name: 'Medical Imaging', href: '/medical-imaging', icon: PhotoIcon, color: 'from-cyan-500 to-cyan-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'RADIOLOGIST'] },
+      { name: 'PDF Analysis', href: '/pdf-analysis', icon: DocumentMagnifyingGlassIcon, color: 'from-violet-500 to-purple-600',
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN', 'RADIOLOGIST'] },
       { name: 'Telemedicine', href: '/telemedicine', icon: VideoCameraIcon, color: 'from-blue-500 to-blue-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'] },
       { name: 'Patient Portal', href: '/patient-portal', icon: UserCircleIcon, color: 'from-indigo-500 to-purple-600',

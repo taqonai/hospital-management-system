@@ -80,6 +80,9 @@ import MedicationSafety from './pages/MedicationSafety';
 // Smart Orders (AI-powered order recommendations)
 import SmartOrders from './pages/SmartOrders';
 
+// PDF Document Analysis
+import PDFAnalysis from './pages/PDFAnalysis';
+
 // Quality Management
 import Quality from './pages/Quality';
 
@@ -154,6 +157,7 @@ function App() {
         <Route path="/early-warning" element={<EarlyWarning />} />
         <Route path="/medication-safety" element={<MedicationSafety />} />
         <Route path="/smart-orders" element={<SmartOrders />} />
+        <Route path="/pdf-analysis" element={<PDFAnalysis />} />
         <Route path="/quality" element={<Quality />} />
         <Route path="/patient-portal" element={<PatientPortal />} />
         <Route path="/ipd" element={<IPD />} />
