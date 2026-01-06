@@ -89,6 +89,9 @@ import Quality from './pages/Quality';
 // Patient Portal
 import PatientPortal from './pages/PatientPortal';
 
+// Asset Management
+import Assets from './pages/Assets';
+
 // Protected Route Component
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -175,6 +178,7 @@ function App() {
         <Route path="/reports" element={<Reports />} />
         <Route path="/telemedicine" element={<Telemedicine />} />
         <Route path="/queue" element={<Queue />} />
+        <Route path="/assets" element={<Assets />} />
 
         <Route
           path="/ai-assistant"
