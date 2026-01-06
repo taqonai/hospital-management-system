@@ -1386,6 +1386,2215 @@ export default router;
 
 ---
 
+### 6. AI-Enhanced Consultation Flow
+
+**Status:** Consultation exists but with minimal AI integration
+**Effort:** 5-7 days
+**Dependencies:** DiagnosticAI, PharmacyAI, EarlyWarningAI services
+
+This is a comprehensive enhancement to integrate AI throughout the entire patient consultation workflow.
+
+#### 6.1 Overview: AI Consultation Features
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        AI-ENHANCED CONSULTATION FLOW                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌───────────┐ │
+│  │ 1. PATIENT   │───▶│ 2. SYMPTOMS  │───▶│ 3. DIAGNOSIS │───▶│ 4. TREAT- │ │
+│  │    INTAKE    │    │    & VITALS  │    │    & TESTS   │    │    MENT   │ │
+│  └──────────────┘    └──────────────┘    └──────────────┘    └───────────┘ │
+│        │                    │                   │                   │       │
+│        ▼                    ▼                   ▼                   ▼       │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌───────────┐ │
+│  │ • AI Patient │    │ • AI Vital   │    │ • AI Diag-   │    │ • AI Drug │ │
+│  │   Summary    │    │   Interpre-  │    │   nosis      │    │   Inter-  │ │
+│  │ • Risk Flags │    │   tation     │    │   Suggest    │    │   action  │ │
+│  │ • Allergy    │    │ • EWS Score  │    │ • ICD-10     │    │ • Dosage  │ │
+│  │   Alerts     │    │ • Symptom    │    │   Codes      │    │   Calc    │ │
+│  │              │    │   Extraction │    │ • Lab/Test   │    │ • Allergy │ │
+│  │              │    │              │    │   Recommend  │    │   Check   │ │
+│  └──────────────┘    └──────────────┘    └──────────────┘    └───────────┘ │
+│                                                                             │
+│                              ┌───────────────┐                              │
+│                              │ 5. AI SCRIBE  │                              │
+│                              │ • SOAP Notes  │                              │
+│                              │ • Summary     │                              │
+│                              │ • Follow-up   │                              │
+│                              └───────────────┘                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 6.2 Backend: AI Consultation Service
+
+**File:** `backend/src/services/aiConsultationService.ts`
+
+```typescript
+// backend/src/services/aiConsultationService.ts
+import axios from 'axios';
+import { prisma } from '../config/database';
+
+class AIConsultationService {
+  private aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+
+  /**
+   * Get AI-enhanced patient context before consultation starts
+   */
+  async getPatientAIContext(hospitalId: string, patientId: string) {
+    // Fetch patient data
+    const patient = await prisma.patient.findFirst({
+      where: { id: patientId, hospitalId },
+      include: {
+        allergies: true,
+        medicalHistory: true,
+        medications: { where: { status: 'ACTIVE' } },
+        vitals: { orderBy: { recordedAt: 'desc' }, take: 10 },
+        consultations: { orderBy: { createdAt: 'desc' }, take: 5 }
+      }
+    });
+
+    if (!patient) throw new Error('Patient not found');
+
+    // Get AI risk assessment
+    const riskAssessment = await this.assessPatientRisk(patient);
+
+    // Get medication alerts
+    const medicationAlerts = await this.checkCurrentMedications(patient);
+
+    // Get allergy warnings
+    const allergyWarnings = this.getHighRiskAllergies(patient.allergies);
+
+    return {
+      patient: {
+        id: patient.id,
+        name: `${patient.firstName} ${patient.lastName}`,
+        age: this.calculateAge(patient.dateOfBirth),
+        gender: patient.gender,
+        bloodGroup: patient.bloodGroup
+      },
+      aiInsights: {
+        riskLevel: riskAssessment.riskLevel,
+        riskFactors: riskAssessment.factors,
+        recentTrends: riskAssessment.trends,
+        medicationAlerts,
+        allergyWarnings,
+        lastVisitSummary: patient.consultations[0]?.diagnosis || null
+      },
+      currentMedications: patient.medications,
+      allergies: patient.allergies,
+      recentVitals: patient.vitals[0] || null
+    };
+  }
+
+  /**
+   * Interpret vital signs using EWS AI
+   */
+  async interpretVitals(vitals: VitalsInput) {
+    try {
+      const response = await axios.post(`${this.aiServiceUrl}/api/ews/calculate`, {
+        respiratory_rate: vitals.respiratoryRate,
+        oxygen_saturation: vitals.oxygenSaturation,
+        systolic_bp: vitals.systolicBP,
+        heart_rate: vitals.heartRate,
+        temperature: vitals.temperature,
+        consciousness: vitals.consciousness || 'A',
+        on_supplemental_oxygen: vitals.onSupplementalOxygen || false
+      });
+
+      return {
+        ewsScore: response.data.totalScore,
+        riskLevel: response.data.riskLevel,
+        componentScores: response.data.componentScores,
+        recommendedAction: response.data.recommendedAction,
+        abnormalFindings: this.identifyAbnormalVitals(vitals),
+        clinicalAlerts: this.generateVitalAlerts(response.data)
+      };
+    } catch (error) {
+      console.error('EWS calculation failed:', error);
+      return this.fallbackVitalInterpretation(vitals);
+    }
+  }
+
+  /**
+   * Get AI diagnosis suggestions based on symptoms
+   */
+  async getDiagnosisSuggestions(input: DiagnosisInput) {
+    try {
+      // Call DiagnosticAI
+      const response = await axios.post(`${this.aiServiceUrl}/api/diagnose`, {
+        symptoms: input.symptoms,
+        patient_age: input.patientAge,
+        patient_gender: input.patientGender,
+        medical_history: input.medicalHistory || [],
+        duration: input.duration,
+        severity: input.severity
+      });
+
+      // Enrich with ICD-10 codes
+      const enrichedDiagnoses = await this.enrichWithICDCodes(response.data.diagnoses);
+
+      return {
+        primaryDiagnosis: enrichedDiagnoses[0] || null,
+        differentialDiagnoses: enrichedDiagnoses.slice(1, 5),
+        confidence: response.data.confidence,
+        redFlags: response.data.red_flags || [],
+        recommendedTests: response.data.recommended_tests || [],
+        reasoning: response.data.reasoning
+      };
+    } catch (error) {
+      console.error('Diagnosis AI failed:', error);
+      return { primaryDiagnosis: null, differentialDiagnoses: [], recommendedTests: [] };
+    }
+  }
+
+  /**
+   * Get AI-recommended lab tests based on diagnosis
+   */
+  async getRecommendedTests(diagnosis: string, patientContext: any) {
+    try {
+      const response = await axios.post(`${this.aiServiceUrl}/api/smart-orders/recommend`, {
+        diagnosis,
+        patientAge: patientContext.age,
+        patientGender: patientContext.gender,
+        existingConditions: patientContext.medicalHistory,
+        currentMedications: patientContext.medications
+      });
+
+      return {
+        labTests: response.data.recommendations.filter((r: any) => r.type === 'LAB'),
+        imagingTests: response.data.recommendations.filter((r: any) => r.type === 'RADIOLOGY'),
+        otherTests: response.data.recommendations.filter((r: any) => !['LAB', 'RADIOLOGY'].includes(r.type)),
+        bundles: response.data.bundles || []
+      };
+    } catch (error) {
+      console.error('Test recommendation failed:', error);
+      return { labTests: [], imagingTests: [], otherTests: [], bundles: [] };
+    }
+  }
+
+  /**
+   * Validate prescription with AI (drug interactions, dosage, allergies)
+   */
+  async validatePrescription(input: PrescriptionValidationInput) {
+    const { medications, patientId, hospitalId } = input;
+
+    // Get patient context
+    const patient = await prisma.patient.findFirst({
+      where: { id: patientId, hospitalId },
+      include: {
+        allergies: true,
+        medications: { where: { status: 'ACTIVE' } }
+      }
+    });
+
+    // Get all medication names (new + existing)
+    const allMedications = [
+      ...medications.map(m => m.drugName),
+      ...patient.medications.map(m => m.drugName)
+    ];
+
+    // Check drug interactions
+    const interactionResponse = await axios.post(
+      `${this.aiServiceUrl}/api/pharmacy/check-interactions`,
+      {
+        medications: allMedications,
+        patient_age: this.calculateAge(patient.dateOfBirth),
+        patient_weight: patient.weight,
+        patient_conditions: patient.medicalHistory?.conditions || [],
+        allergies: patient.allergies.map(a => a.allergen),
+        renal_function: input.renalFunction || 'normal',
+        hepatic_function: input.hepaticFunction || 'normal'
+      }
+    );
+
+    // Check each medication for dosage and allergies
+    const medicationValidations = await Promise.all(
+      medications.map(async (med) => {
+        const dosageCheck = await this.validateDosage(med, patient);
+        const allergyCheck = this.checkAllergyConflict(med.drugName, patient.allergies);
+
+        return {
+          drugName: med.drugName,
+          dosage: med.dosage,
+          isValid: dosageCheck.isValid && !allergyCheck.hasConflict,
+          dosageValidation: dosageCheck,
+          allergyWarning: allergyCheck,
+          interactions: interactionResponse.data.interactions.filter(
+            (i: any) => i.drugs.includes(med.drugName)
+          )
+        };
+      })
+    );
+
+    return {
+      isValid: medicationValidations.every(v => v.isValid),
+      overallRisk: interactionResponse.data.overall_risk,
+      medications: medicationValidations,
+      interactions: interactionResponse.data.interactions,
+      recommendations: interactionResponse.data.recommendations,
+      contraindications: interactionResponse.data.contraindications
+    };
+  }
+
+  /**
+   * Generate AI SOAP notes from consultation
+   */
+  async generateSOAPNotes(consultationData: ConsultationData) {
+    try {
+      const response = await axios.post(`${this.aiServiceUrl}/api/notes/generate-soap`, {
+        chiefComplaint: consultationData.chiefComplaint,
+        symptoms: consultationData.symptoms,
+        vitals: consultationData.vitals,
+        examination: consultationData.examination,
+        diagnosis: consultationData.diagnosis,
+        treatment: consultationData.treatment,
+        patientHistory: consultationData.medicalHistory
+      });
+
+      return {
+        subjective: response.data.subjective,
+        objective: response.data.objective,
+        assessment: response.data.assessment,
+        plan: response.data.plan,
+        icdCodes: response.data.icd_codes,
+        cptCodes: response.data.cpt_codes,
+        followUpRecommendation: response.data.follow_up
+      };
+    } catch (error) {
+      console.error('SOAP generation failed:', error);
+      return this.generateBasicSOAP(consultationData);
+    }
+  }
+
+  /**
+   * Get AI follow-up recommendations
+   */
+  async getFollowUpRecommendations(consultationId: string) {
+    const consultation = await prisma.consultation.findUnique({
+      where: { id: consultationId },
+      include: {
+        prescriptions: { include: { medications: true } },
+        labOrders: true
+      }
+    });
+
+    const recommendations = [];
+
+    // Based on diagnosis
+    if (consultation.diagnosis) {
+      recommendations.push(...this.getDiagnosisFollowUp(consultation.diagnosis));
+    }
+
+    // Based on medications
+    for (const prescription of consultation.prescriptions) {
+      for (const med of prescription.medications) {
+        const medFollowUp = this.getMedicationFollowUp(med);
+        if (medFollowUp) recommendations.push(medFollowUp);
+      }
+    }
+
+    // Based on pending labs
+    if (consultation.labOrders.length > 0) {
+      recommendations.push({
+        type: 'LAB_REVIEW',
+        timing: '3-5 days',
+        reason: 'Review lab results',
+        priority: 'ROUTINE'
+      });
+    }
+
+    return recommendations;
+  }
+
+  // Helper methods
+  private calculateAge(dob: Date): number {
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const monthDiff = today.getMonth() - dob.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+      age--;
+    }
+    return age;
+  }
+
+  private identifyAbnormalVitals(vitals: VitalsInput): string[] {
+    const abnormal = [];
+    if (vitals.heartRate && (vitals.heartRate < 50 || vitals.heartRate > 100)) {
+      abnormal.push(`Heart rate: ${vitals.heartRate} bpm (abnormal)`);
+    }
+    if (vitals.systolicBP && (vitals.systolicBP < 90 || vitals.systolicBP > 140)) {
+      abnormal.push(`Systolic BP: ${vitals.systolicBP} mmHg (abnormal)`);
+    }
+    if (vitals.temperature && (vitals.temperature < 36 || vitals.temperature > 38)) {
+      abnormal.push(`Temperature: ${vitals.temperature}°C (abnormal)`);
+    }
+    if (vitals.oxygenSaturation && vitals.oxygenSaturation < 95) {
+      abnormal.push(`SpO2: ${vitals.oxygenSaturation}% (low)`);
+    }
+    return abnormal;
+  }
+
+  private checkAllergyConflict(drugName: string, allergies: any[]): AllergyCheckResult {
+    const drugLower = drugName.toLowerCase();
+
+    // Direct allergy match
+    for (const allergy of allergies) {
+      if (drugLower.includes(allergy.allergen.toLowerCase())) {
+        return {
+          hasConflict: true,
+          severity: 'CRITICAL',
+          message: `Patient is allergic to ${allergy.allergen}`,
+          type: 'DIRECT'
+        };
+      }
+    }
+
+    // Cross-reactivity check
+    const crossReactivity: Record<string, string[]> = {
+      'penicillin': ['amoxicillin', 'ampicillin', 'cephalosporins'],
+      'aspirin': ['ibuprofen', 'naproxen', 'nsaids'],
+      'sulfa': ['sulfamethoxazole', 'sulfasalazine'],
+      'codeine': ['morphine', 'hydrocodone', 'oxycodone']
+    };
+
+    for (const allergy of allergies) {
+      const allergenLower = allergy.allergen.toLowerCase();
+      const relatedDrugs = crossReactivity[allergenLower] || [];
+
+      for (const related of relatedDrugs) {
+        if (drugLower.includes(related)) {
+          return {
+            hasConflict: true,
+            severity: 'WARNING',
+            message: `Potential cross-reactivity: patient allergic to ${allergy.allergen}, ${drugName} may cause reaction`,
+            type: 'CROSS_REACTIVITY'
+          };
+        }
+      }
+    }
+
+    return { hasConflict: false, severity: 'NONE', message: '', type: 'NONE' };
+  }
+
+  private async validateDosage(medication: any, patient: any): Promise<DosageValidation> {
+    try {
+      const response = await axios.post(`${this.aiServiceUrl}/api/pharmacy/calculate-dosage`, {
+        drug_name: medication.drugName,
+        patient_age: this.calculateAge(patient.dateOfBirth),
+        patient_weight: patient.weight || 70,
+        indication: medication.indication || 'general',
+        renal_function: 'normal',
+        hepatic_function: 'normal'
+      });
+
+      const recommendedDose = response.data.recommended_dose;
+      const maxDose = response.data.max_daily_dose;
+      const prescribedDose = parseFloat(medication.dosage);
+
+      return {
+        isValid: prescribedDose <= maxDose,
+        recommendedDose,
+        maxDailyDose: maxDose,
+        prescribedDose: medication.dosage,
+        adjustments: response.data.adjustments || [],
+        warnings: response.data.warnings || []
+      };
+    } catch (error) {
+      return {
+        isValid: true,
+        recommendedDose: null,
+        maxDailyDose: null,
+        prescribedDose: medication.dosage,
+        adjustments: [],
+        warnings: ['Unable to validate dosage automatically']
+      };
+    }
+  }
+}
+
+export const aiConsultationService = new AIConsultationService();
+```
+
+#### 6.3 Backend: AI Consultation Routes
+
+**File:** `backend/src/routes/aiConsultationRoutes.ts`
+
+```typescript
+// backend/src/routes/aiConsultationRoutes.ts
+import { Router } from 'express';
+import { authenticate, authorize } from '../middleware/auth';
+import { asyncHandler } from '../middleware/asyncHandler';
+import { aiConsultationService } from '../services/aiConsultationService';
+import { sendSuccess } from '../utils/response';
+
+const router = Router();
+
+// All routes require authentication
+router.use(authenticate);
+
+// Get AI patient context before consultation
+router.get('/patient-context/:patientId',
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  asyncHandler(async (req, res) => {
+    const context = await aiConsultationService.getPatientAIContext(
+      req.user!.hospitalId,
+      req.params.patientId
+    );
+    sendSuccess(res, context);
+  })
+);
+
+// Interpret vital signs
+router.post('/interpret-vitals',
+  authorize('DOCTOR', 'NURSE'),
+  asyncHandler(async (req, res) => {
+    const interpretation = await aiConsultationService.interpretVitals(req.body);
+    sendSuccess(res, interpretation);
+  })
+);
+
+// Get diagnosis suggestions
+router.post('/suggest-diagnosis',
+  authorize('DOCTOR'),
+  asyncHandler(async (req, res) => {
+    const suggestions = await aiConsultationService.getDiagnosisSuggestions(req.body);
+    sendSuccess(res, suggestions);
+  })
+);
+
+// Get recommended tests
+router.post('/recommend-tests',
+  authorize('DOCTOR'),
+  asyncHandler(async (req, res) => {
+    const recommendations = await aiConsultationService.getRecommendedTests(
+      req.body.diagnosis,
+      req.body.patientContext
+    );
+    sendSuccess(res, recommendations);
+  })
+);
+
+// Validate prescription (real-time)
+router.post('/validate-prescription',
+  authorize('DOCTOR'),
+  asyncHandler(async (req, res) => {
+    const validation = await aiConsultationService.validatePrescription({
+      ...req.body,
+      hospitalId: req.user!.hospitalId
+    });
+    sendSuccess(res, validation);
+  })
+);
+
+// Generate SOAP notes
+router.post('/generate-soap',
+  authorize('DOCTOR'),
+  asyncHandler(async (req, res) => {
+    const soap = await aiConsultationService.generateSOAPNotes(req.body);
+    sendSuccess(res, soap);
+  })
+);
+
+// Get follow-up recommendations
+router.get('/follow-up/:consultationId',
+  authorize('DOCTOR'),
+  asyncHandler(async (req, res) => {
+    const recommendations = await aiConsultationService.getFollowUpRecommendations(
+      req.params.consultationId
+    );
+    sendSuccess(res, recommendations);
+  })
+);
+
+export default router;
+```
+
+#### 6.4 Frontend: AI-Enhanced Consultation Page
+
+**File:** `frontend/src/pages/Consultation/index.tsx` (major update)
+
+```typescript
+// frontend/src/pages/Consultation/index.tsx
+import { useState, useEffect, useCallback } from 'react';
+import { useParams } from 'react-router-dom';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { debounce } from 'lodash';
+import {
+  ExclamationTriangleIcon,
+  LightBulbIcon,
+  BeakerIcon,
+  ClipboardDocumentListIcon,
+  SparklesIcon,
+  ShieldExclamationIcon
+} from '@heroicons/react/24/outline';
+import { consultationApi, aiConsultationApi } from '../../services/api';
+
+// Components
+import PatientHeader from './components/PatientHeader';
+import AIInsightsPanel from './components/AIInsightsPanel';
+import VitalsEntry from './components/VitalsEntry';
+import SymptomsEntry from './components/SymptomsEntry';
+import DiagnosisSection from './components/DiagnosisSection';
+import PrescriptionSection from './components/PrescriptionSection';
+import SOAPNotesSection from './components/SOAPNotesSection';
+
+export default function Consultation() {
+  const { appointmentId, patientId } = useParams();
+
+  // State
+  const [activeTab, setActiveTab] = useState<'vitals' | 'symptoms' | 'diagnosis' | 'prescription' | 'notes'>('vitals');
+  const [vitals, setVitals] = useState<VitalsData | null>(null);
+  const [symptoms, setSymptoms] = useState<string[]>([]);
+  const [chiefComplaint, setChiefComplaint] = useState('');
+  const [selectedDiagnosis, setSelectedDiagnosis] = useState<Diagnosis | null>(null);
+  const [prescriptions, setPrescriptions] = useState<Medication[]>([]);
+  const [showAIPanel, setShowAIPanel] = useState(true);
+
+  // Fetch AI patient context
+  const { data: patientContext, isLoading: contextLoading } = useQuery({
+    queryKey: ['patient-ai-context', patientId],
+    queryFn: () => aiConsultationApi.getPatientContext(patientId!),
+    enabled: !!patientId
+  });
+
+  // AI Vital interpretation
+  const { data: vitalInterpretation, refetch: interpretVitals } = useQuery({
+    queryKey: ['vital-interpretation', vitals],
+    queryFn: () => aiConsultationApi.interpretVitals(vitals!),
+    enabled: false
+  });
+
+  // AI Diagnosis suggestions
+  const diagnosisMutation = useMutation({
+    mutationFn: aiConsultationApi.suggestDiagnosis
+  });
+
+  // AI Prescription validation (real-time)
+  const prescriptionValidation = useMutation({
+    mutationFn: aiConsultationApi.validatePrescription
+  });
+
+  // Debounced prescription validation
+  const debouncedValidatePrescription = useCallback(
+    debounce((meds: Medication[]) => {
+      if (meds.length > 0 && patientId) {
+        prescriptionValidation.mutate({
+          medications: meds,
+          patientId
+        });
+      }
+    }, 500),
+    [patientId]
+  );
+
+  // Validate prescription whenever it changes
+  useEffect(() => {
+    debouncedValidatePrescription(prescriptions);
+  }, [prescriptions, debouncedValidatePrescription]);
+
+  // Handle vital signs submission
+  const handleVitalsSubmit = async (vitalsData: VitalsData) => {
+    setVitals(vitalsData);
+    await interpretVitals();
+    setActiveTab('symptoms');
+  };
+
+  // Handle symptoms submission
+  const handleSymptomsSubmit = async (symptomData: { chiefComplaint: string; symptoms: string[] }) => {
+    setChiefComplaint(symptomData.chiefComplaint);
+    setSymptoms(symptomData.symptoms);
+
+    // Get AI diagnosis suggestions
+    diagnosisMutation.mutate({
+      symptoms: symptomData.symptoms,
+      chiefComplaint: symptomData.chiefComplaint,
+      patientAge: patientContext?.patient.age,
+      patientGender: patientContext?.patient.gender,
+      medicalHistory: patientContext?.aiInsights.recentTrends
+    });
+
+    setActiveTab('diagnosis');
+  };
+
+  // Handle adding medication
+  const handleAddMedication = (medication: Medication) => {
+    setPrescriptions(prev => [...prev, medication]);
+  };
+
+  // Handle removing medication
+  const handleRemoveMedication = (index: number) => {
+    setPrescriptions(prev => prev.filter((_, i) => i !== index));
+  };
+
+  return (
+    <div className="flex h-screen bg-gray-50">
+      {/* Main Content */}
+      <div className={`flex-1 overflow-hidden ${showAIPanel ? 'mr-96' : ''}`}>
+        {/* Patient Header with Alerts */}
+        <PatientHeader
+          patient={patientContext?.patient}
+          alerts={patientContext?.aiInsights}
+          isLoading={contextLoading}
+        />
+
+        {/* Critical Alerts Banner */}
+        {patientContext?.aiInsights?.allergyWarnings?.length > 0 && (
+          <div className="bg-red-50 border-l-4 border-red-500 p-4 mx-6 mt-4">
+            <div className="flex items-center">
+              <ShieldExclamationIcon className="w-6 h-6 text-red-500 mr-3" />
+              <div>
+                <h4 className="text-red-800 font-semibold">Allergy Alert</h4>
+                <ul className="text-red-700 text-sm">
+                  {patientContext.aiInsights.allergyWarnings.map((warning: string, i: number) => (
+                    <li key={i}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab Navigation */}
+        <div className="border-b border-gray-200 px-6 mt-4">
+          <nav className="flex space-x-8">
+            {[
+              { id: 'vitals', label: 'Vitals', icon: '❤️' },
+              { id: 'symptoms', label: 'Symptoms', icon: '🩺' },
+              { id: 'diagnosis', label: 'Diagnosis', icon: '📋' },
+              { id: 'prescription', label: 'Prescription', icon: '💊' },
+              { id: 'notes', label: 'Notes', icon: '📝' }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center ${
+                  activeTab === tab.id
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <span className="mr-2">{tab.icon}</span>
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        {/* Tab Content */}
+        <div className="p-6 overflow-y-auto" style={{ height: 'calc(100vh - 200px)' }}>
+          {activeTab === 'vitals' && (
+            <VitalsEntry
+              onSubmit={handleVitalsSubmit}
+              interpretation={vitalInterpretation}
+            />
+          )}
+
+          {activeTab === 'symptoms' && (
+            <SymptomsEntry
+              onSubmit={handleSymptomsSubmit}
+              patientContext={patientContext}
+            />
+          )}
+
+          {activeTab === 'diagnosis' && (
+            <DiagnosisSection
+              suggestions={diagnosisMutation.data}
+              isLoading={diagnosisMutation.isPending}
+              selectedDiagnosis={selectedDiagnosis}
+              onSelectDiagnosis={setSelectedDiagnosis}
+              patientContext={patientContext}
+            />
+          )}
+
+          {activeTab === 'prescription' && (
+            <PrescriptionSection
+              prescriptions={prescriptions}
+              validation={prescriptionValidation.data}
+              isValidating={prescriptionValidation.isPending}
+              onAddMedication={handleAddMedication}
+              onRemoveMedication={handleRemoveMedication}
+              patientContext={patientContext}
+              diagnosis={selectedDiagnosis}
+            />
+          )}
+
+          {activeTab === 'notes' && (
+            <SOAPNotesSection
+              consultationData={{
+                chiefComplaint,
+                symptoms,
+                vitals,
+                diagnosis: selectedDiagnosis,
+                prescriptions
+              }}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* AI Insights Side Panel */}
+      {showAIPanel && (
+        <AIInsightsPanel
+          patientContext={patientContext}
+          vitalInterpretation={vitalInterpretation}
+          diagnosisSuggestions={diagnosisMutation.data}
+          prescriptionValidation={prescriptionValidation.data}
+          onClose={() => setShowAIPanel(false)}
+        />
+      )}
+
+      {/* Toggle AI Panel Button */}
+      {!showAIPanel && (
+        <button
+          onClick={() => setShowAIPanel(true)}
+          className="fixed right-4 top-1/2 transform -translate-y-1/2 bg-primary-600 text-white p-3 rounded-l-lg shadow-lg hover:bg-primary-700"
+        >
+          <SparklesIcon className="w-6 h-6" />
+        </button>
+      )}
+    </div>
+  );
+}
+```
+
+#### 6.5 Frontend: AI Insights Panel Component
+
+**File:** `frontend/src/pages/Consultation/components/AIInsightsPanel.tsx`
+
+```typescript
+// frontend/src/pages/Consultation/components/AIInsightsPanel.tsx
+import {
+  XMarkIcon,
+  ExclamationTriangleIcon,
+  CheckCircleIcon,
+  LightBulbIcon,
+  BeakerIcon
+} from '@heroicons/react/24/outline';
+
+interface AIInsightsPanelProps {
+  patientContext: any;
+  vitalInterpretation: any;
+  diagnosisSuggestions: any;
+  prescriptionValidation: any;
+  onClose: () => void;
+}
+
+export default function AIInsightsPanel({
+  patientContext,
+  vitalInterpretation,
+  diagnosisSuggestions,
+  prescriptionValidation,
+  onClose
+}: AIInsightsPanelProps) {
+  return (
+    <div className="fixed right-0 top-0 h-full w-96 bg-white shadow-xl border-l border-gray-200 overflow-y-auto">
+      {/* Header */}
+      <div className="sticky top-0 bg-gradient-to-r from-primary-600 to-primary-700 text-white p-4 flex items-center justify-between">
+        <div className="flex items-center">
+          <LightBulbIcon className="w-6 h-6 mr-2" />
+          <h2 className="font-semibold">AI Clinical Assistant</h2>
+        </div>
+        <button onClick={onClose} className="hover:bg-primary-500 rounded p-1">
+          <XMarkIcon className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div className="p-4 space-y-6">
+        {/* Patient Risk Summary */}
+        {patientContext?.aiInsights && (
+          <section>
+            <h3 className="font-semibold text-gray-800 mb-3 flex items-center">
+              <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+              Patient Risk Assessment
+            </h3>
+            <div className={`p-3 rounded-lg ${
+              patientContext.aiInsights.riskLevel === 'HIGH' ? 'bg-red-50' :
+              patientContext.aiInsights.riskLevel === 'MEDIUM' ? 'bg-yellow-50' : 'bg-green-50'
+            }`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium">Risk Level</span>
+                <span className={`px-2 py-1 rounded text-xs font-bold ${
+                  patientContext.aiInsights.riskLevel === 'HIGH' ? 'bg-red-200 text-red-800' :
+                  patientContext.aiInsights.riskLevel === 'MEDIUM' ? 'bg-yellow-200 text-yellow-800' :
+                  'bg-green-200 text-green-800'
+                }`}>
+                  {patientContext.aiInsights.riskLevel}
+                </span>
+              </div>
+              {patientContext.aiInsights.riskFactors?.length > 0 && (
+                <ul className="text-sm text-gray-600 space-y-1">
+                  {patientContext.aiInsights.riskFactors.map((factor: string, i: number) => (
+                    <li key={i} className="flex items-start">
+                      <span className="text-yellow-500 mr-1">•</span>
+                      {factor}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Vital Signs Interpretation */}
+        {vitalInterpretation && (
+          <section>
+            <h3 className="font-semibold text-gray-800 mb-3 flex items-center">
+              <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+              Vital Signs Analysis
+            </h3>
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm">NEWS2 Score</span>
+                <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+                  vitalInterpretation.ewsScore >= 7 ? 'bg-red-500 text-white' :
+                  vitalInterpretation.ewsScore >= 5 ? 'bg-orange-500 text-white' :
+                  vitalInterpretation.ewsScore >= 1 ? 'bg-yellow-500 text-white' :
+                  'bg-green-500 text-white'
+                }`}>
+                  {vitalInterpretation.ewsScore}
+                </span>
+              </div>
+              {vitalInterpretation.abnormalFindings?.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-xs font-medium text-gray-500 mb-1">Abnormal Findings:</p>
+                  {vitalInterpretation.abnormalFindings.map((finding: string, i: number) => (
+                    <div key={i} className="flex items-center text-sm text-orange-700 bg-orange-50 px-2 py-1 rounded mb-1">
+                      <ExclamationTriangleIcon className="w-4 h-4 mr-1" />
+                      {finding}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-gray-600 mt-2">
+                <strong>Recommended:</strong> {vitalInterpretation.recommendedAction}
+              </p>
+            </div>
+          </section>
+        )}
+
+        {/* Diagnosis Suggestions */}
+        {diagnosisSuggestions && (
+          <section>
+            <h3 className="font-semibold text-gray-800 mb-3 flex items-center">
+              <span className="w-2 h-2 bg-purple-500 rounded-full mr-2"></span>
+              AI Diagnosis Suggestions
+            </h3>
+            {diagnosisSuggestions.primaryDiagnosis && (
+              <div className="bg-purple-50 rounded-lg p-3 mb-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-purple-900">
+                    {diagnosisSuggestions.primaryDiagnosis.name}
+                  </span>
+                  <span className="text-xs bg-purple-200 text-purple-800 px-2 py-1 rounded">
+                    {Math.round(diagnosisSuggestions.primaryDiagnosis.confidence * 100)}%
+                  </span>
+                </div>
+                <span className="text-xs text-purple-600">
+                  ICD-10: {diagnosisSuggestions.primaryDiagnosis.icdCode}
+                </span>
+              </div>
+            )}
+            {diagnosisSuggestions.differentialDiagnoses?.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-gray-500">Differential Diagnoses:</p>
+                {diagnosisSuggestions.differentialDiagnoses.map((dx: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between text-sm bg-gray-50 px-2 py-1 rounded">
+                    <span>{dx.name}</span>
+                    <span className="text-xs text-gray-500">{Math.round(dx.confidence * 100)}%</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {diagnosisSuggestions.redFlags?.length > 0 && (
+              <div className="mt-2 bg-red-50 rounded p-2">
+                <p className="text-xs font-bold text-red-700 mb-1">Red Flags:</p>
+                {diagnosisSuggestions.redFlags.map((flag: string, i: number) => (
+                  <div key={i} className="text-xs text-red-600 flex items-center">
+                    <ExclamationTriangleIcon className="w-3 h-3 mr-1" />
+                    {flag}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Prescription Validation */}
+        {prescriptionValidation && (
+          <section>
+            <h3 className="font-semibold text-gray-800 mb-3 flex items-center">
+              <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+              Prescription Safety Check
+            </h3>
+            <div className={`rounded-lg p-3 ${
+              prescriptionValidation.isValid ? 'bg-green-50' : 'bg-red-50'
+            }`}>
+              <div className="flex items-center mb-2">
+                {prescriptionValidation.isValid ? (
+                  <>
+                    <CheckCircleIcon className="w-5 h-5 text-green-500 mr-2" />
+                    <span className="text-green-700 font-medium">No Critical Issues</span>
+                  </>
+                ) : (
+                  <>
+                    <ExclamationTriangleIcon className="w-5 h-5 text-red-500 mr-2" />
+                    <span className="text-red-700 font-medium">Issues Detected</span>
+                  </>
+                )}
+              </div>
+
+              {/* Drug Interactions */}
+              {prescriptionValidation.interactions?.length > 0 && (
+                <div className="mt-2 space-y-2">
+                  <p className="text-xs font-medium text-gray-600">Drug Interactions:</p>
+                  {prescriptionValidation.interactions.map((interaction: any, i: number) => (
+                    <div key={i} className={`text-xs p-2 rounded ${
+                      interaction.severity === 'CRITICAL' ? 'bg-red-100 text-red-800' :
+                      interaction.severity === 'SEVERE' ? 'bg-orange-100 text-orange-800' :
+                      interaction.severity === 'MODERATE' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-blue-100 text-blue-800'
+                    }`}>
+                      <div className="font-medium">{interaction.drugs.join(' + ')}</div>
+                      <div>{interaction.description}</div>
+                      <div className="mt-1 text-xs opacity-75">
+                        Severity: {interaction.severity}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Recommendations */}
+              {prescriptionValidation.recommendations?.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-xs font-medium text-gray-600">Recommendations:</p>
+                  <ul className="text-xs text-gray-700 space-y-1 mt-1">
+                    {prescriptionValidation.recommendations.map((rec: string, i: number) => (
+                      <li key={i} className="flex items-start">
+                        <LightBulbIcon className="w-3 h-3 mr-1 mt-0.5 text-yellow-500" />
+                        {rec}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Recommended Tests */}
+        {diagnosisSuggestions?.recommendedTests?.length > 0 && (
+          <section>
+            <h3 className="font-semibold text-gray-800 mb-3 flex items-center">
+              <BeakerIcon className="w-4 h-4 mr-2 text-blue-500" />
+              Recommended Tests
+            </h3>
+            <div className="space-y-1">
+              {diagnosisSuggestions.recommendedTests.map((test: string, i: number) => (
+                <div key={i} className="flex items-center justify-between bg-blue-50 px-3 py-2 rounded text-sm">
+                  <span>{test}</span>
+                  <button className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                    + Add
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+#### 6.6 Frontend: Prescription Section with Real-time Validation
+
+**File:** `frontend/src/pages/Consultation/components/PrescriptionSection.tsx`
+
+```typescript
+// frontend/src/pages/Consultation/components/PrescriptionSection.tsx
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import {
+  PlusIcon,
+  TrashIcon,
+  ExclamationTriangleIcon,
+  CheckCircleIcon,
+  InformationCircleIcon
+} from '@heroicons/react/24/outline';
+import { pharmacyApi } from '../../../services/api';
+
+interface PrescriptionSectionProps {
+  prescriptions: Medication[];
+  validation: any;
+  isValidating: boolean;
+  onAddMedication: (medication: Medication) => void;
+  onRemoveMedication: (index: number) => void;
+  patientContext: any;
+  diagnosis: any;
+}
+
+export default function PrescriptionSection({
+  prescriptions,
+  validation,
+  isValidating,
+  onAddMedication,
+  onRemoveMedication,
+  patientContext,
+  diagnosis
+}: PrescriptionSectionProps) {
+  const [drugSearch, setDrugSearch] = useState('');
+  const [selectedDrug, setSelectedDrug] = useState<any>(null);
+  const [dosageForm, setDosageForm] = useState({
+    dosage: '',
+    frequency: 'OD',
+    duration: '7',
+    route: 'ORAL',
+    instructions: ''
+  });
+
+  // Drug search
+  const { data: drugResults } = useQuery({
+    queryKey: ['drug-search', drugSearch],
+    queryFn: () => pharmacyApi.searchDrugs(drugSearch),
+    enabled: drugSearch.length >= 2
+  });
+
+  // Get AI dosage recommendation when drug is selected
+  const { data: dosageRecommendation } = useQuery({
+    queryKey: ['dosage-recommendation', selectedDrug?.name, patientContext?.patient],
+    queryFn: () => pharmacyApi.calculateDosage({
+      drugName: selectedDrug.name,
+      patientAge: patientContext?.patient?.age,
+      patientWeight: patientContext?.patient?.weight,
+      indication: diagnosis?.name
+    }),
+    enabled: !!selectedDrug && !!patientContext?.patient
+  });
+
+  const handleSelectDrug = (drug: any) => {
+    setSelectedDrug(drug);
+    setDrugSearch(drug.name);
+
+    // Auto-fill recommended dosage if available
+    if (dosageRecommendation) {
+      setDosageForm(prev => ({
+        ...prev,
+        dosage: dosageRecommendation.recommendedDose || prev.dosage,
+        frequency: dosageRecommendation.frequency || prev.frequency
+      }));
+    }
+  };
+
+  const handleAddMedication = () => {
+    if (!selectedDrug || !dosageForm.dosage) return;
+
+    onAddMedication({
+      drugName: selectedDrug.name,
+      drugId: selectedDrug.id,
+      ...dosageForm
+    });
+
+    // Reset form
+    setSelectedDrug(null);
+    setDrugSearch('');
+    setDosageForm({
+      dosage: '',
+      frequency: 'OD',
+      duration: '7',
+      route: 'ORAL',
+      instructions: ''
+    });
+  };
+
+  // Get validation status for a specific medication
+  const getMedicationValidation = (drugName: string) => {
+    if (!validation?.medications) return null;
+    return validation.medications.find((m: any) => m.drugName === drugName);
+  };
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-xl font-semibold">Prescription</h2>
+
+      {/* Allergy Warning */}
+      {patientContext?.allergies?.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <ExclamationTriangleIcon className="w-5 h-5 text-red-500 mr-2" />
+            <span className="font-medium text-red-800">Patient Allergies:</span>
+          </div>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {patientContext.allergies.map((allergy: any, i: number) => (
+              <span key={i} className="bg-red-100 text-red-800 px-2 py-1 rounded text-sm">
+                {allergy.allergen}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Current Medications Warning */}
+      {patientContext?.currentMedications?.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <InformationCircleIcon className="w-5 h-5 text-blue-500 mr-2" />
+            <span className="font-medium text-blue-800">Current Medications:</span>
+          </div>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {patientContext.currentMedications.map((med: any, i: number) => (
+              <span key={i} className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm">
+                {med.drugName}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Add Medication Form */}
+      <div className="bg-white border rounded-lg p-4">
+        <h3 className="font-medium mb-4">Add Medication</h3>
+
+        <div className="grid grid-cols-2 gap-4">
+          {/* Drug Search */}
+          <div className="col-span-2 relative">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Drug Name
+            </label>
+            <input
+              type="text"
+              value={drugSearch}
+              onChange={(e) => setDrugSearch(e.target.value)}
+              placeholder="Search drug..."
+              className="w-full border rounded-lg px-3 py-2"
+            />
+
+            {/* Search Results Dropdown */}
+            {drugResults?.length > 0 && !selectedDrug && (
+              <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                {drugResults.map((drug: any) => (
+                  <button
+                    key={drug.id}
+                    onClick={() => handleSelectDrug(drug)}
+                    className="w-full text-left px-4 py-2 hover:bg-gray-50 border-b last:border-b-0"
+                  >
+                    <div className="font-medium">{drug.name}</div>
+                    <div className="text-sm text-gray-500">
+                      {drug.genericName} • {drug.form} • {drug.strength}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* AI Dosage Recommendation */}
+          {selectedDrug && dosageRecommendation && (
+            <div className="col-span-2 bg-green-50 border border-green-200 rounded-lg p-3">
+              <div className="flex items-center mb-2">
+                <CheckCircleIcon className="w-5 h-5 text-green-500 mr-2" />
+                <span className="font-medium text-green-800">AI Dosage Recommendation</span>
+              </div>
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-600">Recommended:</span>
+                  <span className="ml-1 font-medium">{dosageRecommendation.recommendedDose}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Max Daily:</span>
+                  <span className="ml-1 font-medium">{dosageRecommendation.maxDailyDose}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Frequency:</span>
+                  <span className="ml-1 font-medium">{dosageRecommendation.frequency}</span>
+                </div>
+              </div>
+              {dosageRecommendation.adjustments?.length > 0 && (
+                <div className="mt-2 text-sm text-yellow-700 bg-yellow-50 p-2 rounded">
+                  <strong>Adjustments:</strong>
+                  <ul className="list-disc list-inside">
+                    {dosageRecommendation.adjustments.map((adj: string, i: number) => (
+                      <li key={i}>{adj}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Dosage */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Dosage</label>
+            <input
+              type="text"
+              value={dosageForm.dosage}
+              onChange={(e) => setDosageForm(prev => ({ ...prev, dosage: e.target.value }))}
+              placeholder="e.g., 500mg"
+              className="w-full border rounded-lg px-3 py-2"
+            />
+          </div>
+
+          {/* Frequency */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Frequency</label>
+            <select
+              value={dosageForm.frequency}
+              onChange={(e) => setDosageForm(prev => ({ ...prev, frequency: e.target.value }))}
+              className="w-full border rounded-lg px-3 py-2"
+            >
+              <option value="OD">Once Daily (OD)</option>
+              <option value="BD">Twice Daily (BD)</option>
+              <option value="TDS">Three Times Daily (TDS)</option>
+              <option value="QID">Four Times Daily (QID)</option>
+              <option value="PRN">As Needed (PRN)</option>
+              <option value="STAT">Immediately (STAT)</option>
+            </select>
+          </div>
+
+          {/* Duration */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Duration (days)</label>
+            <input
+              type="number"
+              value={dosageForm.duration}
+              onChange={(e) => setDosageForm(prev => ({ ...prev, duration: e.target.value }))}
+              className="w-full border rounded-lg px-3 py-2"
+            />
+          </div>
+
+          {/* Route */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Route</label>
+            <select
+              value={dosageForm.route}
+              onChange={(e) => setDosageForm(prev => ({ ...prev, route: e.target.value }))}
+              className="w-full border rounded-lg px-3 py-2"
+            >
+              <option value="ORAL">Oral</option>
+              <option value="IV">Intravenous (IV)</option>
+              <option value="IM">Intramuscular (IM)</option>
+              <option value="SC">Subcutaneous (SC)</option>
+              <option value="TOPICAL">Topical</option>
+              <option value="INHALATION">Inhalation</option>
+            </select>
+          </div>
+
+          {/* Instructions */}
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Instructions</label>
+            <input
+              type="text"
+              value={dosageForm.instructions}
+              onChange={(e) => setDosageForm(prev => ({ ...prev, instructions: e.target.value }))}
+              placeholder="e.g., Take after meals"
+              className="w-full border rounded-lg px-3 py-2"
+            />
+          </div>
+        </div>
+
+        <button
+          onClick={handleAddMedication}
+          disabled={!selectedDrug || !dosageForm.dosage}
+          className="mt-4 flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <PlusIcon className="w-5 h-5 mr-2" />
+          Add Medication
+        </button>
+      </div>
+
+      {/* Prescription List */}
+      <div className="bg-white border rounded-lg overflow-hidden">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Drug</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Dosage</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Frequency</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duration</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {prescriptions.map((med, index) => {
+              const medValidation = getMedicationValidation(med.drugName);
+
+              return (
+                <tr key={index} className={medValidation && !medValidation.isValid ? 'bg-red-50' : ''}>
+                  <td className="px-4 py-3">
+                    <div className="font-medium">{med.drugName}</div>
+                    {medValidation?.allergyWarning?.hasConflict && (
+                      <div className="flex items-center text-xs text-red-600 mt-1">
+                        <ExclamationTriangleIcon className="w-4 h-4 mr-1" />
+                        {medValidation.allergyWarning.message}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">{med.dosage}</td>
+                  <td className="px-4 py-3">{med.frequency}</td>
+                  <td className="px-4 py-3">{med.duration} days</td>
+                  <td className="px-4 py-3">
+                    {isValidating ? (
+                      <span className="text-gray-400">Checking...</span>
+                    ) : medValidation ? (
+                      medValidation.isValid ? (
+                        <span className="flex items-center text-green-600">
+                          <CheckCircleIcon className="w-5 h-5 mr-1" />
+                          Safe
+                        </span>
+                      ) : (
+                        <span className="flex items-center text-red-600">
+                          <ExclamationTriangleIcon className="w-5 h-5 mr-1" />
+                          Warning
+                        </span>
+                      )
+                    ) : null}
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => onRemoveMedication(index)}
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      <TrashIcon className="w-5 h-5" />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+            {prescriptions.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                  No medications added yet
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Interaction Summary */}
+      {validation?.interactions?.length > 0 && (
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+          <h3 className="font-medium text-orange-800 mb-2 flex items-center">
+            <ExclamationTriangleIcon className="w-5 h-5 mr-2" />
+            Drug Interactions Detected
+          </h3>
+          <div className="space-y-2">
+            {validation.interactions.map((interaction: any, i: number) => (
+              <div key={i} className={`p-3 rounded ${
+                interaction.severity === 'CRITICAL' ? 'bg-red-100' :
+                interaction.severity === 'SEVERE' ? 'bg-orange-100' :
+                'bg-yellow-100'
+              }`}>
+                <div className="font-medium">
+                  {interaction.drugs.join(' + ')}
+                  <span className={`ml-2 text-xs px-2 py-0.5 rounded ${
+                    interaction.severity === 'CRITICAL' ? 'bg-red-500 text-white' :
+                    interaction.severity === 'SEVERE' ? 'bg-orange-500 text-white' :
+                    'bg-yellow-500 text-white'
+                  }`}>
+                    {interaction.severity}
+                  </span>
+                </div>
+                <div className="text-sm text-gray-700 mt-1">{interaction.description}</div>
+                {interaction.recommendation && (
+                  <div className="text-sm text-blue-700 mt-1">
+                    <strong>Recommendation:</strong> {interaction.recommendation}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+---
+
+### 7. Advanced Pharmacy AI Features
+
+**Status:** Basic drug interaction exists, needs enhancement
+**Effort:** 4-5 days
+**Dependencies:** OpenAI API for advanced analysis
+
+This enhancement adds advanced AI capabilities to the pharmacy module.
+
+#### 7.1 Enhanced Pharmacy AI Service
+
+**File:** `ai-services/pharmacy/service.py` (major enhancement)
+
+```python
+# ai-services/pharmacy/service.py - Enhanced Version
+from typing import Dict, List, Optional, Tuple
+from datetime import datetime, timedelta
+import re
+from openai import OpenAI
+import os
+
+class EnhancedPharmacyAI:
+    """
+    Advanced Pharmacy AI with:
+    - Intelligent drug interaction analysis
+    - Personalized dosing recommendations
+    - Therapeutic drug monitoring
+    - Medication adherence prediction
+    - Polypharmacy optimization
+    - Drug-gene interaction (pharmacogenomics)
+    - Cost-effective alternatives
+    """
+
+    def __init__(self):
+        self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        self._load_knowledge_bases()
+
+    def _load_knowledge_bases(self):
+        """Load comprehensive drug databases."""
+        from .knowledge_base import (
+            DRUG_DATABASE,
+            DRUG_INTERACTIONS,
+            FOOD_INTERACTIONS,
+            THERAPEUTIC_RANGES,
+            PHARMACOGENOMICS_DATA,
+            DRUG_COSTS
+        )
+        self.drug_db = DRUG_DATABASE
+        self.interactions_db = DRUG_INTERACTIONS
+        self.food_interactions = FOOD_INTERACTIONS
+        self.therapeutic_ranges = THERAPEUTIC_RANGES
+        self.pharmacogenomics = PHARMACOGENOMICS_DATA
+        self.drug_costs = DRUG_COSTS
+
+    # ==========================================
+    # 1. INTELLIGENT DRUG INTERACTION ANALYSIS
+    # ==========================================
+
+    async def analyze_interactions_comprehensive(
+        self,
+        medications: List[str],
+        patient_data: Dict
+    ) -> Dict:
+        """
+        Comprehensive drug interaction analysis including:
+        - Drug-drug interactions
+        - Drug-food interactions
+        - Drug-disease contraindications
+        - Drug-lab test interference
+        - Therapeutic duplication
+        """
+        results = {
+            'drugDrugInteractions': [],
+            'drugFoodInteractions': [],
+            'diseaseContraindications': [],
+            'labInterferences': [],
+            'therapeuticDuplications': [],
+            'overallRisk': 'LOW',
+            'recommendations': []
+        }
+
+        # 1. Drug-Drug Interactions
+        for i, drug1 in enumerate(medications):
+            for drug2 in medications[i+1:]:
+                interaction = self._check_drug_interaction(drug1, drug2)
+                if interaction:
+                    results['drugDrugInteractions'].append(interaction)
+
+        # 2. Drug-Food Interactions
+        for drug in medications:
+            food_interactions = self._check_food_interactions(drug)
+            results['drugFoodInteractions'].extend(food_interactions)
+
+        # 3. Disease Contraindications
+        patient_conditions = patient_data.get('conditions', [])
+        for drug in medications:
+            contraindications = self._check_disease_contraindications(drug, patient_conditions)
+            results['diseaseContraindications'].extend(contraindications)
+
+        # 4. Lab Test Interferences
+        for drug in medications:
+            lab_interferences = self._check_lab_interferences(drug)
+            results['labInterferences'].extend(lab_interferences)
+
+        # 5. Therapeutic Duplication
+        duplications = self._check_therapeutic_duplication(medications)
+        results['therapeuticDuplications'] = duplications
+
+        # Calculate overall risk
+        results['overallRisk'] = self._calculate_overall_risk(results)
+
+        # Generate AI recommendations
+        results['recommendations'] = await self._generate_ai_recommendations(results, patient_data)
+
+        return results
+
+    def _check_drug_interaction(self, drug1: str, drug2: str) -> Optional[Dict]:
+        """Check for interaction between two drugs."""
+        drug1_lower = drug1.lower()
+        drug2_lower = drug2.lower()
+
+        # Check in interaction database
+        for interaction in self.interactions_db:
+            if (drug1_lower in interaction['drugs'] and drug2_lower in interaction['drugs']):
+                return {
+                    'drugs': [drug1, drug2],
+                    'severity': interaction['severity'],
+                    'mechanism': interaction['mechanism'],
+                    'effect': interaction['effect'],
+                    'management': interaction['management'],
+                    'documentation': interaction.get('documentation', 'Fair')
+                }
+
+        return None
+
+    def _check_food_interactions(self, drug: str) -> List[Dict]:
+        """Check drug-food interactions."""
+        interactions = []
+        drug_lower = drug.lower()
+
+        food_interaction_db = {
+            'warfarin': [
+                {'food': 'Vitamin K rich foods (leafy greens)', 'effect': 'Decreased anticoagulant effect', 'severity': 'MODERATE'},
+                {'food': 'Cranberry juice', 'effect': 'Increased bleeding risk', 'severity': 'MODERATE'},
+                {'food': 'Alcohol', 'effect': 'Variable anticoagulant effect', 'severity': 'MODERATE'}
+            ],
+            'ciprofloxacin': [
+                {'food': 'Dairy products', 'effect': 'Decreased absorption', 'severity': 'MODERATE'},
+                {'food': 'Calcium-fortified foods', 'effect': 'Decreased absorption', 'severity': 'MODERATE'}
+            ],
+            'metformin': [
+                {'food': 'Alcohol', 'effect': 'Increased lactic acidosis risk', 'severity': 'SEVERE'}
+            ],
+            'lisinopril': [
+                {'food': 'Potassium-rich foods', 'effect': 'Hyperkalemia risk', 'severity': 'MODERATE'},
+                {'food': 'Salt substitutes', 'effect': 'Hyperkalemia risk', 'severity': 'MODERATE'}
+            ],
+            'levothyroxine': [
+                {'food': 'Soy products', 'effect': 'Decreased absorption', 'severity': 'MODERATE'},
+                {'food': 'Coffee', 'effect': 'Decreased absorption', 'severity': 'MINOR'},
+                {'food': 'High-fiber foods', 'effect': 'Decreased absorption', 'severity': 'MINOR'}
+            ],
+            'statins': [
+                {'food': 'Grapefruit juice', 'effect': 'Increased statin levels and toxicity', 'severity': 'SEVERE'}
+            ],
+            'mao_inhibitors': [
+                {'food': 'Tyramine-rich foods (aged cheese, wine)', 'effect': 'Hypertensive crisis', 'severity': 'CRITICAL'}
+            ]
+        }
+
+        for drug_key, food_list in food_interaction_db.items():
+            if drug_key in drug_lower:
+                for food_int in food_list:
+                    interactions.append({
+                        'drug': drug,
+                        **food_int
+                    })
+
+        return interactions
+
+    def _check_therapeutic_duplication(self, medications: List[str]) -> List[Dict]:
+        """Check for therapeutic duplications."""
+        duplications = []
+
+        drug_classes = {
+            'ACE_INHIBITORS': ['lisinopril', 'enalapril', 'ramipril', 'captopril'],
+            'ARBS': ['losartan', 'valsartan', 'irbesartan', 'olmesartan'],
+            'STATINS': ['atorvastatin', 'simvastatin', 'rosuvastatin', 'pravastatin'],
+            'PPIS': ['omeprazole', 'pantoprazole', 'esomeprazole', 'lansoprazole'],
+            'SSRIS': ['fluoxetine', 'sertraline', 'paroxetine', 'escitalopram', 'citalopram'],
+            'BETA_BLOCKERS': ['metoprolol', 'atenolol', 'carvedilol', 'propranolol'],
+            'NSAIDS': ['ibuprofen', 'naproxen', 'diclofenac', 'meloxicam', 'celecoxib'],
+            'BENZODIAZEPINES': ['lorazepam', 'alprazolam', 'diazepam', 'clonazepam'],
+            'OPIOIDS': ['morphine', 'oxycodone', 'hydrocodone', 'fentanyl', 'tramadol']
+        }
+
+        med_lower = [m.lower() for m in medications]
+
+        for drug_class, drugs in drug_classes.items():
+            found_drugs = [m for m in med_lower if any(d in m for d in drugs)]
+            if len(found_drugs) > 1:
+                duplications.append({
+                    'class': drug_class.replace('_', ' ').title(),
+                    'drugs': found_drugs,
+                    'risk': 'Increased side effects and toxicity',
+                    'recommendation': f'Consider using only one {drug_class.replace("_", " ").lower()}'
+                })
+
+        return duplications
+
+    # ==========================================
+    # 2. PERSONALIZED DOSING RECOMMENDATIONS
+    # ==========================================
+
+    async def calculate_personalized_dose(
+        self,
+        drug_name: str,
+        patient: Dict
+    ) -> Dict:
+        """
+        Calculate personalized dose based on:
+        - Age, weight, BSA
+        - Renal function (CrCl/eGFR)
+        - Hepatic function
+        - Genetic factors (if available)
+        - Concurrent medications
+        """
+        # Extract patient parameters
+        age = patient.get('age', 50)
+        weight = patient.get('weight', 70)
+        height = patient.get('height', 170)
+        gender = patient.get('gender', 'male')
+        scr = patient.get('serumCreatinine', 1.0)  # mg/dL
+
+        # Calculate derived values
+        bsa = self._calculate_bsa(weight, height)
+        crcl = self._calculate_creatinine_clearance(age, weight, scr, gender)
+        egfr = self._calculate_egfr(age, scr, gender)
+
+        # Get base dosing
+        drug_info = self.drug_db.get(drug_name.lower(), {})
+        base_dose = drug_info.get('standard_dose', 'Unknown')
+
+        # Calculate adjustments
+        adjustments = []
+        adjusted_dose = base_dose
+
+        # Renal adjustment
+        renal_adj = self._get_renal_adjustment(drug_name, crcl)
+        if renal_adj:
+            adjustments.append(renal_adj)
+
+        # Hepatic adjustment
+        hepatic_function = patient.get('hepaticFunction', 'normal')
+        hepatic_adj = self._get_hepatic_adjustment(drug_name, hepatic_function)
+        if hepatic_adj:
+            adjustments.append(hepatic_adj)
+
+        # Age adjustment
+        if age > 65:
+            age_adj = self._get_geriatric_adjustment(drug_name)
+            if age_adj:
+                adjustments.append(age_adj)
+
+        # Weight-based dosing
+        if drug_info.get('weight_based', False):
+            weight_dose = self._calculate_weight_based_dose(drug_name, weight)
+            adjustments.append({
+                'type': 'WEIGHT_BASED',
+                'recommendation': f'Weight-based dose: {weight_dose}'
+            })
+
+        # Pharmacogenomic adjustment (if genetic data available)
+        if patient.get('geneticProfile'):
+            pg_adj = self._get_pharmacogenomic_adjustment(drug_name, patient['geneticProfile'])
+            if pg_adj:
+                adjustments.append(pg_adj)
+
+        return {
+            'drug': drug_name,
+            'patientParameters': {
+                'age': age,
+                'weight': weight,
+                'bsa': round(bsa, 2),
+                'creatinineClearance': round(crcl, 1),
+                'eGFR': round(egfr, 1),
+                'renalFunction': self._classify_renal_function(crcl),
+                'hepaticFunction': hepatic_function
+            },
+            'baseDose': base_dose,
+            'adjustments': adjustments,
+            'recommendedDose': self._apply_adjustments(base_dose, adjustments),
+            'maxDailyDose': drug_info.get('max_daily_dose', 'Consult reference'),
+            'frequency': drug_info.get('frequency', 'As directed'),
+            'warnings': self._get_dosing_warnings(drug_name, patient),
+            'monitoringRequired': drug_info.get('monitoring', [])
+        }
+
+    def _calculate_bsa(self, weight: float, height: float) -> float:
+        """Calculate Body Surface Area using Mosteller formula."""
+        return ((height * weight) / 3600) ** 0.5
+
+    def _calculate_creatinine_clearance(
+        self, age: int, weight: float, scr: float, gender: str
+    ) -> float:
+        """Calculate CrCl using Cockcroft-Gault formula."""
+        crcl = ((140 - age) * weight) / (72 * scr)
+        if gender.lower() == 'female':
+            crcl *= 0.85
+        return crcl
+
+    def _calculate_egfr(self, age: int, scr: float, gender: str) -> float:
+        """Calculate eGFR using CKD-EPI formula (simplified)."""
+        if gender.lower() == 'female':
+            if scr <= 0.7:
+                return 144 * (scr / 0.7) ** -0.329 * 0.993 ** age
+            else:
+                return 144 * (scr / 0.7) ** -1.209 * 0.993 ** age
+        else:
+            if scr <= 0.9:
+                return 141 * (scr / 0.9) ** -0.411 * 0.993 ** age
+            else:
+                return 141 * (scr / 0.9) ** -1.209 * 0.993 ** age
+
+    def _classify_renal_function(self, crcl: float) -> str:
+        """Classify renal function based on CrCl."""
+        if crcl >= 90:
+            return 'Normal'
+        elif crcl >= 60:
+            return 'Mild impairment'
+        elif crcl >= 30:
+            return 'Moderate impairment'
+        elif crcl >= 15:
+            return 'Severe impairment'
+        else:
+            return 'End-stage renal disease'
+
+    # ==========================================
+    # 3. THERAPEUTIC DRUG MONITORING
+    # ==========================================
+
+    def get_tdm_requirements(self, drug_name: str) -> Dict:
+        """Get therapeutic drug monitoring requirements."""
+        tdm_drugs = {
+            'vancomycin': {
+                'requiresTDM': True,
+                'targetRange': {'trough': '10-20 mcg/mL', 'peak': '20-40 mcg/mL'},
+                'sampleTiming': 'Trough: 30 min before dose, Peak: 1-2h after infusion',
+                'frequency': 'Every 3-5 days until stable, then weekly',
+                'toxicity': 'Nephrotoxicity, ototoxicity if levels too high'
+            },
+            'gentamicin': {
+                'requiresTDM': True,
+                'targetRange': {'trough': '<2 mcg/mL', 'peak': '5-10 mcg/mL'},
+                'sampleTiming': 'Trough: 30 min before dose, Peak: 30 min after infusion',
+                'frequency': 'Every 2-3 days',
+                'toxicity': 'Nephrotoxicity, ototoxicity'
+            },
+            'digoxin': {
+                'requiresTDM': True,
+                'targetRange': {'level': '0.8-2.0 ng/mL'},
+                'sampleTiming': 'At least 6 hours post-dose',
+                'frequency': 'Weekly until stable, then with dose changes',
+                'toxicity': 'Cardiac arrhythmias, nausea, visual disturbances'
+            },
+            'lithium': {
+                'requiresTDM': True,
+                'targetRange': {'level': '0.6-1.2 mEq/L'},
+                'sampleTiming': '12 hours post-dose (trough)',
+                'frequency': 'Weekly x4, then monthly',
+                'toxicity': 'Tremor, polyuria, hypothyroidism, renal impairment'
+            },
+            'phenytoin': {
+                'requiresTDM': True,
+                'targetRange': {'total': '10-20 mcg/mL', 'free': '1-2 mcg/mL'},
+                'sampleTiming': 'Trough level',
+                'frequency': 'Weekly until stable',
+                'toxicity': 'Nystagmus, ataxia, cognitive impairment'
+            },
+            'warfarin': {
+                'requiresTDM': True,
+                'targetRange': {'INR': '2.0-3.0 (standard), 2.5-3.5 (mechanical valve)'},
+                'sampleTiming': 'Anytime (INR)',
+                'frequency': 'Every 1-4 weeks depending on stability',
+                'toxicity': 'Bleeding'
+            },
+            'tacrolimus': {
+                'requiresTDM': True,
+                'targetRange': {'trough': '5-15 ng/mL (varies by indication)'},
+                'sampleTiming': 'Trough: 12h post-dose',
+                'frequency': 'Twice weekly initially, then weekly',
+                'toxicity': 'Nephrotoxicity, neurotoxicity, hyperglycemia'
+            },
+            'cyclosporine': {
+                'requiresTDM': True,
+                'targetRange': {'trough': '100-400 ng/mL (varies by indication)'},
+                'sampleTiming': 'Trough: 12h post-dose',
+                'frequency': 'Twice weekly initially, then weekly',
+                'toxicity': 'Nephrotoxicity, hypertension, tremor'
+            }
+        }
+
+        drug_lower = drug_name.lower()
+        for key, value in tdm_drugs.items():
+            if key in drug_lower:
+                return value
+
+        return {
+            'requiresTDM': False,
+            'message': 'Routine therapeutic drug monitoring not required'
+        }
+
+    # ==========================================
+    # 4. MEDICATION ADHERENCE PREDICTION
+    # ==========================================
+
+    async def predict_adherence_risk(
+        self,
+        patient: Dict,
+        medications: List[Dict]
+    ) -> Dict:
+        """
+        Predict medication adherence risk based on:
+        - Number of medications (polypharmacy)
+        - Dosing complexity
+        - Side effect profile
+        - Cost factors
+        - Patient factors
+        """
+        risk_score = 0
+        risk_factors = []
+
+        # 1. Polypharmacy risk
+        med_count = len(medications)
+        if med_count >= 10:
+            risk_score += 30
+            risk_factors.append(f'Taking {med_count} medications (high polypharmacy)')
+        elif med_count >= 5:
+            risk_score += 15
+            risk_factors.append(f'Taking {med_count} medications (moderate polypharmacy)')
+
+        # 2. Dosing complexity
+        total_daily_doses = sum(self._get_daily_frequency(m.get('frequency', 'OD')) for m in medications)
+        if total_daily_doses > 8:
+            risk_score += 20
+            risk_factors.append(f'{total_daily_doses} doses per day (complex regimen)')
+
+        # 3. Different timing requirements
+        timing_variations = self._analyze_timing_complexity(medications)
+        if timing_variations > 3:
+            risk_score += 15
+            risk_factors.append('Multiple different timing requirements')
+
+        # 4. Side effect burden
+        high_side_effect_drugs = [m for m in medications if self._has_high_side_effects(m['drugName'])]
+        if len(high_side_effect_drugs) >= 2:
+            risk_score += 15
+            risk_factors.append('Multiple medications with significant side effects')
+
+        # 5. Patient age
+        age = patient.get('age', 50)
+        if age > 75:
+            risk_score += 10
+            risk_factors.append('Age >75 (cognitive/physical barriers)')
+
+        # 6. Cognitive status
+        if patient.get('cognitiveImpairment'):
+            risk_score += 20
+            risk_factors.append('Cognitive impairment')
+
+        # Generate recommendations
+        recommendations = self._generate_adherence_recommendations(risk_factors, medications)
+
+        return {
+            'adherenceRisk': min(risk_score, 100),
+            'riskLevel': 'HIGH' if risk_score >= 50 else 'MEDIUM' if risk_score >= 25 else 'LOW',
+            'riskFactors': risk_factors,
+            'recommendations': recommendations,
+            'simplificationOptions': self._suggest_regimen_simplification(medications)
+        }
+
+    def _get_daily_frequency(self, frequency: str) -> int:
+        """Convert frequency code to daily dose count."""
+        freq_map = {
+            'OD': 1, 'QD': 1, 'DAILY': 1,
+            'BD': 2, 'BID': 2,
+            'TDS': 3, 'TID': 3,
+            'QID': 4,
+            'Q4H': 6,
+            'Q6H': 4,
+            'Q8H': 3,
+            'Q12H': 2
+        }
+        return freq_map.get(frequency.upper(), 1)
+
+    # ==========================================
+    # 5. COST-EFFECTIVE ALTERNATIVES
+    # ==========================================
+
+    async def suggest_cost_effective_alternatives(
+        self,
+        medications: List[Dict],
+        insurance_formulary: Optional[Dict] = None
+    ) -> List[Dict]:
+        """Suggest cost-effective therapeutic alternatives."""
+        alternatives = []
+
+        for med in medications:
+            drug_name = med.get('drugName', '').lower()
+
+            # Check for generic alternatives
+            generic = self._get_generic_alternative(drug_name)
+            if generic:
+                alternatives.append({
+                    'original': med['drugName'],
+                    'alternative': generic['name'],
+                    'type': 'GENERIC',
+                    'savings': generic.get('savingsPercent', 'Significant'),
+                    'therapeutic_equivalence': 'AB rated (therapeutically equivalent)'
+                })
+
+            # Check for therapeutic alternatives
+            therapeutic_alts = self._get_therapeutic_alternatives(drug_name)
+            for alt in therapeutic_alts:
+                alternatives.append({
+                    'original': med['drugName'],
+                    'alternative': alt['name'],
+                    'type': 'THERAPEUTIC_ALTERNATIVE',
+                    'rationale': alt['rationale'],
+                    'considerations': alt.get('considerations', [])
+                })
+
+            # Check formulary status if available
+            if insurance_formulary:
+                formulary_alt = self._check_formulary_alternative(drug_name, insurance_formulary)
+                if formulary_alt:
+                    alternatives.append({
+                        'original': med['drugName'],
+                        'alternative': formulary_alt['name'],
+                        'type': 'FORMULARY_PREFERRED',
+                        'tier': formulary_alt['tier'],
+                        'copay': formulary_alt.get('copay')
+                    })
+
+        return alternatives
+
+    # ==========================================
+    # 6. AI-POWERED ANALYSIS
+    # ==========================================
+
+    async def _generate_ai_recommendations(
+        self,
+        analysis_results: Dict,
+        patient_data: Dict
+    ) -> List[str]:
+        """Use GPT to generate clinical recommendations."""
+        try:
+            prompt = f"""
+            As a clinical pharmacist, analyze these findings and provide recommendations:
+
+            Patient: {patient_data.get('age')} year old {patient_data.get('gender')}
+            Conditions: {', '.join(patient_data.get('conditions', []))}
+
+            Drug Interactions Found: {len(analysis_results.get('drugDrugInteractions', []))}
+            - Critical/Severe: {len([i for i in analysis_results.get('drugDrugInteractions', []) if i['severity'] in ['CRITICAL', 'SEVERE']])}
+
+            Food Interactions: {len(analysis_results.get('drugFoodInteractions', []))}
+            Disease Contraindications: {len(analysis_results.get('diseaseContraindications', []))}
+            Therapeutic Duplications: {len(analysis_results.get('therapeuticDuplications', []))}
+
+            Provide 3-5 specific, actionable recommendations for the prescriber.
+            Focus on patient safety and clinical significance.
+            Format as a JSON array of strings.
+            """
+
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a clinical pharmacist providing medication safety recommendations."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                max_tokens=500
+            )
+
+            import json
+            result = json.loads(response.choices[0].message.content)
+            return result.get('recommendations', [])
+
+        except Exception as e:
+            print(f"AI recommendation failed: {e}")
+            return self._generate_fallback_recommendations(analysis_results)
+
+    def _generate_fallback_recommendations(self, results: Dict) -> List[str]:
+        """Generate basic recommendations without AI."""
+        recommendations = []
+
+        if results.get('drugDrugInteractions'):
+            critical = [i for i in results['drugDrugInteractions'] if i['severity'] == 'CRITICAL']
+            if critical:
+                recommendations.append(f"URGENT: {len(critical)} critical drug interaction(s) require immediate review")
+
+        if results.get('therapeuticDuplications'):
+            recommendations.append("Consider discontinuing duplicate therapy to reduce side effect risk")
+
+        if results.get('drugFoodInteractions'):
+            recommendations.append("Provide patient education on food-drug interactions")
+
+        return recommendations
+
+
+# Export enhanced service
+pharmacy_ai = EnhancedPharmacyAI()
+```
+
+#### 7.2 Additional Pharmacy AI Endpoints
+
+Add to `ai-services/main.py`:
+
+```python
+# Enhanced Pharmacy AI Endpoints
+
+@app.post("/api/pharmacy/comprehensive-analysis")
+async def comprehensive_medication_analysis(request: MedicationAnalysisRequest):
+    """Comprehensive medication analysis with all interaction types."""
+    return await pharmacy_ai.analyze_interactions_comprehensive(
+        medications=request.medications,
+        patient_data=request.patient_data
+    )
+
+@app.post("/api/pharmacy/personalized-dose")
+async def calculate_personalized_dose(request: PersonalizedDoseRequest):
+    """Calculate personalized dosing based on patient parameters."""
+    return await pharmacy_ai.calculate_personalized_dose(
+        drug_name=request.drug_name,
+        patient=request.patient
+    )
+
+@app.get("/api/pharmacy/tdm/{drug_name}")
+async def get_tdm_requirements(drug_name: str):
+    """Get therapeutic drug monitoring requirements."""
+    return pharmacy_ai.get_tdm_requirements(drug_name)
+
+@app.post("/api/pharmacy/adherence-risk")
+async def predict_adherence_risk(request: AdherenceRiskRequest):
+    """Predict medication adherence risk."""
+    return await pharmacy_ai.predict_adherence_risk(
+        patient=request.patient,
+        medications=request.medications
+    )
+
+@app.post("/api/pharmacy/cost-alternatives")
+async def get_cost_alternatives(request: CostAlternativesRequest):
+    """Get cost-effective medication alternatives."""
+    return await pharmacy_ai.suggest_cost_effective_alternatives(
+        medications=request.medications,
+        insurance_formulary=request.formulary
+    )
+
+@app.post("/api/pharmacy/regimen-optimization")
+async def optimize_medication_regimen(request: RegimenOptimizationRequest):
+    """AI-powered medication regimen optimization."""
+    return await pharmacy_ai.optimize_regimen(
+        medications=request.medications,
+        patient=request.patient,
+        goals=request.optimization_goals
+    )
+```
+
+#### 7.3 Pharmacy AI Knowledge Base Enhancement
+
+**File:** `ai-services/pharmacy/knowledge_base.py` (additions)
+
+```python
+# Add to knowledge_base.py
+
+THERAPEUTIC_RANGES = {
+    'vancomycin': {'trough_min': 10, 'trough_max': 20, 'peak_min': 20, 'peak_max': 40, 'unit': 'mcg/mL'},
+    'gentamicin': {'trough_max': 2, 'peak_min': 5, 'peak_max': 10, 'unit': 'mcg/mL'},
+    'digoxin': {'min': 0.8, 'max': 2.0, 'unit': 'ng/mL'},
+    'lithium': {'min': 0.6, 'max': 1.2, 'unit': 'mEq/L'},
+    'phenytoin': {'total_min': 10, 'total_max': 20, 'free_min': 1, 'free_max': 2, 'unit': 'mcg/mL'},
+    'carbamazepine': {'min': 4, 'max': 12, 'unit': 'mcg/mL'},
+    'valproic_acid': {'min': 50, 'max': 100, 'unit': 'mcg/mL'},
+    'theophylline': {'min': 10, 'max': 20, 'unit': 'mcg/mL'},
+    'tacrolimus': {'min': 5, 'max': 15, 'unit': 'ng/mL'},
+    'cyclosporine': {'min': 100, 'max': 400, 'unit': 'ng/mL'}
+}
+
+RENAL_DOSE_ADJUSTMENTS = {
+    'metformin': {
+        'crcl_30_60': '50% dose reduction',
+        'crcl_below_30': 'Contraindicated',
+        'dialysis': 'Contraindicated'
+    },
+    'gabapentin': {
+        'crcl_30_60': '300-700mg daily',
+        'crcl_15_30': '100-300mg daily',
+        'crcl_below_15': '100-150mg daily',
+        'dialysis': '125-350mg post-dialysis'
+    },
+    'enoxaparin': {
+        'crcl_below_30': 'Reduce dose by 50%',
+        'dialysis': 'Use unfractionated heparin instead'
+    },
+    'ciprofloxacin': {
+        'crcl_30_50': '250-500mg q12h',
+        'crcl_5_30': '250-500mg q18h',
+        'dialysis': '250-500mg q24h after dialysis'
+    },
+    'vancomycin': {
+        'crcl_50_80': '15-20mg/kg q12-24h',
+        'crcl_20_49': '15-20mg/kg q24-48h',
+        'crcl_below_20': '15-20mg/kg, redose per levels',
+        'dialysis': '15-25mg/kg, redose post-HD per levels'
+    }
+}
+
+PHARMACOGENOMICS_DATA = {
+    'clopidogrel': {
+        'gene': 'CYP2C19',
+        'poor_metabolizer': 'Consider alternative antiplatelet (prasugrel, ticagrelor)',
+        'intermediate_metabolizer': 'Consider alternative or higher dose',
+        'normal_metabolizer': 'Standard dosing'
+    },
+    'warfarin': {
+        'gene': 'CYP2C9/VKORC1',
+        'sensitive': 'Start lower dose (2-3mg)',
+        'highly_sensitive': 'Start very low dose (1-2mg)',
+        'resistant': 'May need higher doses'
+    },
+    'codeine': {
+        'gene': 'CYP2D6',
+        'poor_metabolizer': 'Ineffective - use alternative analgesic',
+        'ultrarapid_metabolizer': 'AVOID - risk of toxicity'
+    },
+    'simvastatin': {
+        'gene': 'SLCO1B1',
+        'decreased_function': 'Use lower dose or alternative statin'
+    },
+    'abacavir': {
+        'gene': 'HLA-B*5701',
+        'positive': 'CONTRAINDICATED - risk of hypersensitivity'
+    }
+}
+
+DRUG_COSTS = {
+    # Brand -> Generic savings examples
+    'lipitor': {'generic': 'atorvastatin', 'savings_percent': 90},
+    'plavix': {'generic': 'clopidogrel', 'savings_percent': 85},
+    'nexium': {'generic': 'esomeprazole', 'savings_percent': 80},
+    'singulair': {'generic': 'montelukast', 'savings_percent': 85},
+    'crestor': {'generic': 'rosuvastatin', 'savings_percent': 80}
+}
+
+GERIATRIC_CONSIDERATIONS = {
+    'benzodiazepines': {
+        'recommendation': 'AVOID in elderly (Beers Criteria)',
+        'reason': 'Increased sensitivity, fall risk, cognitive impairment',
+        'alternatives': ['trazodone', 'melatonin', 'CBT-I']
+    },
+    'anticholinergics': {
+        'recommendation': 'AVOID or minimize in elderly',
+        'reason': 'Cognitive impairment, delirium risk, urinary retention',
+        'examples': ['diphenhydramine', 'oxybutynin', 'tricyclic antidepressants']
+    },
+    'nsaids': {
+        'recommendation': 'Use with caution, short-term only',
+        'reason': 'GI bleeding, renal impairment, cardiovascular risk',
+        'alternatives': ['acetaminophen', 'topical NSAIDs']
+    },
+    'sulfonylureas': {
+        'recommendation': 'Avoid long-acting (glyburide)',
+        'reason': 'Prolonged hypoglycemia risk',
+        'alternatives': ['glipizide', 'metformin', 'DPP-4 inhibitors']
+    }
+}
+```
+
+---
+
 ## MEDIUM PRIORITY
 
 ### 6. PDF Document Analysis
@@ -2252,10 +4461,19 @@ export const labSampleService = new LabSampleService();
 
 | Priority | Items | Estimated Effort |
 |----------|-------|------------------|
-| HIGH | 5 items | 15-19 days |
+| HIGH | 7 items | 24-31 days |
 | MEDIUM | 5 items | 14-18 days |
 | LOW | 5 items | 23-31 days |
-| **TOTAL** | **15 items** | **52-68 days** |
+| **TOTAL** | **17 items** | **61-80 days** |
+
+### HIGH PRIORITY Items
+1. Complete Smart Orders API (2-3 days)
+2. Quality Management Frontend (3-4 days)
+3. AI Microservices - EWS and Smart Orders (4-5 days)
+4. AI Scribe Database Persistence (2 days)
+5. Patient Portal Dashboard (4-5 days)
+6. **NEW**: AI-Enhanced Consultation Flow (5-7 days)
+7. **NEW**: Advanced Pharmacy AI Features (4-5 days)
 
 ---
 
