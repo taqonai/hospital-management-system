@@ -16,8 +16,8 @@ npx prisma generate          # Required after schema changes
 npx prisma migrate dev       # Run migrations
 npm run db:seed              # Seed test data
 npm run dev                  # Start dev server (port 3001)
-npm run build                # Production build
-npm test                     # Run tests
+npm run build                # TypeScript compile
+npm test                     # Run Jest tests
 npm run lint                 # ESLint
 ```
 
@@ -26,7 +26,7 @@ npm run lint                 # ESLint
 cd frontend
 npm install
 npm run dev                  # Start dev server (port 3000)
-npm run build                # Production build (runs tsc first)
+npm run build                # TypeScript + Vite build
 npm run lint                 # ESLint
 ```
 
@@ -43,6 +43,12 @@ uvicorn main:app --reload --port 8000
 ```bash
 docker-compose up -d                          # All services
 docker-compose --profile production up -d     # With nginx
+```
+
+### Running Individual AI Microservices
+```bash
+cd ai-services
+uvicorn main:app --reload --port 8011        # AI Scribe on different port
 ```
 
 ## Architecture
