@@ -194,4 +194,101 @@ router.post(
   })
 );
 
+// ==================== Sample Tracking ====================
+
+// Collect sample (phlebotomy)
+router.post(
+  '/samples/collect',
+  authenticate,
+  authorize('HOSPITAL_ADMIN', 'LAB_TECHNICIAN', 'NURSE'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const result = await laboratoryService.collectSample(req.user!.hospitalId, {
+      ...req.body,
+      collectedBy: req.user!.userId,
+      collectionTime: req.body.collectionTime || new Date()
+    });
+    sendCreated(res, result, 'Sample collected successfully');
+  })
+);
+
+// Get pending samples (for lab dashboard)
+router.get(
+  '/samples/pending',
+  authenticate,
+  authorize('HOSPITAL_ADMIN', 'LAB_TECHNICIAN', 'NURSE'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const samples = await laboratoryService.getPendingSamples(req.user!.hospitalId);
+    sendSuccess(res, samples);
+  })
+);
+
+// Get cold chain samples
+router.get(
+  '/samples/cold-chain',
+  authenticate,
+  authorize('HOSPITAL_ADMIN', 'LAB_TECHNICIAN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const samples = await laboratoryService.getColdChainSamples(req.user!.hospitalId);
+    sendSuccess(res, samples);
+  })
+);
+
+// Get sample details by barcode
+router.get(
+  '/samples/:barcode',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const sample = await laboratoryService.getSampleByBarcode(req.params.barcode);
+    sendSuccess(res, sample);
+  })
+);
+
+// Get sample chain of custody history
+router.get(
+  '/samples/:barcode/history',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const history = await laboratoryService.getSampleHistory(req.params.barcode);
+    sendSuccess(res, history);
+  })
+);
+
+// Update sample status (chain of custody)
+router.patch(
+  '/samples/:barcode/status',
+  authenticate,
+  authorize('HOSPITAL_ADMIN', 'LAB_TECHNICIAN', 'NURSE'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const sample = await laboratoryService.updateSampleStatus(req.params.barcode, {
+      ...req.body,
+      handledBy: req.user!.userId
+    });
+    sendSuccess(res, sample, 'Sample status updated');
+  })
+);
+
+// Verify sample (quality check)
+router.post(
+  '/samples/:barcode/verify',
+  authenticate,
+  authorize('HOSPITAL_ADMIN', 'LAB_TECHNICIAN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const sample = await laboratoryService.verifySample(req.params.barcode, {
+      ...req.body,
+      verifiedBy: req.user!.userId
+    });
+    sendSuccess(res, sample, req.body.isAcceptable ? 'Sample verified successfully' : 'Sample rejected');
+  })
+);
+
+// Get samples by order ID
+router.get(
+  '/orders/:orderId/samples',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const samples = await laboratoryService.getOrderSamples(req.params.orderId, req.user!.hospitalId);
+    sendSuccess(res, samples);
+  })
+);
+
 export default router;

@@ -106,6 +106,83 @@ router.patch(
   })
 );
 
+// ==================== SESSION RECORDING ====================
+
+// Start recording a session
+router.post(
+  '/sessions/:id/recording/start',
+  authenticate,
+  authorize('DOCTOR'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { recordingType } = req.body;
+    const result = await telemedicineService.startRecording(
+      req.params.id,
+      recordingType || 'VIDEO'
+    );
+    sendSuccess(res, result, 'Recording started');
+  })
+);
+
+// Stop recording
+router.post(
+  '/sessions/:id/recording/stop',
+  authenticate,
+  authorize('DOCTOR'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { recordingId } = req.body;
+    if (!recordingId) {
+      return res.status(400).json({ success: false, message: 'recordingId is required' });
+    }
+    const result = await telemedicineService.stopRecording(req.params.id, recordingId);
+    sendSuccess(res, result, 'Recording stopped');
+  })
+);
+
+// Get session recordings
+router.get(
+  '/sessions/:id/recordings',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const recordings = await telemedicineService.getSessionRecordings(req.params.id);
+    sendSuccess(res, recordings);
+  })
+);
+
+// Save recording metadata (webhook from video provider)
+router.post(
+  '/sessions/:id/recording/metadata',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const result = await telemedicineService.saveRecordingMetadata(req.params.id, req.body);
+    sendSuccess(res, result, 'Recording metadata saved');
+  })
+);
+
+// Delete recording
+router.delete(
+  '/recordings/:id',
+  authenticate,
+  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const result = await telemedicineService.deleteRecording(req.params.id);
+    sendSuccess(res, result, 'Recording deleted');
+  })
+);
+
+// Get all recordings for a patient
+router.get(
+  '/patients/:patientId/recordings',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const result = await telemedicineService.getPatientRecordings(req.params.patientId, {
+      page: req.query.page ? parseInt(req.query.page as string) : undefined,
+      limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
+    });
+    const pagination = calculatePagination(result.page, result.limit, result.total);
+    sendPaginated(res, result.recordings, pagination);
+  })
+);
+
 // ==================== AI FEATURES ====================
 
 // AI: Pre-consultation triage

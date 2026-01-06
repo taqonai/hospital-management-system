@@ -284,6 +284,17 @@ export const laboratoryApi = {
   getCriticalResults: () => api.get('/laboratory/critical'),
   getPendingOrders: () => api.get('/laboratory/pending'),
   getStats: () => api.get('/laboratory/stats'),
+  // Sample Tracking
+  collectSample: (data: any) => api.post('/laboratory/samples/collect', data),
+  getSampleByBarcode: (barcode: string) => api.get(`/laboratory/samples/${barcode}`),
+  getSampleHistory: (barcode: string) => api.get(`/laboratory/samples/${barcode}/history`),
+  updateSampleStatus: (barcode: string, data: any) =>
+    api.patch(`/laboratory/samples/${barcode}/status`, data),
+  verifySample: (barcode: string, data: any) =>
+    api.post(`/laboratory/samples/${barcode}/verify`, data),
+  getOrderSamples: (orderId: string) => api.get(`/laboratory/orders/${orderId}/samples`),
+  getPendingSamples: () => api.get('/laboratory/samples/pending'),
+  getColdChainSamples: () => api.get('/laboratory/samples/cold-chain'),
   // AI Smart Lab Features
   smartOrderRecommendation: (data: {
     symptoms?: string[];
@@ -955,6 +966,17 @@ export const telemedicineApi = {
     api.patch(`/telemedicine/sessions/${id}/notes`, { notes }),
   recordVitals: (id: string, vitals: any) =>
     api.patch(`/telemedicine/sessions/${id}/vitals`, vitals),
+  // Recording
+  startRecording: (sessionId: string, type: 'VIDEO' | 'AUDIO' | 'SCREEN') =>
+    api.post(`/telemedicine/sessions/${sessionId}/recording/start`, { type }),
+  stopRecording: (sessionId: string, recordingId: string) =>
+    api.post(`/telemedicine/sessions/${sessionId}/recording/stop`, { recordingId }),
+  getSessionRecordings: (sessionId: string) =>
+    api.get(`/telemedicine/sessions/${sessionId}/recordings`),
+  deleteRecording: (recordingId: string) =>
+    api.delete(`/telemedicine/recordings/${recordingId}`),
+  getPatientRecordings: (patientId: string, params?: any) =>
+    api.get(`/telemedicine/patients/${patientId}/recordings`, { params }),
   // AI Features
   performTriage: (data: any) => api.post('/telemedicine/ai/triage', data),
   generateSummary: (data: any) => api.post('/telemedicine/ai/summary', data),

@@ -1,5 +1,41 @@
 import prisma from '../config/database';
-import { NotFoundError } from '../middleware/errorHandler';
+import { NotFoundError, ValidationError } from '../middleware/errorHandler';
+
+// Sample tracking data structure (stored in memory - in production would be in database)
+interface SampleData {
+  sampleId: string;
+  barcode: string;
+  orderId: string;
+  testId: string;
+  sampleType: string;
+  sampleVolume?: number;
+  sampleCondition: string;
+  specialHandling?: string[];
+  collectedBy: string;
+  collectionTime: Date;
+  notes?: string;
+  status: string;
+  isVerified: boolean;
+  verifiedBy?: string;
+  verifiedAt?: Date;
+  rejectionReason?: string;
+  requiresColdChain: boolean;
+  hospitalId: string;
+  createdAt: Date;
+}
+
+interface SampleStatusHistory {
+  status: string;
+  location: string;
+  handledBy: string;
+  timestamp: Date;
+  notes?: string;
+  temperature?: number;
+}
+
+// In-memory storage for sample tracking (would be database tables in production)
+const sampleStorage: Map<string, SampleData> = new Map();
+const sampleHistoryStorage: Map<string, SampleStatusHistory[]> = new Map();
 
 export class LaboratoryService {
   private generateOrderNumber(): string {
@@ -670,6 +706,279 @@ export class LaboratoryService {
       recommendedActions: recommendedActions.length > 0 ? recommendedActions : ['Standard follow-up'],
       reflexTests,
     };
+  }
+
+  // ==================== SAMPLE TRACKING ====================
+
+  // Generate sample barcode
+  generateSampleBarcode(orderId: string, testId: string): string {
+    // Format: LAB-{date}-{orderId-last4}-{testId-last4}
+    // e.g., LAB-20250106-AB12-XY34
+    const date = new Date();
+    const dateStr = date.getFullYear().toString() +
+      (date.getMonth() + 1).toString().padStart(2, '0') +
+      date.getDate().toString().padStart(2, '0');
+    const orderLast4 = orderId.slice(-4).toUpperCase();
+    const testLast4 = testId.slice(-4).toUpperCase();
+    return `LAB-${dateStr}-${orderLast4}-${testLast4}`;
+  }
+
+  // Collect sample (phlebotomy)
+  async collectSample(hospitalId: string, data: {
+    orderId: string;
+    testId: string;
+    collectedBy: string;
+    collectionTime: Date;
+    sampleType: string; // BLOOD, URINE, STOOL, SWAB, TISSUE, CSF, etc.
+    sampleVolume?: number;
+    sampleCondition: string; // ADEQUATE, HEMOLYZED, LIPEMIC, CLOTTED, INSUFFICIENT
+    specialHandling?: string[];
+    notes?: string;
+  }): Promise<{
+    sampleId: string;
+    barcode: string;
+    status: string;
+  }> {
+    // Verify the order exists and belongs to the hospital
+    const order = await prisma.labOrder.findFirst({
+      where: { id: data.orderId, hospitalId },
+      include: { tests: true }
+    });
+
+    if (!order) {
+      throw new NotFoundError('Lab order not found');
+    }
+
+    // Verify the test exists in this order
+    const orderTest = order.tests.find(t => t.id === data.testId || t.labTestId === data.testId);
+    if (!orderTest) {
+      throw new NotFoundError('Test not found in this order');
+    }
+
+    // Generate barcode and sample ID
+    const barcode = this.generateSampleBarcode(data.orderId, data.testId);
+    const sampleId = `SMP-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
+
+    // Determine if cold chain is required based on sample type
+    const coldChainTypes = ['CSF', 'TISSUE', 'PLASMA', 'SERUM'];
+    const requiresColdChain = coldChainTypes.includes(data.sampleType.toUpperCase()) ||
+      (data.specialHandling && data.specialHandling.some(h => h.toLowerCase().includes('cold') || h.toLowerCase().includes('refrigerat')));
+
+    // Store sample data
+    const sampleData: SampleData = {
+      sampleId,
+      barcode,
+      orderId: data.orderId,
+      testId: data.testId,
+      sampleType: data.sampleType,
+      sampleVolume: data.sampleVolume,
+      sampleCondition: data.sampleCondition,
+      specialHandling: data.specialHandling,
+      collectedBy: data.collectedBy,
+      collectionTime: new Date(data.collectionTime),
+      notes: data.notes,
+      status: 'COLLECTED',
+      isVerified: false,
+      requiresColdChain,
+      hospitalId,
+      createdAt: new Date()
+    };
+
+    sampleStorage.set(barcode, sampleData);
+
+    // Initialize history with collection event
+    sampleHistoryStorage.set(barcode, [{
+      status: 'COLLECTED',
+      location: 'Collection Point',
+      handledBy: data.collectedBy,
+      timestamp: new Date(data.collectionTime),
+      notes: data.notes
+    }]);
+
+    // Update the lab order status
+    await prisma.labOrder.update({
+      where: { id: data.orderId },
+      data: {
+        status: 'SAMPLE_COLLECTED',
+        collectedAt: new Date(data.collectionTime)
+      }
+    });
+
+    return {
+      sampleId,
+      barcode,
+      status: 'COLLECTED'
+    };
+  }
+
+  // Update sample status (chain of custody)
+  async updateSampleStatus(sampleBarcode: string, data: {
+    status: string; // COLLECTED, IN_TRANSIT, RECEIVED, PROCESSING, ANALYZED, STORED, DISPOSED
+    location: string;
+    handledBy: string;
+    notes?: string;
+    temperature?: number; // for cold chain
+  }): Promise<SampleData> {
+    const sample = sampleStorage.get(sampleBarcode);
+    if (!sample) {
+      throw new NotFoundError('Sample not found');
+    }
+
+    // Update sample status
+    sample.status = data.status;
+
+    // Add to history
+    const history = sampleHistoryStorage.get(sampleBarcode) || [];
+    history.push({
+      status: data.status,
+      location: data.location,
+      handledBy: data.handledBy,
+      timestamp: new Date(),
+      notes: data.notes,
+      temperature: data.temperature
+    });
+    sampleHistoryStorage.set(sampleBarcode, history);
+
+    // Update lab order status if sample is being processed
+    if (data.status === 'PROCESSING') {
+      await prisma.labOrder.update({
+        where: { id: sample.orderId },
+        data: { status: 'IN_PROGRESS' }
+      });
+    }
+
+    return sample;
+  }
+
+  // Get sample tracking history (chain of custody log)
+  async getSampleHistory(sampleBarcode: string): Promise<Array<{
+    status: string;
+    location: string;
+    handledBy: string;
+    timestamp: Date;
+    notes?: string;
+    temperature?: number;
+  }>> {
+    const sample = sampleStorage.get(sampleBarcode);
+    if (!sample) {
+      throw new NotFoundError('Sample not found');
+    }
+
+    const history = sampleHistoryStorage.get(sampleBarcode) || [];
+    return history;
+  }
+
+  // Get sample by barcode
+  async getSampleByBarcode(sampleBarcode: string): Promise<SampleData & { history: SampleStatusHistory[] }> {
+    const sample = sampleStorage.get(sampleBarcode);
+    if (!sample) {
+      throw new NotFoundError('Sample not found');
+    }
+
+    const history = sampleHistoryStorage.get(sampleBarcode) || [];
+    return { ...sample, history };
+  }
+
+  // Get samples by order
+  async getOrderSamples(orderId: string, hospitalId: string): Promise<SampleData[]> {
+    // Verify order exists
+    const order = await prisma.labOrder.findFirst({
+      where: { id: orderId, hospitalId }
+    });
+
+    if (!order) {
+      throw new NotFoundError('Lab order not found');
+    }
+
+    const samples: SampleData[] = [];
+    sampleStorage.forEach((sample) => {
+      if (sample.orderId === orderId) {
+        samples.push(sample);
+      }
+    });
+
+    return samples;
+  }
+
+  // Verify sample (quality check before analysis)
+  async verifySample(sampleBarcode: string, data: {
+    verifiedBy: string;
+    isAcceptable: boolean;
+    rejectionReason?: string;
+  }): Promise<SampleData> {
+    const sample = sampleStorage.get(sampleBarcode);
+    if (!sample) {
+      throw new NotFoundError('Sample not found');
+    }
+
+    sample.isVerified = true;
+    sample.verifiedBy = data.verifiedBy;
+    sample.verifiedAt = new Date();
+
+    if (!data.isAcceptable) {
+      sample.rejectionReason = data.rejectionReason;
+      sample.status = 'REJECTED';
+
+      // Add rejection to history
+      const history = sampleHistoryStorage.get(sampleBarcode) || [];
+      history.push({
+        status: 'REJECTED',
+        location: 'Quality Control',
+        handledBy: data.verifiedBy,
+        timestamp: new Date(),
+        notes: `Sample rejected: ${data.rejectionReason || 'Quality issue'}`
+      });
+      sampleHistoryStorage.set(sampleBarcode, history);
+    } else {
+      // Add verification to history
+      const history = sampleHistoryStorage.get(sampleBarcode) || [];
+      history.push({
+        status: 'VERIFIED',
+        location: 'Quality Control',
+        handledBy: data.verifiedBy,
+        timestamp: new Date(),
+        notes: 'Sample passed quality verification'
+      });
+      sampleHistoryStorage.set(sampleBarcode, history);
+    }
+
+    return sample;
+  }
+
+  // Get pending samples (for lab dashboard)
+  async getPendingSamples(hospitalId: string): Promise<SampleData[]> {
+    const pendingStatuses = ['COLLECTED', 'IN_TRANSIT', 'RECEIVED'];
+    const samples: SampleData[] = [];
+
+    sampleStorage.forEach((sample) => {
+      if (sample.hospitalId === hospitalId && pendingStatuses.includes(sample.status)) {
+        samples.push(sample);
+      }
+    });
+
+    // Sort by collection time (oldest first)
+    samples.sort((a, b) => a.collectionTime.getTime() - b.collectionTime.getTime());
+
+    return samples;
+  }
+
+  // Get samples requiring cold chain monitoring
+  async getColdChainSamples(hospitalId: string): Promise<Array<SampleData & { latestTemperature?: number }>> {
+    const samples: Array<SampleData & { latestTemperature?: number }> = [];
+
+    sampleStorage.forEach((sample) => {
+      if (sample.hospitalId === hospitalId && sample.requiresColdChain && sample.status !== 'DISPOSED') {
+        const history = sampleHistoryStorage.get(sample.barcode) || [];
+        const latestWithTemp = [...history].reverse().find(h => h.temperature !== undefined);
+
+        samples.push({
+          ...sample,
+          latestTemperature: latestWithTemp?.temperature
+        });
+      }
+    });
+
+    return samples;
   }
 }
 

@@ -9,7 +9,9 @@ import {
   SparklesIcon,
   ExclamationTriangleIcon,
   CheckCircleIcon,
+  FilmIcon,
 } from '@heroicons/react/24/outline';
+import RecordingHistory from '../../components/telemedicine/RecordingHistory';
 
 interface Session {
   id: string;
@@ -94,6 +96,7 @@ const Telemedicine: React.FC = () => {
     { id: 'sessions', name: 'Sessions', icon: VideoCameraIcon },
     { id: 'schedule', name: 'Schedule', icon: CalendarDaysIcon },
     { id: 'ai-triage', name: 'AI Triage', icon: SparklesIcon },
+    { id: 'recordings', name: 'Recordings', icon: FilmIcon },
   ];
 
   const getStatusBadge = (status: string) => {
@@ -530,6 +533,18 @@ const Telemedicine: React.FC = () => {
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'recordings' && (
+          <div>
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-gray-900">
+              <div className="p-1.5 rounded-lg bg-gradient-to-br from-sky-500 to-cyan-600 shadow-lg">
+                <FilmIcon className="h-5 w-5 text-white" />
+              </div>
+              Session Recordings
+            </h2>
+            <RecordingHistory />
           </div>
         )}
       </div>

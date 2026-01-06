@@ -11,11 +11,13 @@ import {
   SparklesIcon,
   ClipboardDocumentCheckIcon,
   ChartBarIcon,
+  QrCodeIcon,
 } from '@heroicons/react/24/outline';
 import { useAIHealth } from '../../hooks/useAI';
 import { laboratoryApi } from '../../services/api';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
+import SampleTracker from '../../components/laboratory/SampleTracker';
 
 interface LabOrder {
   id: string;
@@ -392,7 +394,7 @@ function NewLabOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
 }
 
 export default function Laboratory() {
-  const [activeTab, setActiveTab] = useState<'orders' | 'results' | 'critical'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'results' | 'critical' | 'sample-tracking'>('orders');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [labOrders, setLabOrders] = useState<LabOrder[]>([]);
@@ -486,6 +488,7 @@ export default function Laboratory() {
     { id: 'orders', label: 'Lab Orders', count: labOrders.length, icon: ClipboardDocumentCheckIcon },
     { id: 'results', label: 'Results Entry', count: stats.inProgressOrders, icon: ChartBarIcon },
     { id: 'critical', label: 'Critical Values', count: criticalResults.length, icon: ExclamationTriangleIcon, alert: criticalResults.length > 0 },
+    { id: 'sample-tracking', label: 'Sample Tracking', count: stats.pendingOrders, icon: QrCodeIcon },
   ];
 
   return (
@@ -766,6 +769,13 @@ export default function Laboratory() {
                 ))}
               </div>
             )
+          )}
+
+          {activeTab === 'sample-tracking' && (
+            <div className="p-6">
+              {/* Sample Barcode Tracker */}
+              <SampleTracker />
+            </div>
           )}
         </div>
 

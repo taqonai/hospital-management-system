@@ -481,6 +481,343 @@ ${plan.map((p, i) => `${i + 1}. ${p}`).join('\n')}
     };
   },
 
+  // ==================== SESSION RECORDING ====================
+
+  // Start recording a session
+  async startRecording(sessionId: string, recordingType: 'VIDEO' | 'AUDIO' | 'SCREEN'): Promise<{
+    recordingId: string;
+    status: string;
+    startedAt: Date;
+  }> {
+    const session = await prisma.teleconsultationSession.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      throw new Error('Session not found');
+    }
+
+    if (session.status !== 'IN_PROGRESS') {
+      throw new Error('Can only record sessions that are in progress');
+    }
+
+    // Generate unique recording ID
+    const recordingId = `REC-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const startedAt = new Date();
+
+    // Get existing recordings from doctorDeviceInfo (used as recording metadata storage)
+    const existingData = (session.doctorDeviceInfo as any) || {};
+    const recordings = existingData.recordings || [];
+
+    // Check if there's already an active recording
+    const activeRecording = recordings.find((r: any) => r.status === 'RECORDING');
+    if (activeRecording) {
+      throw new Error('A recording is already in progress for this session');
+    }
+
+    // Add new recording entry
+    recordings.push({
+      id: recordingId,
+      type: recordingType,
+      status: 'RECORDING',
+      startedAt: startedAt.toISOString(),
+      stoppedAt: null,
+      duration: null,
+      fileSize: null,
+      url: null,
+      thumbnailUrl: null,
+    });
+
+    // Update session with recording info
+    await prisma.teleconsultationSession.update({
+      where: { id: sessionId },
+      data: {
+        isRecorded: true,
+        doctorDeviceInfo: {
+          ...existingData,
+          recordings,
+        },
+      },
+    });
+
+    // In real implementation, would integrate with video provider API (e.g., Twilio, Daily.co)
+    // to actually start recording the stream
+
+    return {
+      recordingId,
+      status: 'RECORDING',
+      startedAt,
+    };
+  },
+
+  // Stop recording
+  async stopRecording(sessionId: string, recordingId: string): Promise<{
+    recordingId: string;
+    duration: number;
+    fileSize: number;
+    url: string;
+  }> {
+    const session = await prisma.teleconsultationSession.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      throw new Error('Session not found');
+    }
+
+    const existingData = (session.doctorDeviceInfo as any) || {};
+    const recordings = existingData.recordings || [];
+
+    const recordingIndex = recordings.findIndex((r: any) => r.id === recordingId);
+    if (recordingIndex === -1) {
+      throw new Error('Recording not found');
+    }
+
+    const recording = recordings[recordingIndex];
+    if (recording.status !== 'RECORDING') {
+      throw new Error('Recording is not in progress');
+    }
+
+    const stoppedAt = new Date();
+    const startedAt = new Date(recording.startedAt);
+    const duration = Math.round((stoppedAt.getTime() - startedAt.getTime()) / 1000); // duration in seconds
+
+    // In real implementation, would get actual file size and URL from video provider
+    // For now, estimate file size based on duration (roughly 1MB per minute for compressed video)
+    const estimatedFileSize = Math.round(duration * (1024 * 1024 / 60));
+    const recordingUrl = `https://recordings.hospital.com/${sessionId}/${recordingId}.mp4`;
+
+    // Update recording entry
+    recordings[recordingIndex] = {
+      ...recording,
+      status: 'COMPLETED',
+      stoppedAt: stoppedAt.toISOString(),
+      duration,
+      fileSize: estimatedFileSize,
+      url: recordingUrl,
+    };
+
+    // Update session
+    await prisma.teleconsultationSession.update({
+      where: { id: sessionId },
+      data: {
+        recordingUrl: recordingUrl, // Store the latest recording URL
+        doctorDeviceInfo: {
+          ...existingData,
+          recordings,
+        },
+      },
+    });
+
+    return {
+      recordingId,
+      duration,
+      fileSize: estimatedFileSize,
+      url: recordingUrl,
+    };
+  },
+
+  // Get session recordings
+  async getSessionRecordings(sessionId: string): Promise<Array<{
+    id: string;
+    type: string;
+    duration: number;
+    fileSize: number;
+    url: string;
+    createdAt: Date;
+  }>> {
+    const session = await prisma.teleconsultationSession.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      throw new Error('Session not found');
+    }
+
+    const existingData = (session.doctorDeviceInfo as any) || {};
+    const recordings = existingData.recordings || [];
+
+    return recordings
+      .filter((r: any) => r.status === 'COMPLETED')
+      .map((r: any) => ({
+        id: r.id,
+        type: r.type,
+        duration: r.duration || 0,
+        fileSize: r.fileSize || 0,
+        url: r.url || '',
+        createdAt: new Date(r.startedAt),
+      }));
+  },
+
+  // Save recording metadata (from video provider callback)
+  async saveRecordingMetadata(sessionId: string, data: {
+    recordingId: string;
+    type: string;
+    duration: number;
+    fileSize: number;
+    url: string;
+    thumbnailUrl?: string;
+  }) {
+    const session = await prisma.teleconsultationSession.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      throw new Error('Session not found');
+    }
+
+    const existingData = (session.doctorDeviceInfo as any) || {};
+    const recordings = existingData.recordings || [];
+
+    // Find existing recording or add new one
+    const recordingIndex = recordings.findIndex((r: any) => r.id === data.recordingId);
+
+    const recordingEntry = {
+      id: data.recordingId,
+      type: data.type,
+      status: 'COMPLETED',
+      startedAt: new Date().toISOString(),
+      stoppedAt: new Date().toISOString(),
+      duration: data.duration,
+      fileSize: data.fileSize,
+      url: data.url,
+      thumbnailUrl: data.thumbnailUrl || null,
+    };
+
+    if (recordingIndex !== -1) {
+      recordings[recordingIndex] = { ...recordings[recordingIndex], ...recordingEntry };
+    } else {
+      recordings.push(recordingEntry);
+    }
+
+    await prisma.teleconsultationSession.update({
+      where: { id: sessionId },
+      data: {
+        isRecorded: true,
+        recordingUrl: data.url,
+        doctorDeviceInfo: {
+          ...existingData,
+          recordings,
+        },
+      },
+    });
+
+    return recordingEntry;
+  },
+
+  // Delete recording
+  async deleteRecording(recordingId: string) {
+    // Find the session containing this recording
+    const sessions = await prisma.teleconsultationSession.findMany({
+      where: {
+        isRecorded: true,
+      },
+    });
+
+    let targetSession = null;
+    let recordingIndex = -1;
+
+    for (const session of sessions) {
+      const existingData = (session.doctorDeviceInfo as any) || {};
+      const recordings = existingData.recordings || [];
+      const idx = recordings.findIndex((r: any) => r.id === recordingId);
+      if (idx !== -1) {
+        targetSession = session;
+        recordingIndex = idx;
+        break;
+      }
+    }
+
+    if (!targetSession || recordingIndex === -1) {
+      throw new Error('Recording not found');
+    }
+
+    const existingData = (targetSession.doctorDeviceInfo as any) || {};
+    const recordings = existingData.recordings || [];
+
+    // Remove the recording
+    recordings.splice(recordingIndex, 1);
+
+    // Update session
+    await prisma.teleconsultationSession.update({
+      where: { id: targetSession.id },
+      data: {
+        isRecorded: recordings.length > 0,
+        recordingUrl: recordings.length > 0 ? recordings[recordings.length - 1].url : null,
+        doctorDeviceInfo: {
+          ...existingData,
+          recordings,
+        },
+      },
+    });
+
+    // In real implementation, would also delete the actual file from storage
+
+    return { deleted: true, recordingId };
+  },
+
+  // Get all recordings for a patient (for medical records)
+  async getPatientRecordings(patientId: string, params: { page?: number; limit?: number }) {
+    const page = params.page || 1;
+    const limit = params.limit || 20;
+    const skip = (page - 1) * limit;
+
+    // Get all sessions for this patient that have recordings
+    const sessions = await prisma.teleconsultationSession.findMany({
+      where: {
+        patientId,
+        isRecorded: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Extract all recordings from all sessions
+    const allRecordings: Array<{
+      id: string;
+      sessionId: string;
+      sessionDate: Date;
+      type: string;
+      duration: number;
+      fileSize: number;
+      url: string;
+      createdAt: Date;
+    }> = [];
+
+    for (const session of sessions) {
+      const existingData = (session.doctorDeviceInfo as any) || {};
+      const recordings = existingData.recordings || [];
+
+      for (const recording of recordings) {
+        if (recording.status === 'COMPLETED') {
+          allRecordings.push({
+            id: recording.id,
+            sessionId: session.id,
+            sessionDate: session.scheduledStart,
+            type: recording.type,
+            duration: recording.duration || 0,
+            fileSize: recording.fileSize || 0,
+            url: recording.url || '',
+            createdAt: new Date(recording.startedAt),
+          });
+        }
+      }
+    }
+
+    // Sort by createdAt descending
+    allRecordings.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    // Apply pagination
+    const total = allRecordings.length;
+    const paginatedRecordings = allRecordings.slice(skip, skip + limit);
+
+    return {
+      recordings: paginatedRecordings,
+      total,
+      page,
+      limit,
+    };
+  },
+
   // Get telemedicine dashboard stats
   async getDashboardStats(hospitalId: string, doctorId?: string) {
     const today = new Date();
