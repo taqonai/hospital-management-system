@@ -80,6 +80,9 @@ import MedicationSafety from './pages/MedicationSafety';
 // Smart Orders (AI-powered order recommendations)
 import SmartOrders from './pages/SmartOrders';
 
+// Quality Management
+import Quality from './pages/Quality';
+
 // Protected Route Component
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -148,6 +151,7 @@ function App() {
         <Route path="/early-warning" element={<EarlyWarning />} />
         <Route path="/medication-safety" element={<MedicationSafety />} />
         <Route path="/smart-orders" element={<SmartOrders />} />
+        <Route path="/quality" element={<Quality />} />
         <Route path="/ipd" element={<IPD />} />
         <Route path="/emergency" element={<Emergency />} />
         <Route path="/laboratory" element={<Laboratory />} />

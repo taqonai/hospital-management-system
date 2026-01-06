@@ -31,6 +31,7 @@ import {
   DocumentTextIcon,
   ShieldCheckIcon,
   Squares2X2Icon,
+  ClipboardDocumentCheckIcon,
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../../hooks/useAuth';
 import AICreationAssistant from '../ai/AICreationAssistant';
@@ -127,6 +128,8 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'RECEPTIONIST', 'NURSE'] },
       { name: 'Kiosk', href: '/kiosk', icon: ComputerDesktopIcon, color: 'from-gray-500 to-gray-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'RECEPTIONIST'] },
+      { name: 'Quality', href: '/quality', icon: ClipboardDocumentCheckIcon, color: 'from-emerald-500 to-teal-600',
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'] },
     ],
   },
   {
