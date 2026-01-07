@@ -199,16 +199,24 @@ export default function Appointments() {
     enabled: showBookModal,
   });
 
-  // Fetch doctors for selected department
-  const { data: doctors } = useQuery({
+  // Fetch doctors for selected department - always filter by department
+  const { data: doctors, refetch: refetchDoctors } = useQuery({
     queryKey: ['patient-portal-doctors', selectedDepartment],
     queryFn: async () => {
       const response = await patientPortalApi.getDoctors({
         departmentId: selectedDepartment || undefined,
       });
-      return response.data?.data || response.data || [];
+      const doctorsList = response.data?.data || response.data || [];
+      // Filter doctors by selected department if set
+      if (selectedDepartment) {
+        return doctorsList.filter((d: Doctor) =>
+          d.departmentId === selectedDepartment ||
+          (d as any).department?.id === selectedDepartment
+        );
+      }
+      return doctorsList;
     },
-    enabled: showBookModal && bookingStep >= 2,
+    enabled: showBookModal,
   });
 
   // Fetch available slots for selected doctor and date
@@ -223,6 +231,12 @@ export default function Appointments() {
              (showRescheduleModal && !!selectedAppointment?.doctorId && !!rescheduleDate),
   });
 
+  // Success state for showing booking confirmation
+  const [bookingSuccess, setBookingSuccess] = useState<{
+    show: boolean;
+    appointment?: any;
+  }>({ show: false });
+
   // Book appointment mutation
   const bookMutation = useMutation({
     mutationFn: (data: {
@@ -233,12 +247,24 @@ export default function Appointments() {
       reason?: string;
       notes?: string;
     }) => patientPortalApi.bookAppointment(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['patient-appointments-page'] });
-      queryClient.invalidateQueries({ queryKey: ['patient-portal-summary'] });
+    onSuccess: async (response) => {
+      // Force immediate refetch of appointments
+      await queryClient.invalidateQueries({ queryKey: ['patient-appointments-page'] });
+      await queryClient.invalidateQueries({ queryKey: ['patient-portal-summary'] });
+      await refetch(); // Force refetch current list
+
+      // Get appointment data from response
+      const appointmentData = response.data?.data || response.data;
+
+      // Show success with appointment details
+      setShowBookModal(false);
+      setBookingSuccess({
+        show: true,
+        appointment: appointmentData,
+      });
+
       toast.success('Appointment booked successfully!');
       resetBookingForm();
-      setShowBookModal(false);
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.message || 'Failed to book appointment');
@@ -754,51 +780,76 @@ export default function Appointments() {
                       </button>
                     </Dialog.Title>
 
-                    <div className="space-y-4">
+                    <div className="space-y-3">
+                      {/* Emergency Quick Option */}
+                      <button
+                        onClick={() => {
+                          setShowBookingChoice(false);
+                          setShowBookModal(true);
+                          setIsAiGuidedBooking(false);
+                          setAppointmentType('EMERGENCY');
+                          setAppointmentReason('Emergency consultation');
+                        }}
+                        className="w-full p-4 rounded-2xl border-2 border-red-200 bg-gradient-to-br from-red-50 to-orange-50 hover:border-red-400 hover:shadow-lg transition-all text-left group"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 bg-gradient-to-br from-red-500 to-orange-500 rounded-xl text-white shadow-lg group-hover:scale-110 transition-transform">
+                            <ExclamationTriangleIcon className="h-6 w-6" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-semibold text-gray-900">Emergency Booking</h4>
+                              <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded-full">Urgent</span>
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1">
+                              Need immediate care? Book emergency appointment quickly.
+                            </p>
+                          </div>
+                          <ChevronRightIcon className="h-5 w-5 text-gray-400 group-hover:text-red-500" />
+                        </div>
+                      </button>
+
+                      {/* Direct Quick Booking */}
+                      <button
+                        onClick={handleStartDirectBooking}
+                        className="w-full p-4 rounded-2xl border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-cyan-50 hover:border-blue-400 hover:shadow-lg transition-all text-left group"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl text-white shadow-lg group-hover:scale-110 transition-transform">
+                            <CalendarDaysIcon className="h-6 w-6" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-semibold text-gray-900">Quick Booking</h4>
+                              <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">Fast</span>
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1">
+                              Know which doctor you need? Book in under a minute.
+                            </p>
+                          </div>
+                          <ChevronRightIcon className="h-5 w-5 text-gray-400 group-hover:text-blue-500" />
+                        </div>
+                      </button>
+
                       {/* AI-Guided Option */}
                       <button
                         onClick={handleStartAiGuidedBooking}
-                        className="w-full p-5 rounded-2xl border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50 hover:border-purple-400 hover:shadow-lg transition-all text-left group"
+                        className="w-full p-4 rounded-2xl border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50 hover:border-purple-400 hover:shadow-lg transition-all text-left group"
                       >
-                        <div className="flex items-start gap-4">
+                        <div className="flex items-center gap-4">
                           <div className="p-3 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl text-white shadow-lg group-hover:scale-110 transition-transform">
                             <SparklesIcon className="h-6 w-6" />
                           </div>
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
                               <h4 className="font-semibold text-gray-900">AI-Guided Booking</h4>
-                              <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">Recommended</span>
+                              <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">Smart</span>
                             </div>
                             <p className="text-sm text-gray-600 mt-1">
-                              Use our AI Symptom Checker to get personalized recommendations for the right department and doctor.
+                              Not sure which department? Let AI recommend based on your symptoms.
                             </p>
-                            <div className="flex items-center gap-2 mt-3 text-sm text-purple-600">
-                              <ChatBubbleLeftRightIcon className="h-4 w-4" />
-                              <span>Takes 2-3 minutes</span>
-                            </div>
                           </div>
-                        </div>
-                      </button>
-
-                      {/* Direct Booking Option */}
-                      <button
-                        onClick={handleStartDirectBooking}
-                        className="w-full p-5 rounded-2xl border-2 border-gray-200 bg-white hover:border-gray-300 hover:shadow-md transition-all text-left group"
-                      >
-                        <div className="flex items-start gap-4">
-                          <div className="p-3 bg-gray-100 rounded-xl text-gray-600 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
-                            <CalendarDaysIcon className="h-6 w-6" />
-                          </div>
-                          <div className="flex-1">
-                            <h4 className="font-semibold text-gray-900">Direct Booking</h4>
-                            <p className="text-sm text-gray-600 mt-1">
-                              Already know which department or doctor you need? Book directly without symptom assessment.
-                            </p>
-                            <div className="flex items-center gap-2 mt-3 text-sm text-gray-500">
-                              <ClockIcon className="h-4 w-4" />
-                              <span>Quick booking</span>
-                            </div>
-                          </div>
+                          <ChevronRightIcon className="h-5 w-5 text-gray-400 group-hover:text-purple-500" />
                         </div>
                       </button>
                     </div>
@@ -1511,6 +1562,113 @@ export default function Appointments() {
                         </div>
                       </>
                     )}
+                  </Dialog.Panel>
+                </Transition.Child>
+              </div>
+            </div>
+          </Dialog>
+        </Transition>
+
+        {/* Booking Success Modal */}
+        <Transition appear show={bookingSuccess.show} as={Fragment}>
+          <Dialog as="div" className="relative z-50" onClose={() => setBookingSuccess({ show: false })}>
+            <Transition.Child
+              as={Fragment}
+              enter="ease-out duration-300"
+              enterFrom="opacity-0"
+              enterTo="opacity-100"
+              leave="ease-in duration-200"
+              leaveFrom="opacity-100"
+              leaveTo="opacity-0"
+            >
+              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
+            </Transition.Child>
+
+            <div className="fixed inset-0 overflow-y-auto">
+              <div className="flex min-h-full items-center justify-center p-4">
+                <Transition.Child
+                  as={Fragment}
+                  enter="ease-out duration-300"
+                  enterFrom="opacity-0 scale-95"
+                  enterTo="opacity-100 scale-100"
+                  leave="ease-in duration-200"
+                  leaveFrom="opacity-100 scale-100"
+                  leaveTo="opacity-0 scale-95"
+                >
+                  <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white shadow-2xl transition-all">
+                    {/* Success Header */}
+                    <div className="bg-gradient-to-r from-green-500 to-emerald-600 px-6 py-8 text-center">
+                      <div className="w-20 h-20 mx-auto bg-white rounded-full flex items-center justify-center shadow-lg mb-4">
+                        <CheckCircleIcon className="h-12 w-12 text-green-500" />
+                      </div>
+                      <h3 className="text-2xl font-bold text-white">Booking Confirmed!</h3>
+                      <p className="text-green-100 mt-2">Your appointment has been scheduled successfully</p>
+                    </div>
+
+                    {/* Appointment Details */}
+                    {bookingSuccess.appointment && (
+                      <div className="px-6 py-6 space-y-4">
+                        <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-500">Date</span>
+                            <span className="font-semibold text-gray-900">
+                              {bookingSuccess.appointment.appointmentDate &&
+                                format(parseISO(bookingSuccess.appointment.appointmentDate), 'EEEE, MMM d, yyyy')}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-500">Time</span>
+                            <span className="font-semibold text-gray-900">
+                              {bookingSuccess.appointment.startTime}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-500">Doctor</span>
+                            <span className="font-semibold text-gray-900">
+                              Dr. {bookingSuccess.appointment.doctor?.user?.firstName} {bookingSuccess.appointment.doctor?.user?.lastName}
+                            </span>
+                          </div>
+                          {bookingSuccess.appointment.tokenNumber && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-500">Token Number</span>
+                              <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full font-bold">
+                                #{bookingSuccess.appointment.tokenNumber}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-start gap-3 p-4 bg-blue-50 rounded-xl border border-blue-100">
+                          <InformationCircleIcon className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                          <p className="text-sm text-blue-700">
+                            Please arrive 15 minutes before your scheduled time. Bring your ID and any relevant medical records.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="px-6 py-4 bg-gray-50 flex gap-3">
+                      <button
+                        onClick={() => {
+                          setBookingSuccess({ show: false });
+                          refetch();
+                        }}
+                        className="flex-1 py-3 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-100 transition-colors"
+                      >
+                        Close
+                      </button>
+                      <button
+                        onClick={() => {
+                          setBookingSuccess({ show: false });
+                          setActiveTab('upcoming');
+                          refetch();
+                        }}
+                        className="flex-1 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium hover:from-blue-700 hover:to-indigo-700 transition-all"
+                      >
+                        View My Appointments
+                      </button>
+                    </div>
                   </Dialog.Panel>
                 </Transition.Child>
               </div>
