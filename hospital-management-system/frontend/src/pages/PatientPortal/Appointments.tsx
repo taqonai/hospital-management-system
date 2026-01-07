@@ -33,7 +33,7 @@ import toast from 'react-hot-toast';
 
 interface Appointment {
   id: string;
-  doctorId: string;
+  doctorId?: string;
   doctor?: {
     id: string;
     specialization: string;
@@ -48,16 +48,23 @@ interface Appointment {
     id: string;
     name: string;
   };
-  appointmentDate: string;
+  // API returns 'date', direct queries return 'appointmentDate'
+  appointmentDate?: string;
+  date?: string;
   scheduledAt?: string;
-  startTime: string;
-  endTime: string;
+  // API returns 'time', direct queries return 'startTime'
+  startTime?: string;
+  time?: string;
+  endTime?: string;
   status: string;
-  type: string;
+  type?: string;
   reason?: string;
   notes?: string;
   location?: string;
   tokenNumber?: number;
+  // API returns flat strings instead of nested objects
+  doctorName?: string;
+  doctorSpecialty?: string;
 }
 
 interface Department {
@@ -436,12 +443,35 @@ export default function Appointments() {
   };
 
   const getAppointmentDate = (appointment: Appointment) => {
-    const dateStr = appointment.scheduledAt || appointment.appointmentDate;
+    // Handle both API format (date) and direct format (appointmentDate)
+    const dateStr = appointment.scheduledAt || appointment.appointmentDate || appointment.date;
+    if (!dateStr) return new Date();
     try {
       return parseISO(dateStr);
     } catch {
       return new Date(dateStr);
     }
+  };
+
+  // Helper to get doctor name from either format
+  const getDoctorName = (appointment: Appointment) => {
+    if (appointment.doctorName) {
+      return appointment.doctorName;
+    }
+    if (appointment.doctor?.user) {
+      return `Dr. ${appointment.doctor.user.firstName} ${appointment.doctor.user.lastName}`;
+    }
+    return 'Doctor';
+  };
+
+  // Helper to get appointment time from either format
+  const getAppointmentTime = (appointment: Appointment) => {
+    return appointment.startTime || appointment.time || '';
+  };
+
+  // Helper to get doctor specialty from either format
+  const getDoctorSpecialty = (appointment: Appointment) => {
+    return appointment.doctorSpecialty || appointment.doctor?.specialization || '';
   };
 
   const canCancel = (appointment: Appointment) => {
@@ -467,14 +497,15 @@ export default function Appointments() {
     // Search filter
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
-      const doctorName = apt.doctor?.user
-        ? `${apt.doctor.user.firstName} ${apt.doctor.user.lastName}`.toLowerCase()
-        : '';
+      // Handle both API format (doctorName) and direct format (doctor.user)
+      const doctorNameStr = getDoctorName(apt).toLowerCase();
       const deptName = apt.department?.name?.toLowerCase() || '';
+      const specialty = getDoctorSpecialty(apt).toLowerCase();
       const reason = apt.reason?.toLowerCase() || '';
 
-      if (!doctorName.includes(searchLower) &&
+      if (!doctorNameStr.includes(searchLower) &&
           !deptName.includes(searchLower) &&
+          !specialty.includes(searchLower) &&
           !reason.includes(searchLower)) {
         return false;
       }
@@ -492,11 +523,11 @@ export default function Appointments() {
 
   const renderAppointmentCard = (appointment: Appointment) => {
     const status = statusConfig[appointment.status] || statusConfig.SCHEDULED;
-    const typeConfig = appointmentTypeConfig[appointment.type] || appointmentTypeConfig.CONSULTATION;
+    const typeConfig = appointmentTypeConfig[appointment.type || 'CONSULTATION'] || appointmentTypeConfig.CONSULTATION;
     const appointmentDate = getAppointmentDate(appointment);
-    const doctorName = appointment.doctor?.user
-      ? `Dr. ${appointment.doctor.user.firstName} ${appointment.doctor.user.lastName}`
-      : 'Doctor';
+    const doctorName = getDoctorName(appointment);
+    const appointmentTime = getAppointmentTime(appointment);
+    const doctorSpecialty = getDoctorSpecialty(appointment);
     const TypeIcon = typeConfig.icon;
     const StatusIcon = status.icon;
 
@@ -533,13 +564,13 @@ export default function Appointments() {
               <div className="space-y-1.5 text-sm text-gray-600">
                 <div className="flex items-center gap-2">
                   <ClockIcon className="h-4 w-4 text-gray-400" />
-                  <span>{appointment.startTime} - {appointment.endTime}</span>
+                  <span>{appointmentTime}{appointment.endTime ? ` - ${appointment.endTime}` : ''}</span>
                 </div>
 
-                {appointment.doctor?.specialization && (
+                {doctorSpecialty && (
                   <div className="flex items-center gap-2">
                     <UserIcon className="h-4 w-4 text-gray-400" />
-                    <span>{appointment.doctor.specialization}</span>
+                    <span>{doctorSpecialty}</span>
                   </div>
                 )}
 
@@ -1722,13 +1753,13 @@ export default function Appointments() {
                           <div className="bg-gray-50 rounded-xl p-4">
                             <div className="flex items-center gap-4">
                               <div className="h-14 w-14 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xl font-bold">
-                                {(selectedAppointment.doctor?.user?.firstName || 'D')[0]}
+                                {getDoctorName(selectedAppointment).charAt(0)}
                               </div>
                               <div>
                                 <p className="font-semibold text-gray-900">
-                                  Dr. {selectedAppointment.doctor?.user?.firstName} {selectedAppointment.doctor?.user?.lastName}
+                                  {getDoctorName(selectedAppointment)}
                                 </p>
-                                <p className="text-gray-600">{selectedAppointment.doctor?.specialization}</p>
+                                <p className="text-gray-600">{getDoctorSpecialty(selectedAppointment)}</p>
                                 {selectedAppointment.doctor?.user?.phone && (
                                   <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
                                     <PhoneIcon className="h-3.5 w-3.5" />
@@ -1745,7 +1776,7 @@ export default function Appointments() {
                               <p className="text-xs text-gray-500 uppercase tracking-wider">Time</p>
                               <p className="font-medium text-gray-900 flex items-center gap-1.5 mt-1">
                                 <ClockIcon className="h-4 w-4 text-gray-400" />
-                                {selectedAppointment.startTime} - {selectedAppointment.endTime}
+                                {getAppointmentTime(selectedAppointment)}{selectedAppointment.endTime ? ` - ${selectedAppointment.endTime}` : ''}
                               </p>
                             </div>
                             <div>
@@ -1888,20 +1919,23 @@ export default function Appointments() {
                           <div className="flex items-center justify-between">
                             <span className="text-gray-500">Date</span>
                             <span className="font-semibold text-gray-900">
-                              {bookingSuccess.appointment.appointmentDate &&
-                                format(parseISO(bookingSuccess.appointment.appointmentDate), 'EEEE, MMM d, yyyy')}
+                              {(bookingSuccess.appointment.appointmentDate || bookingSuccess.appointment.date) &&
+                                format(parseISO(bookingSuccess.appointment.appointmentDate || bookingSuccess.appointment.date), 'EEEE, MMM d, yyyy')}
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-gray-500">Time</span>
                             <span className="font-semibold text-gray-900">
-                              {bookingSuccess.appointment.startTime}
+                              {bookingSuccess.appointment.startTime || bookingSuccess.appointment.time}
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-gray-500">Doctor</span>
                             <span className="font-semibold text-gray-900">
-                              Dr. {bookingSuccess.appointment.doctor?.user?.firstName} {bookingSuccess.appointment.doctor?.user?.lastName}
+                              {bookingSuccess.appointment.doctorName ||
+                                (bookingSuccess.appointment.doctor?.user ?
+                                  `Dr. ${bookingSuccess.appointment.doctor.user.firstName} ${bookingSuccess.appointment.doctor.user.lastName}` :
+                                  'Doctor')}
                             </span>
                           </div>
                           {bookingSuccess.appointment.tokenNumber && (
