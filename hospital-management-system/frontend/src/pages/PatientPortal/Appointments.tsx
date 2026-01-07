@@ -1456,8 +1456,8 @@ export default function Appointments() {
                       </div>
                     )}
 
-                    {/* Back Button */}
-                    {bookingStep > 1 && (
+                    {/* Back Button (Standard mode only) */}
+                    {bookingStep > 1 && bookingMode === 'standard' && (
                       <button
                         onClick={() => setBookingStep(bookingStep - 1)}
                         className="mt-4 w-full py-2 text-gray-600 hover:text-gray-900 text-sm font-medium"
@@ -1465,6 +1465,7 @@ export default function Appointments() {
                         Go Back
                       </button>
                     )}
+                    </div>
                   </Dialog.Panel>
                 </Transition.Child>
               </div>
