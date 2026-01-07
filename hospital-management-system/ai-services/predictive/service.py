@@ -1,6 +1,6 @@
 """
-ML-Powered Predictive Analytics Service
-Uses validated clinical scoring systems and machine learning for risk prediction
+ML-Powered Predictive Analytics Service with GPT-4 Explanation Layer
+Uses validated clinical scoring systems with GPT-4 enhanced explanations
 """
 
 from typing import Dict, Any, List, Optional, Tuple
@@ -8,7 +8,17 @@ import numpy as np
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 import logging
+import os
+import json
 from datetime import datetime, timedelta
+
+# OpenAI integration for GPT-4 explanations
+try:
+    from openai import OpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+    OpenAI = None
 
 from .knowledge_base import (
     LACE_SCORING,
@@ -557,14 +567,169 @@ class MLRiskPredictor:
         return min(base_prob, 0.95), feature_adjustments
 
 
-class PredictiveAnalytics:
-    """ML-Powered Predictive Analytics Service"""
+class GPTRiskExplainer:
+    """GPT-4 powered explanation and recommendation layer for risk predictions"""
 
     def __init__(self):
-        self.model_version = "2.0.0-ml"
+        self.api_key = os.getenv("OPENAI_API_KEY")
+        self.client = OpenAI(api_key=self.api_key) if OPENAI_AVAILABLE and self.api_key else None
+        self.model = "gpt-4o-mini"
+
+    def is_available(self) -> bool:
+        """Check if GPT-4 is available"""
+        return self.client is not None
+
+    def explain_risk(
+        self,
+        prediction_type: str,
+        risk_score: float,
+        risk_level: str,
+        clinical_scores: Dict[str, Any],
+        patient_data: Dict[str, Any],
+        factors: List[str]
+    ) -> Optional[Dict[str, Any]]:
+        """Generate GPT-4 explanation of risk prediction"""
+
+        if not self.is_available():
+            return None
+
+        # Sanitize patient data for prompt (remove sensitive info)
+        safe_patient_data = {
+            "age": patient_data.get("age"),
+            "gender": patient_data.get("gender"),
+            "lengthOfStay": patient_data.get("lengthOfStay"),
+            "admissionType": patient_data.get("admissionType"),
+            "chronicConditions": patient_data.get("medicalHistory", {}).get("chronicConditions", []),
+        }
+
+        factors_text = "\n".join(f"- {f}" for f in factors) if factors else "No specific factors identified"
+
+        prompt = f"""Explain this clinical risk prediction in clear, actionable terms for healthcare providers.
+
+PREDICTION TYPE: {prediction_type}
+RISK SCORE: {risk_score:.1%}
+RISK LEVEL: {risk_level}
+
+CLINICAL SCORES:
+{json.dumps(clinical_scores, indent=2)}
+
+PATIENT DATA:
+{json.dumps(safe_patient_data, indent=2)}
+
+CONTRIBUTING FACTORS:
+{factors_text}
+
+Return JSON:
+{{
+    "summary": "2-3 sentence plain language summary of the risk",
+    "key_drivers": ["Top 3 modifiable factors driving this risk"],
+    "clinical_interpretation": "How to interpret the clinical scores in context",
+    "personalized_recommendations": [
+        {{
+            "recommendation": "Specific action",
+            "rationale": "Why this helps reduce risk",
+            "priority": "high/medium/low",
+            "responsible_party": "physician/nurse/patient/care_coordinator"
+        }}
+    ],
+    "monitoring_plan": "Recommended monitoring approach",
+    "warning_signs": ["Signs that would indicate worsening"]
+}}
+
+Guidelines:
+1. Be specific and actionable
+2. Consider patient age and comorbidities
+3. Focus on modifiable risk factors
+4. Provide evidence-based recommendations"""
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a clinical decision support system explaining risk predictions to healthcare providers. Be specific, actionable, and evidence-based."
+                    },
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=1500,
+                response_format={"type": "json_object"}
+            )
+
+            result = json.loads(response.choices[0].message.content)
+            logger.info(f"GPT-4 generated risk explanation for {prediction_type}")
+            return result
+
+        except Exception as e:
+            logger.error(f"GPT-4 risk explanation failed: {e}")
+            return None
+
+    def explain_deterioration_risk(
+        self,
+        news2_score: int,
+        news2_level: str,
+        vital_signs: Dict[str, Any],
+        patient_age: int
+    ) -> Optional[Dict[str, Any]]:
+        """Generate GPT-4 explanation specifically for deterioration risk"""
+
+        if not self.is_available():
+            return None
+
+        prompt = f"""Explain this clinical deterioration risk assessment for a healthcare provider.
+
+NEWS2 SCORE: {news2_score}
+RISK LEVEL: {news2_level}
+PATIENT AGE: {patient_age}
+
+VITAL SIGNS:
+{json.dumps(vital_signs, indent=2)}
+
+Return JSON:
+{{
+    "summary": "Brief explanation of what this NEWS2 score means clinically",
+    "concerning_vitals": ["List vital signs that are contributing to the score"],
+    "age_considerations": "How the patient's age affects interpretation",
+    "immediate_actions": ["What should be done now based on risk level"],
+    "escalation_criteria": ["When to escalate care"],
+    "monitoring_frequency": "How often to reassess vitals",
+    "potential_causes": ["Possible underlying causes to investigate"]
+}}"""
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an early warning system clinical expert. Explain NEWS2 scores and deterioration risk clearly."
+                    },
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=1000,
+                response_format={"type": "json_object"}
+            )
+
+            result = json.loads(response.choices[0].message.content)
+            logger.info("GPT-4 generated deterioration risk explanation")
+            return result
+
+        except Exception as e:
+            logger.error(f"GPT-4 deterioration explanation failed: {e}")
+            return None
+
+
+class PredictiveAnalytics:
+    """ML-Powered Predictive Analytics Service with GPT-4 Explanations"""
+
+    def __init__(self):
+        self.model_version = "3.0.0-gpt4-hybrid"
         self.feature_extractor = PatientFeatureExtractor()
         self.clinical_scorer = ClinicalRiskScorer()
         self.ml_predictor = MLRiskPredictor()
+        self.risk_explainer = GPTRiskExplainer()
 
     def predict(
         self,
@@ -624,7 +789,7 @@ class PredictiveAnalytics:
         risk_level = self._get_risk_level(risk_score)
         recommendations = INTERVENTION_RECOMMENDATIONS["readmission"].get(risk_level, [])
 
-        return {
+        result = {
             "riskScore": round(float(risk_score), 3),
             "riskLevel": risk_level,
             "factors": factors[:6],
@@ -642,7 +807,28 @@ class PredictiveAnalytics:
             },
             "timeframe": timeframe,
             "modelVersion": self.model_version,
+            "aiEnhanced": False,
         }
+
+        # Add GPT-4 explanation if available
+        if self.risk_explainer.is_available():
+            try:
+                gpt_explanation = self.risk_explainer.explain_risk(
+                    prediction_type="30-Day Readmission Risk",
+                    risk_score=risk_score,
+                    risk_level=risk_level,
+                    clinical_scores={"lace": {"score": lace_score, "components": lace_components}},
+                    patient_data=patient_data,
+                    factors=factors
+                )
+                if gpt_explanation:
+                    result["aiExplanation"] = gpt_explanation
+                    result["aiEnhanced"] = True
+                    logger.info("GPT-4 enhanced readmission prediction")
+            except Exception as e:
+                logger.warning(f"GPT-4 explanation failed, using standard output: {e}")
+
+        return result
 
     def _predict_mortality(
         self, patient_data: Dict[str, Any], timeframe: str
@@ -664,20 +850,42 @@ class PredictiveAnalytics:
         risk_level = self._get_risk_level(risk_score)
         recommendations = INTERVENTION_RECOMMENDATIONS["mortality"].get(risk_level, [])
 
-        return {
+        charlson_score = int(features.get("charlson_score", 0))
+        result = {
             "riskScore": round(float(risk_score), 3),
             "riskLevel": risk_level,
             "factors": factors[:6],
             "recommendations": recommendations[:5],
             "clinicalScores": {
                 "charlson": {
-                    "score": int(features.get("charlson_score", 0)),
-                    "interpretation": self._interpret_charlson(features.get("charlson_score", 0))
+                    "score": charlson_score,
+                    "interpretation": self._interpret_charlson(charlson_score)
                 }
             },
             "timeframe": timeframe,
             "modelVersion": self.model_version,
+            "aiEnhanced": False,
         }
+
+        # Add GPT-4 explanation if available
+        if self.risk_explainer.is_available():
+            try:
+                gpt_explanation = self.risk_explainer.explain_risk(
+                    prediction_type="In-Hospital Mortality Risk",
+                    risk_score=risk_score,
+                    risk_level=risk_level,
+                    clinical_scores={"charlson": {"score": charlson_score, "interpretation": self._interpret_charlson(charlson_score)}},
+                    patient_data=patient_data,
+                    factors=factors
+                )
+                if gpt_explanation:
+                    result["aiExplanation"] = gpt_explanation
+                    result["aiEnhanced"] = True
+                    logger.info("GPT-4 enhanced mortality prediction")
+            except Exception as e:
+                logger.warning(f"GPT-4 explanation failed, using standard output: {e}")
+
+        return result
 
     def _interpret_charlson(self, score: float) -> str:
         """Interpret Charlson Comorbidity Index"""
@@ -746,7 +954,15 @@ class PredictiveAnalytics:
 
         recommendations = INTERVENTION_RECOMMENDATIONS["deterioration"].get(risk_level, [])
 
-        return {
+        vital_signs_data = {
+            "heartRate": int(features.get("heart_rate", 0)),
+            "systolicBP": int(features.get("systolic_bp", 0)),
+            "respiratoryRate": int(features.get("respiratory_rate", 0)),
+            "oxygenSaturation": int(features.get("oxygen_saturation", 0)),
+            "temperature": round(float(features.get("temperature", 0)), 1)
+        }
+
+        result = {
             "riskScore": round(float(risk_score), 3),
             "riskLevel": risk_level,
             "factors": factors[:6] if factors else ["No acute abnormalities detected"],
@@ -758,15 +974,29 @@ class PredictiveAnalytics:
                     "components": news2_components
                 }
             },
-            "vitalSigns": {
-                "heartRate": int(features.get("heart_rate", 0)),
-                "systolicBP": int(features.get("systolic_bp", 0)),
-                "respiratoryRate": int(features.get("respiratory_rate", 0)),
-                "oxygenSaturation": int(features.get("oxygen_saturation", 0)),
-                "temperature": round(float(features.get("temperature", 0)), 1)
-            },
+            "vitalSigns": vital_signs_data,
             "modelVersion": self.model_version,
+            "aiEnhanced": False,
         }
+
+        # Add GPT-4 explanation for deterioration risk
+        if self.risk_explainer.is_available():
+            try:
+                patient_age = patient_data.get("age", patient_data.get("patientData", {}).get("age", 50))
+                gpt_explanation = self.risk_explainer.explain_deterioration_risk(
+                    news2_score=news2_score,
+                    news2_level=news2_level,
+                    vital_signs=latest_vitals,
+                    patient_age=patient_age
+                )
+                if gpt_explanation:
+                    result["aiExplanation"] = gpt_explanation
+                    result["aiEnhanced"] = True
+                    logger.info("GPT-4 enhanced deterioration prediction")
+            except Exception as e:
+                logger.warning(f"GPT-4 explanation failed, using standard output: {e}")
+
+        return result
 
     def _predict_length_of_stay(self, patient_data: Dict[str, Any]) -> Dict[str, Any]:
         """Predict expected length of hospital stay"""

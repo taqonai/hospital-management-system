@@ -53,12 +53,33 @@ interface RiskFactor {
   relevance: string;
 }
 
+interface AgeAdjustedWarning {
+  symptom: string;
+  ageGroup: string;
+  severityMultiplier: number;
+  warnings: string[];
+  priority: 'high' | 'moderate';
+}
+
+interface UrgencyAssessment {
+  level: 'HIGH' | 'MODERATE-HIGH' | 'MODERATE' | 'LOW';
+  baseScore: number;
+  ageAdjustedScore: number;
+  ageMultiplier: number;
+  patientAgeCategory: string;
+  patientAge: number;
+  highPrioritySymptoms?: string[];
+  ageConsideration?: string;
+}
+
 interface DiagnosisResult {
   diagnoses: Diagnosis[];
   recommendedTests: string[];
   treatmentSuggestions: string[];
   drugInteractions: DrugInteraction[];
   riskFactors: RiskFactor[];
+  ageAdjustedWarnings?: AgeAdjustedWarning[];
+  urgencyAssessment?: UrgencyAssessment;
   confidence: number;
   modelVersion: string;
 }
@@ -95,6 +116,7 @@ export default function DiagnosticAssistant({
     treatments: false,
     interactions: true,
     risks: false,
+    ageWarnings: true,
   });
 
   useEffect(() => {
@@ -189,6 +211,26 @@ export default function DiagnosticAssistant({
       case 'moderate': return 'bg-amber-100 text-amber-700';
       case 'severe': case 'emergency': return 'bg-red-100 text-red-700';
       default: return 'bg-gray-100 text-gray-700';
+    }
+  };
+
+  const getUrgencyColor = (level?: string) => {
+    switch (level) {
+      case 'HIGH': return 'bg-red-600 text-white';
+      case 'MODERATE-HIGH': return 'bg-orange-500 text-white';
+      case 'MODERATE': return 'bg-amber-500 text-white';
+      case 'LOW': return 'bg-green-500 text-white';
+      default: return 'bg-gray-500 text-white';
+    }
+  };
+
+  const getUrgencyBorderColor = (level?: string) => {
+    switch (level) {
+      case 'HIGH': return 'border-red-500 bg-red-50';
+      case 'MODERATE-HIGH': return 'border-orange-500 bg-orange-50';
+      case 'MODERATE': return 'border-amber-500 bg-amber-50';
+      case 'LOW': return 'border-green-500 bg-green-50';
+      default: return 'border-gray-300 bg-gray-50';
     }
   };
 
@@ -332,6 +374,110 @@ export default function DiagnosticAssistant({
                 {Math.round(result.confidence * 100)}%
               </span>
             </div>
+
+            {/* Urgency Assessment - Show prominently if age affects severity */}
+            {result.urgencyAssessment && result.urgencyAssessment.ageMultiplier > 1 && (
+              <div className={`p-4 rounded-lg border-2 ${getUrgencyBorderColor(result.urgencyAssessment.level)}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <ExclamationTriangleIcon className={`h-6 w-6 ${
+                      result.urgencyAssessment.level === 'HIGH' ? 'text-red-600' :
+                      result.urgencyAssessment.level === 'MODERATE-HIGH' ? 'text-orange-600' : 'text-amber-600'
+                    }`} />
+                    <span className="font-bold text-gray-900">Age-Adjusted Urgency</span>
+                  </div>
+                  <span className={`px-4 py-1.5 rounded-full text-sm font-bold ${getUrgencyColor(result.urgencyAssessment.level)}`}>
+                    {result.urgencyAssessment.level}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mb-3 text-sm">
+                  <div className="p-2 bg-white rounded border">
+                    <span className="text-gray-500">Patient Age:</span>
+                    <span className="ml-2 font-semibold">{result.urgencyAssessment.patientAge} years</span>
+                    <span className="ml-1 text-gray-500">({result.urgencyAssessment.patientAgeCategory})</span>
+                  </div>
+                  <div className="p-2 bg-white rounded border">
+                    <span className="text-gray-500">Age Factor:</span>
+                    <span className={`ml-2 font-semibold ${result.urgencyAssessment.ageMultiplier > 1.3 ? 'text-red-600' : 'text-orange-600'}`}>
+                      {result.urgencyAssessment.ageMultiplier}x severity
+                    </span>
+                  </div>
+                </div>
+
+                {result.urgencyAssessment.ageConsideration && (
+                  <div className="p-3 bg-white rounded border border-amber-200">
+                    <p className="text-sm text-gray-700">
+                      <strong className="text-amber-700">Clinical Note:</strong> {result.urgencyAssessment.ageConsideration}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Age-Adjusted Warnings */}
+            {(result.ageAdjustedWarnings?.length || 0) > 0 && (
+              <div className="border border-orange-300 bg-orange-50 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => toggleSection('ageWarnings')}
+                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-orange-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <ExclamationTriangleIcon className="h-5 w-5 text-orange-600" />
+                    <span className="font-medium text-orange-800">Age-Specific Clinical Warnings</span>
+                    <span className="px-2 py-0.5 bg-orange-200 text-orange-800 rounded-full text-xs font-bold">
+                      {result.ageAdjustedWarnings?.length || 0}
+                    </span>
+                  </div>
+                  {expandedSections.ageWarnings ? <ChevronUpIcon className="h-5 w-5 text-orange-600" /> : <ChevronDownIcon className="h-5 w-5 text-orange-600" />}
+                </button>
+
+                {expandedSections.ageWarnings && (
+                  <div className="p-4 space-y-3">
+                    {(result.ageAdjustedWarnings || []).map((warning, idx) => (
+                      <div
+                        key={idx}
+                        className={`p-4 rounded-lg border ${
+                          warning.priority === 'high'
+                            ? 'bg-red-50 border-red-300'
+                            : 'bg-amber-50 border-amber-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`font-bold ${warning.priority === 'high' ? 'text-red-700' : 'text-amber-700'}`}>
+                              {warning.symptom}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                              warning.priority === 'high'
+                                ? 'bg-red-200 text-red-800'
+                                : 'bg-amber-200 text-amber-800'
+                            }`}>
+                              {warning.priority.toUpperCase()} PRIORITY
+                            </span>
+                          </div>
+                          <span className="text-sm text-gray-500">
+                            Severity: <strong className={warning.severityMultiplier >= 1.5 ? 'text-red-600' : 'text-amber-600'}>
+                              {warning.severityMultiplier}x
+                            </strong>
+                          </span>
+                        </div>
+                        <ul className="space-y-1">
+                          {warning.warnings.map((w, wIdx) => (
+                            <li key={wIdx} className="flex items-start gap-2 text-sm">
+                              <ExclamationTriangleIcon className={`h-4 w-4 flex-shrink-0 mt-0.5 ${
+                                warning.priority === 'high' ? 'text-red-500' : 'text-amber-500'
+                              }`} />
+                              <span className="text-gray-700">{w}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Diagnoses */}
             <div className="border border-gray-200 rounded-lg overflow-hidden">

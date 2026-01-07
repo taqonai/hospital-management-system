@@ -1,6 +1,6 @@
 """
-Diagnostic AI Service with ML-powered Symptom Analysis
-Uses Sentence Transformers for semantic matching and Bayesian-style inference
+Diagnostic AI Service with GPT-4 and ML-powered Symptom Analysis
+Uses GPT-4 for clinical reasoning with SentenceTransformers fallback
 """
 
 from typing import List, Dict, Any, Optional, Tuple
@@ -8,9 +8,20 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 import logging
 import re
+import os
+import json
 
 # Initialize logger
 logger = logging.getLogger(__name__)
+
+# OpenAI integration for GPT-4
+try:
+    from openai import OpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+    OpenAI = None
+    logger.warning("OpenAI package not available. GPT-4 features will be disabled.")
 
 # Lazy load sentence transformers to speed up initial startup
 _model = None
@@ -39,6 +50,7 @@ from .knowledge_base import (
     SYMPTOM_TEST_RECOMMENDATIONS,
     DRUG_INTERACTIONS_DATABASE,
     SYMPTOM_SYNONYMS,
+    AGE_SYMPTOM_SEVERITY,
 )
 
 
@@ -143,12 +155,363 @@ class SymptomEncoder:
         return disease_scores
 
 
-class DiagnosticAI:
-    """ML-powered Diagnostic AI for clinical decision support"""
+class GPTDiagnosticAnalyzer:
+    """GPT-4 powered diagnostic analysis for clinical reasoning"""
 
     def __init__(self):
-        self.model_version = "2.0.0-ml"
+        self.api_key = os.getenv("OPENAI_API_KEY")
+        self.client = OpenAI(api_key=self.api_key) if OPENAI_AVAILABLE and self.api_key else None
+        self.model = "gpt-4o-mini"  # Cost-effective for most analysis
+        self.complex_model = "gpt-4o"  # For complex differential diagnosis
+
+    def is_available(self) -> bool:
+        """Check if GPT-4 is available"""
+        return self.client is not None
+
+    def generate_diagnoses(
+        self,
+        symptoms: List[str],
+        patient_age: int,
+        gender: str,
+        medical_history: Optional[List[str]] = None,
+        vital_signs: Optional[Dict[str, Any]] = None
+    ) -> Optional[List[Dict[str, Any]]]:
+        """Generate differential diagnoses using GPT-4 clinical reasoning"""
+
+        if not self.is_available():
+            return None
+
+        history_text = ', '.join(medical_history) if medical_history else 'Not provided'
+        vitals_text = json.dumps(vital_signs) if vital_signs else 'Not provided'
+
+        prompt = f"""You are an expert clinical diagnostician. Analyze the following patient presentation and provide a differential diagnosis.
+
+PATIENT INFORMATION:
+- Age: {patient_age} years
+- Gender: {gender}
+- Chief Complaints/Symptoms: {', '.join(symptoms)}
+- Medical History: {history_text}
+- Vital Signs: {vitals_text}
+
+Provide your analysis as JSON with this exact structure:
+{{
+    "diagnoses": [
+        {{
+            "icd10": "ICD-10 code (e.g., J06.9)",
+            "name": "Diagnosis name",
+            "confidence": 0.0-1.0,
+            "category": "cardiovascular/respiratory/infectious/neurological/gastrointestinal/endocrine/musculoskeletal/dermatological/psychiatric/other",
+            "severity": "mild/moderate/severe/emergency",
+            "reasoning": "Brief clinical reasoning for this diagnosis",
+            "key_symptoms_matched": ["symptom1", "symptom2"]
+        }}
+    ],
+    "clinical_reasoning": "Overall clinical thought process",
+    "red_flags": ["Any urgent concerns requiring immediate attention"]
+}}
+
+Guidelines:
+1. List up to 5 diagnoses in order of probability
+2. Consider age and gender-specific conditions (e.g., higher cardiac risk in elderly)
+3. Account for symptom patterns and combinations
+4. Flag any emergency conditions prominently
+5. Use standard ICD-10 codes
+6. Confidence values should reflect clinical certainty"""
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an expert clinical diagnostician. Provide evidence-based differential diagnoses in JSON format. Be thorough but prioritize patient safety. Always consider age-specific presentations."
+                    },
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=2000,
+                response_format={"type": "json_object"}
+            )
+
+            result_text = response.choices[0].message.content
+            result = json.loads(result_text)
+
+            diagnoses = result.get("diagnoses", [])
+            if not diagnoses:
+                logger.warning("GPT-4 returned no diagnoses")
+                return None
+
+            # Validate and normalize confidence values
+            for diag in diagnoses:
+                diag["confidence"] = min(max(float(diag.get("confidence", 0.5)), 0.05), 0.95)
+                # Store additional GPT-4 insights
+                if "reasoning" in diag:
+                    diag["gpt_reasoning"] = diag.pop("reasoning")
+                if "key_symptoms_matched" in diag:
+                    diag["matched_symptoms"] = diag.pop("key_symptoms_matched")
+
+            # Store red flags and clinical reasoning for response
+            self._last_clinical_reasoning = result.get("clinical_reasoning", "")
+            self._last_red_flags = result.get("red_flags", [])
+
+            logger.info(f"GPT-4 generated {len(diagnoses)} diagnoses")
+            return diagnoses
+
+        except json.JSONDecodeError as e:
+            logger.error(f"GPT-4 returned invalid JSON: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"GPT-4 diagnosis generation failed: {e}")
+            return None
+
+    def recommend_tests(
+        self,
+        symptoms: List[str],
+        diagnoses: List[Dict[str, Any]],
+        patient_age: int,
+        vital_signs: Optional[Dict[str, Any]] = None
+    ) -> Optional[List[str]]:
+        """Generate evidence-based test recommendations using GPT-4"""
+
+        if not self.is_available() or not diagnoses:
+            return None
+
+        diagnoses_text = "\n".join([
+            f"- {d.get('name', 'Unknown')} (ICD-10: {d.get('icd10', 'N/A')}, confidence: {d.get('confidence', 0):.0%})"
+            for d in diagnoses[:3]
+        ])
+
+        prompt = f"""As a clinical decision support system, recommend diagnostic tests for this patient.
+
+SYMPTOMS: {', '.join(symptoms)}
+
+TOP DIFFERENTIAL DIAGNOSES:
+{diagnoses_text}
+
+PATIENT AGE: {patient_age}
+VITAL SIGNS: {json.dumps(vital_signs) if vital_signs else 'Not provided'}
+
+Return JSON with this structure:
+{{
+    "recommended_tests": [
+        {{
+            "test_name": "Test name",
+            "priority": "urgent/routine",
+            "rationale": "Why this test is needed",
+            "target_diagnoses": ["Which diagnoses this helps confirm/rule out"]
+        }}
+    ],
+    "test_sequence": "Suggested order of tests if resources are limited"
+}}
+
+Guidelines:
+1. Prioritize tests that differentiate between top diagnoses
+2. Consider cost-effectiveness
+3. Flag urgent tests (e.g., troponin for chest pain in elderly)
+4. Include standard panels (CBC, BMP) when appropriate
+5. Consider patient age - more aggressive workup for elderly with concerning symptoms"""
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a clinical laboratory consultant. Recommend evidence-based diagnostic tests prioritized by clinical utility."
+                    },
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=1500,
+                response_format={"type": "json_object"}
+            )
+
+            result = json.loads(response.choices[0].message.content)
+            tests = [t["test_name"] for t in result.get("recommended_tests", [])]
+
+            logger.info(f"GPT-4 recommended {len(tests)} tests")
+            return tests
+
+        except Exception as e:
+            logger.error(f"GPT-4 test recommendation failed: {e}")
+            return None
+
+    def suggest_treatments(
+        self,
+        diagnoses: List[Dict[str, Any]],
+        patient_age: int,
+        medical_history: Optional[List[str]] = None,
+        current_medications: Optional[List[str]] = None,
+        allergies: Optional[List[str]] = None
+    ) -> Optional[List[str]]:
+        """Generate treatment suggestions using GPT-4 clinical reasoning"""
+
+        if not self.is_available() or not diagnoses:
+            return None
+
+        diagnoses_text = "\n".join([
+            f"- {d.get('name', 'Unknown')} ({d.get('severity', 'unknown')} severity)"
+            for d in diagnoses[:3]
+        ])
+
+        prompt = f"""As a clinical decision support system, provide treatment recommendations.
+
+DIAGNOSES:
+{diagnoses_text}
+
+PATIENT CONTEXT:
+- Age: {patient_age}
+- Medical History: {', '.join(medical_history) if medical_history else 'None documented'}
+- Current Medications: {', '.join(current_medications) if current_medications else 'None documented'}
+- Allergies: {', '.join(allergies) if allergies else 'NKDA'}
+
+Return JSON:
+{{
+    "treatment_suggestions": [
+        {{
+            "recommendation": "Treatment recommendation",
+            "priority": "immediate/urgent/routine",
+            "rationale": "Clinical reasoning",
+            "contraindication_check": "Any concerns given patient history"
+        }}
+    ],
+    "referral_recommendations": ["Specialist referrals if needed"],
+    "follow_up_plan": "Recommended follow-up"
+}}
+
+Guidelines:
+1. Prioritize life-threatening conditions
+2. Check for drug interactions and allergies
+3. Adjust recommendations for age (geriatric/pediatric considerations)
+4. Include non-pharmacological interventions
+5. DO NOT recommend specific drug doses - defer to pharmacy
+6. Consider patient's current medications to avoid interactions"""
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a clinical consultant providing treatment guidance. Never recommend specific drug doses. Always prioritize patient safety and consider age-specific factors."
+                    },
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=1500,
+                response_format={"type": "json_object"}
+            )
+
+            result = json.loads(response.choices[0].message.content)
+            suggestions = [t["recommendation"] for t in result.get("treatment_suggestions", [])]
+            suggestions.extend(result.get("referral_recommendations", []))
+
+            logger.info(f"GPT-4 suggested {len(suggestions)} treatments")
+            return suggestions
+
+        except Exception as e:
+            logger.error(f"GPT-4 treatment suggestion failed: {e}")
+            return None
+
+    def assess_urgency(
+        self,
+        symptoms: List[str],
+        patient_age: int,
+        vital_signs: Optional[Dict[str, Any]] = None,
+        diagnoses: Optional[List[Dict[str, Any]]] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Comprehensive age-adjusted urgency assessment using GPT-4"""
+
+        if not self.is_available():
+            return None
+
+        age_category = "pediatric" if patient_age < 18 else "geriatric" if patient_age > 65 else "adult"
+
+        diagnoses_text = ""
+        if diagnoses:
+            diagnoses_text = "\nTOP DIAGNOSES:\n" + "\n".join([
+                f"- {d.get('name', 'Unknown')} ({d.get('severity', 'unknown')})"
+                for d in diagnoses[:3]
+            ])
+
+        prompt = f"""Assess clinical urgency for this patient considering age-specific factors.
+
+PATIENT:
+- Age: {patient_age} years ({age_category})
+- Symptoms: {', '.join(symptoms)}
+- Vital Signs: {json.dumps(vital_signs) if vital_signs else 'Not available'}
+{diagnoses_text}
+
+Return JSON:
+{{
+    "level": "LOW/MODERATE/MODERATE-HIGH/HIGH",
+    "urgency_score": 1-10,
+    "age_considerations": ["Age-specific factors affecting urgency"],
+    "red_flags": ["Any concerning findings"],
+    "time_sensitivity": "How quickly patient needs to be seen",
+    "recommended_setting": "ED/Urgent Care/Outpatient/Self-care",
+    "rationale": "Clinical reasoning for urgency assessment",
+    "age_multiplier": 1.0-2.0
+}}
+
+Age-specific considerations:
+- Pediatric (<18): Faster deterioration, different vital sign norms, consider dehydration risk
+- Adult (18-65): Standard assessment
+- Geriatric (>65): Atypical presentations common, higher complication risk, blunted fever response, consider frailty
+
+Consider vital sign ranges appropriate for age group."""
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an emergency medicine specialist. Assess clinical urgency with emphasis on patient safety and age-appropriate considerations."
+                    },
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=1000,
+                response_format={"type": "json_object"}
+            )
+
+            result = json.loads(response.choices[0].message.content)
+
+            # Normalize response format
+            return {
+                "level": result.get("level", "MODERATE"),
+                "ageAdjustedScore": result.get("urgency_score", 5),
+                "ageMultiplier": result.get("age_multiplier", 1.0),
+                "patientAgeCategory": age_category,
+                "patientAge": patient_age,
+                "ageConsiderations": result.get("age_considerations", []),
+                "redFlags": result.get("red_flags", []),
+                "timeSensitivity": result.get("time_sensitivity", ""),
+                "recommendedSetting": result.get("recommended_setting", ""),
+                "rationale": result.get("rationale", ""),
+                "source": "gpt-4"
+            }
+
+        except Exception as e:
+            logger.error(f"GPT-4 urgency assessment failed: {e}")
+            return None
+
+    def get_last_insights(self) -> Dict[str, Any]:
+        """Get additional insights from last GPT-4 analysis"""
+        return {
+            "clinicalReasoning": getattr(self, '_last_clinical_reasoning', ''),
+            "redFlags": getattr(self, '_last_red_flags', [])
+        }
+
+
+class DiagnosticAI:
+    """GPT-4 and ML-powered Diagnostic AI for clinical decision support"""
+
+    def __init__(self):
+        self.model_version = "3.0.0-gpt4-hybrid"
         self.symptom_encoder = SymptomEncoder()
+        self.gpt_analyzer = GPTDiagnosticAnalyzer()
         self._use_ml = True
 
     def analyze(
@@ -162,23 +525,92 @@ class DiagnosticAI:
         vital_signs: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Analyze symptoms using ML-powered semantic matching and generate differential diagnosis
+        Analyze symptoms using GPT-4 clinical reasoning with ML/rule-based fallback.
+        Three-tier fallback: GPT-4 → SentenceTransformers → Rule-based
         """
         # Normalize input symptoms
         normalized_symptoms = self._normalize_symptoms(symptoms)
 
-        # Generate diagnoses using ML or fallback
-        diagnoses = self._generate_diagnoses_ml(
-            normalized_symptoms, patient_age, gender, medical_history
-        )
+        # Track which analysis source was used
+        analysis_source = "rule-based"
+        gpt_insights = {}
 
-        # Get recommended tests
-        recommended_tests = self._recommend_tests(normalized_symptoms, diagnoses)
+        # Tier 1: Try GPT-4 first
+        if self.gpt_analyzer.is_available():
+            logger.info("Attempting GPT-4 diagnosis generation...")
+            diagnoses = self.gpt_analyzer.generate_diagnoses(
+                normalized_symptoms, patient_age, gender, medical_history, vital_signs
+            )
 
-        # Generate treatment suggestions based on top diagnoses
-        treatment_suggestions = self._suggest_treatments(diagnoses, patient_age, medical_history)
+            if diagnoses:
+                analysis_source = "gpt-4"
+                gpt_insights = self.gpt_analyzer.get_last_insights()
 
-        # Check drug interactions
+                # Use GPT-4 for all components
+                recommended_tests = self.gpt_analyzer.recommend_tests(
+                    normalized_symptoms, diagnoses, patient_age, vital_signs
+                )
+                if not recommended_tests:
+                    recommended_tests = self._recommend_tests(normalized_symptoms, diagnoses)
+
+                treatment_suggestions = self.gpt_analyzer.suggest_treatments(
+                    diagnoses, patient_age, medical_history, current_medications, allergies
+                )
+                if not treatment_suggestions:
+                    treatment_suggestions = self._suggest_treatments(diagnoses, patient_age, medical_history)
+
+                age_adjusted_urgency = self.gpt_analyzer.assess_urgency(
+                    normalized_symptoms, patient_age, vital_signs, diagnoses
+                )
+                if not age_adjusted_urgency:
+                    base_severity = diagnoses[0].get("severity", "unknown") if diagnoses else "unknown"
+                    age_adjusted_urgency = self._calculate_age_adjusted_urgency(
+                        normalized_symptoms, patient_age, base_severity
+                    )
+
+                # Get age-adjusted warnings (GPT-4 provides this in urgency assessment)
+                age_adjusted_warnings = []
+                if age_adjusted_urgency and age_adjusted_urgency.get("source") == "gpt-4":
+                    # Convert GPT-4 age considerations to warning format
+                    for consideration in age_adjusted_urgency.get("ageConsiderations", []):
+                        age_adjusted_warnings.append({
+                            "symptom": "Age-Related",
+                            "ageGroup": age_adjusted_urgency.get("patientAgeCategory", "unknown"),
+                            "severityMultiplier": age_adjusted_urgency.get("ageMultiplier", 1.0),
+                            "warnings": [consideration],
+                            "priority": "high" if age_adjusted_urgency.get("ageMultiplier", 1.0) >= 1.5 else "moderate"
+                        })
+                else:
+                    age_adjusted_warnings = self._get_age_adjusted_warnings(normalized_symptoms, patient_age)
+
+                logger.info(f"GPT-4 analysis successful: {len(diagnoses)} diagnoses")
+            else:
+                logger.warning("GPT-4 diagnosis failed, falling back to SentenceTransformers")
+                diagnoses = None
+
+        # Tier 2 & 3: Fallback to ML/rule-based if GPT-4 unavailable or failed
+        if not self.gpt_analyzer.is_available() or analysis_source != "gpt-4":
+            diagnoses = self._generate_diagnoses_ml(
+                normalized_symptoms, patient_age, gender, medical_history
+            )
+
+            # Determine actual source
+            if self.symptom_encoder.model != "fallback":
+                analysis_source = "sentence-transformers"
+            else:
+                analysis_source = "rule-based"
+
+            # Use fallback for all components
+            recommended_tests = self._recommend_tests(normalized_symptoms, diagnoses)
+            treatment_suggestions = self._suggest_treatments(diagnoses, patient_age, medical_history)
+            age_adjusted_warnings = self._get_age_adjusted_warnings(normalized_symptoms, patient_age)
+
+            base_severity = diagnoses[0].get("severity", "unknown") if diagnoses else "unknown"
+            age_adjusted_urgency = self._calculate_age_adjusted_urgency(
+                normalized_symptoms, patient_age, base_severity
+            )
+
+        # Check drug interactions (always rule-based for safety)
         drug_interactions = self._check_drug_interactions(current_medications or [], allergies or [])
 
         # Identify risk factors
@@ -189,15 +621,28 @@ class DiagnosticAI:
         # Calculate overall confidence
         confidence = self._calculate_confidence(symptoms, diagnoses)
 
-        return {
+        # Build response
+        response = {
             "diagnoses": diagnoses[:5],
             "recommendedTests": list(set(recommended_tests))[:8],
             "treatmentSuggestions": treatment_suggestions[:6],
             "drugInteractions": drug_interactions,
             "riskFactors": risk_factors,
+            "ageAdjustedWarnings": age_adjusted_warnings,
+            "urgencyAssessment": age_adjusted_urgency,
             "confidence": confidence,
             "modelVersion": self.model_version,
+            "analysisSource": analysis_source,
         }
+
+        # Add GPT-4 insights if available
+        if gpt_insights:
+            if gpt_insights.get("clinicalReasoning"):
+                response["clinicalReasoning"] = gpt_insights["clinicalReasoning"]
+            if gpt_insights.get("redFlags"):
+                response["redFlags"] = gpt_insights["redFlags"]
+
+        return response
 
     def _normalize_symptoms(self, symptoms: List[str]) -> List[str]:
         """Normalize and expand symptoms using synonym matching"""
@@ -671,3 +1116,142 @@ class DiagnosticAI:
                      symptom_factor * 0.15 + spread_factor * 0.15)
 
         return round(min(max(confidence, 0.2), 0.95), 2)
+
+    def _get_age_adjusted_warnings(
+        self,
+        symptoms: List[str],
+        patient_age: int
+    ) -> List[Dict[str, Any]]:
+        """
+        Get age-specific warnings for symptoms.
+        Different symptoms have different implications based on patient age.
+        """
+        age_warnings = []
+
+        for symptom in symptoms:
+            symptom_lower = symptom.lower().strip()
+
+            # Check direct symptom match
+            if symptom_lower in AGE_SYMPTOM_SEVERITY:
+                severity_data = AGE_SYMPTOM_SEVERITY[symptom_lower]
+                warning_entry = self._get_warning_for_age(
+                    symptom_lower, severity_data, patient_age
+                )
+                if warning_entry:
+                    age_warnings.append(warning_entry)
+            else:
+                # Check for partial matches (e.g., "high fever" matches "fever")
+                for key_symptom, severity_data in AGE_SYMPTOM_SEVERITY.items():
+                    if key_symptom in symptom_lower or symptom_lower in key_symptom:
+                        warning_entry = self._get_warning_for_age(
+                            key_symptom, severity_data, patient_age
+                        )
+                        if warning_entry:
+                            age_warnings.append(warning_entry)
+                        break
+
+        return age_warnings
+
+    def _get_warning_for_age(
+        self,
+        symptom: str,
+        severity_data: Dict[str, Dict],
+        patient_age: int
+    ) -> Optional[Dict[str, Any]]:
+        """Get warning for a specific symptom based on patient age"""
+        for age_group, data in severity_data.items():
+            age_range = data.get("age_range", (0, 150))
+            if age_range[0] <= patient_age <= age_range[1]:
+                warnings = data.get("warnings", [])
+                severity_multiplier = data.get("severity_multiplier", 1.0)
+
+                if warnings and severity_multiplier > 1.0:
+                    return {
+                        "symptom": symptom.title(),
+                        "ageGroup": age_group,
+                        "severityMultiplier": severity_multiplier,
+                        "warnings": warnings,
+                        "priority": "high" if severity_multiplier >= 1.5 else "moderate"
+                    }
+        return None
+
+    def _calculate_age_adjusted_urgency(
+        self,
+        symptoms: List[str],
+        patient_age: int,
+        base_severity: str
+    ) -> Dict[str, Any]:
+        """
+        Calculate overall urgency level adjusted for patient age.
+        Returns urgency assessment with age considerations.
+        """
+        # Base urgency scores
+        urgency_scores = {
+            "mild": 1,
+            "mild-moderate": 2,
+            "moderate": 3,
+            "moderate-severe": 4,
+            "severe": 5,
+            "emergency": 6,
+            "chronic": 2,
+            "chronic-progressive": 3,
+            "variable": 2,
+            "unknown": 2
+        }
+
+        base_score = urgency_scores.get(base_severity.lower(), 2)
+
+        # Calculate age-based multiplier from symptoms
+        total_multiplier = 1.0
+        high_priority_symptoms = []
+
+        for symptom in symptoms:
+            symptom_lower = symptom.lower().strip()
+
+            for key_symptom, severity_data in AGE_SYMPTOM_SEVERITY.items():
+                if key_symptom in symptom_lower or symptom_lower in key_symptom:
+                    for age_group, data in severity_data.items():
+                        age_range = data.get("age_range", (0, 150))
+                        if age_range[0] <= patient_age <= age_range[1]:
+                            multiplier = data.get("severity_multiplier", 1.0)
+                            if multiplier > 1.0:
+                                total_multiplier = max(total_multiplier, multiplier)
+                                if multiplier >= 1.4:
+                                    high_priority_symptoms.append(key_symptom)
+                    break
+
+        # Adjust score based on age multiplier
+        adjusted_score = base_score * total_multiplier
+
+        # Determine urgency level
+        if adjusted_score >= 5:
+            urgency_level = "HIGH"
+        elif adjusted_score >= 3.5:
+            urgency_level = "MODERATE-HIGH"
+        elif adjusted_score >= 2.5:
+            urgency_level = "MODERATE"
+        else:
+            urgency_level = "LOW"
+
+        # Age-specific category
+        if patient_age <= 12:
+            age_category = "pediatric"
+        elif patient_age <= 60:
+            age_category = "adult"
+        else:
+            age_category = "elderly"
+
+        result = {
+            "level": urgency_level,
+            "baseScore": base_score,
+            "ageAdjustedScore": round(adjusted_score, 2),
+            "ageMultiplier": round(total_multiplier, 2),
+            "patientAgeCategory": age_category,
+            "patientAge": patient_age
+        }
+
+        if high_priority_symptoms:
+            result["highPrioritySymptoms"] = list(set(high_priority_symptoms))
+            result["ageConsideration"] = f"Patient age ({patient_age}) increases clinical significance of: {', '.join(set(high_priority_symptoms))}"
+
+        return result

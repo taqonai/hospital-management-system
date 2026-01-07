@@ -17,7 +17,9 @@ npx prisma migrate dev       # Run migrations
 npm run db:seed              # Seed test data
 npm run dev                  # Start dev server (port 3001)
 npm run build                # TypeScript compile
+npm run build:strict         # TypeScript compile with strict mode
 npm test                     # Run Jest tests
+npm test -- path/to/test.ts  # Run single test file
 npm run lint                 # ESLint
 ```
 
@@ -90,6 +92,7 @@ Located in `ai-services/`:
 | `smart_orders/` | SmartOrdersAI | Clinical order recommendations |
 | `ai_scribe/` | AIScribeService | Medical transcription |
 | `entity_extraction/` | EntityExtractionAI | Medical entity extraction from text |
+| `pdf_analysis/` | PDFAnalysisService | Medical PDF extraction and analysis |
 
 ### AI Services API (FastAPI - port 8000)
 Direct AI endpoints (backend proxies these via `/api/v1/ai/*`):
@@ -103,6 +106,7 @@ Direct AI endpoints (backend proxies these via `/api/v1/ai/*`):
 - `POST /api/notes/*` - Clinical note generation/enhancement
 - `POST /api/symptom-checker/*` - Interactive symptom assessment
 - `POST /api/entity/*` - Entity extraction from natural language
+- `POST /api/pdf/analyze-url` - PDF document analysis
 
 ### AI Models in Use
 
@@ -128,7 +132,7 @@ Direct AI endpoints (backend proxies these via `/api/v1/ai/*`):
 
 ### Multi-Tenant Data Model
 
-All entities include `hospitalId` for tenant isolation. Prisma schema (`backend/prisma/schema.prisma`, ~3700 lines) covers 80+ models.
+All entities include `hospitalId` for tenant isolation. Prisma schema (`backend/prisma/schema.prisma`, ~4100 lines) covers 80+ models.
 
 ### User Roles (UserRole enum)
 SUPER_ADMIN, HOSPITAL_ADMIN, DOCTOR, NURSE, RECEPTIONIST, LAB_TECHNICIAN, PHARMACIST, RADIOLOGIST, ACCOUNTANT, PATIENT, HR_MANAGER, HR_STAFF, HOUSEKEEPING_MANAGER, HOUSEKEEPING_STAFF, MAINTENANCE_STAFF, SECURITY_STAFF, DIETARY_STAFF
@@ -158,6 +162,13 @@ Key routes (`/api/v1/`):
 - `authorize(...roles)` middleware for RBAC
 - `authorizeHospital` ensures tenant isolation
 - `optionalAuth` for endpoints with optional authentication
+
+### RBAC (Role-Based Access Control)
+- Custom roles with granular permissions stored in database (`CustomRole`, `UserPermission`)
+- Permission format: `module:action` (e.g., `patients:read`, `billing:write`)
+- RBAC audit logging via `RBACAuditLog` model
+- Routes: `/api/v1/rbac/*` - Role and permission management
+- Middleware: `rbac.ts` for permission checking
 
 ## Configuration
 

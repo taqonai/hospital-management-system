@@ -574,6 +574,288 @@ DRUG_INTERACTIONS_DATABASE: Dict[str, Dict[str, str]] = {
     },
 }
 
+# Age-specific symptom severity modifiers
+# Certain symptoms are more concerning at different ages
+AGE_SYMPTOM_SEVERITY: Dict[str, Dict[str, Any]] = {
+    "fever": {
+        "pediatric": {  # 0-12 years
+            "age_range": (0, 12),
+            "severity_multiplier": 1.3,
+            "warnings": [
+                "Fever in children can escalate quickly - monitor closely",
+                "Risk of febrile seizures in young children",
+                "Dehydration risk is higher in pediatric patients"
+            ]
+        },
+        "adult": {  # 13-60 years
+            "age_range": (13, 60),
+            "severity_multiplier": 1.0,
+            "warnings": []
+        },
+        "elderly": {  # 61+ years
+            "age_range": (61, 150),
+            "severity_multiplier": 1.5,
+            "warnings": [
+                "Fever in elderly patients (>60) requires careful evaluation",
+                "Elderly patients may have blunted fever response - actual infection may be more severe",
+                "Higher risk of sepsis and serious bacterial infections in elderly",
+                "Consider hospitalization threshold is lower for elderly patients with fever"
+            ]
+        }
+    },
+    "shortness of breath": {
+        "pediatric": {
+            "age_range": (0, 12),
+            "severity_multiplier": 1.2,
+            "warnings": [
+                "Respiratory distress in children can deteriorate rapidly",
+                "Monitor for signs of respiratory failure"
+            ]
+        },
+        "adult": {
+            "age_range": (13, 60),
+            "severity_multiplier": 1.0,
+            "warnings": []
+        },
+        "elderly": {
+            "age_range": (61, 150),
+            "severity_multiplier": 1.6,
+            "warnings": [
+                "Dyspnea in elderly is a red flag - may indicate cardiac or pulmonary emergency",
+                "Elderly patients have reduced respiratory reserve",
+                "Consider early cardiac workup in elderly with dyspnea"
+            ]
+        }
+    },
+    "chest pain": {
+        "pediatric": {
+            "age_range": (0, 12),
+            "severity_multiplier": 0.8,
+            "warnings": [
+                "Cardiac causes of chest pain are rare in children",
+                "Consider musculoskeletal or anxiety-related causes"
+            ]
+        },
+        "young_adult": {
+            "age_range": (13, 40),
+            "severity_multiplier": 1.0,
+            "warnings": [
+                "While cardiac events are less common, don't dismiss chest pain",
+                "Consider family history of early cardiac disease"
+            ]
+        },
+        "middle_aged": {
+            "age_range": (41, 60),
+            "severity_multiplier": 1.4,
+            "warnings": [
+                "Chest pain in patients 40-60 requires cardiac evaluation",
+                "Higher risk of acute coronary syndrome",
+                "ECG and cardiac enzymes recommended"
+            ]
+        },
+        "elderly": {
+            "age_range": (61, 150),
+            "severity_multiplier": 1.7,
+            "warnings": [
+                "HIGH PRIORITY: Chest pain in elderly patients >60 requires urgent cardiac workup",
+                "Atypical presentations of MI are common in elderly",
+                "Consider immediate ECG and troponin",
+                "Elderly may present with dyspnea or confusion instead of typical chest pain"
+            ]
+        }
+    },
+    "confusion": {
+        "pediatric": {
+            "age_range": (0, 12),
+            "severity_multiplier": 1.3,
+            "warnings": [
+                "Altered mental status in children is always concerning",
+                "Consider meningitis, sepsis, or metabolic causes"
+            ]
+        },
+        "adult": {
+            "age_range": (13, 60),
+            "severity_multiplier": 1.2,
+            "warnings": [
+                "New onset confusion requires immediate evaluation"
+            ]
+        },
+        "elderly": {
+            "age_range": (61, 150),
+            "severity_multiplier": 1.8,
+            "warnings": [
+                "Acute confusion in elderly (delirium) is a medical emergency",
+                "May be the only sign of serious infection (UTI, pneumonia)",
+                "Consider medication side effects, metabolic derangement",
+                "Baseline cognitive status should be established"
+            ]
+        }
+    },
+    "dizziness": {
+        "pediatric": {
+            "age_range": (0, 12),
+            "severity_multiplier": 1.0,
+            "warnings": []
+        },
+        "adult": {
+            "age_range": (13, 60),
+            "severity_multiplier": 1.0,
+            "warnings": []
+        },
+        "elderly": {
+            "age_range": (61, 150),
+            "severity_multiplier": 1.4,
+            "warnings": [
+                "Dizziness in elderly increases fall risk significantly",
+                "May indicate cardiovascular issues (orthostatic hypotension, arrhythmia)",
+                "Medication review recommended - many drugs cause dizziness in elderly"
+            ]
+        }
+    },
+    "falls": {
+        "pediatric": {
+            "age_range": (0, 12),
+            "severity_multiplier": 1.0,
+            "warnings": []
+        },
+        "adult": {
+            "age_range": (13, 60),
+            "severity_multiplier": 1.0,
+            "warnings": []
+        },
+        "elderly": {
+            "age_range": (61, 150),
+            "severity_multiplier": 1.8,
+            "warnings": [
+                "Falls in elderly are a major cause of morbidity and mortality",
+                "Assess for fractures, especially hip fractures",
+                "Evaluate underlying cause - syncope, stroke, medication effects",
+                "Consider head CT if on anticoagulation"
+            ]
+        }
+    },
+    "abdominal pain": {
+        "pediatric": {
+            "age_range": (0, 12),
+            "severity_multiplier": 1.1,
+            "warnings": [
+                "Appendicitis presents atypically in young children"
+            ]
+        },
+        "adult": {
+            "age_range": (13, 60),
+            "severity_multiplier": 1.0,
+            "warnings": []
+        },
+        "elderly": {
+            "age_range": (61, 150),
+            "severity_multiplier": 1.5,
+            "warnings": [
+                "Abdominal pain in elderly often presents atypically",
+                "Higher risk of serious pathology: mesenteric ischemia, AAA, malignancy",
+                "Physical exam may be less reliable in elderly",
+                "Lower threshold for imaging studies"
+            ]
+        }
+    },
+    "headache": {
+        "pediatric": {
+            "age_range": (0, 12),
+            "severity_multiplier": 1.1,
+            "warnings": [
+                "Consider meningitis in children with headache and fever"
+            ]
+        },
+        "adult": {
+            "age_range": (13, 50),
+            "severity_multiplier": 1.0,
+            "warnings": []
+        },
+        "older_adult": {
+            "age_range": (51, 150),
+            "severity_multiplier": 1.4,
+            "warnings": [
+                "New onset headache in patients >50 requires workup",
+                "Consider temporal arteritis (giant cell arteritis)",
+                "Rule out intracranial pathology - hemorrhage, mass lesion",
+                "ESR/CRP recommended if temporal arteritis suspected"
+            ]
+        }
+    },
+    "fatigue": {
+        "pediatric": {
+            "age_range": (0, 12),
+            "severity_multiplier": 1.2,
+            "warnings": [
+                "Significant fatigue in children warrants investigation"
+            ]
+        },
+        "adult": {
+            "age_range": (13, 60),
+            "severity_multiplier": 1.0,
+            "warnings": []
+        },
+        "elderly": {
+            "age_range": (61, 150),
+            "severity_multiplier": 1.3,
+            "warnings": [
+                "Fatigue in elderly may mask serious illness",
+                "Screen for anemia, thyroid dysfunction, malignancy",
+                "Consider depression and medication effects"
+            ]
+        }
+    },
+    "vomiting": {
+        "pediatric": {
+            "age_range": (0, 12),
+            "severity_multiplier": 1.4,
+            "warnings": [
+                "Dehydration risk is high in children with vomiting",
+                "Monitor for signs of dehydration closely",
+                "Consider early IV fluids if unable to tolerate oral intake"
+            ]
+        },
+        "adult": {
+            "age_range": (13, 60),
+            "severity_multiplier": 1.0,
+            "warnings": []
+        },
+        "elderly": {
+            "age_range": (61, 150),
+            "severity_multiplier": 1.4,
+            "warnings": [
+                "Elderly patients dehydrate quickly with vomiting",
+                "Monitor electrolytes and renal function",
+                "Lower threshold for IV fluid replacement"
+            ]
+        }
+    },
+    "diarrhea": {
+        "pediatric": {
+            "age_range": (0, 12),
+            "severity_multiplier": 1.4,
+            "warnings": [
+                "High risk of dehydration in children with diarrhea",
+                "Monitor urine output and hydration status"
+            ]
+        },
+        "adult": {
+            "age_range": (13, 60),
+            "severity_multiplier": 1.0,
+            "warnings": []
+        },
+        "elderly": {
+            "age_range": (61, 150),
+            "severity_multiplier": 1.4,
+            "warnings": [
+                "Elderly patients are prone to rapid dehydration",
+                "C. difficile infection more common in elderly",
+                "Monitor for electrolyte abnormalities"
+            ]
+        }
+    }
+}
+
 # Symptom synonyms for NLP matching
 SYMPTOM_SYNONYMS: Dict[str, List[str]] = {
     "fever": ["high temperature", "pyrexia", "febrile", "elevated temperature", "burning up", "hot"],

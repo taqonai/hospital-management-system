@@ -843,60 +843,133 @@ class PharmacyAI:
                     context_parts.append(f"Hepatic function: {patient_context['hepatic_function']}")
                 context_str = "\n".join(context_parts)
 
-            prompt = f"""As a clinical pharmacist, analyze the following medication list for drug interactions, considering the patient context.
+            prompt = f"""As an expert clinical pharmacist with subspecialty training in pharmacokinetics and drug interactions, perform a comprehensive drug interaction analysis.
 
-Medications: {med_list}
+MEDICATIONS: {med_list}
 
-Patient Context:
+PATIENT CONTEXT:
 {context_str if context_str else "No additional patient context provided"}
 
-Provide a JSON response with the following structure:
+Provide a detailed JSON response with the following structure:
 {{
-    "clinicalSummary": "Brief clinical summary of the most important interaction concerns",
-    "patientSpecificRisks": ["List of risks specific to this patient's context"],
+    "clinicalSummary": "2-3 sentence executive summary of most critical concerns requiring immediate attention",
+    "patientSpecificRisks": [
+        {{
+            "risk": "Specific risk description",
+            "severity": "CRITICAL/HIGH/MODERATE/LOW",
+            "rationale": "Why this patient is at increased risk"
+        }}
+    ],
     "additionalInteractions": [
         {{
             "drugs": ["drug1", "drug2"],
             "severity": "CRITICAL/HIGH/MODERATE/LOW",
-            "clinicalSignificance": "Explanation of clinical impact",
-            "recommendation": "Specific recommendation"
+            "mechanism": "Pharmacokinetic or pharmacodynamic mechanism",
+            "clinicalSignificance": "Expected clinical impact with onset timeframe",
+            "recommendation": "Specific actionable recommendation"
         }}
     ],
-    "pharmacokineticConsiderations": ["PK considerations based on patient factors"],
-    "monitoringRecommendations": ["Specific monitoring parameters to watch"],
-    "alternatives": ["Alternative medications to consider if interactions are severe"],
-    "overallRiskAssessment": "LOW/MODERATE/HIGH/CRITICAL"
+    "pharmacokineticConsiderations": [
+        {{
+            "concern": "Description of PK concern",
+            "affectedDrugs": ["drugs affected"],
+            "clinicalImplication": "How this affects dosing/efficacy/toxicity",
+            "adjustment": "Specific dose adjustment recommendation if applicable"
+        }}
+    ],
+    "renalHepatic": {{
+        "renalAdjustments": [
+            {{
+                "drug": "Drug name",
+                "currentDose": "Typical dose",
+                "recommendedAdjustment": "Adjustment based on patient's function",
+                "rationale": "Why adjustment needed"
+            }}
+        ],
+        "hepaticAdjustments": [
+            {{
+                "drug": "Drug name",
+                "concern": "Hepatic metabolism concern",
+                "recommendation": "Monitoring or dose adjustment"
+            }}
+        ]
+    }},
+    "monitoringRecommendations": [
+        {{
+            "parameter": "What to monitor",
+            "targetRange": "Specific target values when applicable",
+            "frequency": "How often to monitor",
+            "rationale": "Why this monitoring is important"
+        }}
+    ],
+    "alternatives": [
+        {{
+            "currentDrug": "Drug to replace",
+            "alternative": "Suggested alternative",
+            "rationale": "Why this is safer/more effective for this patient",
+            "considerations": "Things to watch when switching"
+        }}
+    ],
+    "drugFoodTimingAdvice": [
+        {{
+            "drug": "Drug name",
+            "advice": "Specific administration timing guidance"
+        }}
+    ],
+    "overallRiskAssessment": "LOW/MODERATE/HIGH/CRITICAL",
+    "prioritizedActions": ["List of actions in order of priority"]
 }}
 
-Focus on interactions that may not be in standard databases, patient-specific pharmacokinetic concerns, and nuanced clinical recommendations."""
+ANALYSIS GUIDELINES:
+1. Prioritize life-threatening interactions (QT prolongation, serotonin syndrome, bleeding risk, respiratory depression)
+2. Consider patient age for pharmacokinetic changes (reduced renal clearance, altered distribution)
+3. Account for polypharmacy risks and cumulative toxicities
+4. Identify cytochrome P450 interactions (2D6, 3A4, 2C9, 2C19 substrates/inhibitors/inducers)
+5. Note protein binding displacement interactions
+6. Provide specific monitoring parameters with target ranges, not generic advice
+7. Consider patient conditions when assessing risk (e.g., cardiac history + QT-prolonging drugs)
+8. Identify therapeutic duplications that may increase adverse effects"""
 
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": "You are an expert clinical pharmacist specializing in drug interactions and medication safety. Provide evidence-based analysis in JSON format."},
+                    {
+                        "role": "system",
+                        "content": """You are a board-certified clinical pharmacist with expertise in:
+- Drug-drug and drug-disease interactions
+- Clinical pharmacokinetics and pharmacodynamics
+- Geriatric and renal/hepatic dosing adjustments
+- Medication safety and adverse drug reaction prevention
+- Antimicrobial stewardship
+
+Provide evidence-based, actionable analysis. Be specific with monitoring parameters (include target ranges), dose adjustments, and timing recommendations. Prioritize patient safety while avoiding unnecessary alarm for minor interactions."""
+                    },
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.3,
-                max_tokens=1500
+                max_tokens=2000,
+                response_format={"type": "json_object"}
             )
 
             import json
             ai_content = response.choices[0].message.content
 
-            # Try to parse JSON from response
+            # Parse JSON from response (using response_format ensures valid JSON)
             try:
-                # Handle markdown code blocks
-                if "```json" in ai_content:
-                    ai_content = ai_content.split("```json")[1].split("```")[0]
-                elif "```" in ai_content:
-                    ai_content = ai_content.split("```")[1].split("```")[0]
-
                 ai_analysis = json.loads(ai_content.strip())
             except json.JSONDecodeError:
-                ai_analysis = {
-                    "clinicalSummary": ai_content,
-                    "parseError": True
-                }
+                # Fallback: try to extract JSON from markdown blocks if present
+                try:
+                    if "```json" in ai_content:
+                        ai_content = ai_content.split("```json")[1].split("```")[0]
+                    elif "```" in ai_content:
+                        ai_content = ai_content.split("```")[1].split("```")[0]
+                    ai_analysis = json.loads(ai_content.strip())
+                except (json.JSONDecodeError, IndexError):
+                    ai_analysis = {
+                        "clinicalSummary": ai_content,
+                        "parseError": True
+                    }
 
             return {
                 **rule_based_result,
