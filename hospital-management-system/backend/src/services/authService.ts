@@ -105,6 +105,8 @@ export class AuthService {
       hospitalId: user.hospitalId,
       email: user.email,
       role: user.role,
+      firstName: user.firstName,
+      lastName: user.lastName,
     };
 
     const tokens = this.generateTokens(tokenPayload);
@@ -171,6 +173,8 @@ export class AuthService {
       hospitalId: user.hospitalId,
       email: user.email,
       role: user.role,
+      firstName: user.firstName,
+      lastName: user.lastName,
     };
 
     const tokens = this.generateTokens(tokenPayload);

@@ -6,6 +6,8 @@ export interface JwtPayload {
   hospitalId: string;
   email: string;
   role: UserRole;
+  firstName?: string;
+  lastName?: string;
 }
 
 export interface AuthenticatedRequest extends Request {

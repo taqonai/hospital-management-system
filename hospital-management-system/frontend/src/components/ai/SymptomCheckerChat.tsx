@@ -122,11 +122,11 @@ export default function SymptomCheckerChat({
         headers['Authorization'] = `Bearer ${patientToken}`;
       }
 
-      const response = await fetch(`${API_URL}/patient-portal/symptom-check/start`, {
+      const response = await fetch(`${API_URL}/symptom-checker/start`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          patientId,
+          initialSymptoms: [],
           patientAge,
           patientGender,
         }),
@@ -137,14 +137,27 @@ export default function SymptomCheckerChat({
       const data = await response.json();
       const result = data.data;
 
-      setSessionId(result.session_id);
-      setProgress(result.progress);
+      // Handle both snake_case and camelCase response formats
+      setSessionId(result.sessionId || result.session_id);
+      setProgress(result.progress || 0);
 
-      addMessage('bot', result.message);
+      // Welcome message
+      const welcomeMsg = result.message || "Welcome to the AI Symptom Checker. Let me help you understand your symptoms better.";
+      addMessage('bot', welcomeMsg);
 
-      if (result.question) {
-        setCurrentQuestion(result.question);
-        addMessage('bot', result.question.question, result.question);
+      // Handle next questions from the service
+      const questions = result.nextQuestions || [];
+      if (questions.length > 0) {
+        const firstQuestion = questions[0];
+        setCurrentQuestion(firstQuestion);
+        addMessage('bot', firstQuestion.question, firstQuestion);
+      }
+
+      // Check for red flags
+      if (result.redFlagDetected || result.red_flag_detected) {
+        const flagMsg = result.redFlagMessage || result.red_flag_message || 'Emergency symptoms detected. Please seek immediate medical attention.';
+        setRedFlagMessage(flagMsg);
+        addMessage('bot', flagMsg, undefined, true);
       }
     } catch (err) {
       console.error('Error starting session:', err);
@@ -180,13 +193,12 @@ export default function SymptomCheckerChat({
         headers['Authorization'] = `Bearer ${patientToken}`;
       }
 
-      const response = await fetch(`${API_URL}/patient-portal/symptom-check/answer`, {
+      const response = await fetch(`${API_URL}/symptom-checker/respond`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
           sessionId,
-          answer,
-          questionId: currentQuestion.id,
+          responses: [{ questionId: currentQuestion.id, answer: String(answer) }],
         }),
       });
 
@@ -195,27 +207,34 @@ export default function SymptomCheckerChat({
       const data = await response.json();
       const result = data.data;
 
-      setProgress(result.progress);
+      setProgress(result.progress || 0);
 
-      // Check for red flags
-      if (result.red_flag_detected) {
-        setRedFlagMessage(result.red_flag_message);
-        addMessage('bot', result.red_flag_message || 'Emergency symptoms detected.', undefined, true);
+      // Check for red flags (handle both camelCase and snake_case)
+      if (result.redFlagDetected || result.red_flag_detected) {
+        const flagMsg = result.redFlagMessage || result.red_flag_message || 'Emergency symptoms detected.';
+        setRedFlagMessage(flagMsg);
+        addMessage('bot', flagMsg, undefined, true);
       }
 
       // Add bot message if present
-      if (result.message && !result.red_flag_detected) {
+      if (result.message && !(result.redFlagDetected || result.red_flag_detected)) {
         addMessage('bot', result.message);
       }
 
-      if (result.is_complete) {
+      // Check if assessment is complete (handle both camelCase and snake_case)
+      if (result.isComplete || result.is_complete) {
         setIsComplete(true);
         setCurrentQuestion(null);
         // Automatically complete the assessment
         await completeAssessment();
-      } else if (result.question) {
-        setCurrentQuestion(result.question);
-        addMessage('bot', result.question.question, result.question);
+      } else {
+        // Handle next questions from the service
+        const questions = result.nextQuestions || [];
+        if (questions.length > 0) {
+          const nextQuestion = questions[0];
+          setCurrentQuestion(nextQuestion);
+          addMessage('bot', nextQuestion.question, nextQuestion);
+        }
       }
 
       // Reset inputs
@@ -236,16 +255,54 @@ export default function SymptomCheckerChat({
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/patient-portal/symptom-check/complete`, {
+      // Get patient portal token if available
+      const patientToken = localStorage.getItem('patientPortalToken');
+      const completeHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (patientToken) {
+        completeHeaders['Authorization'] = `Bearer ${patientToken}`;
+      }
+
+      const response = await fetch(`${API_URL}/symptom-checker/complete`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: completeHeaders,
         body: JSON.stringify({ sessionId }),
       });
 
       if (!response.ok) throw new Error('Failed to complete assessment');
 
       const data = await response.json();
-      const result = data.data as TriageResult;
+      const apiResult = data.data;
+
+      // Map backend camelCase response to frontend TriageResult format
+      const urgencyMap: Record<string, 'self-care' | 'schedule-appointment' | 'urgent-care' | 'emergency'> = {
+        'SELF_CARE': 'self-care',
+        'ROUTINE': 'schedule-appointment',
+        'URGENT': 'urgent-care',
+        'EMERGENCY': 'emergency',
+      };
+
+      const result: TriageResult = {
+        session_id: sessionId || '',
+        urgency: urgencyMap[apiResult.triageLevel] || 'schedule-appointment',
+        urgency_level: Math.min(4, Math.max(1, Math.ceil((apiResult.urgencyScore || 5) / 2.5))) as 1 | 2 | 3 | 4,
+        urgency_color: apiResult.triageLevel === 'EMERGENCY' ? 'red' : apiResult.triageLevel === 'URGENT' ? 'orange' : apiResult.triageLevel === 'SELF_CARE' ? 'green' : 'blue',
+        primary_concern: apiResult.symptomsSummary?.[0] || 'General symptoms',
+        body_part: apiResult.bodyPart || 'General',
+        severity: apiResult.severity || 'moderate',
+        symptoms_summary: apiResult.symptomsSummary || [],
+        possible_conditions: (apiResult.possibleConditions || []).map((c: any) => ({
+          name: c.name || c,
+          likelihood: c.likelihood || 'Possible',
+          note: c.note || c.description || '',
+        })),
+        recommended_department: apiResult.recommendedDepartment || 'General Medicine',
+        follow_up_questions: apiResult.followUpQuestions || [],
+        self_care_advice: apiResult.selfCareAdvice || [],
+        when_to_seek_help: apiResult.whenToSeekHelp || [],
+        red_flags_present: (apiResult.redFlags && apiResult.redFlags.length > 0) || false,
+        red_flag_symptoms: apiResult.redFlags || [],
+        disclaimer: apiResult.disclaimer || 'This is a general health guidance tool and does not replace professional medical advice.',
+      };
 
       setTriageResult(result);
       onComplete?.(result);

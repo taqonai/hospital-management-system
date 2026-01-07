@@ -422,9 +422,16 @@ export class PatientPortalService {
 
     return doctors.map(d => ({
       id: d.id,
-      name: `Dr. ${d.user.firstName} ${d.user.lastName}`,
-      specialty: d.specialization || '',
-      department: d.department?.name || '',
+      specialization: d.specialization || '',
+      consultationFee: (d as any).consultationFee || null,
+      user: {
+        firstName: d.user.firstName,
+        lastName: d.user.lastName,
+      },
+      department: {
+        id: d.departmentId || '',
+        name: d.department?.name || '',
+      },
     }));
   }
 
