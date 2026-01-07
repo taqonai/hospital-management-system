@@ -70,6 +70,7 @@ router.post(
     const appointment = await patientPortalService.bookAppointment(hospitalId, patientId, {
       ...req.body,
       appointmentDate: new Date(req.body.appointmentDate),
+      startTime: req.body.appointmentTime || req.body.startTime,
     });
     sendSuccess(res, appointment, 'Appointment booked successfully');
   })
