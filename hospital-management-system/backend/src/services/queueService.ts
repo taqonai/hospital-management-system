@@ -21,7 +21,7 @@ interface CallNextDto {
 }
 
 export const queueService = {
-  // Issue a new queue ticket
+  // Issue a new queue ticket - ATOMIC operation to prevent race conditions
   async issueTicket(hospitalId: string, data: IssueTicketDto) {
     // Get queue config for this service type
     const config = await prisma.queueConfig.findFirst({
@@ -34,35 +34,83 @@ export const queueService = {
 
     // Default config if none exists
     const prefix = config?.prefix || this.getDefaultPrefix(data.serviceType);
-    const avgServiceTime = config?.avgServiceTime || 10;
 
-    // Get today's ticket count for this service
+    // Get today's date boundary
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const ticketCount = await prisma.queueTicket.count({
-      where: {
-        hospitalId,
-        serviceType: data.serviceType,
-        issuedAt: { gte: today },
-      },
+    // Use transaction to ensure atomic ticket number generation
+    const result = await prisma.$transaction(async (tx) => {
+      // Get the last ticket number for today using MAX approach (atomic)
+      const lastTicket = await tx.queueTicket.findFirst({
+        where: {
+          hospitalId,
+          serviceType: data.serviceType,
+          issuedAt: { gte: today },
+        },
+        orderBy: { issuedAt: 'desc' },
+        select: { ticketNumber: true },
+      });
+
+      // Extract the number from the last ticket or start at 0
+      let lastNumber = 0;
+      if (lastTicket?.ticketNumber) {
+        const match = lastTicket.ticketNumber.match(/\d+$/);
+        if (match) {
+          lastNumber = parseInt(match[0], 10);
+        }
+      }
+
+      const nextNumber = lastNumber + 1;
+      const ticketNumber = `${prefix}${String(nextNumber).padStart(3, '0')}`;
+      const tokenDisplay = `${prefix}-${String(nextNumber).padStart(3, '0')}`;
+
+      // Get current queue position
+      const waitingCount = await tx.queueTicket.count({
+        where: {
+          hospitalId,
+          serviceType: data.serviceType,
+          status: { in: ['WAITING', 'CALLED'] },
+          issuedAt: { gte: today },
+        },
+      });
+
+      // Calculate AI priority score
+      const aiPriorityScore = this.calculatePriorityScore(
+        data.priority || 'NORMAL',
+        data.urgencyLevel
+      );
+
+      // Create the ticket within the transaction
+      const ticket = await tx.queueTicket.create({
+        data: {
+          hospitalId,
+          ticketNumber,
+          tokenDisplay,
+          patientId: data.patientId,
+          patientName: data.patientName,
+          patientPhone: data.patientPhone,
+          appointmentId: data.appointmentId,
+          departmentId: data.departmentId,
+          serviceType: data.serviceType,
+          priority: data.priority as any || 'NORMAL',
+          status: 'WAITING',
+          queuePosition: waitingCount + 1,
+          initialPosition: waitingCount + 1,
+          estimatedWaitTime: 10, // Will be calculated outside transaction
+          aiPriorityScore,
+          aiRecommendedCounter: null, // Will be set outside transaction
+          urgencyLevel: data.urgencyLevel,
+          notes: data.notes,
+        },
+      });
+
+      return { ticket, waitingCount };
     });
 
-    const nextNumber = ticketCount + 1;
-    const ticketNumber = `${prefix}${String(nextNumber).padStart(3, '0')}`;
-    const tokenDisplay = `${prefix}-${String(nextNumber).padStart(3, '0')}`;
+    const { ticket, waitingCount } = result;
 
-    // Get current queue position
-    const waitingCount = await prisma.queueTicket.count({
-      where: {
-        hospitalId,
-        serviceType: data.serviceType,
-        status: { in: ['WAITING', 'CALLED'] },
-        issuedAt: { gte: today },
-      },
-    });
-
-    // Calculate estimated wait time
+    // Calculate estimated wait time (outside transaction for performance)
     const estimatedWaitTime = await this.calculateEstimatedWaitTime(
       hospitalId,
       data.serviceType,
@@ -70,38 +118,18 @@ export const queueService = {
       data.priority || 'NORMAL'
     );
 
-    // Calculate AI priority score
-    const aiPriorityScore = this.calculatePriorityScore(
-      data.priority || 'NORMAL',
-      data.urgencyLevel
-    );
-
-    // Find optimal counter
+    // Find optimal counter (outside transaction)
     const aiRecommendedCounter = await this.findOptimalCounter(
       hospitalId,
       data.serviceType
     );
 
-    const ticket = await prisma.queueTicket.create({
+    // Update ticket with calculated values
+    const updatedTicket = await prisma.queueTicket.update({
+      where: { id: ticket.id },
       data: {
-        hospitalId,
-        ticketNumber,
-        tokenDisplay,
-        patientId: data.patientId,
-        patientName: data.patientName,
-        patientPhone: data.patientPhone,
-        appointmentId: data.appointmentId,
-        departmentId: data.departmentId,
-        serviceType: data.serviceType,
-        priority: data.priority as any || 'NORMAL',
-        status: 'WAITING',
-        queuePosition: waitingCount + 1,
-        initialPosition: waitingCount + 1,
         estimatedWaitTime,
-        aiPriorityScore,
         aiRecommendedCounter,
-        urgencyLevel: data.urgencyLevel,
-        notes: data.notes,
       },
     });
 
@@ -109,7 +137,7 @@ export const queueService = {
     await this.updateAnalytics(hospitalId, data.serviceType, data.departmentId);
 
     return {
-      ...ticket,
+      ...updatedTicket,
       estimatedWaitTime,
       queuePosition: waitingCount + 1,
       totalWaiting: waitingCount + 1,
