@@ -76,6 +76,10 @@ interface Doctor {
     lastName: string;
     phone?: string;
   };
+  department?: {
+    id: string;
+    name: string;
+  };
 }
 
 interface TimeSlot {
@@ -128,6 +132,9 @@ export default function Appointments() {
   const [aiRecommendedDepartment, setAiRecommendedDepartment] = useState('');
   const [aiSymptomsSummary, setAiSymptomsSummary] = useState('');
   const [isAiGuidedBooking, setIsAiGuidedBooking] = useState(false);
+
+  // Booking mode: 'emergency' | 'quick' | 'standard'
+  const [bookingMode, setBookingMode] = useState<'emergency' | 'quick' | 'standard'>('standard');
 
   // Book modal state
   const [bookingStep, setBookingStep] = useState(1);
@@ -207,16 +214,15 @@ export default function Appointments() {
         departmentId: selectedDepartment || undefined,
       });
       const doctorsList = response.data?.data || response.data || [];
-      // Filter doctors by selected department if set
+      // Filter doctors by selected department if set (client-side fallback)
       if (selectedDepartment) {
         return doctorsList.filter((d: Doctor) =>
-          d.departmentId === selectedDepartment ||
-          (d as any).department?.id === selectedDepartment
+          d.department?.id === selectedDepartment
         );
       }
       return doctorsList;
     },
-    enabled: showBookModal,
+    enabled: showBookModal && (bookingStep >= 2 || bookingMode === 'emergency'),
   });
 
   // Fetch available slots for selected doctor and date
@@ -242,16 +248,23 @@ export default function Appointments() {
     mutationFn: (data: {
       doctorId: string;
       appointmentDate: string;
-      startTime: string;
+      appointmentTime: string;
       type?: string;
       reason?: string;
       notes?: string;
     }) => patientPortalApi.bookAppointment(data),
     onSuccess: async (response) => {
-      // Force immediate refetch of appointments
-      await queryClient.invalidateQueries({ queryKey: ['patient-appointments-page'] });
-      await queryClient.invalidateQueries({ queryKey: ['patient-portal-summary'] });
-      await refetch(); // Force refetch current list
+      // Force immediate refetch of appointments - use exact: false to match all queries starting with this key
+      await queryClient.invalidateQueries({
+        queryKey: ['patient-appointments-page'],
+        exact: false,
+        refetchType: 'all'
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ['patient-portal-summary'],
+        exact: false,
+        refetchType: 'all'
+      });
 
       // Get appointment data from response
       const appointmentData = response.data?.data || response.data;
@@ -318,10 +331,40 @@ export default function Appointments() {
     setIsAiGuidedBooking(false);
     setAiRecommendedDepartment('');
     setAiSymptomsSummary('');
+    setBookingMode('standard');
+  };
+
+  // EMERGENCY BOOKING - Auto-select Emergency dept, today's date, show available slots immediately
+  const handleStartEmergencyBooking = () => {
+    setShowBookingChoice(false);
+    resetBookingForm();
+    setBookingMode('emergency');
+    setAppointmentType('EMERGENCY');
+    setAppointmentReason('Emergency consultation');
+    setSelectedDate(format(new Date(), 'yyyy-MM-dd'));
+    // Find Emergency department
+    const emergencyDept = (departments || []).find((d: Department) =>
+      d.name.toLowerCase().includes('emergency')
+    );
+    if (emergencyDept) {
+      setSelectedDepartment(emergencyDept.id);
+    }
+    setShowBookModal(true);
+  };
+
+  // QUICK BOOKING - Streamlined flow
+  const handleStartQuickBooking = () => {
+    setShowBookingChoice(false);
+    resetBookingForm();
+    setBookingMode('quick');
+    setSelectedDate(format(new Date(), 'yyyy-MM-dd')); // Default to today
+    setShowBookModal(true);
   };
 
   const handleStartDirectBooking = () => {
     setShowBookingChoice(false);
+    resetBookingForm();
+    setBookingMode('standard');
     setShowBookModal(true);
     setIsAiGuidedBooking(false);
   };
@@ -375,10 +418,10 @@ export default function Appointments() {
 
     bookMutation.mutate({
       doctorId: selectedDoctor,
-      appointmentDate: `${selectedDate}T${selectedTime}:00`,
-      startTime: selectedTime,
-      type: appointmentType,
-      reason: appointmentReason,
+      appointmentDate: selectedDate,
+      appointmentTime: selectedTime,
+      type: appointmentType || 'CONSULTATION',
+      reason: appointmentReason || `${bookingMode === 'emergency' ? 'Emergency' : 'Regular'} consultation`,
       notes: appointmentNotes,
     });
   };
@@ -781,53 +824,47 @@ export default function Appointments() {
                     </Dialog.Title>
 
                     <div className="space-y-3">
-                      {/* Emergency Quick Option */}
+                      {/* Emergency Booking - ONE CLICK */}
                       <button
-                        onClick={() => {
-                          setShowBookingChoice(false);
-                          setShowBookModal(true);
-                          setIsAiGuidedBooking(false);
-                          setAppointmentType('EMERGENCY');
-                          setAppointmentReason('Emergency consultation');
-                        }}
-                        className="w-full p-4 rounded-2xl border-2 border-red-200 bg-gradient-to-br from-red-50 to-orange-50 hover:border-red-400 hover:shadow-lg transition-all text-left group"
+                        onClick={handleStartEmergencyBooking}
+                        className="w-full p-5 rounded-2xl border-2 border-red-300 bg-gradient-to-br from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 hover:shadow-xl transition-all text-left group"
                       >
                         <div className="flex items-center gap-4">
-                          <div className="p-3 bg-gradient-to-br from-red-500 to-orange-500 rounded-xl text-white shadow-lg group-hover:scale-110 transition-transform">
-                            <ExclamationTriangleIcon className="h-6 w-6" />
+                          <div className="p-3 bg-white/20 backdrop-blur rounded-xl text-white">
+                            <ExclamationTriangleIcon className="h-8 w-8" />
                           </div>
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
-                              <h4 className="font-semibold text-gray-900">Emergency Booking</h4>
-                              <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded-full">Urgent</span>
+                              <h4 className="font-bold text-white text-lg">Emergency</h4>
+                              <span className="px-2 py-0.5 text-xs font-bold bg-white text-red-600 rounded-full animate-pulse">INSTANT</span>
                             </div>
-                            <p className="text-sm text-gray-600 mt-1">
-                              Need immediate care? Book emergency appointment quickly.
+                            <p className="text-sm text-red-100 mt-1">
+                              One-click booking for urgent care today
                             </p>
                           </div>
-                          <ChevronRightIcon className="h-5 w-5 text-gray-400 group-hover:text-red-500" />
+                          <ChevronRightIcon className="h-6 w-6 text-white/80" />
                         </div>
                       </button>
 
-                      {/* Direct Quick Booking */}
+                      {/* Quick Booking - 2 STEPS */}
                       <button
-                        onClick={handleStartDirectBooking}
-                        className="w-full p-4 rounded-2xl border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-cyan-50 hover:border-blue-400 hover:shadow-lg transition-all text-left group"
+                        onClick={handleStartQuickBooking}
+                        className="w-full p-5 rounded-2xl border-2 border-blue-300 bg-gradient-to-br from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 hover:shadow-xl transition-all text-left group"
                       >
                         <div className="flex items-center gap-4">
-                          <div className="p-3 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl text-white shadow-lg group-hover:scale-110 transition-transform">
-                            <CalendarDaysIcon className="h-6 w-6" />
+                          <div className="p-3 bg-white/20 backdrop-blur rounded-xl text-white">
+                            <ClockIcon className="h-8 w-8" />
                           </div>
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
-                              <h4 className="font-semibold text-gray-900">Quick Booking</h4>
-                              <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">Fast</span>
+                              <h4 className="font-bold text-white text-lg">Quick Book</h4>
+                              <span className="px-2 py-0.5 text-xs font-bold bg-white text-blue-600 rounded-full">2 STEPS</span>
                             </div>
-                            <p className="text-sm text-gray-600 mt-1">
-                              Know which doctor you need? Book in under a minute.
+                            <p className="text-sm text-blue-100 mt-1">
+                              Select department → Pick doctor & time
                             </p>
                           </div>
-                          <ChevronRightIcon className="h-5 w-5 text-gray-400 group-hover:text-blue-500" />
+                          <ChevronRightIcon className="h-6 w-6 text-white/80" />
                         </div>
                       </button>
 
@@ -842,14 +879,25 @@ export default function Appointments() {
                           </div>
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
-                              <h4 className="font-semibold text-gray-900">AI-Guided Booking</h4>
+                              <h4 className="font-semibold text-gray-900">AI-Guided</h4>
                               <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">Smart</span>
                             </div>
                             <p className="text-sm text-gray-600 mt-1">
-                              Not sure which department? Let AI recommend based on your symptoms.
+                              Unsure which doctor? AI recommends based on symptoms
                             </p>
                           </div>
                           <ChevronRightIcon className="h-5 w-5 text-gray-400 group-hover:text-purple-500" />
+                        </div>
+                      </button>
+
+                      {/* Standard Booking - Full Steps */}
+                      <button
+                        onClick={handleStartDirectBooking}
+                        className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-all text-left"
+                      >
+                        <div className="flex items-center justify-center gap-2 text-gray-600">
+                          <CalendarDaysIcon className="h-5 w-5" />
+                          <span className="text-sm font-medium">Standard Booking (4 steps)</span>
                         </div>
                       </button>
                     </div>
@@ -897,32 +945,250 @@ export default function Appointments() {
                   leaveFrom="opacity-100 scale-100"
                   leaveTo="opacity-0 scale-95"
                 >
-                  <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-white p-6 shadow-2xl transition-all">
-                    <Dialog.Title className="flex items-center justify-between mb-6">
-                      <div>
-                        <h3 className="text-xl font-bold text-gray-900">Book Appointment</h3>
-                        <p className="text-sm text-gray-500 mt-1">Step {bookingStep} of 4</p>
+                  <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-white shadow-2xl transition-all">
+                    {/* Mode-specific Header */}
+                    {bookingMode === 'emergency' && (
+                      <div className="bg-gradient-to-r from-red-500 to-orange-500 px-6 py-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <ExclamationTriangleIcon className="h-8 w-8 text-white" />
+                            <div>
+                              <h3 className="text-xl font-bold text-white">Emergency Booking</h3>
+                              <p className="text-sm text-red-100">Select available doctor & time slot</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => { setShowBookModal(false); resetBookingForm(); }}
+                            className="p-2 rounded-lg bg-white/20 hover:bg-white/30 transition-colors"
+                          >
+                            <XMarkIcon className="h-6 w-6 text-white" />
+                          </button>
+                        </div>
                       </div>
-                      <button
-                        onClick={() => { setShowBookModal(false); resetBookingForm(); }}
-                        className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                      >
-                        <XMarkIcon className="h-6 w-6 text-gray-500" />
-                      </button>
-                    </Dialog.Title>
-
-                    {/* Progress Bar */}
-                    <div className="mb-6">
-                      <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 transition-all duration-300"
-                          style={{ width: `${(bookingStep / 4) * 100}%` }}
-                        />
+                    )}
+                    {bookingMode === 'quick' && (
+                      <div className="bg-gradient-to-r from-blue-500 to-cyan-500 px-6 py-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <ClockIcon className="h-8 w-8 text-white" />
+                            <div>
+                              <h3 className="text-xl font-bold text-white">Quick Booking</h3>
+                              <p className="text-sm text-blue-100">Step {bookingStep === 1 ? '1: Select Department' : '2: Pick Doctor & Time'}</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => { setShowBookModal(false); resetBookingForm(); }}
+                            className="p-2 rounded-lg bg-white/20 hover:bg-white/30 transition-colors"
+                          >
+                            <XMarkIcon className="h-6 w-6 text-white" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    )}
+                    {bookingMode === 'standard' && (
+                      <div className="px-6 pt-6">
+                        <Dialog.Title className="flex items-center justify-between mb-4">
+                          <div>
+                            <h3 className="text-xl font-bold text-gray-900">Book Appointment</h3>
+                            <p className="text-sm text-gray-500 mt-1">Step {bookingStep} of 4</p>
+                          </div>
+                          <button
+                            onClick={() => { setShowBookModal(false); resetBookingForm(); }}
+                            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                          >
+                            <XMarkIcon className="h-6 w-6 text-gray-500" />
+                          </button>
+                        </Dialog.Title>
+                        {/* Progress Bar for standard mode */}
+                        <div className="mb-2">
+                          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 transition-all duration-300"
+                              style={{ width: `${(bookingStep / 4) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
-                    {/* Step 1: Select Department */}
-                    {bookingStep === 1 && (
+                    <div className="p-6">
+
+                    {/* EMERGENCY MODE - All in one view */}
+                    {bookingMode === 'emergency' && (
+                      <div className="space-y-4">
+                        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                          <div className="flex items-center gap-2 text-red-700">
+                            <CalendarDaysIcon className="h-5 w-5" />
+                            <span className="font-medium">Today: {format(new Date(), 'MMMM d, yyyy')}</span>
+                          </div>
+                        </div>
+
+                        <h4 className="font-semibold text-gray-900">Select Doctor & Time</h4>
+                        <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                          {(doctors || []).map((doctor: Doctor) => (
+                            <div
+                              key={doctor.id}
+                              className={`p-4 rounded-xl border-2 transition-all ${
+                                selectedDoctor === doctor.id
+                                  ? 'border-red-500 bg-red-50'
+                                  : 'border-gray-200 hover:border-gray-300'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 mb-3">
+                                <div className="h-12 w-12 rounded-full bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center text-white font-bold">
+                                  {(doctor.user?.firstName || 'D')[0]}
+                                </div>
+                                <div className="flex-1">
+                                  <p className="font-medium text-gray-900">
+                                    Dr. {doctor.user?.firstName} {doctor.user?.lastName}
+                                  </p>
+                                  <p className="text-sm text-gray-500">{doctor.specialization}</p>
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {DEFAULT_TIME_SLOTS.slice(0, 8).map((time) => (
+                                  <button
+                                    key={`${doctor.id}-${time}`}
+                                    onClick={() => {
+                                      setSelectedDoctor(doctor.id);
+                                      setSelectedTime(time);
+                                    }}
+                                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                                      selectedDoctor === doctor.id && selectedTime === time
+                                        ? 'bg-red-600 text-white'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-red-100 hover:text-red-700'
+                                    }`}
+                                  >
+                                    {time}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                          {(!doctors || doctors.length === 0) && (
+                            <div className="text-center py-8 text-gray-500">
+                              No doctors available. Please try Quick Booking.
+                            </div>
+                          )}
+                        </div>
+
+                        {selectedDoctor && selectedTime && (
+                          <button
+                            onClick={handleBookAppointment}
+                            disabled={bookMutation.isPending}
+                            className="w-full py-4 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 text-white font-bold text-lg hover:from-red-700 hover:to-orange-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
+                          >
+                            {bookMutation.isPending ? (
+                              <>
+                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+                                Booking...
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircleIcon className="h-6 w-6" />
+                                Book Emergency Appointment
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* QUICK MODE - Step 2: Doctor + Time combined */}
+                    {bookingMode === 'quick' && bookingStep === 2 && (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <button
+                            onClick={() => { setBookingStep(1); setSelectedDoctor(''); setSelectedTime(''); }}
+                            className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                          >
+                            <ChevronLeftIcon className="h-4 w-4" />
+                            Change Department
+                          </button>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="date"
+                              value={selectedDate}
+                              onChange={(e) => setSelectedDate(e.target.value)}
+                              min={format(new Date(), 'yyyy-MM-dd')}
+                              max={format(addDays(new Date(), 30), 'yyyy-MM-dd')}
+                              className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-3 max-h-[350px] overflow-y-auto">
+                          {(doctors || []).map((doctor: Doctor) => (
+                            <div
+                              key={doctor.id}
+                              className={`p-4 rounded-xl border-2 transition-all ${
+                                selectedDoctor === doctor.id
+                                  ? 'border-blue-500 bg-blue-50'
+                                  : 'border-gray-200 hover:border-gray-300'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 mb-3">
+                                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white font-bold text-sm">
+                                  {(doctor.user?.firstName || 'D')[0]}
+                                </div>
+                                <div className="flex-1">
+                                  <p className="font-medium text-gray-900">
+                                    Dr. {doctor.user?.firstName} {doctor.user?.lastName}
+                                  </p>
+                                  <p className="text-xs text-gray-500">{doctor.specialization} • ${Number(doctor.consultationFee || 0).toFixed(0)}</p>
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {DEFAULT_TIME_SLOTS.map((time) => (
+                                  <button
+                                    key={`${doctor.id}-${time}`}
+                                    onClick={() => {
+                                      setSelectedDoctor(doctor.id);
+                                      setSelectedTime(time);
+                                    }}
+                                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                                      selectedDoctor === doctor.id && selectedTime === time
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-700'
+                                    }`}
+                                  >
+                                    {time}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                          {(!doctors || doctors.length === 0) && (
+                            <div className="text-center py-8 text-gray-500">
+                              No doctors available in this department
+                            </div>
+                          )}
+                        </div>
+
+                        {selectedDoctor && selectedTime && (
+                          <button
+                            onClick={handleBookAppointment}
+                            disabled={bookMutation.isPending}
+                            className="w-full py-4 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold text-lg hover:from-blue-700 hover:to-cyan-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
+                          >
+                            {bookMutation.isPending ? (
+                              <>
+                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+                                Booking...
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircleIcon className="h-6 w-6" />
+                                Confirm Booking
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Step 1: Select Department (for Quick and Standard modes) */}
+                    {bookingStep === 1 && bookingMode !== 'emergency' && (
                       <div className="space-y-4">
                         {/* AI Recommendation Banner */}
                         {isAiGuidedBooking && aiRecommendedDepartment && (
@@ -954,7 +1220,7 @@ export default function Appointments() {
                             return (
                               <button
                                 key={dept.id}
-                                onClick={() => { setSelectedDepartment(dept.id); setBookingStep(2); }}
+                                onClick={() => { setSelectedDepartment(dept.id); setSelectedDoctor(''); setBookingStep(2); }}
                                 className={`p-4 rounded-xl border-2 text-left transition-all hover:shadow-md relative ${
                                   selectedDepartment === dept.id
                                     ? 'border-blue-500 bg-blue-50'
@@ -985,8 +1251,8 @@ export default function Appointments() {
                       </div>
                     )}
 
-                    {/* Step 2: Select Doctor */}
-                    {bookingStep === 2 && (
+                    {/* Step 2: Select Doctor (Standard mode only) */}
+                    {bookingStep === 2 && bookingMode === 'standard' && (
                       <div className="space-y-4">
                         <h4 className="font-semibold text-gray-900">Select Doctor</h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto">
@@ -1027,8 +1293,8 @@ export default function Appointments() {
                       </div>
                     )}
 
-                    {/* Step 3: Select Date & Time */}
-                    {bookingStep === 3 && (
+                    {/* Step 3: Select Date & Time (Standard mode only) */}
+                    {bookingStep === 3 && bookingMode === 'standard' && (
                       <div className="space-y-6">
                         <div>
                           <h4 className="font-semibold text-gray-900 mb-3">Select Date</h4>
@@ -1089,8 +1355,8 @@ export default function Appointments() {
                       </div>
                     )}
 
-                    {/* Step 4: Appointment Type, Reason & Confirm */}
-                    {bookingStep === 4 && (
+                    {/* Step 4: Appointment Type, Reason & Confirm (Standard mode only) */}
+                    {bookingStep === 4 && bookingMode === 'standard' && (
                       <div className="space-y-6">
                         <div>
                           <h4 className="font-semibold text-gray-900 mb-3">Appointment Type</h4>
