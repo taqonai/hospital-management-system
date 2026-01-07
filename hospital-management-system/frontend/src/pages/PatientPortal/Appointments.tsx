@@ -302,8 +302,8 @@ export default function Appointments() {
 
   const handleStartAiGuidedBooking = () => {
     setShowBookingChoice(false);
-    // Navigate to symptom checker
-    window.location.href = '/patient-portal/symptom-checker';
+    // Navigate to symptom checker with autoStart to immediately begin the session
+    window.location.href = '/patient-portal/symptom-checker?autoStart=true';
   };
 
   const handleOpenCancelModal = (appointment: Appointment) => {

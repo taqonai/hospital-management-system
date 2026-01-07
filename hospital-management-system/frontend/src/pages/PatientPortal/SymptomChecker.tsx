@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ChatBubbleLeftRightIcon,
   ClockIcon,
@@ -14,26 +14,7 @@ import {
   ExclamationTriangleIcon,
   PhoneIcon,
 } from '@heroicons/react/24/outline';
-import SymptomCheckerChat from '../../components/ai/SymptomCheckerChat';
-
-interface TriageResult {
-  session_id: string;
-  urgency: 'self-care' | 'schedule-appointment' | 'urgent-care' | 'emergency';
-  urgency_level: 1 | 2 | 3 | 4;
-  urgency_color: string;
-  primary_concern: string;
-  body_part: string;
-  severity: string;
-  symptoms_summary: string[];
-  possible_conditions: Array<{ name: string; likelihood: string; note: string }>;
-  recommended_department: string;
-  follow_up_questions: string[];
-  self_care_advice: string[];
-  when_to_seek_help: string[];
-  red_flags_present: boolean;
-  red_flag_symptoms: string[];
-  disclaimer: string;
-}
+import SymptomCheckerChat, { TriageResult } from '../../components/ai/SymptomCheckerChat';
 
 const FEATURES = [
   {
@@ -85,8 +66,21 @@ const DISCLAIMER_ITEMS = [
 
 export default function SymptomChecker() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showChecker, setShowChecker] = useState(false);
+  const [autoStart, setAutoStart] = useState(false);
   const [completedResult, setCompletedResult] = useState<TriageResult | null>(null);
+
+  // Check URL params for autoStart (from AI-guided booking)
+  useEffect(() => {
+    const shouldAutoStart = searchParams.get('autoStart') === 'true';
+    if (shouldAutoStart) {
+      setShowChecker(true);
+      setAutoStart(true);
+      // Clear the URL param
+      setSearchParams({});
+    }
+  }, [searchParams, setSearchParams]);
 
   const handleComplete = (result: TriageResult) => {
     setCompletedResult(result);
@@ -139,6 +133,7 @@ export default function SymptomChecker() {
           <SymptomCheckerChat
             onComplete={handleComplete}
             onBookAppointment={handleBookAppointment}
+            autoStart={autoStart}
           />
         </div>
       </div>

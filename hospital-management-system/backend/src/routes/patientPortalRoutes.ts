@@ -88,6 +88,16 @@ router.post(
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const hospitalId = req.user?.hospitalId || '';
     const patientId = await getPatientIdFromUser(req.user?.userId || '', hospitalId);
+
+    // Validate that patient exists before booking
+    if (!patientId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Patient profile not found. Please complete your registration first.',
+        error: 'PATIENT_NOT_FOUND'
+      });
+    }
+
     const appointment = await patientPortalService.bookAppointment(hospitalId, patientId, {
       ...req.body,
       appointmentDate: new Date(req.body.appointmentDate),
