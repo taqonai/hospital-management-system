@@ -43,6 +43,10 @@ interface Appointment {
       lastName: string;
       phone?: string;
     };
+    department?: {
+      id: string;
+      name: string;
+    };
   };
   department?: {
     id: string;
@@ -65,6 +69,8 @@ interface Appointment {
   // API returns flat strings instead of nested objects
   doctorName?: string;
   doctorSpecialty?: string;
+  departmentId?: string;
+  departmentName?: string;
 }
 
 interface Department {
@@ -474,6 +480,11 @@ export default function Appointments() {
     return appointment.doctorSpecialty || appointment.doctor?.specialization || '';
   };
 
+  // Helper to get department name from either format
+  const getDepartmentName = (appointment: Appointment) => {
+    return appointment.departmentName || appointment.department?.name || appointment.doctor?.department?.name || '';
+  };
+
   const canCancel = (appointment: Appointment) => {
     return ['SCHEDULED', 'CONFIRMED'].includes(appointment.status);
   };
@@ -497,9 +508,9 @@ export default function Appointments() {
     // Search filter
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
-      // Handle both API format (doctorName) and direct format (doctor.user)
+      // Handle both API format (doctorName, departmentName) and direct format
       const doctorNameStr = getDoctorName(apt).toLowerCase();
-      const deptName = apt.department?.name?.toLowerCase() || '';
+      const deptName = getDepartmentName(apt).toLowerCase();
       const specialty = getDoctorSpecialty(apt).toLowerCase();
       const reason = apt.reason?.toLowerCase() || '';
 
@@ -574,10 +585,10 @@ export default function Appointments() {
                   </div>
                 )}
 
-                {appointment.department?.name && (
+                {getDepartmentName(appointment) && (
                   <div className="flex items-center gap-2">
                     <BuildingOfficeIcon className="h-4 w-4 text-gray-400" />
-                    <span>{appointment.department.name}</span>
+                    <span>{getDepartmentName(appointment)}</span>
                   </div>
                 )}
 
@@ -1783,7 +1794,7 @@ export default function Appointments() {
                               <p className="text-xs text-gray-500 uppercase tracking-wider">Department</p>
                               <p className="font-medium text-gray-900 flex items-center gap-1.5 mt-1">
                                 <BuildingOfficeIcon className="h-4 w-4 text-gray-400" />
-                                {selectedAppointment.department?.name || 'N/A'}
+                                {getDepartmentName(selectedAppointment) || 'N/A'}
                               </p>
                             </div>
                             <div>

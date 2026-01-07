@@ -122,6 +122,7 @@ export class PatientPortalService {
           doctor: {
             include: {
               user: { select: { firstName: true, lastName: true } },
+              department: { select: { id: true, name: true } },
             },
           },
         },
@@ -137,11 +138,17 @@ export class PatientPortalService {
         id: apt.id,
         date: apt.appointmentDate,
         time: apt.startTime,
+        endTime: apt.endTime,
+        doctorId: apt.doctorId,
         doctorName: apt.doctor ? `Dr. ${apt.doctor.user.firstName} ${apt.doctor.user.lastName}` : 'TBD',
         doctorSpecialty: apt.doctor?.specialization || '',
+        departmentId: apt.doctor?.departmentId || '',
+        departmentName: apt.doctor?.department?.name || '',
+        type: apt.type,
         reason: apt.reason,
         status: apt.status,
         notes: apt.notes,
+        tokenNumber: apt.tokenNumber,
       })),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
@@ -172,11 +179,18 @@ export class PatientPortalService {
     // Validate doctor exists and is available
     const doctor = await prisma.doctor.findFirst({
       where: { id: data.doctorId, isAvailable: true },
+      include: {
+        department: { select: { id: true, name: true } },
+      },
     });
 
     if (!doctor) {
       throw new NotFoundError('Doctor not found or unavailable');
     }
+
+    // Normalize the date to start of day (UTC) for consistent comparison
+    const normalizedDate = new Date(data.appointmentDate);
+    normalizedDate.setUTCHours(0, 0, 0, 0);
 
     // Calculate end time (30 min default)
     const [hours, mins] = data.startTime.split(':').map(Number);
@@ -191,7 +205,7 @@ export class PatientPortalService {
         where: {
           patientId,
           hospitalId,
-          appointmentDate: data.appointmentDate,
+          appointmentDate: normalizedDate,
           startTime: data.startTime,
           status: { notIn: ['CANCELLED', 'NO_SHOW'] },
         },
@@ -214,11 +228,11 @@ export class PatientPortalService {
         );
       }
 
-      // VALIDATION 2: Check for conflicting doctor appointments (slot already taken)
+      // VALIDATION 2: Check for conflicting doctor appointments (slot already taken by another patient)
       const doctorConflict = await tx.appointment.findFirst({
         where: {
           doctorId: data.doctorId,
-          appointmentDate: data.appointmentDate,
+          appointmentDate: normalizedDate,
           startTime: data.startTime,
           status: { notIn: ['CANCELLED', 'NO_SHOW'] },
         },
@@ -250,7 +264,7 @@ export class PatientPortalService {
       const maxTokenResult = await tx.appointment.findFirst({
         where: {
           doctorId: data.doctorId,
-          appointmentDate: data.appointmentDate,
+          appointmentDate: normalizedDate,
         },
         orderBy: { tokenNumber: 'desc' },
         select: { tokenNumber: true },
@@ -263,7 +277,7 @@ export class PatientPortalService {
           hospitalId,
           patientId,
           doctorId: data.doctorId,
-          appointmentDate: data.appointmentDate,
+          appointmentDate: normalizedDate,
           startTime: data.startTime,
           endTime,
           type: data.type || 'CONSULTATION',
@@ -275,6 +289,7 @@ export class PatientPortalService {
           doctor: {
             include: {
               user: { select: { firstName: true, lastName: true } },
+              department: { select: { id: true, name: true } },
             },
           },
         },
@@ -318,7 +333,7 @@ export class PatientPortalService {
    * Validations:
    * - Appointment must exist and belong to patient
    * - Cannot reschedule cancelled/completed appointments
-   * - New slot must be available
+   * - New slot must be available (doctor not booked)
    * - Patient cannot have another appointment at the new time
    */
   async rescheduleAppointment(
@@ -334,6 +349,7 @@ export class PatientPortalService {
         doctor: {
           include: {
             user: { select: { firstName: true, lastName: true } },
+            department: { select: { id: true, name: true } },
           },
         },
       },
@@ -347,6 +363,10 @@ export class PatientPortalService {
       throw new AppError(`Cannot reschedule a ${appointment.status.toLowerCase()} appointment`);
     }
 
+    // Normalize the date to start of day (UTC) for consistent comparison
+    const normalizedDate = new Date(data.appointmentDate);
+    normalizedDate.setUTCHours(0, 0, 0, 0);
+
     // Calculate new end time (30 min default)
     const [hours, mins] = data.startTime.split(':').map(Number);
     const endMinutes = hours * 60 + mins + 30;
@@ -354,15 +374,16 @@ export class PatientPortalService {
 
     // Use transaction for consistency
     const updatedAppointment = await prisma.$transaction(async (tx) => {
-      // Check if patient already has another appointment at the new time
+      // VALIDATION 1: Check if patient already has another appointment at the new time
+      // This prevents double-booking regardless of doctor
       const patientConflict = await tx.appointment.findFirst({
         where: {
           patientId,
           hospitalId,
-          appointmentDate: data.appointmentDate,
+          appointmentDate: normalizedDate,
           startTime: data.startTime,
           status: { notIn: ['CANCELLED', 'NO_SHOW'] },
-          id: { not: appointmentId }, // Exclude current appointment
+          id: { not: appointmentId }, // Exclude current appointment being rescheduled
         },
         include: {
           doctor: {
@@ -383,26 +404,32 @@ export class PatientPortalService {
         );
       }
 
-      // Check if the new slot is available with the same doctor
+      // VALIDATION 2: Check if doctor's slot is available (not booked by another patient)
       const doctorConflict = await tx.appointment.findFirst({
         where: {
           doctorId: appointment.doctorId,
-          appointmentDate: data.appointmentDate,
+          appointmentDate: normalizedDate,
           startTime: data.startTime,
           status: { notIn: ['CANCELLED', 'NO_SHOW'] },
-          id: { not: appointmentId }, // Exclude current appointment
+          id: { not: appointmentId }, // Exclude current appointment being rescheduled
+        },
+        include: {
+          patient: { select: { firstName: true, lastName: true } },
         },
       });
 
       if (doctorConflict) {
-        throw new AppError('This time slot is no longer available. Please select another time.');
+        throw new AppError(
+          `This time slot is already booked with another patient. Please select a different time.`,
+          400
+        );
       }
 
       // Generate new token number for the new date
       const maxTokenResult = await tx.appointment.findFirst({
         where: {
           doctorId: appointment.doctorId,
-          appointmentDate: data.appointmentDate,
+          appointmentDate: normalizedDate,
           id: { not: appointmentId },
         },
         orderBy: { tokenNumber: 'desc' },
@@ -414,7 +441,7 @@ export class PatientPortalService {
       return tx.appointment.update({
         where: { id: appointmentId },
         data: {
-          appointmentDate: data.appointmentDate,
+          appointmentDate: normalizedDate,
           startTime: data.startTime,
           endTime,
           tokenNumber: nextTokenNumber,
@@ -426,6 +453,7 @@ export class PatientPortalService {
           doctor: {
             include: {
               user: { select: { firstName: true, lastName: true } },
+              department: { select: { id: true, name: true } },
             },
           },
         },
