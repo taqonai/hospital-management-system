@@ -3,6 +3,7 @@ import { queueService } from '../services/queueService';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendNotFound } from '../utils/response';
 import prisma from '../config/database';
+import { patientLookupService } from '../services/patientLookupService';
 
 const router = Router();
 
@@ -253,37 +254,27 @@ router.post(
       return sendNotFound(res, 'Invalid hospital');
     }
 
-    // Check if patient already exists
-    let patient = await prisma.patient.findFirst({
-      where: {
-        hospitalId,
+    // Use centralized patient lookup service to find or create patient
+    // This checks by email -> phone -> name+DOB to prevent duplicates
+    const result = await patientLookupService.findOrCreatePatient(
+      hospitalId,
+      {
+        firstName,
+        lastName,
         phone,
+        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
+        gender: gender || 'OTHER',
+        // Kiosk walk-ins don't have email usually
+        email: undefined,
+        address: 'To be updated',
+        city: 'To be updated',
+        state: 'To be updated',
+        zipCode: '00000',
       },
-    });
+      'STAFF' // Kiosk registration is treated as staff-assisted
+    );
 
-    // Create patient if not exists
-    if (!patient) {
-      // Generate MRN
-      const patientCount = await prisma.patient.count({ where: { hospitalId } });
-      const mrn = `KIOSK${String(patientCount + 1).padStart(6, '0')}`;
-
-      patient = await prisma.patient.create({
-        data: {
-          hospitalId,
-          firstName,
-          lastName,
-          phone,
-          dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : new Date('1990-01-01'),
-          gender: (gender as any) || 'OTHER',
-          mrn,
-          // Required fields with defaults for kiosk walk-ins
-          address: 'To be updated',
-          city: 'To be updated',
-          state: 'To be updated',
-          zipCode: '00000',
-        },
-      });
-    }
+    const patient = result.patient;
 
     // Issue queue ticket
     const ticket = await queueService.issueTicket(hospitalId, {

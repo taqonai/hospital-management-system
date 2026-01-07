@@ -1,10 +1,11 @@
-import Twilio from 'twilio';
+import { SNSClient, PublishCommand, SetSMSAttributesCommand, GetSMSAttributesCommand } from '@aws-sdk/client-sns';
 import { logger } from '../utils/logger';
 
-// Twilio configuration from environment variables
-const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
-const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER;
+// AWS SNS configuration from environment variables
+const AWS_REGION = process.env.AWS_SNS_REGION || process.env.AWS_REGION || 'us-east-1';
+const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID;
+const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
+const SMS_SENDER_ID = process.env.AWS_SNS_SENDER_ID || 'HMS'; // 11 character alphanumeric sender ID
 
 // Rate limiting configuration
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
@@ -13,31 +14,38 @@ const MAX_SMS_PER_NUMBER_PER_HOUR = 10;
 // In-memory rate limiting store (consider using Redis in production)
 const rateLimitStore: Map<string, { count: number; resetTime: number }> = new Map();
 
-// Twilio client (lazy initialization)
-let twilioClient: Twilio.Twilio | null = null;
+// AWS SNS client (lazy initialization)
+let snsClient: SNSClient | null = null;
 
 /**
- * Get or initialize the Twilio client
+ * Get or initialize the AWS SNS client
  */
-function getTwilioClient(): Twilio.Twilio {
-  if (!twilioClient) {
-    if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
-      throw new SMSServiceError(
-        'Twilio credentials not configured. Please set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN environment variables.',
-        'CONFIG_ERROR'
-      );
+function getSNSClient(): SNSClient {
+  if (!snsClient) {
+    const config: any = {
+      region: AWS_REGION,
+    };
+
+    // Use explicit credentials if provided, otherwise use default AWS credential chain
+    if (AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY) {
+      config.credentials = {
+        accessKeyId: AWS_ACCESS_KEY_ID,
+        secretAccessKey: AWS_SECRET_ACCESS_KEY,
+      };
     }
-    twilioClient = Twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
-    logger.info('Twilio client initialized');
+
+    snsClient = new SNSClient(config);
+    logger.info('AWS SNS client initialized', { region: AWS_REGION });
   }
-  return twilioClient;
+  return snsClient;
 }
 
 /**
- * Check if Twilio is properly configured
+ * Check if AWS SNS is properly configured
  */
-function isTwilioConfigured(): boolean {
-  return !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_PHONE_NUMBER);
+function isSNSConfigured(): boolean {
+  // AWS SDK will use instance profile, environment variables, or explicit credentials
+  return !!(AWS_REGION);
 }
 
 /**
@@ -45,13 +53,13 @@ function isTwilioConfigured(): boolean {
  */
 export class SMSServiceError extends Error {
   code: string;
-  twilioErrorCode?: number;
+  awsErrorCode?: string;
 
-  constructor(message: string, code: string, twilioErrorCode?: number) {
+  constructor(message: string, code: string, awsErrorCode?: string) {
     super(message);
     this.name = 'SMSServiceError';
     this.code = code;
-    this.twilioErrorCode = twilioErrorCode;
+    this.awsErrorCode = awsErrorCode;
   }
 }
 
@@ -210,7 +218,7 @@ function getRemainingQuota(phoneNumber: string): number {
 
 /**
  * Normalize phone number to E.164 format
- * Basic validation - Twilio will perform full validation
+ * Basic validation - AWS SNS will perform full validation
  */
 function normalizePhoneNumber(phoneNumber: string): string {
   // Remove all non-digit characters except leading +
@@ -224,7 +232,7 @@ function normalizePhoneNumber(phoneNumber: string): string {
     } else if (normalized.length === 11 && normalized.startsWith('1')) {
       normalized = '+' + normalized;
     } else {
-      // Keep as is, Twilio will validate
+      // Keep as is, AWS SNS will validate
       normalized = '+' + normalized;
     }
   }
@@ -246,7 +254,7 @@ function isValidPhoneNumber(phoneNumber: string): boolean {
 // ============================================
 
 /**
- * Send an SMS message via Twilio
+ * Send an SMS message via AWS SNS
  * @param to - Recipient phone number
  * @param message - Message content
  * @returns SMS delivery status
@@ -258,12 +266,12 @@ export async function sendSMS(
   const timestamp = new Date();
 
   // Validate configuration
-  if (!isTwilioConfigured()) {
-    logger.warn('SMS not sent: Twilio not configured', { to });
+  if (!isSNSConfigured()) {
+    logger.warn('SMS not sent: AWS SNS not configured', { to });
     return {
       success: false,
       to,
-      error: 'Twilio SMS service is not configured',
+      error: 'AWS SNS SMS service is not configured',
       errorCode: 'NOT_CONFIGURED',
       timestamp,
     };
@@ -296,65 +304,69 @@ export async function sendSMS(
   }
 
   try {
-    const client = getTwilioClient();
+    const client = getSNSClient();
 
-    const response = await client.messages.create({
-      body: message,
-      from: TWILIO_PHONE_NUMBER,
-      to: normalizedNumber,
+    const command = new PublishCommand({
+      PhoneNumber: normalizedNumber,
+      Message: message,
+      MessageAttributes: {
+        'AWS.SNS.SMS.SenderID': {
+          DataType: 'String',
+          StringValue: SMS_SENDER_ID,
+        },
+        'AWS.SNS.SMS.SMSType': {
+          DataType: 'String',
+          StringValue: 'Transactional', // Transactional for OTPs, Promotional for marketing
+        },
+      },
     });
+
+    const response = await client.send(command);
 
     // Increment rate limit counter on successful send
     incrementRateLimitCounter(normalizedNumber);
 
-    logger.info('SMS sent successfully', {
+    logger.info('SMS sent successfully via AWS SNS', {
       to: normalizedNumber,
-      messageId: response.sid,
-      status: response.status,
+      messageId: response.MessageId,
     });
 
     return {
       success: true,
-      messageId: response.sid,
-      status: response.status,
+      messageId: response.MessageId,
+      status: 'sent',
       to: normalizedNumber,
       timestamp,
     };
   } catch (error: any) {
-    const twilioErrorCode = error.code;
+    const awsErrorCode = error.name || error.code;
     const errorMessage = error.message || 'Unknown error occurred';
 
-    logger.error('Failed to send SMS', {
+    logger.error('Failed to send SMS via AWS SNS', {
       to: normalizedNumber,
       error: errorMessage,
-      twilioErrorCode,
+      awsErrorCode,
     });
 
-    // Map common Twilio error codes to user-friendly messages
+    // Map common AWS SNS error codes to user-friendly messages
     let friendlyError = errorMessage;
-    if (twilioErrorCode === 21211) {
-      friendlyError = 'Invalid phone number';
-    } else if (twilioErrorCode === 21614) {
-      friendlyError = 'Phone number is not SMS-capable';
-    } else if (twilioErrorCode === 21408) {
-      friendlyError = 'Permission denied for this region';
-    } else if (twilioErrorCode === 21610) {
-      friendlyError = 'Recipient has unsubscribed from messages';
-    } else if (twilioErrorCode === 30003) {
-      friendlyError = 'Phone number is unreachable';
-    } else if (twilioErrorCode === 30004) {
-      friendlyError = 'Message blocked by carrier';
-    } else if (twilioErrorCode === 30005) {
-      friendlyError = 'Unknown destination handset';
-    } else if (twilioErrorCode === 30006) {
-      friendlyError = 'Landline or unreachable carrier';
+    if (awsErrorCode === 'InvalidParameterValue') {
+      friendlyError = 'Invalid phone number format';
+    } else if (awsErrorCode === 'AuthorizationErrorException') {
+      friendlyError = 'SMS authorization failed';
+    } else if (awsErrorCode === 'ThrottlingException') {
+      friendlyError = 'SMS sending rate exceeded. Please try again later.';
+    } else if (awsErrorCode === 'OptedOutException') {
+      friendlyError = 'Recipient has opted out of receiving SMS';
+    } else if (awsErrorCode === 'InvalidParameter') {
+      friendlyError = 'Invalid SMS parameters';
     }
 
     return {
       success: false,
       to: normalizedNumber,
       error: friendlyError,
-      errorCode: twilioErrorCode?.toString() || 'UNKNOWN',
+      errorCode: awsErrorCode || 'UNKNOWN',
       timestamp,
     };
   }
@@ -380,7 +392,7 @@ export async function sendOTP(
     hospitalName,
   });
 
-  logger.debug('Sending OTP', { to, expiryMinutes });
+  logger.debug('Sending OTP via AWS SNS', { to, expiryMinutes });
   return sendSMS(to, message);
 }
 
@@ -522,36 +534,55 @@ export async function checkSMSServiceHealth(): Promise<{
   configured: boolean;
   healthy: boolean;
   message: string;
-  accountSid?: string;
+  provider: string;
 }> {
-  if (!isTwilioConfigured()) {
+  if (!isSNSConfigured()) {
     return {
       configured: false,
       healthy: false,
-      message: 'Twilio SMS service is not configured. Missing environment variables.',
+      message: 'AWS SNS SMS service is not configured. Missing region configuration.',
+      provider: 'AWS SNS',
     };
   }
 
   try {
-    const client = getTwilioClient();
-    // Fetch account info to verify credentials
-    const account = await client.api.accounts(TWILIO_ACCOUNT_SID!).fetch();
+    const client = getSNSClient();
+    // Check current SMS attributes to verify access
+    const command = new GetSMSAttributesCommand({
+      attributes: ['DefaultSMSType'],
+    });
+    await client.send(command);
 
     return {
       configured: true,
-      healthy: account.status === 'active',
-      message: account.status === 'active'
-        ? 'Twilio SMS service is configured and healthy'
-        : `Twilio account status: ${account.status}`,
-      accountSid: TWILIO_ACCOUNT_SID!.slice(0, 8) + '...',
+      healthy: true,
+      message: 'AWS SNS SMS service is configured and healthy',
+      provider: 'AWS SNS',
     };
   } catch (error: any) {
     return {
       configured: true,
       healthy: false,
-      message: `Twilio connection failed: ${error.message}`,
+      message: `AWS SNS connection failed: ${error.message}`,
+      provider: 'AWS SNS',
     };
   }
+}
+
+/**
+ * Set default SMS type (Transactional or Promotional)
+ * Transactional: Higher delivery priority, for OTPs and alerts
+ * Promotional: Cost-effective, for marketing messages
+ */
+export async function setDefaultSMSType(type: 'Transactional' | 'Promotional'): Promise<void> {
+  const client = getSNSClient();
+  const command = new SetSMSAttributesCommand({
+    attributes: {
+      DefaultSMSType: type,
+    },
+  });
+  await client.send(command);
+  logger.info('Set default SMS type', { type });
 }
 
 /**
@@ -603,6 +634,7 @@ export class SMSService {
   checkHealth = checkSMSServiceHealth;
   getRateLimitStatus = getRateLimitStatus;
   clearRateLimit = clearRateLimit;
+  setDefaultSMSType = setDefaultSMSType;
 }
 
 export const smsService = new SMSService();

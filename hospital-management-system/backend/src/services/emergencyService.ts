@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import { NotFoundError } from '../middleware/errorHandler';
+import { patientLookupService } from './patientLookupService';
 
 export class EmergencyService {
   // ESI Triage Levels:
@@ -31,29 +32,30 @@ export class EmergencyService {
     assignedDoctorId?: string;
   }) {
     let patientId = data.patientId;
+    let isNewPatient = false;
 
-    // Create new patient if not existing
+    // Find existing patient or create new one using centralized lookup service
     if (!patientId && data.firstName && data.lastName) {
-      const hospital = await prisma.hospital.findUnique({ where: { id: hospitalId } });
-      if (!hospital) throw new NotFoundError('Hospital not found');
-
-      const mrn = `ER-${Date.now().toString(36).toUpperCase()}`;
-      const patient = await prisma.patient.create({
-        data: {
-          hospitalId,
-          mrn,
+      // Use patientLookupService to check for existing patient and prevent duplicates
+      const result = await patientLookupService.findOrCreatePatient(
+        hospitalId,
+        {
           firstName: data.firstName,
           lastName: data.lastName,
-          dateOfBirth: data.dateOfBirth || new Date(),
-          gender: data.gender || 'OTHER',
-          phone: data.phone || '',
+          dateOfBirth: data.dateOfBirth,
+          gender: data.gender,
+          phone: data.phone,
+          email: undefined, // Emergency patients often don't have email readily available
           address: 'Emergency Registration',
           city: '',
           state: '',
           zipCode: '',
         },
-      });
-      patientId = patient.id;
+        'STAFF' // Emergency registration is done by staff
+      );
+
+      patientId = result.patient.id;
+      isNewPatient = !result.isExisting;
     }
 
     if (!patientId) throw new Error('Patient information required');
