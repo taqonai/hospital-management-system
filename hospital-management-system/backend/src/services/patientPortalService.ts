@@ -149,6 +149,12 @@ export class PatientPortalService {
 
   /**
    * Book a new appointment
+   *
+   * Token number generation:
+   * - Unique per hospital per day (ensured by doctor+date combination)
+   * - Sequential for each doctor's appointments on that day
+   * - Resets daily (new day = new sequence starting from 1)
+   * - Uses transaction to prevent race conditions
    */
   async bookAppointment(hospitalId: string, patientId: string, data: {
     doctorId: string;
@@ -167,54 +173,64 @@ export class PatientPortalService {
       throw new NotFoundError('Doctor not found or unavailable');
     }
 
-    // Check for conflicting appointments
-    const existingAppointment = await prisma.appointment.findFirst({
-      where: {
-        doctorId: data.doctorId,
-        appointmentDate: data.appointmentDate,
-        startTime: data.startTime,
-        status: { notIn: ['CANCELLED', 'NO_SHOW'] },
-      },
-    });
-
-    if (existingAppointment) {
-      throw new AppError('This time slot is no longer available');
-    }
-
     // Calculate end time (30 min default)
     const [hours, mins] = data.startTime.split(':').map(Number);
     const endMinutes = hours * 60 + mins + 30;
     const endTime = `${Math.floor(endMinutes / 60).toString().padStart(2, '0')}:${(endMinutes % 60).toString().padStart(2, '0')}`;
 
-    // Get token number
-    const todayAppointments = await prisma.appointment.count({
-      where: {
-        doctorId: data.doctorId,
-        appointmentDate: data.appointmentDate,
-        status: { notIn: ['CANCELLED'] },
-      },
-    });
+    // Use a serializable transaction to prevent race conditions in token generation
+    const appointment = await prisma.$transaction(async (tx) => {
+      // Check for conflicting appointments within the transaction
+      const existingAppointment = await tx.appointment.findFirst({
+        where: {
+          doctorId: data.doctorId,
+          appointmentDate: data.appointmentDate,
+          startTime: data.startTime,
+          status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+        },
+      });
 
-    const appointment = await prisma.appointment.create({
-      data: {
-        hospitalId,
-        patientId,
-        doctorId: data.doctorId,
-        appointmentDate: data.appointmentDate,
-        startTime: data.startTime,
-        endTime,
-        type: 'CONSULTATION',
-        reason: data.reason || 'Patient portal booking',
-        status: 'SCHEDULED',
-        tokenNumber: todayAppointments + 1,
-      },
-      include: {
-        doctor: {
-          include: {
-            user: { select: { firstName: true, lastName: true } },
+      if (existingAppointment) {
+        throw new AppError('This time slot is no longer available');
+      }
+
+      // Get the maximum token number for this doctor on this date
+      // Using max instead of count ensures proper sequencing even with cancelled appointments
+      const maxTokenResult = await tx.appointment.findFirst({
+        where: {
+          doctorId: data.doctorId,
+          appointmentDate: data.appointmentDate,
+        },
+        orderBy: { tokenNumber: 'desc' },
+        select: { tokenNumber: true },
+      });
+
+      const nextTokenNumber = (maxTokenResult?.tokenNumber ?? 0) + 1;
+
+      return tx.appointment.create({
+        data: {
+          hospitalId,
+          patientId,
+          doctorId: data.doctorId,
+          appointmentDate: data.appointmentDate,
+          startTime: data.startTime,
+          endTime,
+          type: 'CONSULTATION',
+          reason: data.reason || 'Patient portal booking',
+          status: 'SCHEDULED',
+          tokenNumber: nextTokenNumber,
+        },
+        include: {
+          doctor: {
+            include: {
+              user: { select: { firstName: true, lastName: true } },
+            },
           },
         },
-      },
+      });
+    }, {
+      // Use serializable isolation level to prevent race conditions
+      isolationLevel: 'Serializable',
     });
 
     return appointment;
@@ -423,6 +439,7 @@ export class PatientPortalService {
     return doctors.map(d => ({
       id: d.id,
       specialization: d.specialization || '',
+      departmentId: d.departmentId || '',
       consultationFee: (d as any).consultationFee || null,
       user: {
         firstName: d.user.firstName,

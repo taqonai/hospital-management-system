@@ -190,7 +190,11 @@ export default function Appointments() {
         page: currentPage,
         limit: itemsPerPage,
       });
-      return response.data?.data || response.data || [];
+      // API returns: {"success":true,"data":{"data":[...appointments...],"pagination":{...}}}
+      // response.data = {"success":true,"data":{"data":[...],"pagination":{...}}}
+      // response.data.data = {"data":[...],"pagination":{...}}
+      // response.data.data.data = [...appointments...]
+      return response.data?.data?.data || response.data?.data || response.data || [];
     },
   });
 
@@ -210,19 +214,24 @@ export default function Appointments() {
   const { data: doctors, refetch: refetchDoctors } = useQuery({
     queryKey: ['patient-portal-doctors', selectedDepartment],
     queryFn: async () => {
+      // Only fetch if we have a department selected (except for emergency mode which may not have one)
+      const deptId = selectedDepartment || undefined;
       const response = await patientPortalApi.getDoctors({
-        departmentId: selectedDepartment || undefined,
+        departmentId: deptId,
       });
       const doctorsList = response.data?.data || response.data || [];
-      // Filter doctors by selected department if set (client-side fallback)
+      // Client-side fallback filter: ensure only doctors from selected department are shown
+      // This handles cases where the API might not filter correctly or returns cached data
       if (selectedDepartment) {
         return doctorsList.filter((d: Doctor) =>
-          d.department?.id === selectedDepartment
+          d.department?.id === selectedDepartment || d.departmentId === selectedDepartment
         );
       }
       return doctorsList;
     },
     enabled: showBookModal && (bookingStep >= 2 || bookingMode === 'emergency'),
+    // Ensure fresh data when department changes - don't use stale cached data
+    staleTime: 0,
   });
 
   // Fetch available slots for selected doctor and date
