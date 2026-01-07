@@ -1183,7 +1183,7 @@ export const patientPortalApi = {
   cancelAppointment: (id: string, reason?: string) =>
     api.post(`/patient-portal/appointments/${id}/cancel`, { reason }),
   rescheduleAppointment: (id: string, data: { appointmentDate: string; startTime: string }) =>
-    api.post(`/patient-portal/appointments/${id}/reschedule`, data),
+    api.put(`/patient-portal/appointments/${id}/reschedule`, data),
   getAvailableSlots: (doctorId: string, date: string) =>
     api.get(`/patient-portal/doctors/${doctorId}/slots`, { params: { date } }),
 

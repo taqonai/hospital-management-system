@@ -150,6 +150,11 @@ export class PatientPortalService {
   /**
    * Book a new appointment
    *
+   * Validations:
+   * - Patient cannot have multiple appointments at the same date/time (prevents double booking)
+   * - Doctor slot must be available (no other patient booked)
+   * - Appointment must be for future date/time
+   *
    * Token number generation:
    * - Unique per hospital per day (ensured by doctor+date combination)
    * - Sequential for each doctor's appointments on that day
@@ -178,10 +183,39 @@ export class PatientPortalService {
     const endMinutes = hours * 60 + mins + 30;
     const endTime = `${Math.floor(endMinutes / 60).toString().padStart(2, '0')}:${(endMinutes % 60).toString().padStart(2, '0')}`;
 
-    // Use a serializable transaction to prevent race conditions in token generation
+    // Use a serializable transaction to prevent race conditions
     const appointment = await prisma.$transaction(async (tx) => {
-      // Check for conflicting appointments within the transaction
-      const existingAppointment = await tx.appointment.findFirst({
+      // VALIDATION 1: Check if patient already has an appointment at this date/time
+      // This prevents double-booking regardless of doctor or department
+      const patientConflict = await tx.appointment.findFirst({
+        where: {
+          patientId,
+          hospitalId,
+          appointmentDate: data.appointmentDate,
+          startTime: data.startTime,
+          status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+        },
+        include: {
+          doctor: {
+            include: {
+              user: { select: { firstName: true, lastName: true } },
+            },
+          },
+        },
+      });
+
+      if (patientConflict) {
+        const doctorName = patientConflict.doctor?.user
+          ? `Dr. ${patientConflict.doctor.user.firstName} ${patientConflict.doctor.user.lastName}`
+          : 'another doctor';
+        throw new AppError(
+          `You already have an appointment at this time with ${doctorName}. Please choose a different time slot.`,
+          400
+        );
+      }
+
+      // VALIDATION 2: Check for conflicting doctor appointments (slot already taken)
+      const doctorConflict = await tx.appointment.findFirst({
         where: {
           doctorId: data.doctorId,
           appointmentDate: data.appointmentDate,
@@ -190,12 +224,29 @@ export class PatientPortalService {
         },
       });
 
-      if (existingAppointment) {
-        throw new AppError('This time slot is no longer available');
+      if (doctorConflict) {
+        throw new AppError('This time slot is no longer available. Please select another time.');
+      }
+
+      // VALIDATION 3: Check patient doesn't have too many pending appointments
+      // This helps prevent appointment hoarding
+      const pendingAppointments = await tx.appointment.count({
+        where: {
+          patientId,
+          hospitalId,
+          appointmentDate: { gte: new Date() },
+          status: { in: ['SCHEDULED', 'CONFIRMED'] },
+        },
+      });
+
+      if (pendingAppointments >= 10) {
+        throw new AppError(
+          'You have too many pending appointments. Please complete or cancel existing appointments before booking new ones.',
+          400
+        );
       }
 
       // Get the maximum token number for this doctor on this date
-      // Using max instead of count ensures proper sequencing even with cancelled appointments
       const maxTokenResult = await tx.appointment.findFirst({
         where: {
           doctorId: data.doctorId,
@@ -215,7 +266,7 @@ export class PatientPortalService {
           appointmentDate: data.appointmentDate,
           startTime: data.startTime,
           endTime,
-          type: 'CONSULTATION',
+          type: data.type || 'CONSULTATION',
           reason: data.reason || 'Patient portal booking',
           status: 'SCHEDULED',
           tokenNumber: nextTokenNumber,
@@ -259,6 +310,131 @@ export class PatientPortalService {
         notes: reason ? `Cancelled by patient: ${reason}` : 'Cancelled by patient',
       },
     });
+  }
+
+  /**
+   * Reschedule appointment
+   *
+   * Validations:
+   * - Appointment must exist and belong to patient
+   * - Cannot reschedule cancelled/completed appointments
+   * - New slot must be available
+   * - Patient cannot have another appointment at the new time
+   */
+  async rescheduleAppointment(
+    hospitalId: string,
+    patientId: string,
+    appointmentId: string,
+    data: { appointmentDate: Date; startTime: string }
+  ) {
+    // Find the existing appointment
+    const appointment = await prisma.appointment.findFirst({
+      where: { id: appointmentId, patientId, hospitalId },
+      include: {
+        doctor: {
+          include: {
+            user: { select: { firstName: true, lastName: true } },
+          },
+        },
+      },
+    });
+
+    if (!appointment) {
+      throw new NotFoundError('Appointment not found');
+    }
+
+    if (['CANCELLED', 'NO_SHOW', 'COMPLETED'].includes(appointment.status)) {
+      throw new AppError(`Cannot reschedule a ${appointment.status.toLowerCase()} appointment`);
+    }
+
+    // Calculate new end time (30 min default)
+    const [hours, mins] = data.startTime.split(':').map(Number);
+    const endMinutes = hours * 60 + mins + 30;
+    const endTime = `${Math.floor(endMinutes / 60).toString().padStart(2, '0')}:${(endMinutes % 60).toString().padStart(2, '0')}`;
+
+    // Use transaction for consistency
+    const updatedAppointment = await prisma.$transaction(async (tx) => {
+      // Check if patient already has another appointment at the new time
+      const patientConflict = await tx.appointment.findFirst({
+        where: {
+          patientId,
+          hospitalId,
+          appointmentDate: data.appointmentDate,
+          startTime: data.startTime,
+          status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+          id: { not: appointmentId }, // Exclude current appointment
+        },
+        include: {
+          doctor: {
+            include: {
+              user: { select: { firstName: true, lastName: true } },
+            },
+          },
+        },
+      });
+
+      if (patientConflict) {
+        const doctorName = patientConflict.doctor?.user
+          ? `Dr. ${patientConflict.doctor.user.firstName} ${patientConflict.doctor.user.lastName}`
+          : 'another doctor';
+        throw new AppError(
+          `You already have an appointment at this time with ${doctorName}. Please choose a different time slot.`,
+          400
+        );
+      }
+
+      // Check if the new slot is available with the same doctor
+      const doctorConflict = await tx.appointment.findFirst({
+        where: {
+          doctorId: appointment.doctorId,
+          appointmentDate: data.appointmentDate,
+          startTime: data.startTime,
+          status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+          id: { not: appointmentId }, // Exclude current appointment
+        },
+      });
+
+      if (doctorConflict) {
+        throw new AppError('This time slot is no longer available. Please select another time.');
+      }
+
+      // Generate new token number for the new date
+      const maxTokenResult = await tx.appointment.findFirst({
+        where: {
+          doctorId: appointment.doctorId,
+          appointmentDate: data.appointmentDate,
+          id: { not: appointmentId },
+        },
+        orderBy: { tokenNumber: 'desc' },
+        select: { tokenNumber: true },
+      });
+
+      const nextTokenNumber = (maxTokenResult?.tokenNumber ?? 0) + 1;
+
+      return tx.appointment.update({
+        where: { id: appointmentId },
+        data: {
+          appointmentDate: data.appointmentDate,
+          startTime: data.startTime,
+          endTime,
+          tokenNumber: nextTokenNumber,
+          notes: appointment.notes
+            ? `${appointment.notes}\n[Rescheduled by patient]`
+            : '[Rescheduled by patient]',
+        },
+        include: {
+          doctor: {
+            include: {
+              user: { select: { firstName: true, lastName: true } },
+            },
+          },
+        },
+      });
+    }, {
+      isolationLevel: 'Serializable',
+    });
+
+    return updatedAppointment;
   }
 
   /**

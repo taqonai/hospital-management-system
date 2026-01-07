@@ -92,6 +92,38 @@ router.post(
 );
 
 /**
+ * Reschedule appointment
+ * PUT /api/v1/patient-portal/appointments/:id/reschedule
+ */
+router.put(
+  '/appointments/:id/reschedule',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
+    const { appointmentDate, startTime } = req.body;
+
+    if (!appointmentDate || !startTime) {
+      return res.status(400).json({
+        success: false,
+        message: 'appointmentDate and startTime are required',
+      });
+    }
+
+    const appointment = await patientPortalService.rescheduleAppointment(
+      hospitalId,
+      patientId,
+      req.params.id,
+      {
+        appointmentDate: new Date(appointmentDate),
+        startTime,
+      }
+    );
+    sendSuccess(res, appointment, 'Appointment rescheduled successfully');
+  })
+);
+
+/**
  * Get medical records
  * GET /api/v1/patient-portal/records
  */
