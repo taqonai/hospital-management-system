@@ -30,6 +30,25 @@ export const config = {
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
     region: process.env.AWS_REGION || 'us-east-1',
     s3Bucket: process.env.AWS_S3_BUCKET || 'hospital-medical-images',
+    ses: {
+      region: process.env.AWS_SES_REGION || process.env.AWS_REGION || 'us-east-1',
+      accessKeyId: process.env.AWS_SES_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '',
+      secretAccessKey: process.env.AWS_SES_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || '',
+      fromEmail: process.env.AWS_SES_FROM_EMAIL || 'noreply@medint.taqon.ai',
+    },
+  },
+
+  twilio: {
+    accountSid: process.env.TWILIO_ACCOUNT_SID || '',
+    authToken: process.env.TWILIO_AUTH_TOKEN || '',
+    phoneNumber: process.env.TWILIO_PHONE_NUMBER || '',
+    whatsappNumber: process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886',
+  },
+
+  notifications: {
+    emailEnabled: process.env.NOTIFICATIONS_EMAIL_ENABLED === 'true',
+    smsEnabled: process.env.NOTIFICATIONS_SMS_ENABLED === 'true',
+    whatsappEnabled: process.env.NOTIFICATIONS_WHATSAPP_ENABLED === 'true',
   },
 
   email: {

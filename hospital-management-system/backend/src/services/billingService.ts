@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { NotFoundError } from '../middleware/errorHandler';
 import { Decimal } from '@prisma/client/runtime/library';
+import { notificationService } from './notificationService';
 
 export class BillingService {
   private generateInvoiceNumber(): string {
@@ -44,7 +45,7 @@ export class BillingService {
     const tax = data.tax || 0;
     const totalAmount = subtotal - discount + tax;
 
-    return prisma.invoice.create({
+    const invoice = await prisma.invoice.create({
       data: {
         hospitalId,
         patientId: data.patientId,
@@ -61,10 +62,29 @@ export class BillingService {
         },
       },
       include: {
-        patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
+        patient: { select: { id: true, firstName: true, lastName: true, mrn: true, email: true, phone: true } },
         items: true,
       },
     });
+
+    // Send invoice notification to patient
+    try {
+      await notificationService.sendBillingNotification({
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        patientName: `${invoice.patient.firstName} ${invoice.patient.lastName}`,
+        amount: totalAmount,
+        dueDate: data.dueDate,
+        type: 'INVOICE_CREATED',
+        title: 'New Invoice Generated',
+        message: `Invoice #${invoice.invoiceNumber} has been generated for ${totalAmount.toFixed(2)}.`,
+      });
+    } catch (error) {
+      console.error('[BILLING] Failed to send invoice notification:', error);
+      // Don't fail the billing operation if notification fails
+    }
+
+    return invoice;
   }
 
   async getInvoices(hospitalId: string, params: {
@@ -127,7 +147,12 @@ export class BillingService {
     notes?: string;
     receivedBy: string;
   }) {
-    const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        patient: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
+      },
+    });
     if (!invoice) throw new NotFoundError('Invoice not found');
 
     const payment = await prisma.payment.create({
@@ -153,6 +178,22 @@ export class BillingService {
         status: newStatus,
       },
     });
+
+    // Send payment confirmation notification
+    try {
+      await notificationService.sendBillingNotification({
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        patientName: `${invoice.patient.firstName} ${invoice.patient.lastName}`,
+        amount: data.amount,
+        type: 'PAYMENT_RECEIVED',
+        title: 'Payment Received',
+        message: `Payment of ${data.amount.toFixed(2)} received for invoice #${invoice.invoiceNumber}.`,
+      });
+    } catch (error) {
+      console.error('[BILLING] Failed to send payment notification:', error);
+      // Don't fail the billing operation if notification fails
+    }
 
     return payment;
   }
@@ -329,6 +370,63 @@ export class BillingService {
         patient: { select: { id: true, firstName: true, lastName: true, mrn: true, phone: true } },
       },
     });
+  }
+
+  /**
+   * Send overdue payment reminders for invoices past their due date
+   * This function can be called by a scheduled job
+   */
+  async sendOverduePaymentReminders(hospitalId: string): Promise<{
+    processed: number;
+    sent: number;
+    failed: number;
+    errors: string[];
+  }> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Find all overdue invoices
+    const overdueInvoices = await prisma.invoice.findMany({
+      where: {
+        hospitalId,
+        status: { in: ['PENDING', 'PARTIALLY_PAID'] },
+        balanceAmount: { gt: 0 },
+        dueDate: { lt: today },
+      },
+      include: {
+        patient: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
+      },
+    });
+
+    const results = {
+      processed: overdueInvoices.length,
+      sent: 0,
+      failed: 0,
+      errors: [] as string[],
+    };
+
+    for (const invoice of overdueInvoices) {
+      try {
+        await notificationService.sendBillingNotification({
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          patientName: `${invoice.patient.firstName} ${invoice.patient.lastName}`,
+          amount: Number(invoice.balanceAmount),
+          dueDate: invoice.dueDate || undefined,
+          type: 'PAYMENT_OVERDUE',
+          title: 'Payment Overdue',
+          message: `Your payment of ${Number(invoice.balanceAmount).toFixed(2)} for invoice #${invoice.invoiceNumber} is overdue. Please make the payment at your earliest convenience.`,
+        });
+        results.sent++;
+      } catch (error) {
+        results.failed++;
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        results.errors.push(`Invoice ${invoice.invoiceNumber}: ${errorMessage}`);
+        console.error(`[BILLING] Failed to send overdue reminder for invoice ${invoice.invoiceNumber}:`, error);
+      }
+    }
+
+    return results;
   }
 
   // ==================== AI AUTO CHARGE CAPTURE ====================

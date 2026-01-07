@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler';
+import { notificationService } from './notificationService';
 
 // Sample tracking data structure (stored in memory - in production would be in database)
 interface SampleData {
@@ -107,7 +108,7 @@ export class LaboratoryService {
   }) {
     const orderNumber = this.generateOrderNumber();
 
-    return prisma.labOrder.create({
+    const order = await prisma.labOrder.create({
       data: {
         hospitalId,
         patientId: data.patientId,
@@ -125,10 +126,32 @@ export class LaboratoryService {
         },
       },
       include: {
-        patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
+        patient: { select: { id: true, firstName: true, lastName: true, mrn: true, email: true, phone: true, oderId: true } },
         tests: { include: { labTest: true } },
       },
     });
+
+    // Send confirmation notification to patient
+    try {
+      const testNames = order.tests.map(t => t.labTest.name);
+      if (order.patient.oderId) {
+        await notificationService.sendLabResultNotification({
+          labOrderId: order.id,
+          orderNumber: order.orderNumber,
+          patientName: `${order.patient.firstName} ${order.patient.lastName}`,
+          testNames,
+          hasCriticalResults: false,
+          hasAbnormalResults: false,
+          title: 'Lab Order Confirmation',
+          message: `Your lab order (${order.orderNumber}) has been created. Tests ordered: ${testNames.join(', ')}. Please proceed to the sample collection area.`,
+        });
+      }
+    } catch (error) {
+      console.error('[LAB NOTIFICATION] Failed to send order confirmation:', error);
+      // Don't fail the lab order creation if notification fails
+    }
+
+    return order;
   }
 
   async getLabOrders(hospitalId: string, params: {
@@ -191,11 +214,43 @@ export class LaboratoryService {
     if (status === 'SAMPLE_COLLECTED') updateData.collectedAt = new Date();
     if (status === 'COMPLETED') updateData.completedAt = new Date();
 
-    return prisma.labOrder.update({
+    const updatedOrder = await prisma.labOrder.update({
       where: { id },
       data: updateData,
-      include: { tests: { include: { labTest: true } } },
+      include: {
+        patient: { select: { id: true, firstName: true, lastName: true, mrn: true, email: true, phone: true, oderId: true } },
+        tests: { include: { labTest: true } },
+      },
     });
+
+    // Send notification when lab results are ready (status changed to COMPLETED)
+    if (status === 'COMPLETED') {
+      try {
+        const testNames = updatedOrder.tests.map(t => t.labTest.name);
+        const hasCritical = updatedOrder.tests.some(t => t.isCritical);
+        const hasAbnormal = updatedOrder.tests.some(t => t.isAbnormal);
+
+        if (updatedOrder.patient.oderId) {
+          await notificationService.sendLabResultNotification({
+            labOrderId: updatedOrder.id,
+            orderNumber: updatedOrder.orderNumber,
+            patientName: `${updatedOrder.patient.firstName} ${updatedOrder.patient.lastName}`,
+            testNames,
+            hasCriticalResults: hasCritical,
+            hasAbnormalResults: hasAbnormal,
+            title: hasCritical ? 'Critical Lab Results Available' : 'Lab Results Ready',
+            message: hasCritical
+              ? `Your lab results for order ${updatedOrder.orderNumber} are ready and require immediate attention. Please contact your healthcare provider.`
+              : `Your lab results for order ${updatedOrder.orderNumber} are now available. You can view them in the patient portal.`,
+          });
+        }
+      } catch (error) {
+        console.error('[LAB NOTIFICATION] Failed to send results ready notification:', error);
+        // Don't fail the status update if notification fails
+      }
+    }
+
+    return updatedOrder;
   }
 
   async enterTestResult(labOrderTestId: string, data: {
@@ -207,14 +262,78 @@ export class LaboratoryService {
     comments?: string;
     performedBy: string;
   }) {
-    return prisma.labOrderTest.update({
+    const updatedTest = await prisma.labOrderTest.update({
       where: { id: labOrderTestId },
       data: {
         ...data,
         status: 'COMPLETED',
         performedAt: new Date(),
       },
+      include: {
+        labTest: true,
+        labOrder: {
+          include: {
+            patient: { select: { id: true, firstName: true, lastName: true, mrn: true, email: true, phone: true, oderId: true } },
+          },
+        },
+      },
     });
+
+    // Send urgent alert for critical or abnormal values
+    if (data.isCritical || data.isAbnormal) {
+      try {
+        const order = updatedTest.labOrder;
+        const patient = order.patient;
+        const testName = updatedTest.labTest.name;
+
+        // Send notification to patient
+        if (patient.oderId) {
+          await notificationService.sendLabResultNotification({
+            labOrderId: order.id,
+            orderNumber: order.orderNumber,
+            patientName: `${patient.firstName} ${patient.lastName}`,
+            testNames: [testName],
+            hasCriticalResults: data.isCritical || false,
+            hasAbnormalResults: data.isAbnormal || false,
+            title: data.isCritical ? 'URGENT: Critical Lab Result' : 'Alert: Abnormal Lab Result',
+            message: data.isCritical
+              ? `A critical result has been detected for ${testName}. Please contact your healthcare provider immediately.`
+              : `An abnormal result has been detected for ${testName}. Please consult with your healthcare provider.`,
+          });
+        }
+
+        // Send alert to ordering physician for critical values
+        if (data.isCritical && order.orderedBy) {
+          const orderingPhysician = await prisma.user.findFirst({
+            where: {
+              OR: [
+                { id: order.orderedBy },
+                { doctor: { id: order.orderedBy } },
+              ],
+            },
+          });
+
+          if (orderingPhysician) {
+            await notificationService.sendEmergencyAlert(
+              {
+                alertType: 'CRITICAL_RESULT',
+                title: 'Critical Lab Result Alert',
+                message: `CRITICAL: ${testName} result for patient ${patient.firstName} ${patient.lastName} (MRN: ${patient.mrn}) requires immediate attention. Result: ${data.result}${data.unit ? ' ' + data.unit : ''}. Order #: ${order.orderNumber}`,
+                patientId: patient.id,
+                patientName: `${patient.firstName} ${patient.lastName}`,
+                actionRequired: 'Review critical lab result and take appropriate clinical action',
+              },
+              [orderingPhysician.id]
+            );
+          }
+        }
+      } catch (error) {
+        console.error('[LAB NOTIFICATION] Failed to send critical/abnormal result alert:', error);
+        // Don't fail the result entry if notification fails
+      }
+    }
+
+    return updatedTest;
   }
 
   async verifyTestResult(labOrderTestId: string, verifiedBy: string) {

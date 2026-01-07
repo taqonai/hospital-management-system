@@ -6,6 +6,10 @@ import { config } from '../config';
 import { AppError, UnauthorizedError, ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler';
 import { Gender, BloodGroup, MaritalStatus } from '@prisma/client';
 import { patientLookupService } from './patientLookupService';
+import { sendOTP as sendSMSOTP } from './smsService';
+import { sendWhatsAppOTP as sendWhatsAppOTPMessage } from './whatsappService';
+import { sendOTPEmail, sendPasswordResetEmail } from './emailService';
+import { logger } from '../utils/logger';
 
 // Redis client for OTP storage
 const redis = new Redis({
@@ -642,13 +646,19 @@ export class PatientAuthService {
     const otp = this.generateOTP();
     await this.storeOTP(mobile, otp, 'sms');
 
-    // In production, send OTP via SMS gateway
-    // For now, log the OTP (mock implementation)
-    console.log(`[MOCK SMS] OTP for ${mobile}: ${otp}`);
-
-    // TODO: Integrate with SMS gateway (Twilio, AWS SNS, etc.)
-    // Example:
-    // await smsService.send(mobile, `Your HMS verification code is: ${otp}. Valid for 5 minutes.`);
+    // Send OTP via SMS service
+    try {
+      const result = await sendSMSOTP(mobile, otp, Math.floor(OTP_EXPIRY_SECONDS / 60));
+      if (!result.success) {
+        logger.warn(`SMS OTP delivery failed for ${mobile}: ${result.error}`, { errorCode: result.errorCode });
+        // Still return success to avoid revealing whether the account exists
+      } else {
+        logger.info(`SMS OTP sent successfully to ${mobile}`, { messageId: result.messageId });
+      }
+    } catch (error) {
+      logger.error(`Failed to send SMS OTP to ${mobile}:`, error);
+      // Still return success to avoid revealing whether the account exists
+    }
 
     return {
       message: 'OTP sent successfully',
@@ -783,12 +793,19 @@ export class PatientAuthService {
     const otp = this.generateOTP();
     await this.storeOTP(mobile, otp, 'whatsapp');
 
-    // Mock WhatsApp message sending
-    console.log(`[MOCK WHATSAPP] OTP for ${mobile}: ${otp}`);
-
-    // TODO: Integrate with WhatsApp Business API or Twilio WhatsApp
-    // Example:
-    // await whatsappService.send(mobile, `Your HMS verification code is: ${otp}. Valid for 5 minutes.`);
+    // Send OTP via WhatsApp service
+    try {
+      const result = await sendWhatsAppOTPMessage(mobile, otp, Math.floor(OTP_EXPIRY_SECONDS / 60));
+      if (!result.success) {
+        logger.warn(`WhatsApp OTP delivery failed for ${mobile}: ${result.error}`);
+        // Still return success to avoid revealing whether the account exists
+      } else {
+        logger.info(`WhatsApp OTP sent successfully to ${mobile}`, { messageSid: result.messageSid });
+      }
+    } catch (error) {
+      logger.error(`Failed to send WhatsApp OTP to ${mobile}:`, error);
+      // Still return success to avoid revealing whether the account exists
+    }
 
     return {
       message: 'OTP sent via WhatsApp successfully',
@@ -1179,12 +1196,34 @@ export class PatientAuthService {
     await redis.setex(key, OTP_EXPIRY_SECONDS, otp);
 
     // Send via appropriate channel
-    if (patient.email && identifier.includes('@')) {
-      console.log(`[MOCK EMAIL] Password reset OTP for ${patient.email}: ${otp}`);
-      // TODO: Send email
-    } else {
-      console.log(`[MOCK SMS] Password reset OTP for ${patient.phone}: ${otp}`);
-      // TODO: Send SMS
+    try {
+      if (patient.email && identifier.includes('@')) {
+        // Send password reset email
+        const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        const result = await sendPasswordResetEmail(
+          patient.email,
+          `${patient.firstName} ${patient.lastName}`,
+          otp,
+          baseUrl,
+          Math.floor(OTP_EXPIRY_SECONDS / 60)
+        );
+        if (!result.success) {
+          logger.warn(`Password reset email delivery failed for ${patient.email}: ${result.error}`);
+        } else {
+          logger.info(`Password reset email sent successfully to ${patient.email}`, { messageId: result.messageId });
+        }
+      } else {
+        // Send SMS OTP for password reset
+        const result = await sendSMSOTP(patient.phone, otp, Math.floor(OTP_EXPIRY_SECONDS / 60));
+        if (!result.success) {
+          logger.warn(`Password reset SMS delivery failed for ${patient.phone}: ${result.error}`);
+        } else {
+          logger.info(`Password reset SMS sent successfully to ${patient.phone}`, { messageId: result.messageId });
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to send password reset notification:', error);
+      // Still return success to avoid revealing whether the account exists
     }
 
     return { message: 'If an account exists, a reset link/OTP has been sent' };

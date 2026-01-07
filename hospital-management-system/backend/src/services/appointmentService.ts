@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { CreateAppointmentDto, SearchParams } from '../types';
 import { NotFoundError, ConflictError, AppError } from '../middleware/errorHandler';
 import { AppointmentStatus } from '@prisma/client';
+import { notificationService } from './notificationService';
 
 export class AppointmentService {
   async create(hospitalId: string, data: CreateAppointmentDto) {
@@ -69,6 +70,7 @@ export class AppointmentService {
             firstName: true,
             lastName: true,
             phone: true,
+            email: true,
             mrn: true,
           },
         },
@@ -82,6 +84,27 @@ export class AppointmentService {
         },
       },
     });
+
+    // Send appointment confirmation notification
+    try {
+      await notificationService.sendAppointmentNotification(
+        {
+          appointmentId: appointment.id,
+          patientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,
+          doctorName: `${appointment.doctor.user.firstName} ${appointment.doctor.user.lastName}`,
+          departmentName: appointment.doctor.department?.name,
+          appointmentDate: appointment.appointmentDate,
+          appointmentTime: appointment.startTime,
+          title: 'Appointment Scheduled',
+          message: '',
+          type: 'SCHEDULED',
+        },
+        'SCHEDULED'
+      );
+    } catch (error) {
+      console.error('Failed to send appointment notification:', error);
+      // Don't fail the appointment creation if notification fails
+    }
 
     return appointment;
   }
@@ -212,8 +235,13 @@ export class AppointmentService {
       throw new NotFoundError('Appointment not found');
     }
 
+    // Store old date/time for reschedule notification
+    const oldDate = appointment.appointmentDate;
+    const oldTime = appointment.startTime;
+    const isRescheduling = data.appointmentDate || data.startTime;
+
     // If rescheduling, check for conflicts
-    if (data.appointmentDate || data.startTime) {
+    if (isRescheduling) {
       const conflictCheck = await prisma.appointment.findFirst({
         where: {
           id: { not: id },
@@ -237,15 +265,39 @@ export class AppointmentService {
       },
       include: {
         patient: {
-          select: { id: true, firstName: true, lastName: true, phone: true },
+          select: { id: true, firstName: true, lastName: true, phone: true, email: true },
         },
         doctor: {
           include: {
             user: { select: { firstName: true, lastName: true } },
+            department: true,
           },
         },
       },
     });
+
+    // Send reschedule notification if date or time changed
+    if (isRescheduling) {
+      try {
+        await notificationService.sendAppointmentNotification(
+          {
+            appointmentId: updated.id,
+            patientName: `${updated.patient.firstName} ${updated.patient.lastName}`,
+            doctorName: `${updated.doctor.user.firstName} ${updated.doctor.user.lastName}`,
+            departmentName: updated.doctor.department?.name,
+            appointmentDate: updated.appointmentDate,
+            appointmentTime: updated.startTime,
+            title: 'Appointment Rescheduled',
+            message: `Your appointment has been rescheduled from ${oldDate.toLocaleDateString()} at ${oldTime} to ${updated.appointmentDate.toLocaleDateString()} at ${updated.startTime}.`,
+            type: 'RESCHEDULED',
+          },
+          'RESCHEDULED'
+        );
+      } catch (error) {
+        console.error('Failed to send reschedule notification:', error);
+        // Don't fail the update if notification fails
+      }
+    }
 
     return updated;
   }
@@ -253,6 +305,17 @@ export class AppointmentService {
   async updateStatus(id: string, hospitalId: string, status: AppointmentStatus) {
     const appointment = await prisma.appointment.findFirst({
       where: { id, hospitalId },
+      include: {
+        patient: {
+          select: { id: true, firstName: true, lastName: true, phone: true, email: true },
+        },
+        doctor: {
+          include: {
+            user: { select: { firstName: true, lastName: true } },
+            department: true,
+          },
+        },
+      },
     });
 
     if (!appointment) {
@@ -270,12 +333,46 @@ export class AppointmentService {
       data: updateData,
     });
 
+    // Send confirmation notification when status changes to CONFIRMED
+    if (status === 'CONFIRMED') {
+      try {
+        await notificationService.sendAppointmentNotification(
+          {
+            appointmentId: appointment.id,
+            patientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,
+            doctorName: `${appointment.doctor.user.firstName} ${appointment.doctor.user.lastName}`,
+            departmentName: appointment.doctor.department?.name,
+            appointmentDate: appointment.appointmentDate,
+            appointmentTime: appointment.startTime,
+            title: 'Appointment Confirmed',
+            message: '',
+            type: 'CONFIRMED',
+          },
+          'CONFIRMED'
+        );
+      } catch (error) {
+        console.error('Failed to send confirmation notification:', error);
+        // Don't fail the status update if notification fails
+      }
+    }
+
     return updated;
   }
 
   async cancel(id: string, hospitalId: string, reason?: string) {
     const appointment = await prisma.appointment.findFirst({
       where: { id, hospitalId },
+      include: {
+        patient: {
+          select: { id: true, firstName: true, lastName: true, phone: true, email: true },
+        },
+        doctor: {
+          include: {
+            user: { select: { firstName: true, lastName: true } },
+            department: true,
+          },
+        },
+      },
     });
 
     if (!appointment) {
@@ -293,6 +390,27 @@ export class AppointmentService {
         notes: reason ? `${appointment.notes || ''}\nCancellation reason: ${reason}`.trim() : appointment.notes,
       },
     });
+
+    // Send cancellation notification
+    try {
+      await notificationService.sendAppointmentNotification(
+        {
+          appointmentId: appointment.id,
+          patientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,
+          doctorName: `${appointment.doctor.user.firstName} ${appointment.doctor.user.lastName}`,
+          departmentName: appointment.doctor.department?.name,
+          appointmentDate: appointment.appointmentDate,
+          appointmentTime: appointment.startTime,
+          title: 'Appointment Cancelled',
+          message: reason ? `Reason: ${reason}` : '',
+          type: 'CANCELLED',
+        },
+        'CANCELLED'
+      );
+    } catch (error) {
+      console.error('Failed to send cancellation notification:', error);
+      // Don't fail the cancellation if notification fails
+    }
 
     return updated;
   }

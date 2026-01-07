@@ -41,6 +41,7 @@ import advancedPharmacyAIRoutes from './advancedPharmacyAIRoutes';
 import pdfRoutes from './pdfRoutes';
 import rbacRoutes from './rbacRoutes';
 import patientAuthRoutes from './patientAuthRoutes';
+import notificationRoutes from './notificationRoutes';
 
 const router = Router();
 
@@ -103,5 +104,8 @@ router.use('/pdf', pdfRoutes);
 
 // RBAC (Role-Based Access Control) routes
 router.use('/rbac', rbacRoutes);
+
+// Notification routes
+router.use('/notifications', notificationRoutes);
 
 export default router;
