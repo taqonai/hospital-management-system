@@ -1,45 +1,14 @@
 import { Router, Request, Response } from 'express';
 import { patientPortalService } from '../services/patientPortalService';
-import { authenticate } from '../middleware/auth';
+import { patientAuthenticate, PatientAuthenticatedRequest } from '../middleware/patientAuth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess } from '../utils/response';
-import { AuthenticatedRequest } from '../types';
 import prisma from '../config/database';
 
 const router = Router();
 
-// Helper function to get patientId from userId
-async function getPatientIdFromUser(userId: string, hospitalId: string): Promise<string> {
-  // First try to find patient record linked to this user (via oderId)
-  const linkedPatient = await prisma.patient.findFirst({
-    where: { oderId: userId, hospitalId },
-    select: { id: true },
-  });
-
-  if (linkedPatient) {
-    return linkedPatient.id;
-  }
-
-  // If no linked patient, try to find patient by user's email
-  const userWithEmail = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { email: true },
-  });
-
-  if (userWithEmail?.email) {
-    const patient = await prisma.patient.findFirst({
-      where: { email: userWithEmail.email, hospitalId },
-      select: { id: true },
-    });
-    if (patient) return patient.id;
-  }
-
-  // Default: return empty string (will trigger not found in service)
-  return '';
-}
-
 // =============================================================================
-// Patient Portal Dashboard Routes (Authenticated)
+// Patient Portal Dashboard Routes (Authenticated with Patient Token)
 // =============================================================================
 
 /**
@@ -48,10 +17,10 @@ async function getPatientIdFromUser(userId: string, hospitalId: string): Promise
  */
 router.get(
   '/summary',
-  authenticate,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const hospitalId = req.user?.hospitalId || '';
-    const patientId = await getPatientIdFromUser(req.user?.userId || '', hospitalId);
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
     const summary = await patientPortalService.getDashboardSummary(hospitalId, patientId);
     sendSuccess(res, summary, 'Patient summary retrieved');
   })
@@ -63,10 +32,10 @@ router.get(
  */
 router.get(
   '/appointments',
-  authenticate,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const hospitalId = req.user?.hospitalId || '';
-    const patientId = await getPatientIdFromUser(req.user?.userId || '', hospitalId);
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
     const { type, status, page, limit } = req.query;
     const appointments = await patientPortalService.getAppointments(hospitalId, patientId, {
       type: type as 'upcoming' | 'past' | 'all',
@@ -84,10 +53,10 @@ router.get(
  */
 router.post(
   '/appointments',
-  authenticate,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const hospitalId = req.user?.hospitalId || '';
-    const patientId = await getPatientIdFromUser(req.user?.userId || '', hospitalId);
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
 
     // Validate that patient exists before booking
     if (!patientId) {
@@ -112,10 +81,10 @@ router.post(
  */
 router.post(
   '/appointments/:id/cancel',
-  authenticate,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const hospitalId = req.user?.hospitalId || '';
-    const patientId = await getPatientIdFromUser(req.user?.userId || '', hospitalId);
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
     await patientPortalService.cancelAppointment(hospitalId, patientId, req.params.id, req.body.reason);
     sendSuccess(res, null, 'Appointment cancelled');
   })
@@ -127,10 +96,10 @@ router.post(
  */
 router.get(
   '/records',
-  authenticate,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const hospitalId = req.user?.hospitalId || '';
-    const patientId = await getPatientIdFromUser(req.user?.userId || '', hospitalId);
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
     const { type, page, limit } = req.query;
     const records = await patientPortalService.getMedicalRecords(hospitalId, patientId, {
       type: type as string,
@@ -147,10 +116,10 @@ router.get(
  */
 router.get(
   '/prescriptions',
-  authenticate,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const hospitalId = req.user?.hospitalId || '';
-    const patientId = await getPatientIdFromUser(req.user?.userId || '', hospitalId);
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
     const { status, page, limit } = req.query;
     const prescriptions = await patientPortalService.getPrescriptions(hospitalId, patientId, {
       status: (status as 'active' | 'expired' | 'all') || 'all',
@@ -167,8 +136,8 @@ router.get(
  */
 router.post(
   '/prescriptions/:id/refill',
-  authenticate,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
     // Simplified: Just return success - full implementation pending
     sendSuccess(res, { requested: true, prescriptionId: req.params.id }, 'Refill request submitted');
   })
@@ -180,10 +149,10 @@ router.post(
  */
 router.get(
   '/labs',
-  authenticate,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const hospitalId = req.user?.hospitalId || '';
-    const patientId = await getPatientIdFromUser(req.user?.userId || '', hospitalId);
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
     const { status, page, limit } = req.query;
     const labs = await patientPortalService.getLabResults(hospitalId, patientId, {
       status: (status as 'ready' | 'pending' | 'all') || 'all',
@@ -200,8 +169,8 @@ router.get(
  */
 router.get(
   '/messages',
-  authenticate,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
     // Simplified: Return empty messages - messaging feature pending
     sendSuccess(res, { data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } }, 'Messages retrieved');
   })
@@ -213,8 +182,8 @@ router.get(
  */
 router.post(
   '/messages',
-  authenticate,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
     // Simplified: Just return success - messaging feature pending
     sendSuccess(res, { sent: true }, 'Message sent');
   })
@@ -226,10 +195,10 @@ router.post(
  */
 router.get(
   '/billing/summary',
-  authenticate,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const hospitalId = req.user?.hospitalId || '';
-    const patientId = await getPatientIdFromUser(req.user?.userId || '', hospitalId);
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
     const summary = await patientPortalService.getBillingSummary(hospitalId, patientId);
     sendSuccess(res, summary, 'Billing summary retrieved');
   })
@@ -241,10 +210,10 @@ router.get(
  */
 router.get(
   '/bills',
-  authenticate,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const hospitalId = req.user?.hospitalId || '';
-    const patientId = await getPatientIdFromUser(req.user?.userId || '', hospitalId);
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
     const { type, page, limit } = req.query;
     const bills = await patientPortalService.getBills(hospitalId, patientId, {
       type: (type === 'pending' || type === 'paid') ? type : 'all',
@@ -261,9 +230,9 @@ router.get(
  */
 router.get(
   '/doctors',
-  authenticate,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const hospitalId = req.user?.hospitalId || '';
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
     const { departmentId, search } = req.query;
     const doctors = await patientPortalService.getDoctors(hospitalId, {
       departmentId: departmentId as string,
@@ -279,9 +248,9 @@ router.get(
  */
 router.get(
   '/departments',
-  authenticate,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const hospitalId = req.user?.hospitalId || '';
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
     const departments = await patientPortalService.getDepartments(hospitalId);
     sendSuccess(res, departments, 'Departments retrieved');
   })
@@ -293,10 +262,10 @@ router.get(
  */
 router.get(
   '/reminders',
-  authenticate,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const hospitalId = req.user?.hospitalId || '';
-    const patientId = await getPatientIdFromUser(req.user?.userId || '', hospitalId);
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
     const reminders = await patientPortalService.getHealthReminders(hospitalId, patientId);
     sendSuccess(res, reminders, 'Health reminders retrieved');
   })
@@ -312,11 +281,11 @@ router.get(
  */
 router.post(
   '/ai-chat',
-  authenticate,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
     const { message, context, history } = req.body;
-    const hospitalId = req.user?.hospitalId || '';
-    const patientId = await getPatientIdFromUser(req.user?.userId || '', hospitalId);
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
 
     // Get patient context for personalized responses
     let patientContext = '';
@@ -411,10 +380,10 @@ function generateLocalResponse(query: string): string {
  */
 router.get(
   '/health-insights',
-  authenticate,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const hospitalId = req.user?.hospitalId || '';
-    const patientId = await getPatientIdFromUser(req.user?.userId || '', hospitalId);
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
 
     // Get patient data for insights
     const patient = await prisma.patient.findUnique({
