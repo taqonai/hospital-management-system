@@ -20,13 +20,8 @@ from .knowledge_base import (
 
 logger = logging.getLogger(__name__)
 
-# Try to import OpenAI for AI-enhanced analysis
-try:
-    from openai import OpenAI
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
-    logger.warning("OpenAI not available. AI-enhanced analysis will fall back to rule-based.")
+# Import shared OpenAI client
+from shared.openai_client import openai_manager, TaskComplexity, OPENAI_AVAILABLE
 
 
 # Antibiotic knowledge base for antimicrobial stewardship
@@ -767,20 +762,10 @@ class PharmacyAI:
 
         return results[:limit]
 
-    def _get_openai_client(self) -> Optional[Any]:
-        """Get OpenAI client if available"""
-        if not OPENAI_AVAILABLE:
-            return None
-
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            return None
-
-        try:
-            return OpenAI(api_key=api_key)
-        except Exception as e:
-            logger.error(f"Failed to initialize OpenAI client: {e}")
-            return None
+    @staticmethod
+    def is_available() -> bool:
+        """Check if AI-enhanced analysis is available"""
+        return openai_manager.is_available()
 
     def analyze_interactions_with_ai(
         self,
@@ -813,8 +798,7 @@ class PharmacyAI:
         )
 
         # Try AI-enhanced analysis
-        client = self._get_openai_client()
-        if not client:
+        if not openai_manager.is_available():
             return {
                 **rule_based_result,
                 "aiEnhanced": False,
@@ -930,12 +914,7 @@ ANALYSIS GUIDELINES:
 7. Consider patient conditions when assessing risk (e.g., cardiac history + QT-prolonging drugs)
 8. Identify therapeutic duplications that may increase adverse effects"""
 
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": """You are a board-certified clinical pharmacist with expertise in:
+            system_message = """You are a board-certified clinical pharmacist with expertise in:
 - Drug-drug and drug-disease interactions
 - Clinical pharmacokinetics and pharmacodynamics
 - Geriatric and renal/hepatic dosing adjustments
@@ -943,33 +922,24 @@ ANALYSIS GUIDELINES:
 - Antimicrobial stewardship
 
 Provide evidence-based, actionable analysis. Be specific with monitoring parameters (include target ranges), dose adjustments, and timing recommendations. Prioritize patient safety while avoiding unnecessary alarm for minor interactions."""
-                    },
+
+            result = openai_manager.chat_completion_json(
+                messages=[
+                    {"role": "system", "content": system_message},
                     {"role": "user", "content": prompt}
                 ],
+                task_complexity=TaskComplexity.SIMPLE,  # gpt-4o-mini for pharmacy
                 temperature=0.3,
-                max_tokens=2000,
-                response_format={"type": "json_object"}
+                max_tokens=2000
             )
 
-            import json
-            ai_content = response.choices[0].message.content
-
-            # Parse JSON from response (using response_format ensures valid JSON)
-            try:
-                ai_analysis = json.loads(ai_content.strip())
-            except json.JSONDecodeError:
-                # Fallback: try to extract JSON from markdown blocks if present
-                try:
-                    if "```json" in ai_content:
-                        ai_content = ai_content.split("```json")[1].split("```")[0]
-                    elif "```" in ai_content:
-                        ai_content = ai_content.split("```")[1].split("```")[0]
-                    ai_analysis = json.loads(ai_content.strip())
-                except (json.JSONDecodeError, IndexError):
-                    ai_analysis = {
-                        "clinicalSummary": ai_content,
-                        "parseError": True
-                    }
+            if result and result.get("success"):
+                ai_analysis = result.get("data", {})
+            else:
+                ai_analysis = {
+                    "clinicalSummary": "Analysis completed with parsing issues",
+                    "parseError": True
+                }
 
             return {
                 **rule_based_result,

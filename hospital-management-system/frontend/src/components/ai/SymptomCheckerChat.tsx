@@ -115,9 +115,16 @@ export default function SymptomCheckerChat({
     setError('');
 
     try {
+      // Get patient portal token if available
+      const patientToken = localStorage.getItem('patientPortalToken');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (patientToken) {
+        headers['Authorization'] = `Bearer ${patientToken}`;
+      }
+
       const response = await fetch(`${API_URL}/patient-portal/symptom-check/start`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           patientId,
           patientAge,
@@ -166,9 +173,16 @@ export default function SymptomCheckerChat({
     setError('');
 
     try {
+      // Get patient portal token if available
+      const patientToken = localStorage.getItem('patientPortalToken');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (patientToken) {
+        headers['Authorization'] = `Bearer ${patientToken}`;
+      }
+
       const response = await fetch(`${API_URL}/patient-portal/symptom-check/answer`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           sessionId,
           answer,

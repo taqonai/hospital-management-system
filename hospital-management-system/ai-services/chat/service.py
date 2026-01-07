@@ -1,6 +1,8 @@
 """
 Chat AI Service with OpenAI GPT integration
 Uses pattern matching for commands + GPT for conversational responses
+
+Uses GPT-4o-mini via shared OpenAI client for chat responses.
 """
 
 import os
@@ -8,14 +10,14 @@ import re
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
+import logging
 
-# Try to import OpenAI
-try:
-    from openai import OpenAI
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
-    OpenAI = None
+# Import shared OpenAI client
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from shared.openai_client import openai_manager, TaskComplexity, OPENAI_AVAILABLE
+
+logger = logging.getLogger(__name__)
 
 
 class Intent(Enum):
@@ -42,25 +44,15 @@ class Entity:
 class ChatAI:
     """
     AI-powered chat service for HIS
-    Combines pattern matching for commands with GPT for conversations
+    Combines pattern matching for commands with GPT-4o-mini for conversations.
+    Uses shared OpenAI client manager.
     """
 
     def __init__(self):
-        # Initialize OpenAI client if available
-        self.openai_client = None
-        self.openai_api_key = os.getenv("OPENAI_API_KEY")
-
-        if OPENAI_AVAILABLE and self.openai_api_key:
-            try:
-                self.openai_client = OpenAI(api_key=self.openai_api_key)
-                print("OpenAI GPT integration enabled")
-            except Exception as e:
-                print(f"Failed to initialize OpenAI: {e}")
-        else:
-            if not OPENAI_AVAILABLE:
-                print("OpenAI package not installed - using pattern matching only")
-            elif not self.openai_api_key:
-                print("OPENAI_API_KEY not set - using pattern matching only")
+        # Use shared OpenAI client manager
+        ai_status = "GPT-4o-mini enabled" if openai_manager.is_available() else "pattern matching only"
+        logger.info(f"ChatAI initialized - {ai_status}")
+        print(f"ChatAI initialized - {ai_status}")
 
         # System prompt for GPT
         self.system_prompt = """You are an AI assistant for a Hospital Management System (HMS). You help healthcare staff with:
@@ -186,6 +178,11 @@ If the user asks to perform an action, include: [ACTION:action_name]
             r'\b(how\s+many|count|total)': 'count_query',
         }
 
+    @staticmethod
+    def is_available() -> bool:
+        """Check if OpenAI API is available for GPT responses"""
+        return openai_manager.is_available()
+
     def process_chat(
         self,
         message: str,
@@ -223,7 +220,7 @@ If the user asks to perform an action, include: [ACTION:action_name]
             return nav_result
 
         # If no pattern matched, use GPT for conversational response
-        if self.openai_client:
+        if self.is_available():
             return self._get_gpt_response(message, context)
 
         # Fallback response if no GPT
@@ -232,6 +229,7 @@ If the user asks to perform an action, include: [ACTION:action_name]
             "intent": "unknown",
             "actions": [],
             "suggestions": self._get_context_suggestions(context),
+            "aiPowered": False
         }
 
     def _get_gpt_response(
@@ -239,7 +237,7 @@ If the user asks to perform an action, include: [ACTION:action_name]
         message: str,
         context: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Get a response from GPT"""
+        """Get a response from GPT-4o-mini using shared client"""
         try:
             # Build context message
             context_info = ""
@@ -253,14 +251,18 @@ If the user asks to perform an action, include: [ACTION:action_name]
                 {"role": "user", "content": message}
             ]
 
-            response = self.openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
+            # Use shared OpenAI client with gpt-4o-mini
+            result = openai_manager.chat_completion(
                 messages=messages,
+                task_complexity=TaskComplexity.SIMPLE,  # Uses gpt-4o-mini
                 max_tokens=300,
                 temperature=0.7,
             )
 
-            gpt_response = response.choices[0].message.content
+            if not result or not result.get("success"):
+                raise Exception(result.get("error") if result else "No response")
+
+            gpt_response = result["content"]
 
             # Parse GPT response for actions
             actions = []
@@ -289,16 +291,19 @@ If the user asks to perform an action, include: [ACTION:action_name]
                 "intent": intent,
                 "actions": actions,
                 "suggestions": self._get_context_suggestions(context),
+                "aiPowered": True,
+                "model": result.get("model", "gpt-4o-mini")
             }
 
         except Exception as e:
-            print(f"GPT error: {e}")
+            logger.error(f"GPT error: {e}")
             # Fallback to pattern matching
             return {
                 "response": f'I understand you said: "{message}". How can I help you with the hospital system?',
                 "intent": "unknown",
                 "actions": [],
                 "suggestions": self._get_context_suggestions(context),
+                "aiPowered": False
             }
 
     def process_voice_command(
@@ -532,7 +537,7 @@ If the user asks to perform an action, include: [ACTION:action_name]
 
     def _get_greeting_response(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """Generate greeting response"""
-        if self.openai_client:
+        if self.is_available():
             greeting = "Hello! I'm your AI-powered hospital assistant. I can help you navigate the system, manage patients, order tests, check schedules, and much more. What would you like to do today?"
         else:
             greeting = "Hello! I'm your AI assistant. How can I help you today? You can ask me to navigate to any module, manage patients, order tests, or get help with the system."
@@ -542,6 +547,7 @@ If the user asks to perform an action, include: [ACTION:action_name]
             "intent": "greeting",
             "actions": [],
             "suggestions": self._get_context_suggestions(context),
+            "aiPowered": self.is_available()
         }
 
     def _get_help_response(self, context: Dict[str, Any]) -> Dict[str, Any]:

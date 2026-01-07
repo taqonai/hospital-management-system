@@ -3,17 +3,12 @@ Speech-to-Text Service using OpenAI Whisper
 Provides accurate transcription for medical terminology
 """
 
-import os
 import tempfile
 from typing import Optional, Dict, Any
 from pathlib import Path
 
-try:
-    from openai import OpenAI
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
-    OpenAI = None
+# Import shared OpenAI client
+from shared.openai_client import openai_manager, OPENAI_AVAILABLE
 
 
 class SpeechToTextService:
@@ -23,15 +18,9 @@ class SpeechToTextService:
     """
 
     def __init__(self):
-        self.openai_client = None
-        self.openai_api_key = os.getenv("OPENAI_API_KEY")
-
-        if OPENAI_AVAILABLE and self.openai_api_key:
-            try:
-                self.openai_client = OpenAI(api_key=self.openai_api_key)
-                print("Whisper speech-to-text enabled")
-            except Exception as e:
-                print(f"Failed to initialize Whisper: {e}")
+        # Uses shared openai_manager
+        if openai_manager.is_available():
+            print("Whisper speech-to-text enabled via shared client")
         else:
             print("Whisper not available - OpenAI API key required")
 
@@ -66,7 +55,7 @@ class SpeechToTextService:
         Returns:
             Dict with transcript, confidence, and metadata
         """
-        if not self.openai_client:
+        if not openai_manager.is_available():
             return {
                 "success": False,
                 "error": "Whisper not available",
@@ -87,22 +76,27 @@ class SpeechToTextService:
                 # Use medical prompt for context
                 context_prompt = prompt or self.medical_prompt
 
-                # Call Whisper API
+                # Call Whisper API via shared client
                 with open(temp_path, "rb") as audio_file:
-                    response = self.openai_client.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=audio_file,
+                    result = openai_manager.transcribe_audio(
+                        audio_file=audio_file,
                         language=language,
-                        prompt=context_prompt,
-                        response_format="verbose_json"
+                        prompt=context_prompt
                     )
 
-                # Extract transcript and confidence
-                transcript = response.text
+                # Handle result from shared client
+                if not result or not result.get("success"):
+                    return {
+                        "success": False,
+                        "error": result.get("error", "Transcription failed") if result else "No response",
+                        "transcript": "",
+                        "confidence": 0.0
+                    }
 
-                # Whisper doesn't provide confidence directly,
-                # but verbose_json gives us segments with confidence
-                segments = getattr(response, 'segments', []) or []
+                # Extract transcript and confidence
+                transcript = result.get("transcript", "")
+                segments = result.get("segments", [])
+
                 if segments:
                     # Handle both dict and object segments
                     def get_confidence(seg):
@@ -131,12 +125,13 @@ class SpeechToTextService:
                     "transcript": transcript,
                     "confidence": avg_confidence,
                     "language": language,
-                    "duration": getattr(response, 'duration', None),
+                    "duration": result.get("duration"),
                     "segments": serializable_segments
                 }
 
             finally:
                 # Clean up temp file
+                import os
                 os.unlink(temp_path)
 
         except Exception as e:

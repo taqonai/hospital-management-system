@@ -1,6 +1,8 @@
 """
 Diagnostic AI Service with GPT-4 and ML-powered Symptom Analysis
-Uses GPT-4 for clinical reasoning with SentenceTransformers fallback
+Uses GPT-4o for clinical reasoning with SentenceTransformers fallback
+
+Uses shared OpenAI client for standardized API access.
 """
 
 from typing import List, Dict, Any, Optional, Tuple
@@ -10,18 +12,14 @@ import logging
 import re
 import os
 import json
+import sys
 
 # Initialize logger
 logger = logging.getLogger(__name__)
 
-# OpenAI integration for GPT-4
-try:
-    from openai import OpenAI
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
-    OpenAI = None
-    logger.warning("OpenAI package not available. GPT-4 features will be disabled.")
+# Import shared OpenAI client
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from shared.openai_client import openai_manager, TaskComplexity, OPENAI_AVAILABLE
 
 # Lazy load sentence transformers to speed up initial startup
 _model = None
@@ -156,17 +154,19 @@ class SymptomEncoder:
 
 
 class GPTDiagnosticAnalyzer:
-    """GPT-4 powered diagnostic analysis for clinical reasoning"""
+    """
+    GPT-4 powered diagnostic analysis for clinical reasoning.
+    Uses shared OpenAI client with gpt-4o for complex diagnosis.
+    """
 
     def __init__(self):
-        self.api_key = os.getenv("OPENAI_API_KEY")
-        self.client = OpenAI(api_key=self.api_key) if OPENAI_AVAILABLE and self.api_key else None
-        self.model = "gpt-4o-mini"  # Cost-effective for most analysis
-        self.complex_model = "gpt-4o"  # For complex differential diagnosis
+        # Use shared OpenAI client manager
+        ai_status = "GPT-4o enabled" if openai_manager.is_available() else "ML/rule-based only"
+        logger.info(f"GPTDiagnosticAnalyzer initialized - {ai_status}")
 
     def is_available(self) -> bool:
-        """Check if GPT-4 is available"""
-        return self.client is not None
+        """Check if GPT-4 is available via shared client"""
+        return openai_manager.is_available()
 
     def generate_diagnoses(
         self,
@@ -219,8 +219,8 @@ Guidelines:
 6. Confidence values should reflect clinical certainty"""
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            # Use shared OpenAI client with gpt-4o for complex diagnosis
+            result = openai_manager.chat_completion_json(
                 messages=[
                     {
                         "role": "system",
@@ -228,13 +228,16 @@ Guidelines:
                     },
                     {"role": "user", "content": prompt}
                 ],
+                task_complexity=TaskComplexity.COMPLEX,  # Uses gpt-4o
                 temperature=0.3,
-                max_tokens=2000,
-                response_format={"type": "json_object"}
+                max_tokens=2000
             )
 
-            result_text = response.choices[0].message.content
-            result = json.loads(result_text)
+            if not result or not result.get("success"):
+                logger.error(f"GPT diagnosis failed: {result.get('error') if result else 'No response'}")
+                return None
+
+            result = result.get("data", {})
 
             diagnoses = result.get("diagnoses", [])
             if not diagnoses:
@@ -312,8 +315,7 @@ Guidelines:
 5. Consider patient age - more aggressive workup for elderly with concerning symptoms"""
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            result = openai_manager.chat_completion_json(
                 messages=[
                     {
                         "role": "system",
@@ -321,19 +323,23 @@ Guidelines:
                     },
                     {"role": "user", "content": prompt}
                 ],
+                task_complexity=TaskComplexity.SIMPLE,  # Uses gpt-4o-mini
                 temperature=0.3,
-                max_tokens=1500,
-                response_format={"type": "json_object"}
+                max_tokens=1500
             )
 
-            result = json.loads(response.choices[0].message.content)
-            tests = [t["test_name"] for t in result.get("recommended_tests", [])]
+            if not result or not result.get("success"):
+                logger.error(f"GPT test recommendation failed: {result.get('error') if result else 'No response'}")
+                return None
 
-            logger.info(f"GPT-4 recommended {len(tests)} tests")
+            data = result.get("data", {})
+            tests = [t["test_name"] for t in data.get("recommended_tests", [])]
+
+            logger.info(f"GPT recommended {len(tests)} tests")
             return tests
 
         except Exception as e:
-            logger.error(f"GPT-4 test recommendation failed: {e}")
+            logger.error(f"GPT test recommendation failed: {e}")
             return None
 
     def suggest_treatments(
@@ -388,8 +394,7 @@ Guidelines:
 6. Consider patient's current medications to avoid interactions"""
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            result = openai_manager.chat_completion_json(
                 messages=[
                     {
                         "role": "system",
@@ -397,20 +402,24 @@ Guidelines:
                     },
                     {"role": "user", "content": prompt}
                 ],
+                task_complexity=TaskComplexity.SIMPLE,  # Uses gpt-4o-mini
                 temperature=0.3,
-                max_tokens=1500,
-                response_format={"type": "json_object"}
+                max_tokens=1500
             )
 
-            result = json.loads(response.choices[0].message.content)
-            suggestions = [t["recommendation"] for t in result.get("treatment_suggestions", [])]
-            suggestions.extend(result.get("referral_recommendations", []))
+            if not result or not result.get("success"):
+                logger.error(f"GPT treatment suggestion failed: {result.get('error') if result else 'No response'}")
+                return None
 
-            logger.info(f"GPT-4 suggested {len(suggestions)} treatments")
+            data = result.get("data", {})
+            suggestions = [t["recommendation"] for t in data.get("treatment_suggestions", [])]
+            suggestions.extend(data.get("referral_recommendations", []))
+
+            logger.info(f"GPT suggested {len(suggestions)} treatments")
             return suggestions
 
         except Exception as e:
-            logger.error(f"GPT-4 treatment suggestion failed: {e}")
+            logger.error(f"GPT treatment suggestion failed: {e}")
             return None
 
     def assess_urgency(
@@ -462,8 +471,7 @@ Age-specific considerations:
 Consider vital sign ranges appropriate for age group."""
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            result = openai_manager.chat_completion_json(
                 messages=[
                     {
                         "role": "system",
@@ -471,30 +479,34 @@ Consider vital sign ranges appropriate for age group."""
                     },
                     {"role": "user", "content": prompt}
                 ],
+                task_complexity=TaskComplexity.COMPLEX,  # Uses gpt-4o for safety-critical
                 temperature=0.3,
-                max_tokens=1000,
-                response_format={"type": "json_object"}
+                max_tokens=1000
             )
 
-            result = json.loads(response.choices[0].message.content)
+            if not result or not result.get("success"):
+                logger.error(f"GPT urgency assessment failed: {result.get('error') if result else 'No response'}")
+                return None
+
+            data = result.get("data", {})
 
             # Normalize response format
             return {
-                "level": result.get("level", "MODERATE"),
-                "ageAdjustedScore": result.get("urgency_score", 5),
-                "ageMultiplier": result.get("age_multiplier", 1.0),
+                "level": data.get("level", "MODERATE"),
+                "ageAdjustedScore": data.get("urgency_score", 5),
+                "ageMultiplier": data.get("age_multiplier", 1.0),
                 "patientAgeCategory": age_category,
                 "patientAge": patient_age,
-                "ageConsiderations": result.get("age_considerations", []),
-                "redFlags": result.get("red_flags", []),
-                "timeSensitivity": result.get("time_sensitivity", ""),
-                "recommendedSetting": result.get("recommended_setting", ""),
-                "rationale": result.get("rationale", ""),
-                "source": "gpt-4"
+                "ageConsiderations": data.get("age_considerations", []),
+                "redFlags": data.get("red_flags", []),
+                "timeSensitivity": data.get("time_sensitivity", ""),
+                "recommendedSetting": data.get("recommended_setting", ""),
+                "rationale": data.get("rationale", ""),
+                "source": "gpt-4o"
             }
 
         except Exception as e:
-            logger.error(f"GPT-4 urgency assessment failed: {e}")
+            logger.error(f"GPT urgency assessment failed: {e}")
             return None
 
     def get_last_insights(self) -> Dict[str, Any]:

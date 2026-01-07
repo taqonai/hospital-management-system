@@ -1,6 +1,9 @@
 """
 Hospital Management System - AI Services
 FastAPI-based microservices for AI-powered clinical decision support
+
+Uses centralized OpenAI client (shared.openai_client) for standardized API access.
+Models: gpt-4o (complex tasks), gpt-4o-mini (simple tasks), whisper-1 (speech)
 """
 
 import os
@@ -14,6 +17,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import uvicorn
+
+# Import shared OpenAI client for health checks
+from shared.openai_client import openai_manager, Models
 
 from diagnostic.service import DiagnosticAI
 from predictive.service import PredictiveAnalytics
@@ -607,25 +613,34 @@ class ExpandAbbreviationsResponse(BaseModel):
 # Health check
 @app.get("/health")
 async def health_check():
-    openai_available = speech_ai.is_available() if hasattr(speech_ai, 'is_available') else False
+    """Health check with centralized OpenAI status"""
+    openai_available = openai_manager.is_available()
+    openai_status = openai_manager.get_status()
+
     return {
         "status": "healthy",
-        "openai_available": openai_available,
-        "version": "1.0.0",
+        "version": "4.0.0",
+        "openai": {
+            "available": openai_available,
+            "api_key_configured": openai_status.get("api_key_set", False),
+            "models": openai_status.get("models", {}),
+        },
         "services": {
-            "diagnostic": "active",
+            "diagnostic": "gpt-4o" if openai_available else "ml-fallback",
             "predictive": "active",
-            "imaging": "active",
-            "chat": "active",
-            "speech": "active" if openai_available else "unavailable",
-            "queue": "active",
-            "pharmacy": "active",
-            "clinical_notes": "active" if clinical_notes_ai.is_available() else "limited",
-            "symptom_checker": "active",
-            "early_warning": "active",
-            "med_safety": "active",
-            "smart_orders": "active",
-            "ai_scribe": "active" if openai_available else "limited",
+            "imaging": "gpt-4o-vision" if openai_available else "rule-based",
+            "chat": "gpt-4o-mini" if openai_available else "pattern-matching",
+            "speech": "whisper-1" if openai_available else "unavailable",
+            "queue": "gpt-4o-mini" if openai_available else "algorithmic",
+            "pharmacy": "gpt-4o-mini" if openai_available else "database",
+            "clinical_notes": "gpt-4o-mini" if openai_available else "templates",
+            "symptom_checker": "gpt-4o" if openai_available else "rule-based",
+            "entity_extraction": "gpt-4o-mini" if openai_available else "regex",
+            "early_warning": "gpt-4o-mini" if openai_available else "algorithmic",
+            "med_safety": "gpt-4o-mini" if openai_available else "rule-based",
+            "smart_orders": "gpt-4o" if openai_available else "bundles",
+            "ai_scribe": "whisper+gpt-4o-mini" if openai_available else "unavailable",
+            "pdf_analysis": "gpt-4o-vision" if openai_available else "text-only",
         }
     }
 

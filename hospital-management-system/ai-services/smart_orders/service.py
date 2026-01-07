@@ -15,13 +15,8 @@ import uuid
 import os
 import asyncio
 
-# OpenAI integration
-try:
-    from openai import OpenAI
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
-    OpenAI = None
+# Import shared OpenAI client
+from shared.openai_client import openai_manager, TaskComplexity, OPENAI_AVAILABLE
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -1053,28 +1048,16 @@ class SmartOrdersAI:
 
     def __init__(self):
         self.model_version = "2.0.0"
-        self.openai_client = None
-        self._init_openai()
-
-    def _init_openai(self):
-        """Initialize OpenAI client if available"""
-        if OPENAI_AVAILABLE:
-            api_key = os.getenv("OPENAI_API_KEY")
-            if api_key:
-                try:
-                    self.openai_client = OpenAI(api_key=api_key)
-                    logger.info("OpenAI client initialized for Smart Orders AI")
-                except Exception as e:
-                    logger.warning(f"Failed to initialize OpenAI client: {e}")
-                    self.openai_client = None
-            else:
-                logger.info("OpenAI API key not found, AI-enhanced features disabled")
+        # Uses shared openai_manager
+        if openai_manager.is_available():
+            logger.info("OpenAI client available for Smart Orders AI via shared client")
         else:
-            logger.info("OpenAI package not available, AI-enhanced features disabled")
+            logger.info("OpenAI not available, AI-enhanced features disabled")
 
-    def is_ai_available(self) -> bool:
+    @staticmethod
+    def is_ai_available() -> bool:
         """Check if OpenAI integration is available"""
-        return self.openai_client is not None
+        return openai_manager.is_available()
 
     def get_recommendations(
         self,
@@ -1890,30 +1873,20 @@ Respond in JSON format with the following structure:
 
 Be specific and clinically relevant. Focus on patient safety."""
 
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
+            result = openai_manager.chat_completion_json(
                 messages=[
                     {"role": "system", "content": "You are a clinical pharmacist and physician assistant AI. Provide evidence-based recommendations. Always prioritize patient safety. Be concise but thorough."},
                     {"role": "user", "content": prompt}
                 ],
+                task_complexity=TaskComplexity.SIMPLE,  # gpt-4o-mini
                 temperature=0.3,
                 max_tokens=1500,
             )
 
-            ai_response = response.choices[0].message.content
-
-            # Parse AI response
-            import json
-            try:
-                # Try to extract JSON from response
-                json_start = ai_response.find('{')
-                json_end = ai_response.rfind('}') + 1
-                if json_start != -1 and json_end > json_start:
-                    ai_analysis = json.loads(ai_response[json_start:json_end])
-                else:
-                    ai_analysis = {"rawResponse": ai_response}
-            except json.JSONDecodeError:
-                ai_analysis = {"rawResponse": ai_response}
+            if result and result.get("success"):
+                ai_analysis = result.get("data", {})
+            else:
+                ai_analysis = {"error": result.get("error", "Analysis failed") if result else "No response"}
 
             # Merge AI analysis with rule-based recommendations
             rule_based["aiEnhanced"] = True

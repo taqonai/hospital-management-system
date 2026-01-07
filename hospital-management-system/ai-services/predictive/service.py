@@ -12,13 +12,8 @@ import os
 import json
 from datetime import datetime, timedelta
 
-# OpenAI integration for GPT-4 explanations
-try:
-    from openai import OpenAI
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
-    OpenAI = None
+# Import shared OpenAI client
+from shared.openai_client import openai_manager, TaskComplexity, OPENAI_AVAILABLE
 
 from .knowledge_base import (
     LACE_SCORING,
@@ -571,13 +566,12 @@ class GPTRiskExplainer:
     """GPT-4 powered explanation and recommendation layer for risk predictions"""
 
     def __init__(self):
-        self.api_key = os.getenv("OPENAI_API_KEY")
-        self.client = OpenAI(api_key=self.api_key) if OPENAI_AVAILABLE and self.api_key else None
-        self.model = "gpt-4o-mini"
+        pass  # Uses shared openai_manager
 
-    def is_available(self) -> bool:
+    @staticmethod
+    def is_available() -> bool:
         """Check if GPT-4 is available"""
-        return self.client is not None
+        return openai_manager.is_available()
 
     def explain_risk(
         self,
@@ -643,8 +637,7 @@ Guidelines:
 4. Provide evidence-based recommendations"""
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            result = openai_manager.chat_completion_json(
                 messages=[
                     {
                         "role": "system",
@@ -652,14 +645,17 @@ Guidelines:
                     },
                     {"role": "user", "content": prompt}
                 ],
+                task_complexity=TaskComplexity.SIMPLE,  # gpt-4o-mini for explanations
                 temperature=0.3,
-                max_tokens=1500,
-                response_format={"type": "json_object"}
+                max_tokens=1500
             )
 
-            result = json.loads(response.choices[0].message.content)
-            logger.info(f"GPT-4 generated risk explanation for {prediction_type}")
-            return result
+            if result and result.get("success"):
+                logger.info(f"GPT-4 generated risk explanation for {prediction_type}")
+                return result.get("data", {})
+            else:
+                logger.warning(f"GPT-4 risk explanation returned no data")
+                return None
 
         except Exception as e:
             logger.error(f"GPT-4 risk explanation failed: {e}")
@@ -698,8 +694,7 @@ Return JSON:
 }}"""
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            result = openai_manager.chat_completion_json(
                 messages=[
                     {
                         "role": "system",
@@ -707,14 +702,17 @@ Return JSON:
                     },
                     {"role": "user", "content": prompt}
                 ],
+                task_complexity=TaskComplexity.SIMPLE,  # gpt-4o-mini for explanations
                 temperature=0.3,
-                max_tokens=1000,
-                response_format={"type": "json_object"}
+                max_tokens=1000
             )
 
-            result = json.loads(response.choices[0].message.content)
-            logger.info("GPT-4 generated deterioration risk explanation")
-            return result
+            if result and result.get("success"):
+                logger.info("GPT-4 generated deterioration risk explanation")
+                return result.get("data", {})
+            else:
+                logger.warning("GPT-4 deterioration explanation returned no data")
+                return None
 
         except Exception as e:
             logger.error(f"GPT-4 deterioration explanation failed: {e}")

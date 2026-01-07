@@ -1,11 +1,12 @@
 """Clinical Notes AI Service - AI-powered clinical documentation"""
 
-import os
 import re
 import json
 from typing import Dict, List, Any, Optional
 from datetime import datetime
-from openai import OpenAI
+
+# Import shared OpenAI client
+from shared.openai_client import openai_manager, TaskComplexity, OPENAI_AVAILABLE
 
 from .templates import (
     NOTE_TYPES,
@@ -24,14 +25,12 @@ class ClinicalNotesAI:
     """AI-powered clinical documentation service"""
 
     def __init__(self):
-        self.api_key = os.getenv("OPENAI_API_KEY")
-        self.client = OpenAI(api_key=self.api_key) if self.api_key else None
-        self.model = "gpt-4o-mini"  # Use GPT-4 for better medical understanding
         self.model_version = "clinical-notes-v1.0"
 
-    def is_available(self) -> bool:
+    @staticmethod
+    def is_available() -> bool:
         """Check if OpenAI API is available"""
-        return self.client is not None
+        return openai_manager.is_available()
 
     def generate_note(
         self,
@@ -73,32 +72,39 @@ class ClinicalNotesAI:
             )
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            result = openai_manager.chat_completion(
                 messages=[
                     {"role": "system", "content": note_config["system_prompt"]},
                     {"role": "user", "content": prompt},
                 ],
+                task_complexity=TaskComplexity.SIMPLE,  # gpt-4o-mini for notes
                 temperature=0.3,  # Lower temperature for more consistent medical documentation
                 max_tokens=2000,
             )
 
-            generated_note = response.choices[0].message.content
-
-            return {
-                "success": True,
-                "noteType": note_type,
-                "noteName": note_config["name"],
-                "generatedNote": generated_note,
-                "timestamp": datetime.now().isoformat(),
-                "patientInfo": {
-                    "name": patient_info.get("name", "Unknown"),
-                    "mrn": patient_info.get("mrn", "N/A"),
-                    "dob": patient_info.get("dob", "N/A"),
-                },
-                "modelVersion": self.model_version,
-                "aiGenerated": True,
-            }
+            if result and result.get("success"):
+                generated_note = result.get("content", "")
+                return {
+                    "success": True,
+                    "noteType": note_type,
+                    "noteName": note_config["name"],
+                    "generatedNote": generated_note,
+                    "timestamp": datetime.now().isoformat(),
+                    "patientInfo": {
+                        "name": patient_info.get("name", "Unknown"),
+                        "mrn": patient_info.get("mrn", "N/A"),
+                        "dob": patient_info.get("dob", "N/A"),
+                    },
+                    "modelVersion": self.model_version,
+                    "aiGenerated": True,
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": result.get("error", "Failed to generate note") if result else "No response",
+                    "noteType": note_type,
+                    "modelVersion": self.model_version,
+                }
 
         except Exception as e:
             return {
@@ -155,27 +161,33 @@ class ClinicalNotesAI:
             }
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            result = openai_manager.chat_completion(
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPTS["enhance"]},
                     {"role": "user", "content": full_prompt},
                 ],
+                task_complexity=TaskComplexity.SIMPLE,
                 temperature=0.3,
                 max_tokens=2000,
             )
 
-            enhanced_note = response.choices[0].message.content
-
-            return {
-                "success": True,
-                "originalNote": existing_note,
-                "enhancedNote": enhanced_note,
-                "enhancementType": enhancement_type,
-                "timestamp": datetime.now().isoformat(),
-                "modelVersion": self.model_version,
-                "aiGenerated": True,
-            }
+            if result and result.get("success"):
+                enhanced_note = result.get("content", "")
+                return {
+                    "success": True,
+                    "originalNote": existing_note,
+                    "enhancedNote": enhanced_note,
+                    "enhancementType": enhancement_type,
+                    "timestamp": datetime.now().isoformat(),
+                    "modelVersion": self.model_version,
+                    "aiGenerated": True,
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": result.get("error", "Failed to enhance note") if result else "No response",
+                    "modelVersion": self.model_version,
+                }
 
         except Exception as e:
             return {
@@ -222,27 +234,33 @@ class ClinicalNotesAI:
             }
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            result = openai_manager.chat_completion(
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPTS["summarize"]},
                     {"role": "user", "content": prompt},
                 ],
+                task_complexity=TaskComplexity.SIMPLE,
                 temperature=0.3,
                 max_tokens=1500,
             )
 
-            summary = response.choices[0].message.content
-
-            return {
-                "success": True,
-                "summary": summary,
-                "noteCount": len(notes),
-                "summaryType": summary_type,
-                "timestamp": datetime.now().isoformat(),
-                "modelVersion": self.model_version,
-                "aiGenerated": True,
-            }
+            if result and result.get("success"):
+                summary = result.get("content", "")
+                return {
+                    "success": True,
+                    "summary": summary,
+                    "noteCount": len(notes),
+                    "summaryType": summary_type,
+                    "timestamp": datetime.now().isoformat(),
+                    "modelVersion": self.model_version,
+                    "aiGenerated": True,
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": result.get("error", "Failed to summarize") if result else "No response",
+                    "modelVersion": self.model_version,
+                }
 
         except Exception as e:
             return {
@@ -286,34 +304,32 @@ Return a JSON object with these categories:
             }
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            result = openai_manager.chat_completion_json(
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPTS["extract"]},
                     {"role": "user", "content": prompt},
                 ],
+                task_complexity=TaskComplexity.SIMPLE,
                 temperature=0.1,
                 max_tokens=1500,
-                response_format={"type": "json_object"},
             )
 
-            entities_text = response.choices[0].message.content
-            entities = json.loads(entities_text)
+            if result and result.get("success"):
+                entities = result.get("data", {})
+                return {
+                    "success": True,
+                    "entities": entities,
+                    "timestamp": datetime.now().isoformat(),
+                    "modelVersion": self.model_version,
+                    "aiGenerated": True,
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": result.get("error", "Failed to extract entities") if result else "No response",
+                    "modelVersion": self.model_version,
+                }
 
-            return {
-                "success": True,
-                "entities": entities,
-                "timestamp": datetime.now().isoformat(),
-                "modelVersion": self.model_version,
-                "aiGenerated": True,
-            }
-
-        except json.JSONDecodeError:
-            return {
-                "success": False,
-                "error": "Failed to parse extracted entities",
-                "modelVersion": self.model_version,
-            }
         except Exception as e:
             return {
                 "success": False,
@@ -368,28 +384,34 @@ Requirements:
             }
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            result = openai_manager.chat_completion(
                 messages=[
                     {"role": "system", "content": note_config["system_prompt"]},
                     {"role": "user", "content": prompt},
                 ],
+                task_complexity=TaskComplexity.SIMPLE,
                 temperature=0.3,
                 max_tokens=2000,
             )
 
-            structured_note = response.choices[0].message.content
-
-            return {
-                "success": True,
-                "originalTranscription": transcription,
-                "structuredNote": structured_note,
-                "noteType": note_type,
-                "noteName": note_config["name"],
-                "timestamp": datetime.now().isoformat(),
-                "modelVersion": self.model_version,
-                "aiGenerated": True,
-            }
+            if result and result.get("success"):
+                structured_note = result.get("content", "")
+                return {
+                    "success": True,
+                    "originalTranscription": transcription,
+                    "structuredNote": structured_note,
+                    "noteType": note_type,
+                    "noteName": note_config["name"],
+                    "timestamp": datetime.now().isoformat(),
+                    "modelVersion": self.model_version,
+                    "aiGenerated": True,
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": result.get("error", "Failed to structure note") if result else "No response",
+                    "modelVersion": self.model_version,
+                }
 
         except Exception as e:
             return {
@@ -431,8 +453,7 @@ Return as JSON with a "codes" array."""
             }
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            result = openai_manager.chat_completion_json(
                 messages=[
                     {
                         "role": "system",
@@ -440,22 +461,27 @@ Return as JSON with a "codes" array."""
                     },
                     {"role": "user", "content": prompt},
                 ],
+                task_complexity=TaskComplexity.SIMPLE,
                 temperature=0.2,
                 max_tokens=1000,
-                response_format={"type": "json_object"},
             )
 
-            codes_text = response.choices[0].message.content
-            codes_data = json.loads(codes_text)
-
-            return {
-                "success": True,
-                "codes": codes_data.get("codes", []),
-                "timestamp": datetime.now().isoformat(),
-                "modelVersion": self.model_version,
-                "aiGenerated": True,
-                "disclaimer": "AI-suggested codes require verification by certified medical coder",
-            }
+            if result and result.get("success"):
+                codes_data = result.get("data", {})
+                return {
+                    "success": True,
+                    "codes": codes_data.get("codes", []),
+                    "timestamp": datetime.now().isoformat(),
+                    "modelVersion": self.model_version,
+                    "aiGenerated": True,
+                    "disclaimer": "AI-suggested codes require verification by certified medical coder",
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": result.get("error", "Failed to suggest codes") if result else "No response",
+                    "modelVersion": self.model_version,
+                }
 
         except Exception as e:
             return {

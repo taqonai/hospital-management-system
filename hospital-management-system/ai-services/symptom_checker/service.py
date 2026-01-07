@@ -2,6 +2,8 @@
 Symptom Checker AI Service
 FastAPI service for patient symptom analysis, triage, and department recommendation
 Provides conversational symptom collection with red flag detection
+
+Uses GPT-4o for intelligent symptom analysis with rule-based safety fallback.
 """
 
 from fastapi import FastAPI, HTTPException
@@ -14,6 +16,13 @@ import uuid
 import logging
 import re
 import random
+import json
+
+# Import shared OpenAI client
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from shared.openai_client import openai_manager, TaskComplexity
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -1045,7 +1054,9 @@ async def health_check():
         "service": "Symptom Checker AI",
         "version": "2.0.0",
         "timestamp": datetime.now().isoformat(),
-        "activeSessions": len(sessions)
+        "activeSessions": len(sessions),
+        "aiAvailable": openai_manager.is_available(),
+        "model": "gpt-4o (complex medical reasoning)" if openai_manager.is_available() else "rule-based fallback"
     }
 
 
@@ -1245,7 +1256,7 @@ async def get_session(session_id: str):
 
 @app.post("/api/symptom-checker/complete", response_model=CompleteResponse)
 async def complete_assessment(request: CompleteRequest):
-    """Complete the assessment and get full triage result"""
+    """Complete the assessment and get full triage result - AI-enhanced when available"""
     if request.sessionId not in sessions:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -1253,6 +1264,7 @@ async def complete_assessment(request: CompleteRequest):
     answers = session.get("answers", {})
     red_flags = session.get("redFlags", [])
     symptoms = session.get("collectedSymptoms", [])
+    patient_info = session.get("patientInfo", {})
 
     # Extract main symptom info
     main_symptoms = answers.get("main_symptoms", [])
@@ -1263,40 +1275,76 @@ async def complete_assessment(request: CompleteRequest):
 
     symptoms = list(set(symptoms))  # Remove duplicates
 
-    # Calculate urgency and triage
-    urgency_score = calculate_urgency_score(session)
-    triage_level = determine_triage_level(urgency_score, red_flags)
-
     # Get body location
     body_location = answers.get("body_location", "general")
 
-    # Get department recommendation
-    department = get_recommended_department(symptoms, body_location, answers)
+    # Try AI-powered analysis first
+    ai_result = None
+    if openai_manager.is_available():
+        try:
+            ai_result = await SymptomCheckerAI._ai_analyze_symptoms(
+                symptoms=symptoms,
+                patient_age=patient_info.get("age"),
+                patient_gender=patient_info.get("gender"),
+                medical_history=patient_info.get("medicalHistory", []),
+                body_location=body_location,
+                severity=answers.get("severity"),
+                duration=answers.get("duration"),
+                associated_symptoms=answers.get("associated_symptoms", [])
+            )
+        except Exception as e:
+            logger.error(f"AI analysis failed, using rule-based fallback: {e}")
 
-    # If red flags present, use their department
+    # Calculate rule-based urgency and triage (always as safety check)
+    rule_urgency_score = calculate_urgency_score(session)
+    rule_triage_level = determine_triage_level(rule_urgency_score, red_flags)
+
+    # Use AI results if available, with rule-based safety escalation
+    if ai_result:
+        # Parse AI triage level
+        ai_triage_str = ai_result.get("triageLevel", "ROUTINE")
+        try:
+            triage_level = TriageLevel(ai_triage_str)
+        except ValueError:
+            triage_level = rule_triage_level
+
+        # Safety check: escalate if rule-based system detects emergency
+        if rule_triage_level == TriageLevel.EMERGENCY:
+            triage_level = TriageLevel.EMERGENCY
+
+        urgency_score = ai_result.get("urgencyScore", rule_urgency_score)
+        department = ai_result.get("recommendedDepartment", "General Practice")
+        possible_conditions = ai_result.get("possibleConditions", [])
+        self_care = ai_result.get("selfCareAdvice", [])
+        when_to_seek = ai_result.get("whenToSeekHelp", [])
+        follow_up = ai_result.get("followUpQuestions", [])
+        recommended_action = ai_result.get("recommendedAction", "")
+
+        # Merge AI red flags with rule-based red flags
+        ai_red_flags = ai_result.get("redFlags", [])
+        red_flag_symptoms = list(set([rf.get("keyword", "") for rf in red_flags] + ai_red_flags))
+    else:
+        # Fallback to rule-based assessment
+        triage_level = rule_triage_level
+        urgency_score = rule_urgency_score
+        department = get_recommended_department(symptoms, body_location, answers)
+        possible_conditions = get_possible_conditions(symptoms, answers)
+        self_care = get_self_care_advice(symptoms, triage_level)
+        when_to_seek = get_when_to_seek_help(triage_level, body_location)
+        follow_up = get_follow_up_questions_for_provider(symptoms, answers)
+        recommended_action = get_recommended_action(triage_level, department)
+        red_flag_symptoms = [rf.get("keyword", "") for rf in red_flags]
+
+    # If red flags present, use their department (safety override)
     if red_flags:
         department = red_flags[0].get("department", department)
-
-    # Get possible conditions
-    possible_conditions = get_possible_conditions(symptoms, answers)
-
-    # Get self-care advice
-    self_care = get_self_care_advice(symptoms, triage_level)
-
-    # Get when to seek help
-    when_to_seek = get_when_to_seek_help(triage_level, body_location)
 
     # Get estimated wait time
     wait_time = get_estimated_wait_time(department, triage_level)
 
-    # Get follow-up questions
-    follow_up = get_follow_up_questions_for_provider(symptoms, answers)
-
-    # Get recommended action
-    recommended_action = get_recommended_action(triage_level, department)
-
-    # Red flag symptoms list
-    red_flag_symptoms = [rf.get("keyword", "") for rf in red_flags]
+    # Ensure recommended action is set
+    if not recommended_action:
+        recommended_action = get_recommended_action(triage_level, department)
 
     # Mark session as completed
     session["status"] = SessionStatus.COMPLETED.value
@@ -1399,37 +1447,230 @@ async def get_body_parts():
 # =============================================================================
 
 class SymptomCheckerAI:
-    """Wrapper class for the symptom checker service"""
+    """Wrapper class for the symptom checker service with GPT-4o integration"""
+
+    @staticmethod
+    def is_available() -> bool:
+        """Check if OpenAI API is available for AI-powered triage"""
+        return openai_manager.is_available()
 
     @staticmethod
     def get_app():
         return app
 
     @staticmethod
-    async def quick_check(symptoms: List[str], patient_age: Optional[int] = None) -> Dict[str, Any]:
-        """Quick symptom check without full conversation"""
-        # Check for red flags first
-        all_symptoms_text = " ".join(symptoms)
-        red_flags = check_red_flags(all_symptoms_text)
+    async def _ai_analyze_symptoms(
+        symptoms: List[str],
+        patient_age: Optional[int] = None,
+        patient_gender: Optional[str] = None,
+        medical_history: Optional[List[str]] = None,
+        body_location: Optional[str] = None,
+        severity: Optional[int] = None,
+        duration: Optional[str] = None,
+        associated_symptoms: Optional[List[str]] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Use GPT-4o to perform intelligent symptom analysis and triage.
+        Returns structured triage assessment with possible conditions.
+        """
+        if not openai_manager.is_available():
+            return None
 
-        # Create minimal session data
+        # Build patient context
+        patient_context = []
+        if patient_age:
+            patient_context.append(f"Age: {patient_age} years")
+        if patient_gender:
+            patient_context.append(f"Gender: {patient_gender}")
+        if medical_history and len(medical_history) > 0:
+            patient_context.append(f"Medical history: {', '.join(medical_history)}")
+
+        # Build symptom context
+        symptom_context = []
+        if body_location:
+            symptom_context.append(f"Body location: {body_location}")
+        if severity:
+            symptom_context.append(f"Severity: {severity}/10")
+        if duration:
+            symptom_context.append(f"Duration: {duration}")
+        if associated_symptoms and len(associated_symptoms) > 0:
+            symptom_context.append(f"Associated symptoms: {', '.join(associated_symptoms)}")
+
+        system_prompt = """You are an expert medical triage AI assistant. Analyze the patient's symptoms and provide a clinical assessment.
+
+IMPORTANT GUIDELINES:
+- This is for triage purposes only, not diagnosis
+- Be conservative with urgency assessments - patient safety first
+- Always recommend seeking professional medical care
+- Consider patient age and medical history in your assessment
+- Look for red flag symptoms that require immediate attention
+
+Respond with a JSON object containing:
+{
+    "triageLevel": "EMERGENCY" | "URGENT" | "ROUTINE" | "SELF_CARE",
+    "urgencyScore": <1-10>,
+    "recommendedDepartment": "<department name>",
+    "possibleConditions": [
+        {
+            "name": "<condition name>",
+            "confidence": <0.0-1.0>,
+            "icdCode": "<ICD-10 code if known>",
+            "severity": "mild" | "moderate" | "severe",
+            "description": "<brief description>"
+        }
+    ],
+    "redFlags": ["<red flag symptom 1>", ...],
+    "clinicalReasoning": "<brief explanation of triage decision>",
+    "recommendedAction": "<specific action patient should take>",
+    "selfCareAdvice": ["<advice 1>", ...],
+    "whenToSeekHelp": ["<warning sign 1>", ...],
+    "followUpQuestions": ["<question for healthcare provider>", ...]
+}"""
+
+        user_content = f"""Analyze these symptoms for triage:
+
+MAIN SYMPTOMS: {', '.join(symptoms)}
+
+PATIENT INFORMATION:
+{chr(10).join(patient_context) if patient_context else 'Not provided'}
+
+SYMPTOM DETAILS:
+{chr(10).join(symptom_context) if symptom_context else 'Not provided'}
+
+Provide your triage assessment as JSON."""
+
+        try:
+            result = openai_manager.chat_completion_json(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content}
+                ],
+                task_complexity=TaskComplexity.COMPLEX,  # Uses gpt-4o for medical reasoning
+                temperature=0.2,  # Lower temperature for consistent medical assessments
+                max_tokens=2000
+            )
+
+            if result and result.get("success") and result.get("data"):
+                logger.info(f"AI triage completed successfully using {result.get('model')}")
+                return result["data"]
+            else:
+                logger.warning(f"AI triage failed: {result.get('error') if result else 'No result'}")
+                return None
+
+        except Exception as e:
+            logger.error(f"AI symptom analysis error: {e}")
+            return None
+
+    @staticmethod
+    async def _ai_detect_red_flags(text: str) -> Optional[List[Dict[str, Any]]]:
+        """
+        Use GPT-4o to detect red flag symptoms that may be missed by keyword matching.
+        """
+        if not openai_manager.is_available():
+            return None
+
+        system_prompt = """You are an emergency medical triage AI. Analyze the text for red flag symptoms that require immediate medical attention.
+
+Red flag symptoms include but are not limited to:
+- Cardiac: chest pain with radiation, crushing sensation, shortness of breath with chest pain
+- Neurological: sudden severe headache, stroke symptoms (FAST), sudden confusion, seizure
+- Respiratory: severe difficulty breathing, choking, cyanosis
+- Bleeding: uncontrolled bleeding, vomiting blood, blood in stool
+- Allergic: anaphylaxis symptoms, throat swelling, rapid progression
+- Mental health: suicidal ideation, self-harm
+- Trauma: severe injuries, loss of consciousness
+
+Respond with JSON:
+{
+    "redFlagsDetected": [
+        {
+            "symptom": "<detected symptom>",
+            "category": "<category>",
+            "severity": <1-10>,
+            "message": "<urgent message for patient>",
+            "recommendedAction": "CALL_911" | "GO_TO_ER" | "URGENT_CARE" | "MONITOR"
+        }
+    ],
+    "overallUrgency": "CRITICAL" | "HIGH" | "MODERATE" | "LOW" | "NONE"
+}"""
+
+        try:
+            result = openai_manager.chat_completion_json(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Analyze for red flags:\n\n{text}"}
+                ],
+                task_complexity=TaskComplexity.COMPLEX,
+                temperature=0.1,  # Very low for safety-critical decisions
+                max_tokens=1000
+            )
+
+            if result and result.get("success") and result.get("data"):
+                return result["data"].get("redFlagsDetected", [])
+            return None
+
+        except Exception as e:
+            logger.error(f"AI red flag detection error: {e}")
+            return None
+
+    @staticmethod
+    async def quick_check(symptoms: List[str], patient_age: Optional[int] = None) -> Dict[str, Any]:
+        """Quick symptom check - uses AI when available, falls back to rules"""
+        # Always check for red flags with rule-based system first (safety-critical)
+        all_symptoms_text = " ".join(symptoms)
+        rule_red_flags = check_red_flags(all_symptoms_text)
+
+        # Create minimal session data for rule-based fallback
         session_data = {
             "answers": {"main_symptoms": symptoms, "severity": 5},
-            "redFlags": red_flags,
+            "redFlags": rule_red_flags,
             "collectedSymptoms": symptoms
         }
 
+        # Try AI-powered analysis
+        if SymptomCheckerAI.is_available():
+            ai_result = await SymptomCheckerAI._ai_analyze_symptoms(
+                symptoms=symptoms,
+                patient_age=patient_age
+            )
+
+            if ai_result:
+                # Merge AI red flags with rule-based red flags (safety first)
+                ai_red_flags = ai_result.get("redFlags", [])
+                all_red_flags = list(set([rf.get("keyword", "") for rf in rule_red_flags] + ai_red_flags))
+
+                # Use AI triage if available, but escalate if rules detect emergency
+                triage_level = ai_result.get("triageLevel", "ROUTINE")
+                if any(rf.get("triageLevel") == "EMERGENCY" for rf in rule_red_flags):
+                    triage_level = "EMERGENCY"
+
+                return {
+                    "triageLevel": triage_level,
+                    "urgencyScore": ai_result.get("urgencyScore", 5),
+                    "recommendedDepartment": ai_result.get("recommendedDepartment", "General Practice"),
+                    "redFlagsDetected": len(all_red_flags) > 0,
+                    "redFlags": all_red_flags,
+                    "recommendedAction": ai_result.get("recommendedAction", ""),
+                    "possibleConditions": ai_result.get("possibleConditions", []),
+                    "clinicalReasoning": ai_result.get("clinicalReasoning", ""),
+                    "selfCareAdvice": ai_result.get("selfCareAdvice", []),
+                    "whenToSeekHelp": ai_result.get("whenToSeekHelp", []),
+                    "aiPowered": True
+                }
+
+        # Fallback to rule-based assessment
         urgency_score = calculate_urgency_score(session_data)
-        triage_level = determine_triage_level(urgency_score, red_flags)
+        triage_level = determine_triage_level(urgency_score, rule_red_flags)
         department = get_recommended_department(symptoms, "general", session_data["answers"])
 
         return {
             "triageLevel": triage_level.value,
             "urgencyScore": urgency_score,
             "recommendedDepartment": department,
-            "redFlagsDetected": len(red_flags) > 0,
-            "redFlags": [rf.get("keyword") for rf in red_flags],
-            "recommendedAction": get_recommended_action(triage_level, department)
+            "redFlagsDetected": len(rule_red_flags) > 0,
+            "redFlags": [rf.get("keyword") for rf in rule_red_flags],
+            "recommendedAction": get_recommended_action(triage_level, department),
+            "aiPowered": False
         }
 
 

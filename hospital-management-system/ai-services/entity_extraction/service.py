@@ -1,12 +1,24 @@
 """
 Entity Extraction AI Service
 Extracts structured data from natural language for Patient, Doctor, and Appointment creation
+
+Uses GPT-4o-mini for intelligent extraction with regex fallback.
 """
 
 import re
+import json
+import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, asdict
+
+# Import shared OpenAI client
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from shared.openai_client import openai_manager, TaskComplexity
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -20,9 +32,13 @@ class ExtractionResult:
 
 
 class EntityExtractionAI:
-    """AI service for extracting entities from natural language text"""
+    """AI service for extracting entities from natural language text
+
+    Uses GPT-4o-mini for intelligent extraction with regex-based fallback.
+    """
 
     def __init__(self):
+        self.model_version = "2.0.0-gpt4"
         # Intent patterns for entity type detection
         self.intent_patterns = {
             'patient': [
@@ -107,6 +123,135 @@ class EntityExtractionAI:
             'july': 7, 'jul': 7, 'august': 8, 'aug': 8, 'september': 9, 'sep': 9, 'sept': 9,
             'october': 10, 'oct': 10, 'november': 11, 'nov': 11, 'december': 12, 'dec': 12
         }
+
+    def is_available(self) -> bool:
+        """Check if AI-powered extraction is available"""
+        return openai_manager.is_available()
+
+    # ==================== AI-POWERED EXTRACTION ====================
+
+    def _ai_extract_patient(self, text: str) -> Optional[Dict[str, Any]]:
+        """AI-powered patient data extraction using GPT-4o-mini"""
+        prompt = f"""Extract patient registration information from this text and return as JSON.
+
+Text: "{text}"
+
+Return a JSON object with these fields (use null for missing fields):
+{{
+    "firstName": "string or null",
+    "lastName": "string or null",
+    "gender": "MALE" or "FEMALE" or "OTHER" or null,
+    "dateOfBirth": "YYYY-MM-DD format or null",
+    "phone": "digits only, no formatting or null",
+    "email": "email or null",
+    "bloodGroup": "A_POSITIVE, A_NEGATIVE, B_POSITIVE, B_NEGATIVE, AB_POSITIVE, AB_NEGATIVE, O_POSITIVE, O_NEGATIVE or null",
+    "address": "string or null"
+}}
+
+Be precise and only extract information explicitly stated in the text."""
+
+        result = openai_manager.chat_completion_json(
+            messages=[{"role": "user", "content": prompt}],
+            task_complexity=TaskComplexity.SIMPLE,
+            max_tokens=500,
+            temperature=0.1
+        )
+
+        if result and result.get("success"):
+            return result.get("data")
+        return None
+
+    def _ai_extract_doctor(self, text: str) -> Optional[Dict[str, Any]]:
+        """AI-powered doctor data extraction using GPT-4o-mini"""
+        prompt = f"""Extract doctor registration information from this text and return as JSON.
+
+Text: "{text}"
+
+Return a JSON object with these fields (use null for missing fields):
+{{
+    "firstName": "string or null",
+    "lastName": "string or null",
+    "email": "email or null",
+    "phone": "digits only or null",
+    "specialization": "medical specialty or null",
+    "department": "department name or null",
+    "experience": "number of years or null",
+    "licenseNumber": "string or null",
+    "consultationFee": "number or null"
+}}
+
+Be precise and only extract information explicitly stated in the text."""
+
+        result = openai_manager.chat_completion_json(
+            messages=[{"role": "user", "content": prompt}],
+            task_complexity=TaskComplexity.SIMPLE,
+            max_tokens=500,
+            temperature=0.1
+        )
+
+        if result and result.get("success"):
+            return result.get("data")
+        return None
+
+    def _ai_extract_appointment(self, text: str) -> Optional[Dict[str, Any]]:
+        """AI-powered appointment data extraction using GPT-4o-mini"""
+        today = datetime.now().strftime('%Y-%m-%d')
+        prompt = f"""Extract appointment booking information from this text and return as JSON.
+
+Text: "{text}"
+Today's date: {today}
+
+Return a JSON object with these fields (use null for missing fields):
+{{
+    "patientName": "full name or null",
+    "doctorName": "include Dr. prefix if doctor, or null",
+    "appointmentDate": "YYYY-MM-DD format, interpret 'today', 'tomorrow', 'next Monday' etc. relative to today's date, or null",
+    "appointmentTime": "HH:MM 24-hour format, or null",
+    "department": "department name or null",
+    "reason": "appointment reason/symptoms or null"
+}}
+
+Be precise and only extract information explicitly stated in the text."""
+
+        result = openai_manager.chat_completion_json(
+            messages=[{"role": "user", "content": prompt}],
+            task_complexity=TaskComplexity.SIMPLE,
+            max_tokens=500,
+            temperature=0.1
+        )
+
+        if result and result.get("success"):
+            return result.get("data")
+        return None
+
+    def _ai_detect_intent(self, text: str) -> Tuple[str, float]:
+        """AI-powered intent detection using GPT-4o-mini"""
+        prompt = f"""Classify this text into one category: patient, doctor, or appointment.
+
+Text: "{text}"
+
+Return JSON: {{"entityType": "patient" or "doctor" or "appointment", "confidence": 0.0-1.0}}
+
+- "patient": registering a new patient, patient details, patient admission
+- "doctor": registering a new doctor, doctor details, hiring a physician
+- "appointment": booking an appointment, scheduling a visit, consultation booking"""
+
+        result = openai_manager.chat_completion_json(
+            messages=[{"role": "user", "content": prompt}],
+            task_complexity=TaskComplexity.SIMPLE,
+            max_tokens=100,
+            temperature=0.1
+        )
+
+        if result and result.get("success"):
+            data = result.get("data", {})
+            entity_type = data.get("entityType", "unknown")
+            confidence = float(data.get("confidence", 0.5))
+            return entity_type, confidence
+
+        return "unknown", 0.3
+
+    # ==================== REGEX-BASED EXTRACTION (FALLBACK) ====================
 
     def detect_intent(self, text: str) -> Tuple[str, float]:
         """Detect the entity type from text"""
@@ -611,8 +756,73 @@ class EntityExtractionAI:
     def parse_creation_intent(self, text: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Main entry point: Parse text and extract entity data
+        Uses GPT-4o-mini for intelligent extraction with regex fallback.
+
         Returns dict with entity_type, data, confidence, missing_fields
         """
+        # Try AI-powered extraction first
+        if self.is_available():
+            return self._parse_creation_intent_ai(text, context)
+
+        # Fallback to regex-based extraction
+        return self._parse_creation_intent_regex(text, context)
+
+    def _parse_creation_intent_ai(self, text: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """AI-powered entity extraction using GPT-4o-mini"""
+        try:
+            # Detect intent using AI
+            entity_type, intent_confidence = self._ai_detect_intent(text)
+
+            # Extract data based on entity type
+            ai_data = None
+            if entity_type == 'patient':
+                ai_data = self._ai_extract_patient(text)
+            elif entity_type == 'doctor':
+                ai_data = self._ai_extract_doctor(text)
+            elif entity_type == 'appointment':
+                ai_data = self._ai_extract_appointment(text)
+
+            if ai_data:
+                # Clean up null values and calculate missing fields
+                extracted_data = {k: v for k, v in ai_data.items() if v is not None}
+
+                # Define required fields per entity type
+                required_fields = {
+                    'patient': ['firstName', 'lastName', 'gender', 'dateOfBirth', 'phone'],
+                    'doctor': ['firstName', 'lastName', 'email', 'specialization', 'licenseNumber'],
+                    'appointment': ['patientName', 'appointmentDate', 'appointmentTime']
+                }
+
+                missing_fields = [f for f in required_fields.get(entity_type, [])
+                                 if f not in extracted_data]
+
+                # Calculate confidence based on extracted fields
+                req_fields = required_fields.get(entity_type, [])
+                found_required = sum(1 for f in req_fields if f in extracted_data)
+                data_confidence = found_required / len(req_fields) if req_fields else 0.5
+
+                overall_confidence = (intent_confidence + data_confidence) / 2
+
+                logger.info(f"AI extraction successful: {entity_type}, confidence: {overall_confidence}")
+
+                return {
+                    'intent': 'create',
+                    'entityType': entity_type,
+                    'extractedData': extracted_data,
+                    'confidence': round(overall_confidence, 2),
+                    'missingFields': missing_fields,
+                    'modelVersion': self.model_version,
+                    'aiPowered': True
+                }
+
+        except Exception as e:
+            logger.warning(f"AI extraction failed, falling back to regex: {e}")
+
+        # Fallback to regex if AI fails
+        return self._parse_creation_intent_regex(text, context)
+
+    def _parse_creation_intent_regex(self, text: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Regex-based entity extraction (fallback)"""
         entity_type, intent_confidence = self.detect_intent(text)
 
         if entity_type == 'patient':
@@ -642,5 +852,6 @@ class EntityExtractionAI:
             'extractedData': result.data,
             'confidence': round(overall_confidence, 2),
             'missingFields': result.missing_fields,
-            'modelVersion': '1.0.0'
+            'modelVersion': '1.0.0-regex',
+            'aiPowered': False
         }

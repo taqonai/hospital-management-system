@@ -6,6 +6,7 @@ import { sendSuccess, sendCreated } from '../utils/response';
 import { patientAuthService } from '../services/patientAuthService';
 import { patientAuthenticate, PatientAuthenticatedRequest } from '../middleware/patientAuth';
 import { Gender } from '@prisma/client';
+import prisma from '../config/database';
 
 const router = Router();
 
@@ -18,15 +19,15 @@ const patientRegisterSchema = z.object({
     firstName: z.string().min(1, 'First name is required'),
     lastName: z.string().min(1, 'Last name is required'),
     email: z.string().email('Invalid email address').optional(),
-    password: z.string().min(8, 'Password must be at least 8 characters'),
-    mobile: z.string().min(10, 'Valid mobile number required'),
+    password: z.string().min(6, 'Password must be at least 6 characters'),
+    mobile: z.string().min(8, 'Mobile number must be 8-15 digits').max(15, 'Mobile number must be 8-15 digits'),
     dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}.*)?$/, 'Date format should be YYYY-MM-DD'),
     gender: z.enum(['MALE', 'FEMALE', 'OTHER']),
-    address: z.string().min(1, 'Address is required'),
-    city: z.string().min(1, 'City is required'),
-    state: z.string().min(1, 'State is required'),
-    zipCode: z.string().min(1, 'Zip code is required'),
-    hospitalId: z.string().uuid('Invalid hospital ID'),
+    address: z.string().optional().default('Not provided'),
+    city: z.string().optional().default('Not provided'),
+    state: z.string().optional().default('Not provided'),
+    zipCode: z.string().optional().default('00000'),
+    hospitalId: z.string().uuid('Invalid hospital ID').optional(),
   }),
 });
 
@@ -40,14 +41,14 @@ const patientLoginSchema = z.object({
 
 const sendOtpSchema = z.object({
   body: z.object({
-    mobile: z.string().min(10, 'Valid mobile number required'),
+    mobile: z.string().min(8, 'Mobile number must be 8-11 digits').max(11, 'Mobile number must be 8-11 digits'),
     hospitalId: z.string().uuid('Invalid hospital ID').optional(),
   }),
 });
 
 const verifyOtpSchema = z.object({
   body: z.object({
-    mobile: z.string().min(10, 'Valid mobile number required'),
+    mobile: z.string().min(8, 'Mobile number must be 8-11 digits').max(11, 'Mobile number must be 8-11 digits'),
     otp: z.string().length(6, 'OTP must be 6 digits'),
     hospitalId: z.string().uuid('Invalid hospital ID').optional(),
   }),
@@ -55,7 +56,7 @@ const verifyOtpSchema = z.object({
 
 const sendWhatsappOtpSchema = z.object({
   body: z.object({
-    mobile: z.string().min(10, 'Valid mobile number required'),
+    mobile: z.string().min(8, 'Mobile number must be 8-11 digits').max(11, 'Mobile number must be 8-11 digits'),
     hospitalId: z.string().uuid('Invalid hospital ID').optional(),
   }),
 });
@@ -70,7 +71,7 @@ const updateProfileSchema = z.object({
   body: z.object({
     firstName: z.string().min(1).optional(),
     lastName: z.string().min(1).optional(),
-    phone: z.string().min(10).optional(),
+    phone: z.string().min(8).max(11).optional(),
     email: z.string().email().optional(),
     address: z.string().optional(),
     city: z.string().optional(),
@@ -105,12 +106,32 @@ router.post(
   '/register',
   validate(patientRegisterSchema),
   asyncHandler(async (req: Request, res: Response) => {
-    const { mobile, ...rest } = req.body;
+    const { mobile, hospitalId, address, city, state, zipCode, ...rest } = req.body;
+
+    // Use provided hospitalId or get default hospital
+    let resolvedHospitalId = hospitalId;
+    if (!resolvedHospitalId) {
+      // Get the first active hospital as default
+      const defaultHospital = await prisma.hospital.findFirst({
+        where: { isActive: true },
+        select: { id: true }
+      });
+      if (!defaultHospital) {
+        throw new Error('No active hospital found');
+      }
+      resolvedHospitalId = defaultHospital.id;
+    }
+
     const result = await patientAuthService.registerPatient({
       ...rest,
+      hospitalId: resolvedHospitalId,
       phone: mobile,
       dateOfBirth: new Date(rest.dateOfBirth),
       gender: rest.gender as Gender,
+      address: address || 'Not provided',
+      city: city || 'Not provided',
+      state: state || 'Not provided',
+      zipCode: zipCode || '00000',
     });
     // Transform response to match expected format
     sendCreated(res, {
@@ -258,7 +279,7 @@ router.post(
 const canClaimSchema = z.object({
   body: z.object({
     email: z.string().email('Invalid email address').optional(),
-    phone: z.string().min(10, 'Valid phone number required').optional(),
+    phone: z.string().min(8, 'Phone number must be 8-11 digits').max(11, 'Phone number must be 8-11 digits').optional(),
     hospitalId: z.string().uuid('Invalid hospital ID').optional(),
   }).refine(data => data.email || data.phone, {
     message: 'Either email or phone is required',

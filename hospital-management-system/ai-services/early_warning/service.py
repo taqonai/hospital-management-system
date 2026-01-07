@@ -2,6 +2,8 @@
 Early Warning System (EWS/NEWS2+) AI Service
 Enhanced clinical deterioration detection with ML-powered predictions,
 sepsis early detection (qSOFA), and fall risk assessment
+
+Uses GPT-4o-mini for clinical explanations with rule-based safety validation.
 """
 
 from typing import Dict, Any, List, Optional, Tuple
@@ -11,6 +13,13 @@ import numpy as np
 from dataclasses import dataclass, asdict
 import logging
 import random
+import json
+
+# Import shared OpenAI client
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from shared.openai_client import openai_manager, TaskComplexity
 
 logger = logging.getLogger(__name__)
 
@@ -100,12 +109,184 @@ class EWSResponse:
 class EarlyWarningAI:
     """
     Enhanced Early Warning System with NEWS2+ scoring, ML deterioration prediction,
-    sepsis detection (qSOFA), and fall risk assessment
+    sepsis detection (qSOFA), and fall risk assessment.
+
+    Uses GPT-4o-mini for clinical explanations with validated rule-based scoring.
     """
 
     def __init__(self):
         self.model_version = "2.0.0-ews-ml"
-        logger.info("EarlyWarningAI initialized with sepsis and fall risk modules")
+        ai_status = "with AI explanations" if openai_manager.is_available() else "rule-based only"
+        logger.info(f"EarlyWarningAI initialized {ai_status}")
+
+    @staticmethod
+    def is_available() -> bool:
+        """Check if OpenAI API is available for AI explanations"""
+        return openai_manager.is_available()
+
+    def _ai_explain_news2(
+        self,
+        news2_result: Dict[str, Any],
+        vitals: Dict[str, Any],
+        patient_context: Dict[str, Any] = None
+    ) -> Optional[str]:
+        """
+        Generate clinical explanation for NEWS2 score using GPT-4o-mini.
+
+        Returns natural language explanation for healthcare providers.
+        """
+        if not openai_manager.is_available():
+            return None
+
+        # Build context
+        patient_info = ""
+        if patient_context:
+            age = patient_context.get("age")
+            conditions = patient_context.get("conditions", patient_context.get("chronicConditions", []))
+            if age:
+                patient_info += f"Patient age: {age} years. "
+            if conditions:
+                patient_info += f"Medical history: {', '.join(conditions[:5])}. "
+
+        system_prompt = """You are an expert clinical decision support AI for healthcare providers.
+Generate a concise clinical interpretation of NEWS2 (National Early Warning Score 2) results.
+
+Provide:
+1. A brief summary of clinical significance (1-2 sentences)
+2. Key physiological concerns based on abnormal parameters
+3. Immediate clinical priorities
+
+Keep response under 150 words. Be clinical and professional. This is for healthcare providers, not patients."""
+
+        user_content = f"""NEWS2 Assessment Results:
+- Total Score: {news2_result.get('totalScore')}/20
+- Risk Level: {news2_result.get('riskLevel')}
+- Clinical Response: {news2_result.get('clinicalResponse')}
+- Contributing factors: {', '.join(news2_result.get('components', []))}
+
+Current Vitals:
+- RR: {vitals.get('respiratoryRate', 'N/A')}/min
+- SpO2: {vitals.get('oxygenSaturation', 'N/A')}%
+- BP: {vitals.get('systolicBP', 'N/A')}/{vitals.get('diastolicBP', 'N/A')} mmHg
+- HR: {vitals.get('heartRate', 'N/A')} bpm
+- Temp: {vitals.get('temperature', 'N/A')}°C
+- Consciousness: {vitals.get('consciousness', 'alert')}
+- Supplemental O2: {'Yes' if vitals.get('supplementalOxygen') else 'No'}
+
+{patient_info}
+
+Provide clinical interpretation:"""
+
+        try:
+            result = openai_manager.chat_completion(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content}
+                ],
+                task_complexity=TaskComplexity.SIMPLE,  # gpt-4o-mini for explanations
+                temperature=0.3,
+                max_tokens=300
+            )
+
+            if result and result.get("success"):
+                logger.info("AI NEWS2 explanation generated successfully")
+                return result.get("content")
+            return None
+
+        except Exception as e:
+            logger.error(f"AI NEWS2 explanation error: {e}")
+            return None
+
+    def _ai_explain_sepsis_risk(
+        self,
+        qsofa_result: Dict[str, Any],
+        vitals: Dict[str, Any]
+    ) -> Optional[str]:
+        """Generate clinical explanation for qSOFA/sepsis risk"""
+        if not openai_manager.is_available():
+            return None
+
+        system_prompt = """You are an expert clinical decision support AI. Explain qSOFA sepsis screening results.
+Keep response under 100 words. Focus on clinical significance and next steps for healthcare providers."""
+
+        user_content = f"""qSOFA Results:
+- Score: {qsofa_result.get('qsofaScore')}/3
+- Sepsis Risk: {qsofa_result.get('sepsisRisk')}
+- Components: {', '.join(qsofa_result.get('components', []))}
+- Additional indicators: {', '.join(qsofa_result.get('additionalIndicators', []))}
+
+Current vitals: RR {vitals.get('respiratoryRate')}, SBP {vitals.get('systolicBP')}, consciousness {vitals.get('consciousness')}
+
+Provide clinical interpretation:"""
+
+        try:
+            result = openai_manager.chat_completion(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content}
+                ],
+                task_complexity=TaskComplexity.SIMPLE,
+                temperature=0.3,
+                max_tokens=200
+            )
+
+            if result and result.get("success"):
+                return result.get("content")
+            return None
+
+        except Exception as e:
+            logger.error(f"AI sepsis explanation error: {e}")
+            return None
+
+    def _ai_explain_deterioration(
+        self,
+        deterioration_result: Dict[str, Any],
+        patient_context: Dict[str, Any] = None
+    ) -> Optional[str]:
+        """Generate clinical explanation for deterioration prediction"""
+        if not openai_manager.is_available():
+            return None
+
+        patient_info = ""
+        if patient_context:
+            age = patient_context.get("age")
+            conditions = patient_context.get("chronicConditions", [])
+            if age:
+                patient_info += f"Age: {age}. "
+            if conditions:
+                patient_info += f"Comorbidities: {', '.join(conditions[:3])}."
+
+        system_prompt = """You are an expert clinical decision support AI. Explain clinical deterioration risk assessment.
+Provide actionable clinical guidance in under 100 words."""
+
+        user_content = f"""Deterioration Assessment:
+- Probability: {deterioration_result.get('deteriorationProbability', 0) * 100:.1f}%
+- Risk Level: {deterioration_result.get('riskLevel')}
+- Prediction Window: {deterioration_result.get('predictionWindow')}
+- Risk Factors: {', '.join([rf.get('factor', '') for rf in deterioration_result.get('riskFactors', [])])}
+- NEWS2 Score: {deterioration_result.get('news2Score')}
+{patient_info}
+
+Explain clinical significance:"""
+
+        try:
+            result = openai_manager.chat_completion(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content}
+                ],
+                task_complexity=TaskComplexity.SIMPLE,
+                temperature=0.3,
+                max_tokens=200
+            )
+
+            if result and result.get("success"):
+                return result.get("content")
+            return None
+
+        except Exception as e:
+            logger.error(f"AI deterioration explanation error: {e}")
+            return None
 
     # ============== NEWS2 Calculation ==============
 
@@ -786,17 +967,41 @@ class EarlyWarningAI:
         - Deterioration prediction
         - Sepsis screening (qSOFA)
         - Fall risk assessment
+        - AI-generated clinical explanations (when available)
 
         Returns the structured response format required by the frontend
         """
         patient_data = patient_data or {}
         vitals_history = vitals_history or []
 
-        # Calculate all components
+        # Calculate all components (validated rule-based algorithms)
         news2_result = self.calculate_news2(vitals)
         qsofa_result = self.calculate_qsofa(vitals)
         fall_risk_result = self.calculate_fall_risk(vitals, patient_data)
         deterioration_result = self.predict_deterioration(vitals, vitals_history, patient_data)
+
+        # Generate AI explanations if available
+        ai_explanations = {}
+        if self.is_available():
+            try:
+                # Generate explanations for significant scores
+                if news2_result.get("totalScore", 0) >= 3:
+                    news2_explanation = self._ai_explain_news2(news2_result, vitals, patient_data)
+                    if news2_explanation:
+                        ai_explanations["news2"] = news2_explanation
+
+                if qsofa_result.get("qsofaScore", 0) >= 1:
+                    sepsis_explanation = self._ai_explain_sepsis_risk(qsofa_result, vitals)
+                    if sepsis_explanation:
+                        ai_explanations["sepsis"] = sepsis_explanation
+
+                if deterioration_result.get("deteriorationProbability", 0) >= 0.3:
+                    deterioration_explanation = self._ai_explain_deterioration(deterioration_result, patient_data)
+                    if deterioration_explanation:
+                        ai_explanations["deterioration"] = deterioration_explanation
+
+            except Exception as e:
+                logger.warning(f"AI explanation generation failed: {e}")
 
         # Generate alerts based on all assessments
         alerts = []
@@ -891,6 +1096,8 @@ class EarlyWarningAI:
                 "fallRisk": fall_risk_result
             },
             "escalationPathway": self._get_escalation_pathway(news2_result["riskLevel"]),
+            "aiExplanations": ai_explanations if ai_explanations else None,
+            "aiPowered": len(ai_explanations) > 0,
             "timestamp": datetime.now().isoformat(),
             "modelVersion": self.model_version
         }
@@ -1354,7 +1561,9 @@ if __name__ == "__main__":
             "status": "healthy",
             "service": "early-warning",
             "version": "2.0.0",
-            "features": ["news2", "qsofa", "fall_risk", "deterioration_prediction"]
+            "features": ["news2", "qsofa", "fall_risk", "deterioration_prediction", "ai_explanations"],
+            "aiAvailable": openai_manager.is_available(),
+            "model": "gpt-4o-mini (clinical explanations)" if openai_manager.is_available() else "rule-based only"
         }
 
     @app.post("/api/ews/calculate")

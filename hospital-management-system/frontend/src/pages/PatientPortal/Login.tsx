@@ -46,17 +46,23 @@ interface RegistrationFormData {
 
 // Country codes for phone number
 const countryCodes = [
-  { code: '+1', country: 'US', flag: 'US' },
-  { code: '+91', country: 'IN', flag: 'IN' },
-  { code: '+44', country: 'UK', flag: 'GB' },
-  { code: '+61', country: 'AU', flag: 'AU' },
-  { code: '+86', country: 'CN', flag: 'CN' },
-  { code: '+81', country: 'JP', flag: 'JP' },
-  { code: '+49', country: 'DE', flag: 'DE' },
-  { code: '+33', country: 'FR', flag: 'FR' },
-  { code: '+971', country: 'UAE', flag: 'AE' },
-  { code: '+65', country: 'SG', flag: 'SG' },
+  { code: '+1', country: 'US', flag: 'US', digits: 10 },
+  { code: '+91', country: 'IN', flag: 'IN', digits: 10 },
+  { code: '+44', country: 'UK', flag: 'GB', digits: 10 },
+  { code: '+61', country: 'AU', flag: 'AU', digits: 9 },
+  { code: '+86', country: 'CN', flag: 'CN', digits: 11 },
+  { code: '+81', country: 'JP', flag: 'JP', digits: 10 },
+  { code: '+49', country: 'DE', flag: 'DE', digits: 10 },
+  { code: '+33', country: 'FR', flag: 'FR', digits: 9 },
+  { code: '+971', country: 'UAE', flag: 'AE', digits: 9 },
+  { code: '+65', country: 'SG', flag: 'SG', digits: 8 },
 ];
+
+// Helper function to get expected digits for a country code
+const getExpectedDigits = (countryCode: string): number => {
+  const country = countryCodes.find(c => c.code === countryCode);
+  return country?.digits || 10;
+};
 
 // API base URL
 const API_URL = '/api/v1';
@@ -159,7 +165,7 @@ export default function PatientPortalLogin() {
       const { accessToken, refreshToken, patient } = response.data.data;
 
       // Store tokens in localStorage (separate from staff tokens)
-      localStorage.setItem('patientAccessToken', accessToken);
+      localStorage.setItem('patientPortalToken', accessToken);
       localStorage.setItem('patientRefreshToken', refreshToken);
       localStorage.setItem('patientUser', JSON.stringify(patient));
 
@@ -257,7 +263,7 @@ export default function PatientPortalLogin() {
 
       const { accessToken, refreshToken, patient } = response.data.data;
 
-      localStorage.setItem('patientAccessToken', accessToken);
+      localStorage.setItem('patientPortalToken', accessToken);
       localStorage.setItem('patientRefreshToken', refreshToken);
       localStorage.setItem('patientUser', JSON.stringify(patient));
 
@@ -292,8 +298,10 @@ export default function PatientPortalLogin() {
       return;
     }
 
-    if (!registrationData.mobile.match(/^\d{10}$/)) {
-      setError('Please enter a valid 10-digit mobile number');
+    const expectedDigits = getExpectedDigits(registrationData.countryCode);
+    const mobilePattern = new RegExp(`^\\d{${expectedDigits}}$`);
+    if (!registrationData.mobile.match(mobilePattern)) {
+      setError(`Please enter a valid ${expectedDigits}-digit mobile number for ${registrationData.countryCode}`);
       return;
     }
 
@@ -822,14 +830,15 @@ function OTPLoginForm({
               <input
                 type="tel"
                 value={otpData.mobile}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const maxDigits = getExpectedDigits(otpData.countryCode);
                   setOtpData({
                     ...otpData,
-                    mobile: e.target.value.replace(/\D/g, '').slice(0, 10),
-                  })
-                }
+                    mobile: e.target.value.replace(/\D/g, '').slice(0, maxDigits),
+                  });
+                }}
                 className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                placeholder="Enter mobile number"
+                placeholder={`Enter ${getExpectedDigits(otpData.countryCode)}-digit mobile number`}
                 required
               />
             </div>
@@ -1058,14 +1067,15 @@ function RegistrationForm({
             <input
               type="tel"
               value={data.mobile}
-              onChange={(e) =>
+              onChange={(e) => {
+                const maxDigits = getExpectedDigits(data.countryCode);
                 setData({
                   ...data,
-                  mobile: e.target.value.replace(/\D/g, '').slice(0, 10),
-                })
-              }
+                  mobile: e.target.value.replace(/\D/g, '').slice(0, maxDigits),
+                });
+              }}
               className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-              placeholder="Enter mobile number"
+              placeholder={`Enter ${getExpectedDigits(data.countryCode)}-digit mobile number`}
               required
             />
           </div>

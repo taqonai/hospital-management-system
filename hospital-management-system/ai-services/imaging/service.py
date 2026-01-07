@@ -12,12 +12,8 @@ import base64
 import httpx
 from datetime import datetime
 
-try:
-    from openai import OpenAI
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
-    OpenAI = None
+# Import shared OpenAI client
+from shared.openai_client import openai_manager, TaskComplexity, OPENAI_AVAILABLE
 
 from .knowledge_base import (
     PATHOLOGY_DATABASE,
@@ -34,12 +30,11 @@ class GPTVisionAnalyzer:
     """Analyzes medical images using GPT-4 Vision"""
 
     def __init__(self):
-        self.api_key = os.getenv("OPENAI_API_KEY")
-        self.client = OpenAI(api_key=self.api_key) if OPENAI_AVAILABLE and self.api_key else None
-        self.model = "gpt-4o"  # GPT-4 Vision model
+        pass  # Uses shared openai_manager
 
-    def is_available(self) -> bool:
-        return self.client is not None
+    @staticmethod
+    def is_available() -> bool:
+        return openai_manager.is_available()
 
     def _encode_image_from_url(self, image_url: str) -> Optional[str]:
         """Download and encode image to base64"""
@@ -155,8 +150,12 @@ Respond ONLY with the JSON object, no additional text."""
                 }
             ]
 
-            response = self.client.chat.completions.create(
-                model=self.model,
+            # Use gpt-4o for vision analysis via shared client
+            if not openai_manager.client:
+                return {"success": False, "error": "OpenAI client not initialized"}
+
+            response = openai_manager.client.chat.completions.create(
+                model="gpt-4o",  # GPT-4 Vision model
                 messages=messages,
                 max_tokens=2000,
                 temperature=0.3

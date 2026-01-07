@@ -2,6 +2,8 @@
 Medication Administration Safety Service
 Comprehensive medication safety verification for nursing staff
 Implements 5 Rights verification, high-alert drug warnings, dose checking, and more
+
+Uses GPT-4o-mini for enhanced clinical insights with validated rule-based safety checks.
 """
 
 from typing import List, Dict, Any, Optional, Tuple
@@ -10,6 +12,13 @@ from enum import Enum
 import logging
 import re
 import math
+import json
+
+# Import shared OpenAI client
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from shared.openai_client import openai_manager, TaskComplexity
 
 logger = logging.getLogger(__name__)
 
@@ -216,10 +225,134 @@ VALID_ROUTES = {
 
 
 class MedicationSafetyAI:
-    """AI-powered Medication Administration Safety System"""
+    """
+    AI-powered Medication Administration Safety System
+
+    Uses validated rule-based checks for safety with GPT-4o-mini for clinical insights.
+    """
 
     def __init__(self):
         self.model_version = "1.0.0"
+        ai_status = "with AI insights" if openai_manager.is_available() else "rule-based only"
+        logger.info(f"MedicationSafetyAI initialized {ai_status}")
+
+    @staticmethod
+    def is_available() -> bool:
+        """Check if OpenAI API is available for AI-enhanced insights"""
+        return openai_manager.is_available()
+
+    def _ai_medication_insights(
+        self,
+        medication_name: str,
+        dose: float,
+        unit: str,
+        route: str,
+        patient_age: Optional[int] = None,
+        patient_conditions: Optional[List[str]] = None,
+        allergies: Optional[List[str]] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Generate AI-powered clinical insights for medication administration.
+        Complements rule-based checks with clinical context.
+        """
+        if not openai_manager.is_available():
+            return None
+
+        patient_context = ""
+        if patient_age:
+            patient_context += f"Patient age: {patient_age} years. "
+        if patient_conditions:
+            patient_context += f"Conditions: {', '.join(patient_conditions[:5])}. "
+        if allergies:
+            patient_context += f"Allergies: {', '.join(allergies[:5])}. "
+
+        system_prompt = """You are a clinical pharmacist AI assistant. Provide brief, actionable safety insights for medication administration.
+
+Format response as JSON:
+{
+    "clinicalNotes": "<1-2 sentence key consideration for this medication>",
+    "administrationTips": ["<tip 1>", "<tip 2>"],
+    "monitoringParameters": ["<parameter 1>", "<parameter 2>"],
+    "patientEducation": "<1 sentence for patient>",
+    "interactionsToWatch": ["<interaction>"] or []
+}
+
+Be concise. Focus on practical safety information for nurses."""
+
+        user_content = f"""Medication: {medication_name}
+Dose: {dose} {unit}
+Route: {route}
+{patient_context}
+
+Provide clinical insights:"""
+
+        try:
+            result = openai_manager.chat_completion_json(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content}
+                ],
+                task_complexity=TaskComplexity.SIMPLE,
+                temperature=0.3,
+                max_tokens=400
+            )
+
+            if result and result.get("success") and result.get("data"):
+                logger.info("AI medication insights generated")
+                return result["data"]
+            return None
+
+        except Exception as e:
+            logger.error(f"AI medication insights error: {e}")
+            return None
+
+    def _ai_interaction_analysis(
+        self,
+        medication_name: str,
+        current_medications: List[str]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Use AI to analyze potential drug interactions beyond database lookups.
+        """
+        if not openai_manager.is_available() or not current_medications:
+            return None
+
+        system_prompt = """You are a clinical pharmacist AI. Analyze drug interactions briefly.
+
+Format response as JSON:
+{
+    "significantInteractions": [
+        {"drugs": "<drug pair>", "severity": "high|moderate|low", "effect": "<brief effect>", "action": "<brief action>"}
+    ],
+    "overallRisk": "high|moderate|low|none",
+    "recommendation": "<1 sentence>"
+}
+
+Only include clinically significant interactions. Be concise."""
+
+        user_content = f"""New medication: {medication_name}
+Current medications: {', '.join(current_medications[:10])}
+
+Analyze interactions:"""
+
+        try:
+            result = openai_manager.chat_completion_json(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content}
+                ],
+                task_complexity=TaskComplexity.SIMPLE,
+                temperature=0.2,
+                max_tokens=500
+            )
+
+            if result and result.get("success") and result.get("data"):
+                return result["data"]
+            return None
+
+        except Exception as e:
+            logger.error(f"AI interaction analysis error: {e}")
+            return None
 
     def verify_five_rights(
         self,
@@ -353,6 +486,48 @@ class MedicationSafetyAI:
         results["recommendations"] = self._generate_recommendations(
             results, medication_name, ordered_route
         )
+
+        # Add AI-powered insights if available
+        if self.is_available():
+            try:
+                # Get medication insights
+                ai_insights = self._ai_medication_insights(
+                    medication_name=medication_name,
+                    dose=ordered_dose,
+                    unit=ordered_unit,
+                    route=ordered_route,
+                    patient_age=patient_age,
+                    allergies=allergies
+                )
+                if ai_insights:
+                    results["aiInsights"] = ai_insights
+
+                # Get interaction analysis if patient has other medications
+                if current_medications and len(current_medications) > 0:
+                    interaction_analysis = self._ai_interaction_analysis(
+                        medication_name=medication_name,
+                        current_medications=current_medications
+                    )
+                    if interaction_analysis:
+                        results["aiInteractionAnalysis"] = interaction_analysis
+                        # Add high-risk AI-detected interactions to warnings
+                        if interaction_analysis.get("overallRisk") in ["high", "moderate"]:
+                            for interaction in interaction_analysis.get("significantInteractions", []):
+                                if interaction.get("severity") == "high":
+                                    warnings.append({
+                                        "severity": AlertSeverity.HIGH.value,
+                                        "type": "AI_INTERACTION",
+                                        "message": f"AI-detected interaction: {interaction.get('drugs')}",
+                                        "details": interaction.get("effect"),
+                                        "action": interaction.get("action")
+                                    })
+
+                results["aiPowered"] = True
+            except Exception as e:
+                logger.warning(f"AI insights generation failed: {e}")
+                results["aiPowered"] = False
+        else:
+            results["aiPowered"] = False
 
         return results
 

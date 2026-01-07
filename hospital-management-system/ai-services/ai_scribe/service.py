@@ -25,12 +25,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import uvicorn
 
-try:
-    from openai import OpenAI
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
-    OpenAI = None
+# Import shared OpenAI client
+from shared.openai_client import openai_manager, TaskComplexity, OPENAI_AVAILABLE
 
 
 # ============= Pydantic Models =============
@@ -212,15 +208,9 @@ class AIScribeService:
     """
 
     def __init__(self):
-        self.openai_client = None
-        self.api_key = os.getenv("OPENAI_API_KEY")
-
-        if OPENAI_AVAILABLE and self.api_key:
-            try:
-                self.openai_client = OpenAI(api_key=self.api_key)
-                print("AI Scribe: OpenAI client initialized")
-            except Exception as e:
-                print(f"AI Scribe: Failed to initialize OpenAI - {e}")
+        # Uses shared openai_manager
+        if openai_manager.is_available():
+            print("AI Scribe: OpenAI available via shared client")
         else:
             print("AI Scribe: OpenAI not available")
 
@@ -369,9 +359,10 @@ class AIScribeService:
             ],
         }
 
-    def is_available(self) -> bool:
+    @staticmethod
+    def is_available() -> bool:
         """Check if OpenAI services are available"""
-        return self.openai_client is not None
+        return openai_manager.is_available()
 
     def start_session(self, request: StartSessionRequest) -> StartSessionResponse:
         """Start a new scribe session"""
@@ -695,30 +686,33 @@ class AIScribeService:
 
             try:
                 with open(temp_path, "rb") as audio_file:
-                    response = self.openai_client.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=audio_file,
+                    result = openai_manager.transcribe_audio(
+                        audio_file=audio_file,
                         language="en",
                         prompt=self.medical_prompt,
-                        response_format="verbose_json",
                     )
 
+                if not result or not result.get("success"):
+                    return {
+                        "success": False,
+                        "error": result.get("error", "Transcription failed") if result else "No response",
+                    }
+
                 segments = []
-                if hasattr(response, 'segments'):
-                    segments = [
-                        {
+                raw_segments = result.get("segments", [])
+                for seg in raw_segments:
+                    if isinstance(seg, dict):
+                        segments.append({
                             "start": seg.get("start", 0),
                             "end": seg.get("end", 0),
                             "text": seg.get("text", ""),
                             "confidence": seg.get("avg_logprob", 0.9),
-                        }
-                        for seg in response.segments
-                    ]
+                        })
 
                 return {
                     "success": True,
-                    "transcript": response.text,
-                    "duration": getattr(response, 'duration', None),
+                    "transcript": result.get("transcript", ""),
+                    "duration": result.get("duration"),
                     "segments": segments,
                 }
             finally:
@@ -836,8 +830,7 @@ For each entity, include:
 
 Return only valid JSON."""
 
-                response = self.openai_client.chat.completions.create(
-                    model="gpt-4o-mini",
+                api_result = openai_manager.chat_completion_json(
                     messages=[
                         {
                             "role": "system",
@@ -845,12 +838,14 @@ Return only valid JSON."""
                         },
                         {"role": "user", "content": prompt},
                     ],
+                    task_complexity=TaskComplexity.SIMPLE,  # gpt-4o-mini
                     temperature=0.1,
                     max_tokens=1500,
-                    response_format={"type": "json_object"},
                 )
 
-                result = json.loads(response.choices[0].message.content)
+                if not api_result or not api_result.get("success"):
+                    raise Exception(api_result.get("error", "Failed") if api_result else "No response")
+                result = api_result.get("data", {})
 
                 # Transform to our format
                 for category in entities.keys():
@@ -1012,8 +1007,7 @@ If information is not mentioned, write "Not documented in this encounter."
 
 Return as JSON with keys: subjective, objective, assessment, plan"""
 
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
+            api_result = openai_manager.chat_completion_json(
                 messages=[
                     {
                         "role": "system",
@@ -1021,19 +1015,21 @@ Return as JSON with keys: subjective, objective, assessment, plan"""
                     },
                     {"role": "user", "content": prompt},
                 ],
+                task_complexity=TaskComplexity.SIMPLE,  # gpt-4o-mini
                 temperature=0.3,
                 max_tokens=2000,
-                response_format={"type": "json_object"},
             )
 
-            result = json.loads(response.choices[0].message.content)
-
-            return {
-                "subjective": result.get("subjective", "Not documented"),
-                "objective": result.get("objective", "Not documented"),
-                "assessment": result.get("assessment", "Not documented"),
-                "plan": result.get("plan", "Not documented"),
-            }
+            if api_result and api_result.get("success"):
+                result = api_result.get("data", {})
+                return {
+                    "subjective": result.get("subjective", "Not documented"),
+                    "objective": result.get("objective", "Not documented"),
+                    "assessment": result.get("assessment", "Not documented"),
+                    "plan": result.get("plan", "Not documented"),
+                }
+            else:
+                raise Exception(api_result.get("error", "Failed") if api_result else "No response")
 
         except Exception as e:
             print(f"SOAP generation error: {e}")
@@ -1157,8 +1153,7 @@ For each suggested code, provide:
 Return as JSON with a "codes" array. Only suggest codes clearly supported by the text.
 Limit to 5 most relevant codes."""
 
-                response = self.openai_client.chat.completions.create(
-                    model="gpt-4o-mini",
+                api_result = openai_manager.chat_completion_json(
                     messages=[
                         {
                             "role": "system",
@@ -1166,12 +1161,15 @@ Limit to 5 most relevant codes."""
                         },
                         {"role": "user", "content": prompt},
                     ],
+                    task_complexity=TaskComplexity.SIMPLE,  # gpt-4o-mini
                     temperature=0.2,
                     max_tokens=1000,
-                    response_format={"type": "json_object"},
                 )
 
-                result = json.loads(response.choices[0].message.content)
+                if api_result and api_result.get("success"):
+                    result = api_result.get("data", {})
+                else:
+                    result = {}
 
                 if "codes" in result:
                     for code_item in result["codes"]:
@@ -1414,8 +1412,7 @@ Provide follow-up recommendations as JSON with a "recommendations" array. Each r
 
 Limit to 3 most important recommendations."""
 
-                response = self.openai_client.chat.completions.create(
-                    model="gpt-4o-mini",
+                api_result = openai_manager.chat_completion_json(
                     messages=[
                         {
                             "role": "system",
@@ -1423,12 +1420,15 @@ Limit to 3 most important recommendations."""
                         },
                         {"role": "user", "content": prompt},
                     ],
+                    task_complexity=TaskComplexity.SIMPLE,  # gpt-4o-mini
                     temperature=0.3,
                     max_tokens=800,
-                    response_format={"type": "json_object"},
                 )
 
-                result = json.loads(response.choices[0].message.content)
+                if api_result and api_result.get("success"):
+                    result = api_result.get("data", {})
+                else:
+                    result = {}
 
                 if "recommendations" in result:
                     for rec in result["recommendations"][:3]:
@@ -1556,8 +1556,7 @@ Provide prescription suggestions as JSON with a "prescriptions" array. Each pres
 IMPORTANT: Do NOT suggest any medications that may conflict with patient's allergies.
 Limit to 3 most appropriate medications."""
 
-                response = self.openai_client.chat.completions.create(
-                    model="gpt-4o-mini",
+                api_result = openai_manager.chat_completion_json(
                     messages=[
                         {
                             "role": "system",
@@ -1565,12 +1564,15 @@ Limit to 3 most appropriate medications."""
                         },
                         {"role": "user", "content": prompt},
                     ],
+                    task_complexity=TaskComplexity.SIMPLE,  # gpt-4o-mini
                     temperature=0.3,
                     max_tokens=1000,
-                    response_format={"type": "json_object"},
                 )
 
-                result = json.loads(response.choices[0].message.content)
+                if api_result and api_result.get("success"):
+                    result = api_result.get("data", {})
+                else:
+                    result = {}
 
                 if "prescriptions" in result:
                     for rx in result["prescriptions"][:3]:

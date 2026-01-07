@@ -263,8 +263,8 @@ export class PatientAuthService {
     }
 
     // Validate password strength
-    if (data.password.length < 8) {
-      throw new ValidationError('Password must be at least 8 characters long');
+    if (data.password.length < 6) {
+      throw new ValidationError('Password must be at least 6 characters long');
     }
 
     // Check for existing patient using the lookup service

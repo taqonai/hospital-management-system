@@ -1,6 +1,8 @@
 """
 AI-Powered Queue Prediction Service
 Provides intelligent wait time prediction, queue optimization, and demand forecasting
+
+Uses GPT-4o-mini for enhanced suggestions with validated algorithmic predictions.
 """
 
 from typing import Dict, Any, List, Optional, Tuple
@@ -8,6 +10,13 @@ import numpy as np
 from datetime import datetime, timedelta
 import logging
 from enum import Enum
+import json
+
+# Import shared OpenAI client
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from shared.openai_client import openai_manager, TaskComplexity
 
 logger = logging.getLogger(__name__)
 
@@ -487,23 +496,143 @@ class DemandForecaster:
 
 
 class QueuePredictionAI:
-    """Main Queue Prediction AI Service"""
+    """
+    Main Queue Prediction AI Service
+
+    Uses validated algorithms for predictions with GPT-4o-mini for enhanced suggestions.
+    """
 
     def __init__(self):
         self.model_version = "1.0.0"
         self.wait_predictor = WaitTimePredictor()
         self.optimizer = QueueOptimizer()
         self.forecaster = DemandForecaster()
+        ai_status = "with AI suggestions" if openai_manager.is_available() else "algorithmic only"
+        logger.info(f"QueuePredictionAI initialized {ai_status}")
+
+    @staticmethod
+    def is_available() -> bool:
+        """Check if OpenAI API is available for AI-enhanced suggestions"""
+        return openai_manager.is_available()
+
+    def _ai_queue_optimization_suggestions(
+        self,
+        queue_health: Dict[str, Any],
+        service_type: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Use AI to generate intelligent queue optimization suggestions.
+        """
+        if not openai_manager.is_available():
+            return None
+
+        system_prompt = """You are a hospital operations optimization AI. Analyze queue metrics and provide actionable suggestions.
+
+Format response as JSON:
+{
+    "prioritySuggestions": ["<suggestion 1>", "<suggestion 2>"],
+    "staffingAdvice": "<brief staffing recommendation>",
+    "flowOptimization": "<brief flow improvement suggestion>",
+    "patientExperience": "<suggestion to improve patient experience>"
+}
+
+Be concise and practical. Focus on immediate actionable improvements."""
+
+        metrics = queue_health.get("metrics", {})
+        user_content = f"""Queue Health Analysis for {service_type}:
+- Health Score: {queue_health.get('healthScore', 0)}/100
+- Status: {queue_health.get('status', 'unknown')}
+- Waiting Patients: {metrics.get('waitingPatients', 0)}
+- Avg Wait Time: {metrics.get('avgWaitTime', 0)} min
+- No-Show Rate: {metrics.get('noShowRate', 0)}%
+- Throughput/Counter: {metrics.get('throughputPerCounter', 0)}
+- Issues: {', '.join(queue_health.get('issues', []))}
+
+Provide optimization suggestions:"""
+
+        try:
+            result = openai_manager.chat_completion_json(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content}
+                ],
+                task_complexity=TaskComplexity.SIMPLE,
+                temperature=0.4,
+                max_tokens=400
+            )
+
+            if result and result.get("success") and result.get("data"):
+                return result["data"]
+            return None
+
+        except Exception as e:
+            logger.error(f"AI queue optimization error: {e}")
+            return None
+
+    def _ai_wait_time_explanation(
+        self,
+        wait_prediction: Dict[str, Any],
+        service_type: str
+    ) -> Optional[str]:
+        """
+        Generate patient-friendly explanation of wait time.
+        """
+        if not openai_manager.is_available():
+            return None
+
+        system_prompt = """You are a helpful hospital assistant. Explain wait times to patients in a friendly, reassuring way.
+Keep response under 50 words. Be empathetic and helpful."""
+
+        user_content = f"""Service: {service_type}
+Estimated wait: {wait_prediction.get('estimatedWaitMinutes', 15)} minutes
+Queue position: {wait_prediction.get('queuePosition', 1)}
+Factors: {', '.join(wait_prediction.get('factors', [])[:3])}
+
+Explain this to the patient:"""
+
+        try:
+            result = openai_manager.chat_completion(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content}
+                ],
+                task_complexity=TaskComplexity.SIMPLE,
+                temperature=0.5,
+                max_tokens=100
+            )
+
+            if result and result.get("success"):
+                return result.get("content")
+            return None
+
+        except Exception as e:
+            logger.error(f"AI wait explanation error: {e}")
+            return None
 
     def predict_wait_time(
         self,
         queue_data: Dict[str, Any],
         priority: str = "NORMAL"
     ) -> Dict[str, Any]:
-        """Predict wait time for a patient"""
+        """Predict wait time for a patient with AI-enhanced explanation"""
         try:
             result = self.wait_predictor.predict_wait_time(queue_data, priority)
             result["modelVersion"] = self.model_version
+
+            # Add AI-powered patient-friendly explanation
+            if self.is_available():
+                try:
+                    service_type = queue_data.get("serviceType", "consultation")
+                    ai_explanation = self._ai_wait_time_explanation(result, service_type)
+                    if ai_explanation:
+                        result["patientMessage"] = ai_explanation
+                        result["aiPowered"] = True
+                except Exception as e:
+                    logger.warning(f"AI explanation generation failed: {e}")
+                    result["aiPowered"] = False
+            else:
+                result["aiPowered"] = False
+
             return result
         except Exception as e:
             logger.error(f"Wait time prediction error: {e}")
@@ -512,7 +641,8 @@ class QueuePredictionAI:
                 "range": {"lower": 10, "upper": 25},
                 "confidence": 0.5,
                 "error": str(e),
-                "modelVersion": self.model_version
+                "modelVersion": self.model_version,
+                "aiPowered": False
             }
 
     def optimize_queue(
@@ -619,9 +749,10 @@ class QueuePredictionAI:
 
     def analyze_queue_health(
         self,
-        queue_status: Dict[str, Any]
+        queue_status: Dict[str, Any],
+        service_type: str = "general"
     ) -> Dict[str, Any]:
-        """Analyze overall queue health and provide insights"""
+        """Analyze overall queue health and provide insights with AI-enhanced suggestions"""
         waiting = queue_status.get("waiting", 0)
         serving = queue_status.get("serving", 0)
         completed = queue_status.get("completed", 0)
@@ -663,7 +794,7 @@ class QueuePredictionAI:
             issues.append("All metrics within normal range")
             recommendations.append("Continue current operations")
 
-        return {
+        result = {
             "healthScore": max(health_score, 0),
             "status": "healthy" if health_score >= 70 else "warning" if health_score >= 50 else "critical",
             "metrics": {
@@ -680,3 +811,18 @@ class QueuePredictionAI:
             "recommendations": recommendations,
             "modelVersion": self.model_version
         }
+
+        # Add AI-powered suggestions if available
+        if self.is_available():
+            try:
+                ai_suggestions = self._ai_queue_optimization_suggestions(result, service_type)
+                if ai_suggestions:
+                    result["aiSuggestions"] = ai_suggestions
+                    result["aiPowered"] = True
+            except Exception as e:
+                logger.warning(f"AI suggestions generation failed: {e}")
+                result["aiPowered"] = False
+        else:
+            result["aiPowered"] = False
+
+        return result

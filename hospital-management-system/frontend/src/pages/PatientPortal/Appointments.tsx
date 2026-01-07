@@ -1,5 +1,6 @@
-import { useState, Fragment } from 'react';
+import { useState, Fragment, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { format, parseISO, isAfter, isBefore, startOfDay, addDays } from 'date-fns';
 import { Dialog, Transition } from '@headlessui/react';
 import {
@@ -23,6 +24,9 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   InformationCircleIcon,
+  SparklesIcon,
+  ChatBubbleLeftRightIcon,
+  HeartIcon,
 } from '@heroicons/react/24/outline';
 import { patientPortalApi } from '../../services/api';
 import toast from 'react-hot-toast';
@@ -104,8 +108,10 @@ const DEFAULT_TIME_SLOTS = [
 ];
 
 export default function Appointments() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming');
   const [showBookModal, setShowBookModal] = useState(false);
+  const [showBookingChoice, setShowBookingChoice] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -118,6 +124,11 @@ export default function Appointments() {
   const itemsPerPage = 10;
   const queryClient = useQueryClient();
 
+  // AI-assisted booking state
+  const [aiRecommendedDepartment, setAiRecommendedDepartment] = useState('');
+  const [aiSymptomsSummary, setAiSymptomsSummary] = useState('');
+  const [isAiGuidedBooking, setIsAiGuidedBooking] = useState(false);
+
   // Book modal state
   const [bookingStep, setBookingStep] = useState(1);
   const [selectedDepartment, setSelectedDepartment] = useState('');
@@ -127,6 +138,34 @@ export default function Appointments() {
   const [appointmentType, setAppointmentType] = useState('CONSULTATION');
   const [appointmentReason, setAppointmentReason] = useState('');
   const [appointmentNotes, setAppointmentNotes] = useState('');
+
+  // Handle URL params from symptom checker
+  useEffect(() => {
+    const shouldBook = searchParams.get('book');
+    const department = searchParams.get('department');
+    const symptoms = searchParams.get('symptoms');
+    const urgency = searchParams.get('urgency');
+
+    if (shouldBook === 'true') {
+      setShowBookModal(true);
+      setIsAiGuidedBooking(true);
+
+      if (department) {
+        setAiRecommendedDepartment(department);
+        setAppointmentReason(`AI-recommended consultation for: ${department}`);
+      }
+      if (symptoms) {
+        setAiSymptomsSummary(symptoms);
+        setAppointmentNotes(`Symptoms: ${symptoms}`);
+      }
+      if (urgency) {
+        setAppointmentNotes(prev => prev + `\nUrgency level: ${urgency}`);
+      }
+
+      // Clear the URL params
+      setSearchParams({});
+    }
+  }, [searchParams, setSearchParams]);
 
   // Reschedule state
   const [rescheduleDate, setRescheduleDate] = useState('');
@@ -250,6 +289,21 @@ export default function Appointments() {
     setAppointmentType('CONSULTATION');
     setAppointmentReason('');
     setAppointmentNotes('');
+    setIsAiGuidedBooking(false);
+    setAiRecommendedDepartment('');
+    setAiSymptomsSummary('');
+  };
+
+  const handleStartDirectBooking = () => {
+    setShowBookingChoice(false);
+    setShowBookModal(true);
+    setIsAiGuidedBooking(false);
+  };
+
+  const handleStartAiGuidedBooking = () => {
+    setShowBookingChoice(false);
+    // Navigate to symptom checker
+    window.location.href = '/patient-portal/symptom-checker';
   };
 
   const handleOpenCancelModal = (appointment: Appointment) => {
@@ -487,13 +541,15 @@ export default function Appointments() {
               <h1 className="text-3xl font-bold text-gray-900">My Appointments</h1>
               <p className="text-gray-500 mt-1">View, book, and manage your appointments</p>
             </div>
-            <button
-              onClick={() => setShowBookModal(true)}
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl"
-            >
-              <PlusIcon className="h-5 w-5" />
-              Book Appointment
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowBookingChoice(true)}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl"
+              >
+                <PlusIcon className="h-5 w-5" />
+                Book Appointment
+              </button>
+            </div>
           </div>
         </div>
 
@@ -605,7 +661,7 @@ export default function Appointments() {
                 </p>
                 {activeTab === 'upcoming' && (
                   <button
-                    onClick={() => setShowBookModal(true)}
+                    onClick={() => setShowBookingChoice(true)}
                     className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium hover:from-blue-700 hover:to-indigo-700 transition-all"
                   >
                     <PlusIcon className="h-5 w-5" />
@@ -657,6 +713,112 @@ export default function Appointments() {
             </>
           )}
         </div>
+
+        {/* Booking Choice Modal */}
+        <Transition appear show={showBookingChoice} as={Fragment}>
+          <Dialog as="div" className="relative z-50" onClose={() => setShowBookingChoice(false)}>
+            <Transition.Child
+              as={Fragment}
+              enter="ease-out duration-300"
+              enterFrom="opacity-0"
+              enterTo="opacity-100"
+              leave="ease-in duration-200"
+              leaveFrom="opacity-100"
+              leaveTo="opacity-0"
+            >
+              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
+            </Transition.Child>
+
+            <div className="fixed inset-0 overflow-y-auto">
+              <div className="flex min-h-full items-center justify-center p-4">
+                <Transition.Child
+                  as={Fragment}
+                  enter="ease-out duration-300"
+                  enterFrom="opacity-0 scale-95"
+                  enterTo="opacity-100 scale-100"
+                  leave="ease-in duration-200"
+                  leaveFrom="opacity-100 scale-100"
+                  leaveTo="opacity-0 scale-95"
+                >
+                  <Dialog.Panel className="w-full max-w-lg transform overflow-hidden rounded-2xl bg-white p-6 shadow-2xl transition-all">
+                    <Dialog.Title className="flex items-center justify-between mb-6">
+                      <div>
+                        <h3 className="text-xl font-bold text-gray-900">Book Appointment</h3>
+                        <p className="text-sm text-gray-500 mt-1">Choose how you'd like to proceed</p>
+                      </div>
+                      <button
+                        onClick={() => setShowBookingChoice(false)}
+                        className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                      >
+                        <XMarkIcon className="h-6 w-6 text-gray-500" />
+                      </button>
+                    </Dialog.Title>
+
+                    <div className="space-y-4">
+                      {/* AI-Guided Option */}
+                      <button
+                        onClick={handleStartAiGuidedBooking}
+                        className="w-full p-5 rounded-2xl border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50 hover:border-purple-400 hover:shadow-lg transition-all text-left group"
+                      >
+                        <div className="flex items-start gap-4">
+                          <div className="p-3 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl text-white shadow-lg group-hover:scale-110 transition-transform">
+                            <SparklesIcon className="h-6 w-6" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-semibold text-gray-900">AI-Guided Booking</h4>
+                              <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">Recommended</span>
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1">
+                              Use our AI Symptom Checker to get personalized recommendations for the right department and doctor.
+                            </p>
+                            <div className="flex items-center gap-2 mt-3 text-sm text-purple-600">
+                              <ChatBubbleLeftRightIcon className="h-4 w-4" />
+                              <span>Takes 2-3 minutes</span>
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+
+                      {/* Direct Booking Option */}
+                      <button
+                        onClick={handleStartDirectBooking}
+                        className="w-full p-5 rounded-2xl border-2 border-gray-200 bg-white hover:border-gray-300 hover:shadow-md transition-all text-left group"
+                      >
+                        <div className="flex items-start gap-4">
+                          <div className="p-3 bg-gray-100 rounded-xl text-gray-600 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+                            <CalendarDaysIcon className="h-6 w-6" />
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-gray-900">Direct Booking</h4>
+                            <p className="text-sm text-gray-600 mt-1">
+                              Already know which department or doctor you need? Book directly without symptom assessment.
+                            </p>
+                            <div className="flex items-center gap-2 mt-3 text-sm text-gray-500">
+                              <ClockIcon className="h-4 w-4" />
+                              <span>Quick booking</span>
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+
+                    {/* Info Banner */}
+                    <div className="mt-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
+                      <div className="flex items-start gap-3">
+                        <InformationCircleIcon className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <div className="text-sm text-blue-700">
+                          <p className="font-medium">Not sure which option to choose?</p>
+                          <p className="mt-1">The AI-Guided Booking helps identify the best specialist for your needs based on your symptoms.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </Dialog.Panel>
+                </Transition.Child>
+              </div>
+            </div>
+          </Dialog>
+        </Transition>
 
         {/* Book Appointment Modal */}
         <Transition appear show={showBookModal} as={Fragment}>
@@ -711,25 +873,58 @@ export default function Appointments() {
                     {/* Step 1: Select Department */}
                     {bookingStep === 1 && (
                       <div className="space-y-4">
+                        {/* AI Recommendation Banner */}
+                        {isAiGuidedBooking && aiRecommendedDepartment && (
+                          <div className="p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl border border-purple-200">
+                            <div className="flex items-start gap-3">
+                              <div className="p-2 bg-purple-100 rounded-lg">
+                                <SparklesIcon className="h-5 w-5 text-purple-600" />
+                              </div>
+                              <div className="flex-1">
+                                <p className="font-medium text-purple-900">AI Recommendation</p>
+                                <p className="text-sm text-purple-700 mt-1">
+                                  Based on your symptoms, we recommend: <strong>{aiRecommendedDepartment}</strong>
+                                </p>
+                                {aiSymptomsSummary && (
+                                  <p className="text-xs text-purple-600 mt-2">
+                                    Symptoms: {aiSymptomsSummary}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
                         <h4 className="font-semibold text-gray-900">Select Department</h4>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-[400px] overflow-y-auto">
-                          {(departments || []).map((dept: Department) => (
-                            <button
-                              key={dept.id}
-                              onClick={() => { setSelectedDepartment(dept.id); setBookingStep(2); }}
-                              className={`p-4 rounded-xl border-2 text-left transition-all hover:shadow-md ${
-                                selectedDepartment === dept.id
-                                  ? 'border-blue-500 bg-blue-50'
-                                  : 'border-gray-200 hover:border-gray-300'
-                              }`}
-                            >
-                              <BuildingOfficeIcon className="h-8 w-8 text-blue-600 mb-2" />
-                              <p className="font-medium text-gray-900">{dept.name}</p>
-                              {dept.description && (
-                                <p className="text-xs text-gray-500 mt-1 line-clamp-2">{dept.description}</p>
-                              )}
-                            </button>
-                          ))}
+                          {(departments || []).map((dept: Department) => {
+                            const isRecommended = aiRecommendedDepartment &&
+                              dept.name.toLowerCase().includes(aiRecommendedDepartment.toLowerCase());
+                            return (
+                              <button
+                                key={dept.id}
+                                onClick={() => { setSelectedDepartment(dept.id); setBookingStep(2); }}
+                                className={`p-4 rounded-xl border-2 text-left transition-all hover:shadow-md relative ${
+                                  selectedDepartment === dept.id
+                                    ? 'border-blue-500 bg-blue-50'
+                                    : isRecommended
+                                    ? 'border-purple-400 bg-purple-50 ring-2 ring-purple-200'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                              >
+                                {isRecommended && (
+                                  <span className="absolute -top-2 -right-2 px-2 py-0.5 bg-purple-600 text-white text-xs font-medium rounded-full">
+                                    AI Pick
+                                  </span>
+                                )}
+                                <BuildingOfficeIcon className={`h-8 w-8 mb-2 ${isRecommended ? 'text-purple-600' : 'text-blue-600'}`} />
+                                <p className="font-medium text-gray-900">{dept.name}</p>
+                                {dept.description && (
+                                  <p className="text-xs text-gray-500 mt-1 line-clamp-2">{dept.description}</p>
+                                )}
+                              </button>
+                            );
+                          })}
                           {(!departments || departments.length === 0) && (
                             <div className="col-span-full text-center py-8 text-gray-500">
                               No departments available

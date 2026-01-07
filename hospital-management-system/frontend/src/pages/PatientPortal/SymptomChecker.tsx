@@ -93,8 +93,28 @@ export default function SymptomChecker() {
   };
 
   const handleBookAppointment = (department: string) => {
-    // Navigate to appointment booking with pre-filled department
-    navigate(`/appointments/new?department=${encodeURIComponent(department)}`);
+    // Navigate to patient portal appointment booking with pre-filled info from symptom checker
+    const params = new URLSearchParams({
+      book: 'true',
+      department: department,
+    });
+
+    // Add symptoms summary if available
+    if (completedResult?.symptoms_summary && completedResult.symptoms_summary.length > 0) {
+      params.set('symptoms', completedResult.symptoms_summary.slice(0, 5).join(', '));
+    }
+
+    // Add urgency level
+    if (completedResult?.urgency) {
+      params.set('urgency', completedResult.urgency);
+    }
+
+    // Add primary concern
+    if (completedResult?.primary_concern) {
+      params.set('concern', completedResult.primary_concern);
+    }
+
+    navigate(`/patient-portal/appointments?${params.toString()}`);
   };
 
   const handleStartChecker = () => {

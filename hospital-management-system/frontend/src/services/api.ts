@@ -14,8 +14,20 @@ export const api = axios.create({
 // Request interceptor
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const state = store.getState();
-    const token = state.auth.accessToken;
+    // Check if this is a patient portal request
+    const isPatientPortalRequest = config.url?.includes('/patient-portal') ||
+                                    config.url?.includes('/patient-auth');
+
+    let token: string | null = null;
+
+    if (isPatientPortalRequest) {
+      // Use patient portal token for patient portal requests
+      token = localStorage.getItem('patientPortalToken');
+    } else {
+      // Use staff token from Redux for other requests
+      const state = store.getState();
+      token = state.auth.accessToken;
+    }
 
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -34,41 +46,82 @@ api.interceptors.response.use(
       _retry?: boolean;
     };
 
+    // Check if this is a patient portal request
+    const isPatientPortalRequest = originalRequest.url?.includes('/patient-portal') ||
+                                    originalRequest.url?.includes('/patient-auth');
+
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
-      try {
-        const state = store.getState();
-        const refreshToken = state.auth.refreshToken;
+      if (isPatientPortalRequest) {
+        // Handle patient portal authentication failure
+        const patientRefreshToken = localStorage.getItem('patientRefreshToken');
 
-        if (!refreshToken) {
-          store.dispatch(logout());
-          window.location.href = '/login';
+        if (!patientRefreshToken) {
+          localStorage.removeItem('patientPortalToken');
+          localStorage.removeItem('patientRefreshToken');
+          localStorage.removeItem('patientUser');
+          window.location.href = '/patient-portal/login';
           return Promise.reject(error);
         }
 
-        const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
-          refreshToken,
-        });
+        try {
+          const response = await axios.post(`${API_BASE_URL}/patient-auth/refresh`, {
+            refreshToken: patientRefreshToken,
+          });
 
-        const { accessToken, refreshToken: newRefreshToken } = response.data.data;
+          const { accessToken, refreshToken: newRefreshToken } = response.data.data;
 
-        store.dispatch(
-          updateTokens({
-            accessToken,
-            refreshToken: newRefreshToken,
-          })
-        );
+          localStorage.setItem('patientPortalToken', accessToken);
+          localStorage.setItem('patientRefreshToken', newRefreshToken);
 
-        if (originalRequest.headers) {
-          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+          if (originalRequest.headers) {
+            originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+          }
+
+          return api(originalRequest);
+        } catch (refreshError) {
+          localStorage.removeItem('patientPortalToken');
+          localStorage.removeItem('patientRefreshToken');
+          localStorage.removeItem('patientUser');
+          window.location.href = '/patient-portal/login';
+          return Promise.reject(refreshError);
         }
+      } else {
+        // Handle staff authentication failure
+        try {
+          const state = store.getState();
+          const refreshToken = state.auth.refreshToken;
 
-        return api(originalRequest);
-      } catch (refreshError) {
-        store.dispatch(logout());
-        window.location.href = '/login';
-        return Promise.reject(refreshError);
+          if (!refreshToken) {
+            store.dispatch(logout());
+            window.location.href = '/login';
+            return Promise.reject(error);
+          }
+
+          const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+            refreshToken,
+          });
+
+          const { accessToken, refreshToken: newRefreshToken } = response.data.data;
+
+          store.dispatch(
+            updateTokens({
+              accessToken,
+              refreshToken: newRefreshToken,
+            })
+          );
+
+          if (originalRequest.headers) {
+            originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+          }
+
+          return api(originalRequest);
+        } catch (refreshError) {
+          store.dispatch(logout());
+          window.location.href = '/login';
+          return Promise.reject(refreshError);
+        }
       }
     }
 

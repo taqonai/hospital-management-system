@@ -17,12 +17,8 @@ except ImportError:
     PYMUPDF_AVAILABLE = False
     fitz = None
 
-try:
-    from openai import OpenAI
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
-    OpenAI = None
+# Import shared OpenAI client
+from shared.openai_client import openai_manager, TaskComplexity, OPENAI_AVAILABLE
 
 from PIL import Image
 
@@ -36,15 +32,12 @@ class PDFAnalysisService:
     """
 
     def __init__(self):
-        self.api_key = os.getenv("OPENAI_API_KEY")
-        self.client = OpenAI(api_key=self.api_key) if OPENAI_AVAILABLE and self.api_key else None
-        self.model = "gpt-4o"  # GPT-4 with vision capabilities
-        self.text_model = "gpt-4o-mini"  # For text-only analysis (faster/cheaper)
         self.model_version = "1.0.0-pdf"
 
-    def is_available(self) -> bool:
+    @staticmethod
+    def is_available() -> bool:
         """Check if service is available"""
-        return self.client is not None and PYMUPDF_AVAILABLE
+        return openai_manager.is_available() and PYMUPDF_AVAILABLE
 
     def analyze_pdf(
         self,
@@ -154,18 +147,21 @@ class PDFAnalysisService:
         prompt = self._build_text_prompt(document_type, extract_entities, patient_context)
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.text_model,
+            result = openai_manager.chat_completion(
                 messages=[
                     {"role": "system", "content": prompt},
                     {"role": "user", "content": f"Please analyze this medical document:\n\n{text[:15000]}"}  # Limit text length
                 ],
+                task_complexity=TaskComplexity.SIMPLE,  # gpt-4o-mini for text
                 max_tokens=3000,
                 temperature=0.3
             )
 
-            result_text = response.choices[0].message.content
-            return self._parse_analysis_response(result_text, "text")
+            if result and result.get("success"):
+                result_text = result.get("content", "")
+                return self._parse_analysis_response(result_text, "text")
+            else:
+                return {"success": False, "error": result.get("error", "Analysis failed") if result else "No response"}
 
         except Exception as e:
             logger.error(f"Text analysis failed: {e}")
@@ -195,8 +191,12 @@ class PDFAnalysisService:
                     }
                 })
 
-            response = self.client.chat.completions.create(
-                model=self.model,
+            # Use gpt-4o for vision analysis via shared client
+            if not openai_manager.client:
+                return {"success": False, "error": "OpenAI client not initialized"}
+
+            response = openai_manager.client.chat.completions.create(
+                model="gpt-4o",  # GPT-4 Vision model
                 messages=[{"role": "user", "content": content}],
                 max_tokens=3000,
                 temperature=0.3

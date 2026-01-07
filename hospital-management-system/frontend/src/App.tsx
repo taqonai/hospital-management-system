@@ -96,6 +96,9 @@ import PatientPortalPrescriptions from './pages/PatientPortal/Prescriptions';
 import PatientPortalLabResults from './pages/PatientPortal/LabResults';
 import PatientPortalBilling from './pages/PatientPortal/Billing';
 import PatientPortalSettings from './pages/PatientPortal/Settings';
+import PatientPortalSymptomChecker from './pages/PatientPortal/SymptomChecker';
+import PatientPortalHealthAssistant from './pages/PatientPortal/HealthAssistant';
+import PatientPortalHealthInsights from './pages/PatientPortal/HealthInsights';
 import PatientPortalLayout from './components/layout/PatientPortalLayout';
 
 // Asset Management
@@ -239,6 +242,9 @@ function App() {
         <Route path="labs" element={<PatientPortalLabResults />} />
         <Route path="billing" element={<PatientPortalBilling />} />
         <Route path="settings" element={<PatientPortalSettings />} />
+        <Route path="symptom-checker" element={<PatientPortalSymptomChecker />} />
+        <Route path="health-assistant" element={<PatientPortalHealthAssistant />} />
+        <Route path="health-insights" element={<PatientPortalHealthInsights />} />
       </Route>
 
       {/* Redirects */}
