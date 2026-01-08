@@ -56,6 +56,7 @@ interface NavItem {
 }
 
 // Define which roles can access each module
+// Optimized role-based access following principle of least privilege
 const navigationGroups: { name: string; items: NavItem[] }[] = [
   {
     name: 'Main',
@@ -66,7 +67,7 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
       { name: 'Appointments', href: '/appointments', icon: CalendarDaysIcon, color: 'from-purple-500 to-purple-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'] },
       { name: 'Doctors', href: '/doctors', icon: UserGroupIcon, color: 'from-cyan-500 to-cyan-600',
-        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'RECEPTIONIST', 'NURSE'] },
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'RECEPTIONIST'] },
       { name: 'Departments', href: '/departments', icon: BuildingOffice2Icon, color: 'from-blue-500 to-indigo-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN'] },
     ],
@@ -83,15 +84,15 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
       { name: 'Early Warning', href: '/early-warning', icon: BellIcon, color: 'from-orange-500 to-red-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'] },
       { name: 'Med Safety', href: '/medication-safety', icon: ShieldCheckIcon, color: 'from-blue-500 to-cyan-600',
-        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'PHARMACIST'] },
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST'] },
       { name: 'Laboratory', href: '/laboratory', icon: BeakerIcon, color: 'from-amber-500 to-amber-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN'] },
       { name: 'Radiology', href: '/radiology', icon: PhotoIcon, color: 'from-pink-500 to-pink-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'RADIOLOGIST'] },
       { name: 'Pharmacy', href: '/pharmacy', icon: BuildingStorefrontIcon, color: 'from-teal-500 to-teal-600',
-        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'PHARMACIST'] },
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'PHARMACIST'] },
       { name: 'Surgery', href: '/surgery', icon: HeartIcon, color: 'from-rose-500 to-rose-600',
-        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'] },
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR'] },
       { name: 'Blood Bank', href: '/blood-bank', icon: HeartIcon, color: 'from-red-500 to-red-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN'] },
     ],
@@ -99,12 +100,8 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
   {
     name: 'AI Features',
     items: [
-      { name: 'AI Assistant', href: '/ai-assistant', icon: CpuChipIcon, color: 'from-purple-500 to-pink-600',
-        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'] },
       { name: 'Diagnostic AI', href: '/diagnostic-assistant', icon: SparklesIcon, color: 'from-fuchsia-500 to-fuchsia-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'] },
-      { name: 'Symptom Checker', href: '/symptom-checker', icon: MagnifyingGlassIcon, color: 'from-emerald-500 to-teal-600',
-        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'] },
       { name: 'AI Scribe', href: '/ai-scribe', icon: DocumentTextIcon, color: 'from-violet-500 to-violet-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR'] },
       { name: 'Smart Orders', href: '/smart-orders', icon: SparklesIcon, color: 'from-indigo-500 to-purple-600',
@@ -118,11 +115,11 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
       { name: 'Medical Imaging', href: '/medical-imaging', icon: PhotoIcon, color: 'from-cyan-500 to-cyan-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'RADIOLOGIST'] },
       { name: 'PDF Analysis', href: '/pdf-analysis', icon: DocumentMagnifyingGlassIcon, color: 'from-violet-500 to-purple-600',
-        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN', 'RADIOLOGIST'] },
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'LAB_TECHNICIAN', 'RADIOLOGIST'] },
       { name: 'Telemedicine', href: '/telemedicine', icon: VideoCameraIcon, color: 'from-blue-500 to-blue-600',
-        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'] },
-      { name: 'Patient Portal', href: '/patient-portal', icon: UserCircleIcon, color: 'from-indigo-500 to-purple-600',
-        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PATIENT'] },
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR'] },
+      { name: 'Symptom Checker', href: '/symptom-checker', icon: MagnifyingGlassIcon, color: 'from-emerald-500 to-teal-600',
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'] },
     ],
   },
   {
@@ -139,11 +136,11 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
       { name: 'Kiosk', href: '/kiosk', icon: ComputerDesktopIcon, color: 'from-gray-500 to-gray-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'RECEPTIONIST'] },
       { name: 'Quality', href: '/quality', icon: ClipboardDocumentCheckIcon, color: 'from-emerald-500 to-teal-600',
-        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'] },
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN'] },
       { name: 'Assets', href: '/assets', icon: WrenchScrewdriverIcon, color: 'from-amber-500 to-orange-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'MAINTENANCE_STAFF'] },
       { name: 'Dietary', href: '/dietary', icon: CakeIcon, color: 'from-lime-500 to-green-600',
-        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'DIETARY_STAFF'] },
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DIETARY_STAFF'] },
       { name: 'Access Control', href: '/rbac', icon: ShieldCheckIcon, color: 'from-indigo-500 to-purple-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN'] },
     ],
@@ -152,7 +149,7 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
     name: 'Analytics',
     items: [
       { name: 'Reports', href: '/reports', icon: ChartBarIcon, color: 'from-violet-500 to-violet-600',
-        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'ACCOUNTANT'] },
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'ACCOUNTANT', 'HR_MANAGER'] },
       { name: 'Risk Analytics', href: '/risk-analytics', icon: PresentationChartLineIcon, color: 'from-rose-500 to-rose-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR'] },
     ],
