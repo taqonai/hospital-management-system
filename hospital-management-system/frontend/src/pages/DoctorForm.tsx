@@ -15,6 +15,13 @@ import {
 import { doctorApi, departmentApi } from '../services/api';
 import toast from 'react-hot-toast';
 
+interface Specialization {
+  id: string;
+  name: string;
+  code: string;
+  description?: string;
+}
+
 interface DoctorFormData {
   firstName: string;
   lastName: string;
@@ -22,6 +29,7 @@ interface DoctorFormData {
   phone: string;
   password: string;
   specialization: string;
+  specializationId: string;
   qualification: string;
   experience: number;
   licenseNumber: string;
@@ -37,6 +45,7 @@ const initialFormData: DoctorFormData = {
   password: '',
   phone: '',
   specialization: '',
+  specializationId: '',
   qualification: '',
   experience: 0,
   licenseNumber: '',
@@ -45,7 +54,8 @@ const initialFormData: DoctorFormData = {
   bio: '',
 };
 
-const specializations = [
+// Fallback specializations for backward compatibility
+const fallbackSpecializations = [
   'General Medicine',
   'Cardiology',
   'Orthopedics',
@@ -70,8 +80,6 @@ const specializations = [
   'General Surgery',
 ];
 
-// Departments will be fetched from API
-
 export default function DoctorForm() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -88,6 +96,17 @@ export default function DoctorForm() {
       const response = await departmentApi.getAll();
       return response.data.data || [];
     },
+  });
+
+  // Fetch specializations for selected department
+  const { data: specializationsData } = useQuery({
+    queryKey: ['department-specializations', formData.departmentId],
+    queryFn: async () => {
+      if (!formData.departmentId) return [];
+      const response = await departmentApi.getSpecializations(formData.departmentId);
+      return response.data.data || [];
+    },
+    enabled: !!formData.departmentId,
   });
 
   // Fetch doctor data if editing
@@ -111,6 +130,7 @@ export default function DoctorForm() {
         phone: doctorData.user?.phone || doctorData.phone || '',
         password: '', // Don't populate password on edit
         specialization: doctorData.specialization || '',
+        specializationId: doctorData.specializationId || '',
         qualification: doctorData.qualification || '',
         experience: doctorData.experience || 0,
         licenseNumber: doctorData.licenseNumber || '',
@@ -120,6 +140,45 @@ export default function DoctorForm() {
       });
     }
   }, [doctorData]);
+
+  // Reset specialization when department changes
+  const handleDepartmentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newDeptId = e.target.value;
+    setFormData(prev => ({
+      ...prev,
+      departmentId: newDeptId,
+      specializationId: '',
+      specialization: '',
+    }));
+  };
+
+  // Handle specialization selection
+  const handleSpecializationChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value;
+    const specs: Specialization[] = specializationsData || [];
+    const selectedSpec = specs.find((s: Specialization) => s.id === value);
+
+    if (selectedSpec) {
+      setFormData(prev => ({
+        ...prev,
+        specializationId: selectedSpec.id,
+        specialization: selectedSpec.name,
+      }));
+    } else if (value) {
+      // Fallback: using a text value directly
+      setFormData(prev => ({
+        ...prev,
+        specializationId: '',
+        specialization: value,
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        specializationId: '',
+        specialization: '',
+      }));
+    }
+  };
 
   // Create mutation
   const createMutation = useMutation({
@@ -338,15 +397,30 @@ export default function DoctorForm() {
               </label>
               <select
                 name="specialization"
-                value={formData.specialization}
-                onChange={handleChange}
+                value={formData.specializationId || formData.specialization}
+                onChange={handleSpecializationChange}
                 className={`w-full px-4 py-3 rounded-lg border ${errors.specialization ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
               >
-                <option value="">Select specialization</option>
-                {specializations.map(spec => (
-                  <option key={spec} value={spec}>{spec}</option>
-                ))}
+                <option value="">
+                  {!formData.departmentId ? 'Select department first' : 'Select specialization'}
+                </option>
+                {/* Show dynamic specializations if department has them */}
+                {(specializationsData || []).length > 0 ? (
+                  (specializationsData || []).map((spec: Specialization) => (
+                    <option key={spec.id} value={spec.id}>{spec.name}</option>
+                  ))
+                ) : formData.departmentId ? (
+                  /* Fallback to hardcoded list if no specializations defined */
+                  fallbackSpecializations.map(spec => (
+                    <option key={spec} value={spec}>{spec}</option>
+                  ))
+                ) : null}
               </select>
+              {(specializationsData || []).length === 0 && formData.departmentId && (
+                <p className="mt-1 text-xs text-amber-600">
+                  No specializations defined for this department. Using default list.
+                </p>
+              )}
               {errors.specialization && <p className="mt-1 text-sm text-red-500">{errors.specialization}</p>}
             </div>
 
@@ -406,7 +480,7 @@ export default function DoctorForm() {
                 <select
                   name="departmentId"
                   value={formData.departmentId}
-                  onChange={handleChange}
+                  onChange={handleDepartmentChange}
                   className={`w-full pl-10 pr-4 py-3 rounded-lg border ${errors.departmentId ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
                 >
                   <option value="">Select department</option>

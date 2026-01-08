@@ -67,6 +67,8 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'] },
       { name: 'Doctors', href: '/doctors', icon: UserGroupIcon, color: 'from-cyan-500 to-cyan-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'RECEPTIONIST', 'NURSE'] },
+      { name: 'Departments', href: '/departments', icon: BuildingOffice2Icon, color: 'from-blue-500 to-indigo-600',
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN'] },
     ],
   },
   {

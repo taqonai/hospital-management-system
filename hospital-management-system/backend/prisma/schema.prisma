@@ -71,13 +71,32 @@ model Department {
   updatedAt    DateTime @updatedAt
 
   // Relations
-  hospital    Hospital @relation(fields: [hospitalId], references: [id])
-  doctors     Doctor[]
-  nurses      Nurse[]
-  beds        Bed[]
+  hospital        Hospital         @relation(fields: [hospitalId], references: [id])
+  doctors         Doctor[]
+  nurses          Nurse[]
+  beds            Bed[]
+  specializations Specialization[]
 
   @@unique([hospitalId, code])
   @@map("departments")
+}
+
+model Specialization {
+  id           String   @id @default(uuid())
+  departmentId String
+  name         String
+  code         String
+  description  String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  department Department @relation(fields: [departmentId], references: [id])
+  doctors    Doctor[]
+
+  @@unique([departmentId, code])
+  @@map("specializations")
 }
 
 // ==================== USER MANAGEMENT ====================
@@ -236,7 +255,8 @@ model Doctor {
   id                String   @id @default(uuid())
   userId            String   @unique
   departmentId      String
-  specialization    String
+  specializationId  String?  // FK to Specialization (nullable for backward compat)
+  specialization    String   // Keep for backward compat, will phase out
   qualification     String
   experience        Int      @default(0)
   licenseNumber     String
@@ -252,14 +272,15 @@ model Doctor {
   updatedAt         DateTime @updatedAt
 
   // Relations
-  user            User              @relation(fields: [userId], references: [id])
-  department      Department        @relation(fields: [departmentId], references: [id])
-  schedules       DoctorSchedule[]
-  appointments    Appointment[]
-  consultations   Consultation[]
-  prescriptions   Prescription[]
-  surgeries       Surgery[]
-  aiDiagnoses     AIDiagnosis[]
+  user               User              @relation(fields: [userId], references: [id])
+  department         Department        @relation(fields: [departmentId], references: [id])
+  specializationRef  Specialization?   @relation(fields: [specializationId], references: [id])
+  schedules          DoctorSchedule[]
+  appointments       Appointment[]
+  consultations      Consultation[]
+  prescriptions      Prescription[]
+  surgeries          Surgery[]
+  aiDiagnoses        AIDiagnosis[]
 
   @@map("doctors")
 }

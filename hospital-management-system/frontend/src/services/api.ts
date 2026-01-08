@@ -201,8 +201,23 @@ export const doctorApi = {
 
 // Department APIs
 export const departmentApi = {
-  getAll: () => api.get('/departments'),
+  getAll: (includeInactive = false) => api.get(`/departments${includeInactive ? '?includeInactive=true' : ''}`),
   getById: (id: string) => api.get(`/departments/${id}`),
+  create: (data: { name: string; code: string; description?: string; floor?: string; phone?: string; email?: string }) =>
+    api.post('/departments', data),
+  update: (id: string, data: { name?: string; code?: string; description?: string; floor?: string; phone?: string; email?: string; isActive?: boolean }) =>
+    api.put(`/departments/${id}`, data),
+  delete: (id: string) => api.delete(`/departments/${id}`),
+
+  // Specializations
+  getAllSpecializations: () => api.get('/departments/specializations/all'),
+  getSpecializations: (departmentId: string) => api.get(`/departments/${departmentId}/specializations`),
+  createSpecialization: (departmentId: string, data: { name: string; code: string; description?: string }) =>
+    api.post(`/departments/${departmentId}/specializations`, data),
+  updateSpecialization: (departmentId: string, specId: string, data: { name?: string; code?: string; description?: string; isActive?: boolean }) =>
+    api.put(`/departments/${departmentId}/specializations/${specId}`, data),
+  deleteSpecialization: (departmentId: string, specId: string) =>
+    api.delete(`/departments/${departmentId}/specializations/${specId}`),
 };
 
 // AI APIs

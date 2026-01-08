@@ -17,6 +17,8 @@ import Appointments from './pages/Appointments';
 import AppointmentForm from './pages/AppointmentForm';
 import Doctors from './pages/Doctors';
 import DoctorForm from './pages/DoctorForm';
+import Departments from './pages/Departments';
+import DepartmentForm from './pages/Departments/DepartmentForm';
 import AIAssistant from './pages/AIAssistant';
 
 // HIS Module Pages
@@ -166,6 +168,9 @@ function App() {
         <Route path="/doctors" element={<Doctors />} />
         <Route path="/doctors/new" element={<DoctorForm />} />
         <Route path="/doctors/:id/edit" element={<DoctorForm />} />
+        <Route path="/departments" element={<Departments />} />
+        <Route path="/departments/new" element={<DepartmentForm />} />
+        <Route path="/departments/:id/edit" element={<DepartmentForm />} />
 
         {/* HIS Module Routes */}
         <Route path="/opd" element={<OPD />} />

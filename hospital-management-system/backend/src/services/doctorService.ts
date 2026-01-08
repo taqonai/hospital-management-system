@@ -1,11 +1,11 @@
 import prisma from '../config/database';
 import bcrypt from 'bcryptjs';
 import { CreateDoctorDto, SearchParams } from '../types';
-import { NotFoundError, ConflictError } from '../middleware/errorHandler';
+import { NotFoundError, ConflictError, AppError } from '../middleware/errorHandler';
 import { DayOfWeek } from '@prisma/client';
 
 export class DoctorService {
-  async create(hospitalId: string, data: CreateDoctorDto) {
+  async create(hospitalId: string, data: CreateDoctorDto & { specializationId?: string }) {
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
       where: {
@@ -29,6 +29,21 @@ export class DoctorService {
       throw new NotFoundError('Department not found');
     }
 
+    // Validate specializationId if provided
+    if (data.specializationId) {
+      const specialization = await prisma.specialization.findFirst({
+        where: {
+          id: data.specializationId,
+          departmentId: data.departmentId,
+          isActive: true,
+        },
+      });
+
+      if (!specialization) {
+        throw new AppError('Invalid specialization for the selected department', 400);
+      }
+    }
+
     const hashedPassword = await bcrypt.hash(data.password, 12);
 
     // Create user and doctor in transaction
@@ -49,6 +64,7 @@ export class DoctorService {
         data: {
           userId: user.id,
           departmentId: data.departmentId,
+          specializationId: data.specializationId,
           specialization: data.specialization,
           qualification: data.qualification,
           experience: data.experience,
@@ -70,6 +86,7 @@ export class DoctorService {
             },
           },
           department: true,
+          specializationRef: true,
         },
       });
 
@@ -119,6 +136,9 @@ export class DoctorService {
           department: {
             select: { id: true, name: true },
           },
+          specializationRef: {
+            select: { id: true, name: true, code: true },
+          },
           _count: {
             select: {
               appointments: true,
@@ -153,6 +173,7 @@ export class DoctorService {
           },
         },
         department: true,
+        specializationRef: true,
         schedules: {
           orderBy: { dayOfWeek: 'asc' },
         },
@@ -173,13 +194,29 @@ export class DoctorService {
     return doctor;
   }
 
-  async update(id: string, hospitalId: string, data: Partial<CreateDoctorDto>) {
+  async update(id: string, hospitalId: string, data: Partial<CreateDoctorDto> & { specializationId?: string }) {
     const doctor = await prisma.doctor.findFirst({
       where: { id, user: { hospitalId } },
     });
 
     if (!doctor) {
       throw new NotFoundError('Doctor not found');
+    }
+
+    // Validate specializationId if provided
+    const departmentId = data.departmentId || doctor.departmentId;
+    if (data.specializationId) {
+      const specialization = await prisma.specialization.findFirst({
+        where: {
+          id: data.specializationId,
+          departmentId: departmentId,
+          isActive: true,
+        },
+      });
+
+      if (!specialization) {
+        throw new AppError('Invalid specialization for the selected department', 400);
+      }
     }
 
     const { email, password, firstName, lastName, phone, ...doctorData } = data;
@@ -212,6 +249,7 @@ export class DoctorService {
             },
           },
           department: true,
+          specializationRef: true,
         },
       });
 
