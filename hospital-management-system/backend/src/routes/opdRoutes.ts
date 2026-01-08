@@ -115,4 +115,59 @@ router.get(
   })
 );
 
+// Record pre-consultation vitals for an appointment
+router.post(
+  '/appointments/:appointmentId/vitals',
+  authenticate,
+  authorize('NURSE', 'DOCTOR', 'HOSPITAL_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { appointmentId } = req.params;
+    const {
+      temperature,
+      bloodPressureSys,
+      bloodPressureDia,
+      heartRate,
+      respiratoryRate,
+      oxygenSaturation,
+      weight,
+      height,
+      bloodSugar,
+      painLevel,
+      notes,
+    } = req.body;
+
+    const result = await opdService.recordVitals(
+      appointmentId,
+      req.user!.hospitalId,
+      {
+        temperature,
+        bloodPressureSys,
+        bloodPressureDia,
+        heartRate,
+        respiratoryRate,
+        oxygenSaturation,
+        weight,
+        height,
+        bloodSugar,
+        painLevel,
+        notes,
+      },
+      req.user!.userId
+    );
+
+    sendSuccess(res, result, 'Vitals recorded successfully');
+  })
+);
+
+// Get vitals for an appointment
+router.get(
+  '/appointments/:appointmentId/vitals',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { appointmentId } = req.params;
+    const result = await opdService.getAppointmentVitals(appointmentId, req.user!.hospitalId);
+    sendSuccess(res, result);
+  })
+);
+
 export default router;

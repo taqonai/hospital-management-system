@@ -7,7 +7,11 @@ import {
   ArrowPathIcon,
   PlusIcon,
   UserPlusIcon,
+  HeartIcon,
+  CheckCircleIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
+import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
 import { useAIHealth } from '../../hooks/useAI';
 import { opdApi, appointmentApi, doctorApi, patientApi } from '../../services/api';
 import clsx from 'clsx';
@@ -17,8 +21,10 @@ interface QueueItem {
   id: string;
   tokenNumber: string;
   patient: {
+    id: string;
     firstName: string;
     lastName: string;
+    mrn?: string;
   };
   doctor: {
     user: {
@@ -29,6 +35,7 @@ interface QueueItem {
   };
   status: string;
   estimatedWaitTime?: number;
+  vitalsRecordedAt?: string;
 }
 
 interface OPDStats {
@@ -345,6 +352,315 @@ function WalkInModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
   );
 }
 
+// Vitals Recording Modal for pre-consultation
+interface VitalsModalProps {
+  appointment: QueueItem;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalProps) {
+  const [loading, setLoading] = useState(false);
+  const [vitals, setVitals] = useState({
+    temperature: '',
+    bloodPressureSys: '',
+    bloodPressureDia: '',
+    heartRate: '',
+    respiratoryRate: '',
+    oxygenSaturation: '',
+    weight: '',
+    height: '',
+    bloodSugar: '',
+    painLevel: '',
+    notes: '',
+  });
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setVitals((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const vitalsData = {
+        temperature: vitals.temperature ? parseFloat(vitals.temperature) : undefined,
+        bloodPressureSys: vitals.bloodPressureSys ? parseInt(vitals.bloodPressureSys) : undefined,
+        bloodPressureDia: vitals.bloodPressureDia ? parseInt(vitals.bloodPressureDia) : undefined,
+        heartRate: vitals.heartRate ? parseInt(vitals.heartRate) : undefined,
+        respiratoryRate: vitals.respiratoryRate ? parseInt(vitals.respiratoryRate) : undefined,
+        oxygenSaturation: vitals.oxygenSaturation ? parseFloat(vitals.oxygenSaturation) : undefined,
+        weight: vitals.weight ? parseFloat(vitals.weight) : undefined,
+        height: vitals.height ? parseFloat(vitals.height) : undefined,
+        bloodSugar: vitals.bloodSugar ? parseFloat(vitals.bloodSugar) : undefined,
+        painLevel: vitals.painLevel ? parseInt(vitals.painLevel) : undefined,
+        notes: vitals.notes || undefined,
+      };
+
+      await opdApi.recordVitals(appointment.id, vitalsData);
+      toast.success('Vitals recorded successfully');
+      onSuccess();
+    } catch (error: any) {
+      console.error('Failed to record vitals:', error);
+      toast.error(error.response?.data?.message || 'Failed to record vitals');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-rose-500 via-pink-500 to-rose-600 px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <HeartIcon className="h-6 w-6" />
+                  Record Pre-Consultation Vitals
+                </h2>
+                <p className="text-white/80 text-sm mt-1">
+                  Patient: {appointment.patient?.firstName} {appointment.patient?.lastName}
+                  {appointment.patient?.mrn && <span className="ml-2 opacity-75">MRN: {appointment.patient.mrn}</span>}
+                </p>
+              </div>
+              <button
+                onClick={onClose}
+                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+              >
+                <XMarkIcon className="h-5 w-5 text-white" />
+              </button>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+            {/* Primary Vitals */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <span className="w-2 h-2 bg-rose-500 rounded-full" />
+                Primary Vitals
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Temperature (°F)
+                  </label>
+                  <input
+                    type="number"
+                    name="temperature"
+                    value={vitals.temperature}
+                    onChange={handleChange}
+                    step="0.1"
+                    min="90"
+                    max="110"
+                    placeholder="98.6"
+                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    BP Systolic (mmHg)
+                  </label>
+                  <input
+                    type="number"
+                    name="bloodPressureSys"
+                    value={vitals.bloodPressureSys}
+                    onChange={handleChange}
+                    min="60"
+                    max="250"
+                    placeholder="120"
+                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    BP Diastolic (mmHg)
+                  </label>
+                  <input
+                    type="number"
+                    name="bloodPressureDia"
+                    value={vitals.bloodPressureDia}
+                    onChange={handleChange}
+                    min="40"
+                    max="150"
+                    placeholder="80"
+                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Heart Rate (bpm)
+                  </label>
+                  <input
+                    type="number"
+                    name="heartRate"
+                    value={vitals.heartRate}
+                    onChange={handleChange}
+                    min="30"
+                    max="220"
+                    placeholder="72"
+                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Resp. Rate (/min)
+                  </label>
+                  <input
+                    type="number"
+                    name="respiratoryRate"
+                    value={vitals.respiratoryRate}
+                    onChange={handleChange}
+                    min="8"
+                    max="40"
+                    placeholder="16"
+                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    SpO2 (%)
+                  </label>
+                  <input
+                    type="number"
+                    name="oxygenSaturation"
+                    value={vitals.oxygenSaturation}
+                    onChange={handleChange}
+                    step="0.1"
+                    min="70"
+                    max="100"
+                    placeholder="98"
+                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Body Measurements */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <span className="w-2 h-2 bg-blue-500 rounded-full" />
+                Body Measurements
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Weight (kg)
+                  </label>
+                  <input
+                    type="number"
+                    name="weight"
+                    value={vitals.weight}
+                    onChange={handleChange}
+                    step="0.1"
+                    min="1"
+                    max="500"
+                    placeholder="70"
+                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Height (cm)
+                  </label>
+                  <input
+                    type="number"
+                    name="height"
+                    value={vitals.height}
+                    onChange={handleChange}
+                    step="0.1"
+                    min="30"
+                    max="250"
+                    placeholder="170"
+                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Blood Sugar (mg/dL)
+                  </label>
+                  <input
+                    type="number"
+                    name="bloodSugar"
+                    value={vitals.bloodSugar}
+                    onChange={handleChange}
+                    step="0.1"
+                    min="20"
+                    max="600"
+                    placeholder="100"
+                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Pain Level (0-10)
+                  </label>
+                  <input
+                    type="number"
+                    name="painLevel"
+                    value={vitals.painLevel}
+                    onChange={handleChange}
+                    min="0"
+                    max="10"
+                    placeholder="0"
+                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Notes (Optional)
+              </label>
+              <textarea
+                name="notes"
+                value={vitals.notes}
+                onChange={handleChange}
+                placeholder="Any additional observations..."
+                rows={2}
+                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500/50 focus:border-gray-500 resize-none"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 text-white font-semibold hover:from-rose-600 hover:to-pink-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircleIcon className="h-5 w-5" />
+                    Save Vitals
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function OPD() {
   const [activeTab, setActiveTab] = useState<'queue' | 'appointments' | 'noshow'>('queue');
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -356,6 +672,7 @@ export default function OPD() {
   });
   const [loading, setLoading] = useState(true);
   const [showWalkInModal, setShowWalkInModal] = useState(false);
+  const [selectedAppointmentForVitals, setSelectedAppointmentForVitals] = useState<QueueItem | null>(null);
   const { data: healthStatus } = useAIHealth();
   const isAIOnline = healthStatus?.status === 'connected';
 
@@ -588,19 +905,43 @@ export default function OPD() {
                             <h4 className="font-medium text-gray-900">
                               {patient.patient?.firstName} {patient.patient?.lastName}
                             </h4>
-                            {patient.status === 'IN_CONSULTATION' ? (
-                              <span className="inline-flex items-center gap-1.5 text-sm text-emerald-600">
-                                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                                In Consultation
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-sm text-gray-500">
-                                <ClockIcon className="h-3.5 w-3.5" />
-                                ~{patient.estimatedWaitTime || 15} min
-                              </span>
-                            )}
+                            <div className="flex items-center gap-2">
+                              {patient.status === 'IN_CONSULTATION' ? (
+                                <span className="inline-flex items-center gap-1.5 text-sm text-emerald-600">
+                                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                                  In Consultation
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-sm text-gray-500">
+                                  <ClockIcon className="h-3.5 w-3.5" />
+                                  ~{patient.estimatedWaitTime || 15} min
+                                </span>
+                              )}
+                              {/* Vitals Status Indicator */}
+                              {patient.vitalsRecordedAt && (
+                                <span className="inline-flex items-center gap-1 text-xs text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">
+                                  <HeartIconSolid className="h-3 w-3" />
+                                  Vitals
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
+                        {/* Record Vitals Button */}
+                        {patient.status !== 'IN_CONSULTATION' && (
+                          <button
+                            onClick={() => setSelectedAppointmentForVitals(patient)}
+                            className={clsx(
+                              'group relative inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-300',
+                              patient.vitalsRecordedAt
+                                ? 'bg-rose-100 text-rose-700 hover:bg-rose-200'
+                                : 'bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-md shadow-rose-500/25 hover:shadow-rose-500/40 hover:scale-105'
+                            )}
+                          >
+                            <HeartIcon className="h-3.5 w-3.5" />
+                            {patient.vitalsRecordedAt ? 'Update Vitals' : 'Record Vitals'}
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -681,6 +1022,27 @@ export default function OPD() {
           onClose={() => setShowWalkInModal(false)}
           onSuccess={() => {
             setShowWalkInModal(false);
+            // Refresh queue
+            const fetchQueue = async () => {
+              try {
+                const response = await opdApi.getQueue();
+                setQueue(response.data.data || []);
+              } catch (error) {
+                console.error('Failed to fetch queue:', error);
+              }
+            };
+            fetchQueue();
+          }}
+        />
+      )}
+
+      {/* Vitals Recording Modal */}
+      {selectedAppointmentForVitals && (
+        <VitalsRecordingModal
+          appointment={selectedAppointmentForVitals}
+          onClose={() => setSelectedAppointmentForVitals(null)}
+          onSuccess={() => {
+            setSelectedAppointmentForVitals(null);
             // Refresh queue
             const fetchQueue = async () => {
               try {

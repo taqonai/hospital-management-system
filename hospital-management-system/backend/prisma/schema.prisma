@@ -477,6 +477,7 @@ enum AllergySeverity {
 model Vital {
   id                String   @id @default(uuid())
   patientId         String
+  appointmentId     String?  // Optional link to appointment for pre-consultation vitals
   temperature       Decimal? @db.Decimal(4, 1)
   bloodPressureSys  Int?
   bloodPressureDia  Int?
@@ -487,11 +488,13 @@ model Vital {
   height            Decimal? @db.Decimal(5, 2)
   bmi               Decimal? @db.Decimal(4, 1)
   bloodSugar        Decimal? @db.Decimal(5, 1)
+  painLevel         Int?     // Pain scale 0-10
   notes             String?
   recordedBy        String
   recordedAt        DateTime @default(now())
 
-  patient Patient @relation(fields: [patientId], references: [id])
+  patient     Patient      @relation(fields: [patientId], references: [id])
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
 
   @@map("vitals")
 }
@@ -538,6 +541,7 @@ model Appointment {
   parentAppointmentId String?
   tokenNumber     Int?
   checkedInAt     DateTime?
+  vitalsRecordedAt DateTime?        // Timestamp when pre-consultation vitals were recorded
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
@@ -547,6 +551,7 @@ model Appointment {
   doctor         Doctor        @relation(fields: [doctorId], references: [id])
   consultation   Consultation?
   clinicalNotes  ClinicalNote[] @relation("ClinicalNoteAppointment")
+  vitals         Vital[]       // Pre-consultation vitals recorded for this appointment
 
   @@map("appointments")
 }

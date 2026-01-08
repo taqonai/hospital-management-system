@@ -591,6 +591,21 @@ export const opdApi = {
     api.post(`/opd/reschedule/${appointmentId}`, data),
   getStats: () => api.get('/opd/stats'),
   getQueueDisplay: () => api.get('/opd/display'),
+  // Pre-consultation vitals
+  recordVitals: (appointmentId: string, vitalsData: {
+    temperature?: number;
+    bloodPressureSys?: number;
+    bloodPressureDia?: number;
+    heartRate?: number;
+    respiratoryRate?: number;
+    oxygenSaturation?: number;
+    weight?: number;
+    height?: number;
+    bloodSugar?: number;
+    painLevel?: number;
+    notes?: string;
+  }) => api.post(`/opd/appointments/${appointmentId}/vitals`, vitalsData),
+  getAppointmentVitals: (appointmentId: string) => api.get(`/opd/appointments/${appointmentId}/vitals`),
 };
 
 // Emergency APIs

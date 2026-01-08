@@ -1,5 +1,20 @@
 import prisma from '../config/database';
-import { NotFoundError } from '../middleware/errorHandler';
+import { NotFoundError, ValidationError } from '../middleware/errorHandler';
+import { Decimal } from '@prisma/client/runtime/library';
+
+interface VitalsData {
+  temperature?: number;
+  bloodPressureSys?: number;
+  bloodPressureDia?: number;
+  heartRate?: number;
+  respiratoryRate?: number;
+  oxygenSaturation?: number;
+  weight?: number;
+  height?: number;
+  bloodSugar?: number;
+  painLevel?: number;
+  notes?: string;
+}
 
 export class OPDService {
   // Queue Management
@@ -23,7 +38,18 @@ export class OPDService {
         { tokenNumber: 'asc' },
         { startTime: 'asc' },
       ],
-      include: {
+      select: {
+        id: true,
+        tokenNumber: true,
+        status: true,
+        vitalsRecordedAt: true,
+        appointmentDate: true,
+        startTime: true,
+        endTime: true,
+        type: true,
+        reason: true,
+        notes: true,
+        checkedInAt: true,
         patient: { select: { id: true, firstName: true, lastName: true, mrn: true, phone: true } },
         doctor: {
           include: {
@@ -283,6 +309,103 @@ export class OPDService {
       currentToken: doctor.appointments.find(a => a.status === 'IN_PROGRESS')?.tokenNumber || null,
       waitingCount: doctor.appointments.filter(a => a.status === 'CHECKED_IN').length,
     }));
+  }
+
+  // Pre-Consultation Vitals Recording
+  async recordVitals(
+    appointmentId: string,
+    hospitalId: string,
+    vitalsData: VitalsData,
+    recordedBy: string
+  ) {
+    // Verify appointment exists and belongs to hospital
+    const appointment = await prisma.appointment.findFirst({
+      where: { id: appointmentId, hospitalId },
+      include: {
+        patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
+        doctor: {
+          include: {
+            user: { select: { firstName: true, lastName: true } },
+          },
+        },
+      },
+    });
+
+    if (!appointment) {
+      throw new NotFoundError('Appointment not found');
+    }
+
+    // Calculate BMI if weight and height are provided
+    let bmi: number | undefined;
+    if (vitalsData.weight && vitalsData.height) {
+      const heightInMeters = vitalsData.height / 100; // assuming height is in cm
+      bmi = Number((vitalsData.weight / (heightInMeters * heightInMeters)).toFixed(1));
+    }
+
+    // Create vital record linked to the appointment
+    const vital = await prisma.vital.create({
+      data: {
+        patientId: appointment.patientId,
+        appointmentId: appointmentId,
+        temperature: vitalsData.temperature ? new Decimal(vitalsData.temperature) : null,
+        bloodPressureSys: vitalsData.bloodPressureSys || null,
+        bloodPressureDia: vitalsData.bloodPressureDia || null,
+        heartRate: vitalsData.heartRate || null,
+        respiratoryRate: vitalsData.respiratoryRate || null,
+        oxygenSaturation: vitalsData.oxygenSaturation ? new Decimal(vitalsData.oxygenSaturation) : null,
+        weight: vitalsData.weight ? new Decimal(vitalsData.weight) : null,
+        height: vitalsData.height ? new Decimal(vitalsData.height) : null,
+        bmi: bmi ? new Decimal(bmi) : null,
+        bloodSugar: vitalsData.bloodSugar ? new Decimal(vitalsData.bloodSugar) : null,
+        painLevel: vitalsData.painLevel || null,
+        notes: vitalsData.notes || null,
+        recordedBy,
+      },
+    });
+
+    // Update appointment to mark vitals as recorded
+    await prisma.appointment.update({
+      where: { id: appointmentId },
+      data: { vitalsRecordedAt: new Date() },
+    });
+
+    return {
+      vital,
+      appointment: {
+        id: appointment.id,
+        patient: appointment.patient,
+        doctor: appointment.doctor,
+        vitalsRecordedAt: new Date(),
+      },
+    };
+  }
+
+  // Get vitals for an appointment
+  async getAppointmentVitals(appointmentId: string, hospitalId: string) {
+    const appointment = await prisma.appointment.findFirst({
+      where: { id: appointmentId, hospitalId },
+      include: {
+        vitals: {
+          orderBy: { recordedAt: 'desc' },
+          take: 1,
+        },
+        patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
+      },
+    });
+
+    if (!appointment) {
+      throw new NotFoundError('Appointment not found');
+    }
+
+    return {
+      appointment: {
+        id: appointment.id,
+        patientId: appointment.patientId,
+        vitalsRecordedAt: appointment.vitalsRecordedAt,
+      },
+      patient: appointment.patient,
+      vitals: appointment.vitals[0] || null,
+    };
   }
 }
 
