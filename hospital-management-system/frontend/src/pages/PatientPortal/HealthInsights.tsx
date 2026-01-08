@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -8,7 +8,6 @@ import {
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon,
   BeakerIcon,
-  CalendarDaysIcon,
   ExclamationTriangleIcon,
   CheckCircleIcon,
   InformationCircleIcon,
@@ -16,8 +15,9 @@ import {
   ClockIcon,
   ArrowPathIcon,
   ShieldCheckIcon,
+  UserCircleIcon,
+  DocumentTextIcon,
 } from '@heroicons/react/24/outline';
-import { patientPortalApi } from '../../services/api';
 
 interface HealthMetric {
   name: string;
@@ -39,11 +39,29 @@ interface HealthInsight {
   actionRoute?: string;
 }
 
+interface LabResult {
+  testName: string;
+  value: string | number;
+  unit: string;
+  normalRange: string;
+  status: 'normal' | 'abnormal';
+  date: string;
+}
+
+interface PatientInfo {
+  name: string;
+  bloodGroup: string | null;
+  allergiesCount: number;
+  chronicConditionsCount: number;
+}
+
 interface HealthSummary {
   overallScore: number;
   scoreLabel: string;
   metrics: HealthMetric[];
   insights: HealthInsight[];
+  labResults?: LabResult[];
+  patientInfo?: PatientInfo;
   lastUpdated: string;
 }
 
@@ -91,6 +109,17 @@ export default function HealthInsights() {
       { name: 'Cholesterol', value: 195, unit: 'mg/dL', status: 'normal', trend: 'down', previousValue: 210, date: '2024-01-10' },
       { name: 'BMI', value: 24.5, unit: 'kg/m2', status: 'normal', trend: 'stable', date: '2024-01-08' },
     ],
+    labResults: [
+      { testName: 'Complete Blood Count', value: 'Normal', unit: '', normalRange: 'N/A', status: 'normal', date: '2024-01-10' },
+      { testName: 'Hemoglobin', value: 14.5, unit: 'g/dL', normalRange: '13.5-17.5', status: 'normal', date: '2024-01-10' },
+      { testName: 'Glucose (Fasting)', value: 105, unit: 'mg/dL', normalRange: '70-100', status: 'abnormal', date: '2024-01-08' },
+    ],
+    patientInfo: {
+      name: 'Patient',
+      bloodGroup: 'A+',
+      allergiesCount: 2,
+      chronicConditionsCount: 1,
+    },
     insights: [
       {
         id: '1',
@@ -285,7 +314,46 @@ export default function HealthInsights() {
 
         {/* Tab Content */}
         {activeTab === 'overview' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="space-y-6">
+            {/* Patient Info Banner */}
+            {summary.patientInfo && (
+              <div className="bg-white/70 backdrop-blur-xl rounded-2xl border border-white/20 shadow-lg p-4">
+                <div className="flex flex-wrap items-center gap-4 md:gap-8">
+                  <div className="flex items-center gap-3">
+                    <UserCircleIcon className="h-6 w-6 text-blue-600" />
+                    <div>
+                      <p className="text-sm text-gray-500">Patient</p>
+                      <p className="font-medium text-gray-900">{summary.patientInfo.name}</p>
+                    </div>
+                  </div>
+                  {summary.patientInfo.bloodGroup && (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-red-50 rounded-xl">
+                      <HeartIcon className="h-5 w-5 text-red-500" />
+                      <div>
+                        <p className="text-xs text-gray-500">Blood Group</p>
+                        <p className="font-semibold text-red-700">{summary.patientInfo.bloodGroup}</p>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 rounded-xl">
+                    <ExclamationTriangleIcon className="h-5 w-5 text-amber-500" />
+                    <div>
+                      <p className="text-xs text-gray-500">Allergies</p>
+                      <p className="font-semibold text-amber-700">{summary.patientInfo.allergiesCount} known</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 rounded-xl">
+                    <DocumentTextIcon className="h-5 w-5 text-purple-500" />
+                    <div>
+                      <p className="text-xs text-gray-500">Chronic Conditions</p>
+                      <p className="font-semibold text-purple-700">{summary.patientInfo.chronicConditionsCount} tracked</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Key Metrics */}
             <div className="bg-white/70 backdrop-blur-xl rounded-2xl border border-white/20 shadow-lg p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -360,6 +428,55 @@ export default function HealthInsights() {
                 ))}
               </div>
             </div>
+            </div>
+
+            {/* Recent Lab Results Section */}
+            {summary.labResults && summary.labResults.length > 0 && (
+              <div className="bg-white/70 backdrop-blur-xl rounded-2xl border border-white/20 shadow-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <DocumentTextIcon className="h-5 w-5 text-green-600" />
+                  Recent Lab Results
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-3 px-2 text-sm font-medium text-gray-500">Test Name</th>
+                        <th className="text-left py-3 px-2 text-sm font-medium text-gray-500">Result</th>
+                        <th className="text-left py-3 px-2 text-sm font-medium text-gray-500">Normal Range</th>
+                        <th className="text-left py-3 px-2 text-sm font-medium text-gray-500">Status</th>
+                        <th className="text-left py-3 px-2 text-sm font-medium text-gray-500">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {summary.labResults.map((lab, index) => (
+                        <tr key={index} className="hover:bg-gray-50">
+                          <td className="py-3 px-2 text-sm font-medium text-gray-900">{lab.testName}</td>
+                          <td className="py-3 px-2 text-sm text-gray-900">
+                            {lab.value} {lab.unit && <span className="text-gray-500">{lab.unit}</span>}
+                          </td>
+                          <td className="py-3 px-2 text-sm text-gray-500">{lab.normalRange}</td>
+                          <td className="py-3 px-2">
+                            <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                              lab.status === 'normal' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                            }`}>
+                              {lab.status === 'normal' ? 'Normal' : 'Abnormal'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-2 text-sm text-gray-500">{lab.date}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <button
+                  onClick={() => navigate('/patient-portal/medical-history')}
+                  className="w-full mt-4 px-4 py-2 text-sm font-medium text-green-600 hover:bg-green-50 rounded-xl transition-colors"
+                >
+                  View Complete Lab History
+                </button>
+              </div>
+            )}
           </div>
         )}
 

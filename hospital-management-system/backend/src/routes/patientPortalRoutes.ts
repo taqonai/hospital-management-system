@@ -413,17 +413,16 @@ function generateLocalResponse(query: string): string {
 }
 
 /**
- * Get AI health insights
+ * Get AI health insights - Comprehensive health analysis
  * GET /api/v1/patient-portal/health-insights
  */
 router.get(
   '/health-insights',
   patientAuthenticate,
   asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
-    const hospitalId = req.patient?.hospitalId || '';
     const patientId = req.patient?.patientId || '';
 
-    // Get patient data for insights
+    // Get comprehensive patient data for insights
     const patient = await prisma.patient.findUnique({
       where: { id: patientId },
       select: {
@@ -431,22 +430,35 @@ router.get(
         lastName: true,
         dateOfBirth: true,
         gender: true,
+        bloodGroup: true,
+        allergies: true,
+        medicalHistory: {
+          select: {
+            chronicConditions: true,
+          }
+        },
         vitals: {
-          take: 10,
+          take: 20,
           orderBy: { recordedAt: 'desc' },
           select: {
             bloodPressureSys: true,
             bloodPressureDia: true,
             heartRate: true,
+            respiratoryRate: true,
             temperature: true,
+            oxygenSaturation: true,
             weight: true,
             height: true,
+            bmi: true,
+            bloodSugar: true,
+            painLevel: true,
             recordedAt: true,
           }
         },
         labOrders: {
-          take: 5,
+          take: 10,
           orderBy: { createdAt: 'desc' },
+          where: { status: 'COMPLETED' },
           select: {
             status: true,
             createdAt: true,
@@ -458,19 +470,48 @@ router.get(
                 labTest: {
                   select: {
                     name: true,
+                    category: true,
                   }
                 }
               }
             }
           }
         },
+        prescriptions: {
+          take: 10,
+          orderBy: { prescriptionDate: 'desc' },
+          where: { status: 'ACTIVE' },
+          select: {
+            status: true,
+            prescriptionDate: true,
+            medications: {
+              select: {
+                drugName: true,
+                dosage: true,
+                frequency: true,
+                duration: true,
+                quantity: true,
+              }
+            }
+          }
+        },
         appointments: {
-          take: 5,
+          take: 10,
           orderBy: { appointmentDate: 'desc' },
           select: {
             type: true,
             status: true,
             appointmentDate: true,
+            vitalsRecordedAt: true,
+          }
+        },
+        consultations: {
+          take: 5,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            diagnosis: true,
+            notes: true,
+            createdAt: true,
           }
         }
       }
@@ -481,93 +522,340 @@ router.get(
       return;
     }
 
-    // Calculate health score based on available data
-    let healthScore = 70; // Base score
+    // Initialize score and collections
+    let healthScore = 65; // Base score
     const metrics: any[] = [];
     const insights: any[] = [];
+    const labResults: any[] = [];
+
+    // Helper to calculate trend
+    const calculateTrend = (current: number | null, previous: number | null): 'up' | 'down' | 'stable' => {
+      if (!current || !previous) return 'stable';
+      const diff = current - previous;
+      const threshold = previous * 0.05; // 5% change threshold
+      if (diff > threshold) return 'up';
+      if (diff < -threshold) return 'down';
+      return 'stable';
+    };
 
     // Process vitals if available
     if (patient.vitals && patient.vitals.length > 0) {
       const latestVitals = patient.vitals[0];
+      const previousVitals = patient.vitals.length > 1 ? patient.vitals[1] : null;
+      const dateStr = latestVitals.recordedAt?.toISOString().split('T')[0] || 'N/A';
 
+      // Blood Pressure
       if (latestVitals.bloodPressureSys && latestVitals.bloodPressureDia) {
-        const bpStatus = latestVitals.bloodPressureSys <= 120 && latestVitals.bloodPressureDia <= 80
-          ? 'normal'
-          : latestVitals.bloodPressureSys <= 140 ? 'attention' : 'critical';
+        const sys = latestVitals.bloodPressureSys;
+        const dia = latestVitals.bloodPressureDia;
+        const bpStatus = sys <= 120 && dia <= 80 ? 'normal' :
+                        sys <= 140 && dia <= 90 ? 'attention' : 'critical';
 
+        const prevSys = previousVitals?.bloodPressureSys;
         metrics.push({
           name: 'Blood Pressure',
-          value: `${latestVitals.bloodPressureSys}/${latestVitals.bloodPressureDia}`,
+          value: `${sys}/${dia}`,
           unit: 'mmHg',
           status: bpStatus,
-          trend: 'stable',
-          date: latestVitals.recordedAt?.toISOString().split('T')[0] || 'N/A'
+          trend: calculateTrend(sys, prevSys),
+          previousValue: prevSys && previousVitals?.bloodPressureDia ? `${prevSys}/${previousVitals.bloodPressureDia}` : undefined,
+          date: dateStr
         });
 
         if (bpStatus === 'normal') healthScore += 5;
-        if (bpStatus === 'critical') {
+        else if (bpStatus === 'critical') {
           healthScore -= 10;
           insights.push({
             id: 'bp-alert',
             type: 'alert',
-            title: 'Blood Pressure Requires Attention',
-            description: 'Your recent blood pressure reading is elevated. Please consult with your healthcare provider.',
+            title: 'High Blood Pressure Detected',
+            description: `Your blood pressure (${sys}/${dia} mmHg) is elevated. This may increase risk of heart disease. Please consult your doctor.`,
             priority: 'high'
           });
         }
       }
 
+      // Heart Rate
       if (latestVitals.heartRate) {
-        const hrStatus = latestVitals.heartRate >= 60 && latestVitals.heartRate <= 100 ? 'normal' : 'attention';
+        const hr = latestVitals.heartRate;
+        const hrStatus = hr >= 60 && hr <= 100 ? 'normal' : hr > 100 ? 'attention' : 'attention';
+        const prevHr = previousVitals?.heartRate;
+
         metrics.push({
           name: 'Heart Rate',
-          value: latestVitals.heartRate,
+          value: hr,
           unit: 'bpm',
           status: hrStatus,
-          trend: 'stable',
-          date: latestVitals.recordedAt?.toISOString().split('T')[0] || 'N/A'
+          trend: calculateTrend(hr, prevHr),
+          previousValue: prevHr,
+          date: dateStr
         });
         if (hrStatus === 'normal') healthScore += 5;
+      }
+
+      // Respiratory Rate
+      if (latestVitals.respiratoryRate) {
+        const rr = latestVitals.respiratoryRate;
+        const rrStatus = rr >= 12 && rr <= 20 ? 'normal' : 'attention';
+        metrics.push({
+          name: 'Respiratory Rate',
+          value: rr,
+          unit: '/min',
+          status: rrStatus,
+          trend: calculateTrend(rr, previousVitals?.respiratoryRate),
+          previousValue: previousVitals?.respiratoryRate,
+          date: dateStr
+        });
+        if (rrStatus === 'normal') healthScore += 3;
+      }
+
+      // Oxygen Saturation (SpO2)
+      if (latestVitals.oxygenSaturation) {
+        const spo2 = Number(latestVitals.oxygenSaturation);
+        const spo2Status = spo2 >= 95 ? 'normal' : spo2 >= 90 ? 'attention' : 'critical';
+        metrics.push({
+          name: 'Oxygen Saturation',
+          value: spo2,
+          unit: '%',
+          status: spo2Status,
+          trend: calculateTrend(spo2, previousVitals?.oxygenSaturation ? Number(previousVitals.oxygenSaturation) : null),
+          previousValue: previousVitals?.oxygenSaturation ? Number(previousVitals.oxygenSaturation) : undefined,
+          date: dateStr
+        });
+        if (spo2Status === 'normal') healthScore += 5;
+        else if (spo2Status === 'critical') {
+          healthScore -= 15;
+          insights.push({
+            id: 'spo2-alert',
+            type: 'alert',
+            title: 'Low Oxygen Levels',
+            description: `Your oxygen saturation (${spo2}%) is below normal. Please seek medical attention if you experience difficulty breathing.`,
+            priority: 'high'
+          });
+        }
+      }
+
+      // Temperature
+      if (latestVitals.temperature) {
+        const temp = Number(latestVitals.temperature);
+        const tempStatus = temp >= 97 && temp <= 99.5 ? 'normal' : temp > 100.4 ? 'critical' : 'attention';
+        metrics.push({
+          name: 'Temperature',
+          value: temp.toFixed(1),
+          unit: '°F',
+          status: tempStatus,
+          trend: 'stable',
+          date: dateStr
+        });
+        if (tempStatus === 'critical') {
+          insights.push({
+            id: 'fever-alert',
+            type: 'alert',
+            title: 'Fever Detected',
+            description: `Your temperature (${temp.toFixed(1)}°F) indicates a fever. Monitor your symptoms and consult a doctor if it persists.`,
+            priority: 'high'
+          });
+        }
+      }
+
+      // BMI
+      if (latestVitals.bmi || (latestVitals.weight && latestVitals.height)) {
+        let bmiValue = latestVitals.bmi ? Number(latestVitals.bmi) : null;
+        if (!bmiValue && latestVitals.weight && latestVitals.height) {
+          const heightM = Number(latestVitals.height) / 100;
+          bmiValue = Number(latestVitals.weight) / (heightM * heightM);
+        }
+        if (bmiValue) {
+          const bmiStatus = bmiValue >= 18.5 && bmiValue < 25 ? 'normal' :
+                           bmiValue >= 25 && bmiValue < 30 ? 'attention' : 'critical';
+          metrics.push({
+            name: 'BMI',
+            value: bmiValue.toFixed(1),
+            unit: 'kg/m²',
+            status: bmiStatus,
+            trend: 'stable',
+            date: dateStr
+          });
+          if (bmiStatus === 'normal') healthScore += 5;
+          else if (bmiStatus === 'attention') {
+            insights.push({
+              id: 'bmi-tip',
+              type: 'tip',
+              title: 'Weight Management',
+              description: `Your BMI (${bmiValue.toFixed(1)}) is in the overweight range. Consider a balanced diet and regular exercise.`,
+              priority: 'medium'
+            });
+          }
+        }
+      }
+
+      // Blood Sugar
+      if (latestVitals.bloodSugar) {
+        const bs = Number(latestVitals.bloodSugar);
+        const bsStatus = bs >= 70 && bs <= 100 ? 'normal' :
+                        bs <= 125 ? 'attention' : 'critical';
+        metrics.push({
+          name: 'Blood Sugar',
+          value: bs.toFixed(0),
+          unit: 'mg/dL',
+          status: bsStatus,
+          trend: calculateTrend(bs, previousVitals?.bloodSugar ? Number(previousVitals.bloodSugar) : null),
+          previousValue: previousVitals?.bloodSugar ? Number(previousVitals.bloodSugar).toFixed(0) : undefined,
+          date: dateStr
+        });
+        if (bsStatus === 'critical') {
+          healthScore -= 5;
+          insights.push({
+            id: 'blood-sugar-alert',
+            type: 'alert',
+            title: 'Blood Sugar Elevated',
+            description: `Your blood sugar (${bs.toFixed(0)} mg/dL) is above normal. Monitor your diet and consult your doctor.`,
+            priority: 'high'
+          });
+        }
+      }
+    }
+
+    // Process Lab Results
+    if (patient.labOrders && patient.labOrders.length > 0) {
+      for (const order of patient.labOrders) {
+        for (const test of order.tests || []) {
+          if (test.result && test.labTest?.name) {
+            const isAbnormal = test.status === 'ABNORMAL';
+            labResults.push({
+              name: test.labTest.name,
+              value: test.result,
+              normalRange: test.normalRange || 'N/A',
+              status: isAbnormal ? 'attention' : 'normal',
+              date: order.createdAt?.toISOString().split('T')[0] || 'N/A'
+            });
+            if (isAbnormal) {
+              healthScore -= 2;
+            }
+          }
+        }
+      }
+
+      // Add abnormal lab result insight
+      const abnormalCount = labResults.filter(r => r.status === 'attention').length;
+      if (abnormalCount > 0) {
+        insights.push({
+          id: 'lab-results-alert',
+          type: 'alert',
+          title: `${abnormalCount} Abnormal Lab Result${abnormalCount > 1 ? 's' : ''}`,
+          description: 'Some of your recent lab results are outside the normal range. Please review them with your healthcare provider.',
+          priority: abnormalCount > 2 ? 'high' : 'medium',
+          actionLabel: 'View Lab Results',
+          actionRoute: '/patient-portal/labs'
+        });
+      }
+    }
+
+    // Process Prescriptions - Medication reminders
+    if (patient.prescriptions && patient.prescriptions.length > 0) {
+      const activeMeds = patient.prescriptions.filter(p => p.status === 'ACTIVE');
+      const medicationCount = activeMeds.reduce((acc, p) => acc + (p.medications?.length || 0), 0);
+
+      if (medicationCount > 0) {
+        insights.push({
+          id: 'medication-reminder',
+          type: 'reminder',
+          title: `${medicationCount} Active Medication${medicationCount > 1 ? 's' : ''}`,
+          description: 'Remember to take your medications as prescribed. Set reminders if needed to stay on track.',
+          priority: 'medium',
+          actionLabel: 'View Prescriptions',
+          actionRoute: '/patient-portal/prescriptions'
+        });
       }
     }
 
     // Check for due appointments
-    const hasRecentAppointment = patient.appointments?.some(apt =>
+    const hasRecentCheckup = patient.appointments?.some(apt =>
       apt.status === 'COMPLETED' &&
-      new Date(apt.appointmentDate).getTime() > Date.now() - 365 * 24 * 60 * 60 * 1000
+      apt.type === 'CONSULTATION' &&
+      new Date(apt.appointmentDate).getTime() > Date.now() - 180 * 24 * 60 * 60 * 1000 // 6 months
     );
 
-    if (!hasRecentAppointment) {
+    if (!hasRecentCheckup) {
       insights.push({
         id: 'checkup-reminder',
         type: 'recommendation',
-        title: 'Schedule Your Annual Check-up',
-        description: 'Regular health check-ups help detect potential issues early. It\'s been a while since your last visit.',
+        title: 'Schedule a Health Check-up',
+        description: 'Regular health check-ups help detect potential issues early. Consider scheduling your next visit.',
         priority: 'medium',
         actionLabel: 'Book Appointment',
         actionRoute: '/patient-portal/appointments'
       });
     }
 
-    // Add general wellness tips
+    // Check for chronic conditions
+    const chronicConditions = patient.medicalHistory?.chronicConditions || [];
+    if (chronicConditions.length > 0) {
+      insights.push({
+        id: 'chronic-management',
+        type: 'tip',
+        title: 'Managing Chronic Conditions',
+        description: 'Regular monitoring and follow-ups are important for managing chronic conditions effectively.',
+        priority: 'medium'
+      });
+    }
+
+    // Check for allergies reminder
+    if (patient.allergies && patient.allergies.length > 0) {
+      insights.push({
+        id: 'allergy-reminder',
+        type: 'reminder',
+        title: 'Allergy Information on File',
+        description: `You have ${patient.allergies.length} recorded allerg${patient.allergies.length > 1 ? 'ies' : 'y'}. Ensure your healthcare providers are aware.`,
+        priority: 'low'
+      });
+    }
+
+    // Add wellness tips based on data availability
+    if (metrics.length === 0) {
+      insights.push({
+        id: 'record-vitals',
+        type: 'recommendation',
+        title: 'Get Your Vitals Checked',
+        description: 'No recent vital signs recorded. Visit your doctor or use our symptom checker to start tracking your health.',
+        priority: 'medium',
+        actionLabel: 'Check Symptoms',
+        actionRoute: '/patient-portal/symptom-checker'
+      });
+    }
+
+    // General wellness tip
     insights.push({
       id: 'wellness-tip',
       type: 'tip',
-      title: 'Stay Active',
-      description: 'Regular physical activity can improve your overall health. Aim for at least 30 minutes of moderate exercise daily.',
+      title: 'Stay Hydrated',
+      description: 'Drinking enough water daily supports overall health. Aim for 8 glasses (64 oz) per day.',
       priority: 'low'
     });
 
-    const scoreLabel = healthScore >= 80 ? 'Excellent' :
-                       healthScore >= 70 ? 'Good' :
-                       healthScore >= 60 ? 'Fair' : 'Needs Attention';
+    // Calculate final score
+    const finalScore = Math.min(100, Math.max(0, healthScore));
+    const scoreLabel = finalScore >= 85 ? 'Excellent' :
+                       finalScore >= 70 ? 'Good' :
+                       finalScore >= 55 ? 'Fair' : 'Needs Attention';
+
+    // Sort insights by priority
+    const priorityOrder = { high: 0, medium: 1, low: 2 };
+    insights.sort((a, b) => priorityOrder[a.priority as keyof typeof priorityOrder] - priorityOrder[b.priority as keyof typeof priorityOrder]);
 
     sendSuccess(res, {
-      overallScore: Math.min(100, Math.max(0, healthScore)),
+      overallScore: finalScore,
       scoreLabel,
       lastUpdated: new Date().toISOString(),
       metrics: metrics.length > 0 ? metrics : generateDefaultMetrics(),
-      insights: insights.length > 0 ? insights : generateDefaultInsights().insights
+      labResults: labResults.slice(0, 5), // Top 5 lab results
+      insights: insights.slice(0, 8), // Top 8 insights
+      patientInfo: {
+        name: `${patient.firstName} ${patient.lastName}`,
+        bloodGroup: patient.bloodGroup || 'Unknown',
+        allergiesCount: patient.allergies?.length || 0,
+        chronicConditionsCount: chronicConditions.length,
+      }
     }, 'Health insights generated');
   })
 );
