@@ -724,6 +724,221 @@ QUESTION_FLOW = [
     "associated_symptoms",
 ]
 
+# Body parts that make body_location question redundant
+BODY_LOCATION_KEYWORDS = {
+    "head", "headache", "migraine", "temple", "forehead", "scalp",
+    "stomach", "abdomen", "belly", "abdominal", "tummy", "gastric",
+    "chest", "heart", "cardiac", "thoracic", "breast",
+    "back", "spine", "lumbar", "lower back", "upper back",
+    "arm", "elbow", "wrist", "hand", "finger", "shoulder",
+    "leg", "knee", "ankle", "foot", "toe", "hip", "thigh", "calf",
+    "throat", "neck", "cervical",
+    "eye", "vision", "ocular",
+    "ear", "hearing", "tinnitus",
+    "nose", "sinus", "nasal",
+    "skin", "rash", "dermal"
+}
+
+
+def get_contextual_questions(
+    symptoms: List[str],
+    answered_questions: Dict[str, Any]
+) -> List[Dict[str, Any]]:
+    """
+    Generate contextual follow-up questions based on entered symptoms.
+    Skips irrelevant questions (e.g., don't ask body location if symptom implies it).
+    Uses symptom-specific questions from SYMPTOM_PATTERNS when available.
+
+    Args:
+        symptoms: List of symptoms entered by the patient
+        answered_questions: Dictionary of already answered question IDs
+
+    Returns:
+        List of question objects to ask next (max 2 at a time)
+    """
+    questions = []
+    symptom_text = " ".join(str(s).lower() for s in symptoms)
+    answered_keys = set(answered_questions.keys())
+
+    # Check if body location is already implied by symptoms
+    skip_body_location = any(
+        keyword in symptom_text
+        for keyword in BODY_LOCATION_KEYWORDS
+    )
+
+    # Build dynamic question flow based on context
+    dynamic_flow = []
+
+    # 1. Always need main symptoms first
+    if "main_symptoms" not in answered_keys:
+        dynamic_flow.append("main_symptoms")
+
+    # 2. Only ask body location if not implied by symptoms
+    if not skip_body_location and "body_location" not in answered_keys:
+        dynamic_flow.append("body_location")
+
+    # 3. Always ask severity and duration (important for triage)
+    if "severity" not in answered_keys:
+        dynamic_flow.append("severity")
+    if "duration" not in answered_keys:
+        dynamic_flow.append("duration")
+
+    # 4. Get symptom-specific follow-up questions from SYMPTOM_PATTERNS
+    symptom_specific_questions = []
+    for symptom_key, pattern in SYMPTOM_PATTERNS.items():
+        if symptom_key in symptom_text:
+            follow_ups = pattern.get("follow_up_questions", [])
+            # Take up to 2 most relevant follow-up questions
+            for idx, question_text in enumerate(follow_ups[:2]):
+                q_id = f"specific_{symptom_key}_{idx}"
+                if q_id not in answered_keys:
+                    symptom_specific_questions.append({
+                        "id": q_id,
+                        "type": "text",
+                        "question": question_text,
+                        "placeholder": "Please describe...",
+                        "helpText": f"This helps us better understand your {symptom_key}",
+                        "required": False,
+                        "priority": 5 + idx,
+                        "isSymptomSpecific": True,
+                        "relatedSymptom": symptom_key
+                    })
+
+    # Build final question list from dynamic flow
+    for q_key in dynamic_flow:
+        bank_key = "initial" if q_key == "main_symptoms" else q_key
+        if bank_key in QUESTION_BANK:
+            questions.append(QUESTION_BANK[bank_key])
+        elif q_key in QUESTION_BANK:
+            questions.append(QUESTION_BANK[q_key])
+
+        # Return max 2 questions at a time
+        if len(questions) >= 2:
+            return questions
+
+    # If we have room, add symptom-specific questions
+    if len(questions) < 2 and symptom_specific_questions:
+        remaining_slots = 2 - len(questions)
+        questions.extend(symptom_specific_questions[:remaining_slots])
+
+    # If still no questions but need associated symptoms
+    if len(questions) == 0 and "associated_symptoms" not in answered_keys:
+        questions.append(QUESTION_BANK["associated_symptoms"])
+
+    return questions[:2]  # Return max 2 questions
+
+
+async def get_ai_contextual_questions(
+    symptoms: List[str],
+    answered_questions: Dict[str, Any],
+    patient_info: Optional[Dict[str, Any]] = None
+) -> List[Dict[str, Any]]:
+    """
+    Use GPT-4o to generate intelligent, contextual follow-up questions.
+    Falls back to rule-based questions if AI is unavailable.
+
+    Args:
+        symptoms: List of symptoms entered by the patient
+        answered_questions: Dictionary of already answered questions
+        patient_info: Optional patient demographics
+
+    Returns:
+        List of AI-generated question objects
+    """
+    # First, get rule-based questions as fallback
+    rule_based = get_contextual_questions(symptoms, answered_questions)
+
+    # Try AI-powered question generation
+    if not openai_manager.is_available():
+        return rule_based
+
+    try:
+        # Build context for GPT
+        symptom_text = ", ".join(symptoms) if symptoms else "Not specified"
+        answered_summary = []
+        for q_id, answer in answered_questions.items():
+            if isinstance(answer, list):
+                answered_summary.append(f"- {q_id}: {', '.join(str(a) for a in answer)}")
+            else:
+                answered_summary.append(f"- {q_id}: {answer}")
+
+        patient_context = ""
+        if patient_info:
+            if patient_info.get("age"):
+                patient_context += f"Age: {patient_info['age']} years. "
+            if patient_info.get("gender"):
+                patient_context += f"Gender: {patient_info['gender']}. "
+            if patient_info.get("medicalHistory"):
+                patient_context += f"Medical history: {', '.join(patient_info['medicalHistory'])}. "
+
+        system_prompt = """You are a medical intake AI assistant. Generate 2 contextual follow-up questions for a patient based on their symptoms.
+
+RULES:
+1. Questions must be DIRECTLY relevant to the symptoms mentioned
+2. DO NOT ask about body location if the symptom already specifies it (e.g., "headache" already implies head)
+3. DO NOT repeat information the patient has already provided
+4. Ask about things that would help with triage: severity, timing, triggers, associated symptoms
+5. Keep questions simple and clear for patients to understand
+6. Consider patient demographics if provided
+
+Respond with JSON:
+{
+    "questions": [
+        {
+            "id": "ai_q1",
+            "question": "<your question>",
+            "type": "text",
+            "placeholder": "<input hint>",
+            "rationale": "<why this question helps>"
+        }
+    ]
+}"""
+
+        user_content = f"""Patient symptoms: {symptom_text}
+
+Already answered questions:
+{chr(10).join(answered_summary) if answered_summary else "None yet"}
+
+{patient_context if patient_context else ""}
+
+Generate 2 relevant follow-up questions. Do not ask about things already answered or implied by the symptoms."""
+
+        result = openai_manager.chat_completion_json(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content}
+            ],
+            task_complexity=TaskComplexity.SIMPLE,  # Use fast model for questions
+            temperature=0.3,
+            max_tokens=500
+        )
+
+        if result and result.get("success") and result.get("data"):
+            ai_questions = result["data"].get("questions", [])
+            if ai_questions:
+                # Format AI questions for frontend
+                formatted = []
+                for q in ai_questions[:2]:
+                    formatted.append({
+                        "id": q.get("id", f"ai_{uuid.uuid4().hex[:8]}"),
+                        "type": q.get("type", "text"),
+                        "question": q.get("question", ""),
+                        "placeholder": q.get("placeholder", "Please describe..."),
+                        "helpText": q.get("rationale", "This helps us understand your condition better"),
+                        "required": False,
+                        "priority": 10,
+                        "isAIGenerated": True
+                    })
+                logger.info(f"AI generated {len(formatted)} contextual questions")
+                return formatted
+
+        # Fall back to rule-based if AI fails
+        return rule_based
+
+    except Exception as e:
+        logger.error(f"AI question generation failed: {e}")
+        return rule_based
+
 
 # =============================================================================
 # Session Storage (In-memory - use Redis/DB in production)
@@ -1101,13 +1316,25 @@ async def start_session(request: StartSessionRequest):
             redFlagMessage=emergency_flags[0]["message"]
         )
 
-    # Get first questions
-    first_questions = [QUESTION_BANK["initial"]]
+    # Get first questions using contextual question generation
     if request.initialSymptoms and len(request.initialSymptoms) > 0:
-        # Skip initial symptom question, go to body location
+        # Patient already provided symptoms - use contextual questions
         session["answers"]["main_symptoms"] = request.initialSymptoms
         session["currentQuestionIndex"] = 1
-        first_questions = [QUESTION_BANK["body_location"], QUESTION_BANK["severity"]]
+
+        # Use contextual question generation to skip irrelevant questions
+        # e.g., if user said "headache", don't ask "which body part?"
+        first_questions = get_contextual_questions(
+            symptoms=request.initialSymptoms,
+            answered_questions=session["answers"]
+        )
+
+        # If no questions generated, fall back to severity
+        if not first_questions:
+            first_questions = [QUESTION_BANK["severity"]]
+    else:
+        # No initial symptoms - ask for symptoms first
+        first_questions = [QUESTION_BANK["initial"]]
 
     return StartSessionResponse(
         sessionId=session_id,
@@ -1180,21 +1407,35 @@ async def submit_response(request: RespondRequest):
             triageLevel=TriageLevel.EMERGENCY.value
         )
 
-    # Determine next questions - only ask what hasn't been answered
-    next_questions = []
-    for question_key in QUESTION_FLOW:
-        if question_key not in session["answers"]:
-            # Map question key to QUESTION_BANK - handle "initial" -> "main_symptoms"
-            bank_key = "initial" if question_key == "main_symptoms" else question_key
-            if bank_key in QUESTION_BANK:
-                next_questions.append(QUESTION_BANK[bank_key])
-            elif question_key in QUESTION_BANK:
-                next_questions.append(QUESTION_BANK[question_key])
-            if len(next_questions) >= 2:  # Send 2 questions at a time for speed
-                break
+    # Determine next questions using contextual question generation
+    # This intelligently skips irrelevant questions (e.g., body_location if symptom implies it)
+    symptoms = session.get("collectedSymptoms", [])
+    answers = session.get("answers", {})
+    patient_info = session.get("patientInfo", {})
 
-    # Check if complete
-    is_complete = len(next_questions) == 0
+    # Use AI-powered contextual questions if OpenAI is available, else rule-based
+    if openai_manager.is_available() and symptoms:
+        try:
+            next_questions = await get_ai_contextual_questions(
+                symptoms=symptoms,
+                answered_questions=answers,
+                patient_info=patient_info
+            )
+        except Exception as e:
+            logger.warning(f"AI question generation failed, using rule-based: {e}")
+            next_questions = get_contextual_questions(symptoms, answers)
+    else:
+        # Use rule-based contextual questions
+        next_questions = get_contextual_questions(symptoms, answers)
+
+    # Check if complete (no more questions to ask)
+    # Complete when we have: main_symptoms + severity + duration (minimum for triage)
+    has_minimum_data = (
+        "main_symptoms" in answers and
+        "severity" in answers and
+        "duration" in answers
+    )
+    is_complete = len(next_questions) == 0 or (has_minimum_data and len(answers) >= 3)
 
     if is_complete:
         session["status"] = SessionStatus.COMPLETED.value

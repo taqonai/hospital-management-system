@@ -379,6 +379,79 @@ const FALLBACK_QUESTIONS: QuestionData[] = [
 
 const FALLBACK_QUESTION_FLOW = ['main_symptoms', 'body_location', 'severity', 'duration', 'associated_symptoms'];
 
+// Body parts that make body_location question redundant
+const BODY_LOCATION_KEYWORDS = new Set([
+  'head', 'headache', 'migraine', 'temple', 'forehead', 'scalp',
+  'stomach', 'abdomen', 'belly', 'abdominal', 'tummy', 'gastric',
+  'chest', 'heart', 'cardiac', 'thoracic', 'breast',
+  'back', 'spine', 'lumbar', 'lower back', 'upper back',
+  'arm', 'elbow', 'wrist', 'hand', 'finger', 'shoulder',
+  'leg', 'knee', 'ankle', 'foot', 'toe', 'hip', 'thigh', 'calf',
+  'throat', 'neck', 'cervical',
+  'eye', 'vision', 'ocular',
+  'ear', 'hearing', 'tinnitus',
+  'nose', 'sinus', 'nasal',
+  'skin', 'rash', 'dermal'
+]);
+
+/**
+ * Generate contextual follow-up questions based on entered symptoms.
+ * Skips irrelevant questions (e.g., don't ask body location if symptom implies it).
+ */
+function getContextualQuestions(
+  symptoms: string[],
+  answeredQuestions: Record<string, any>
+): QuestionData[] {
+  const questions: QuestionData[] = [];
+  const symptomText = symptoms.map(s => s.toLowerCase()).join(' ');
+  const answeredKeys = new Set(Object.keys(answeredQuestions));
+
+  // Check if body location is already implied by symptoms
+  const skipBodyLocation = Array.from(BODY_LOCATION_KEYWORDS).some(
+    keyword => symptomText.includes(keyword)
+  );
+
+  // Build dynamic question flow based on context
+  const dynamicFlow: string[] = [];
+
+  // 1. Always need main symptoms first
+  if (!answeredKeys.has('main_symptoms')) {
+    dynamicFlow.push('main_symptoms');
+  }
+
+  // 2. Only ask body location if not implied by symptoms
+  if (!skipBodyLocation && !answeredKeys.has('body_location')) {
+    dynamicFlow.push('body_location');
+  }
+
+  // 3. Always ask severity and duration (important for triage)
+  if (!answeredKeys.has('severity')) {
+    dynamicFlow.push('severity');
+  }
+  if (!answeredKeys.has('duration')) {
+    dynamicFlow.push('duration');
+  }
+
+  // 4. Associated symptoms if not answered
+  if (!answeredKeys.has('associated_symptoms')) {
+    dynamicFlow.push('associated_symptoms');
+  }
+
+  // Build question list from dynamic flow
+  for (const qKey of dynamicFlow) {
+    const question = FALLBACK_QUESTIONS.find(q => q.id === qKey);
+    if (question) {
+      questions.push(question);
+    }
+    // Return max 2 questions at a time
+    if (questions.length >= 2) {
+      break;
+    }
+  }
+
+  return questions;
+}
+
 // =============================================================================
 // Symptom Checker Service
 // =============================================================================
@@ -928,11 +1001,29 @@ export class SymptomCheckerService {
       };
     }
 
+    // Get first questions using contextual question generation
+    // If patient already provided symptoms, skip irrelevant questions
+    let nextQuestions: QuestionData[];
+    const answers: Record<string, any> = {};
+
+    if (data.initialSymptoms && data.initialSymptoms.length > 0) {
+      // Patient already provided symptoms - use contextual questions
+      answers['main_symptoms'] = data.initialSymptoms;
+      const session = this.fallbackSessions.get(sessionId);
+      if (session) {
+        session.answers = answers;
+      }
+      nextQuestions = getContextualQuestions(data.initialSymptoms, answers);
+    } else {
+      // No initial symptoms - ask for symptoms first
+      nextQuestions = FALLBACK_QUESTIONS.slice(0, 1); // Just main_symptoms
+    }
+
     return {
       sessionId,
       status: SessionStatus.ACTIVE,
       message: 'Welcome to the Symptom Checker. I\'ll ask you a few questions to better understand your symptoms.',
-      nextQuestions: FALLBACK_QUESTIONS.slice(0, 2),
+      nextQuestions,
       progress: 0,
       redFlagDetected: redFlags.length > 0,
       redFlagMessage,
@@ -997,14 +1088,18 @@ export class SymptomCheckerService {
       };
     }
 
-    // Get next unanswered questions from flow
-    const nextQuestionIds = FALLBACK_QUESTION_FLOW.filter(qId => !(qId in session.answers));
-    const nextQuestions = nextQuestionIds
-      .slice(0, 2)
-      .map(qId => FALLBACK_QUESTIONS.find(q => q.id === qId))
-      .filter(Boolean) as QuestionData[];
+    // Get next questions using contextual question generation
+    // This intelligently skips irrelevant questions (e.g., body_location if symptom implies it)
+    const symptoms = session.collectedSymptoms || session.initialSymptoms || [];
+    const nextQuestions = getContextualQuestions(symptoms, session.answers);
 
-    const isComplete = nextQuestions.length === 0;
+    // Complete when we have minimum data for triage or no more questions
+    const hasMinimumData = (
+      'main_symptoms' in session.answers &&
+      'severity' in session.answers &&
+      'duration' in session.answers
+    );
+    const isComplete = nextQuestions.length === 0 || (hasMinimumData && Object.keys(session.answers).length >= 3);
 
     if (isComplete) {
       session.status = SessionStatus.COMPLETED;

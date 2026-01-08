@@ -1,6 +1,8 @@
 import prisma from '../config/database';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler';
 import { Decimal } from '@prisma/client/runtime/library';
+import { RiskLevel } from '@prisma/client';
+import { earlyWarningService } from './earlyWarningService';
 
 interface VitalsData {
   temperature?: number;
@@ -363,6 +365,70 @@ export class OPDService {
       },
     });
 
+    // Calculate risk assessment using Early Warning Service
+    let riskAssessment = null;
+    try {
+      // Only calculate if we have enough vitals data for meaningful assessment
+      if (vitalsData.heartRate || vitalsData.bloodPressureSys || vitalsData.respiratoryRate) {
+        // Build vitals input for EWS calculation
+        const vitalsInput = {
+          respiratoryRate: vitalsData.respiratoryRate,
+          oxygenSaturation: vitalsData.oxygenSaturation,
+          temperature: vitalsData.temperature,
+          systolicBP: vitalsData.bloodPressureSys,
+          diastolicBP: vitalsData.bloodPressureDia,
+          heartRate: vitalsData.heartRate,
+        };
+
+        // Get recent vitals history for trend analysis
+        const vitalsHistory = await prisma.vital.findMany({
+          where: { patientId: appointment.patientId },
+          orderBy: { recordedAt: 'desc' },
+          take: 10,
+        });
+
+        // Perform comprehensive assessment (NEWS2 + qSOFA + Fall Risk)
+        riskAssessment = await earlyWarningService.comprehensiveAssessment(
+          vitalsInput,
+          vitalsHistory.map(v => ({
+            respiratoryRate: v.respiratoryRate,
+            oxygenSaturation: v.oxygenSaturation ? Number(v.oxygenSaturation) : undefined,
+            temperature: v.temperature ? Number(v.temperature) : undefined,
+            systolicBP: v.bloodPressureSys,
+            heartRate: v.heartRate,
+            timestamp: v.recordedAt,
+          }))
+        );
+
+        // Create AIPrediction record with risk assessment
+        if (riskAssessment) {
+          const riskLevelMap: Record<string, RiskLevel> = {
+            low: RiskLevel.LOW,
+            moderate: RiskLevel.MODERATE,
+            high: RiskLevel.HIGH,
+            critical: RiskLevel.CRITICAL,
+          };
+
+          const riskLevel = riskLevelMap[riskAssessment.riskLevel?.toLowerCase()] || RiskLevel.LOW;
+
+          await prisma.aIPrediction.create({
+            data: {
+              patientId: appointment.patientId,
+              predictionType: 'DETERIORATION',
+              riskScore: new Decimal(riskAssessment.deteriorationProbability || 0),
+              riskLevel,
+              factors: riskAssessment.recommendedActions || [],
+              recommendations: riskAssessment.recommendedActions || [],
+              modelVersion: riskAssessment.modelVersion || 'NEWS2-v1.0',
+            },
+          });
+        }
+      }
+    } catch (error) {
+      // Log but don't fail vitals recording if risk calculation fails
+      console.error('Risk assessment calculation failed:', error);
+    }
+
     // Update appointment to mark vitals as recorded
     await prisma.appointment.update({
       where: { id: appointmentId },
@@ -377,6 +443,15 @@ export class OPDService {
         doctor: appointment.doctor,
         vitalsRecordedAt: new Date(),
       },
+      riskAssessment: riskAssessment ? {
+        news2Score: riskAssessment.news2Score,
+        riskLevel: riskAssessment.riskLevel,
+        deteriorationProbability: riskAssessment.deteriorationProbability,
+        sepsisRisk: riskAssessment.sepsisRisk,
+        fallRisk: riskAssessment.fallRisk,
+        recommendedActions: riskAssessment.recommendedActions,
+        escalationRequired: riskAssessment.escalationRequired,
+      } : null,
     };
   }
 
