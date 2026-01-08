@@ -493,17 +493,11 @@ export default function Appointments() {
     return ['SCHEDULED', 'CONFIRMED'].includes(appointment.status);
   };
 
-  // Filter appointments based on search and active tab
+  // Filter appointments based on search (API already filters by type/tab)
   const filteredAppointments = appointments.filter((apt: Appointment) => {
-    const aptDate = getAppointmentDate(apt);
-    const today = startOfDay(new Date());
-
-    // Tab filter
-    const tabMatch = activeTab === 'upcoming'
-      ? isAfter(aptDate, today) || format(aptDate, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd')
-      : isBefore(aptDate, today) && format(aptDate, 'yyyy-MM-dd') !== format(today, 'yyyy-MM-dd');
-
-    if (!tabMatch) return false;
+    // Note: The API already filters by type (upcoming/past), so we don't need
+    // to do client-side tab filtering. This allows today's past appointments
+    // to show correctly in the past tab.
 
     // Search filter
     if (searchTerm) {
