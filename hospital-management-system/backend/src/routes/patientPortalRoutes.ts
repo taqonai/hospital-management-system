@@ -843,6 +843,73 @@ router.get(
     const priorityOrder = { high: 0, medium: 1, low: 2 };
     insights.sort((a, b) => priorityOrder[a.priority as keyof typeof priorityOrder] - priorityOrder[b.priority as keyof typeof priorityOrder]);
 
+    // Try to get AI-powered analysis
+    let aiAnalysis: any = null;
+    try {
+      const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+
+      // Calculate patient age
+      const birthDate = new Date(patient.dateOfBirth);
+      const today = new Date();
+      const patientAge = Math.floor((today.getTime() - birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+
+      // Get medication names from prescriptions
+      const currentMedications = patient.prescriptions
+        ?.flatMap(p => p.medications?.map(m => m.drugName) || [])
+        .filter(Boolean) || [];
+
+      // Get allergy names
+      const allergyNames = patient.allergies?.map((a: any) => a.allergen || a.name || String(a)) || [];
+
+      // Build AI analysis request
+      const aiRequest = {
+        patientAge,
+        patientGender: patient.gender,
+        bloodGroup: patient.bloodGroup,
+        chronicConditions: chronicConditions,
+        allergies: allergyNames,
+        currentMedications,
+        vitals: metrics.filter(m => m.value !== '--'),
+        labResults: labResults,
+        recentDiagnoses: patient.consultations?.map((c: any) => c.diagnosis).filter(Boolean) || [],
+      };
+
+      const aiResponse = await fetch(`${AI_SERVICE_URL}/api/health-analysis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(aiRequest),
+      });
+
+      if (aiResponse.ok) {
+        aiAnalysis = await aiResponse.json();
+
+        // If AI analysis has insights, merge them with existing insights
+        if (aiAnalysis?.insights && aiAnalysis.insights.length > 0) {
+          // Add AI-generated insights that aren't duplicates
+          const existingIds = new Set(insights.map(i => i.id));
+          aiAnalysis.insights.forEach((aiInsight: any) => {
+            if (!existingIds.has(aiInsight.id)) {
+              insights.push({
+                id: aiInsight.id,
+                type: aiInsight.type,
+                title: aiInsight.title,
+                description: aiInsight.description,
+                priority: aiInsight.priority,
+                actionLabel: aiInsight.actionLabel,
+                actionRoute: aiInsight.actionRoute,
+              });
+            }
+          });
+
+          // Re-sort after adding AI insights
+          insights.sort((a, b) => priorityOrder[a.priority as keyof typeof priorityOrder] - priorityOrder[b.priority as keyof typeof priorityOrder]);
+        }
+      }
+    } catch (aiError) {
+      console.error('AI health analysis error:', aiError);
+      // Continue without AI analysis
+    }
+
     sendSuccess(res, {
       overallScore: finalScore,
       scoreLabel,
@@ -855,7 +922,15 @@ router.get(
         bloodGroup: patient.bloodGroup || 'Unknown',
         allergiesCount: patient.allergies?.length || 0,
         chronicConditionsCount: chronicConditions.length,
-      }
+      },
+      aiAnalysis: aiAnalysis ? {
+        overallAssessment: aiAnalysis.overallAssessment,
+        riskLevel: aiAnalysis.riskLevel,
+        recommendations: aiAnalysis.recommendations,
+        warningFlags: aiAnalysis.warningFlags,
+        aiPowered: aiAnalysis.aiPowered,
+        model: aiAnalysis.model,
+      } : null,
     }, 'Health insights generated');
   })
 );

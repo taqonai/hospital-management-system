@@ -55,6 +55,15 @@ interface PatientInfo {
   chronicConditionsCount: number;
 }
 
+interface AIAnalysis {
+  overallAssessment: string;
+  riskLevel: 'low' | 'moderate' | 'elevated' | 'high';
+  recommendations: string[];
+  warningFlags: string[];
+  aiPowered: boolean;
+  model?: string;
+}
+
 interface HealthSummary {
   overallScore: number;
   scoreLabel: string;
@@ -62,6 +71,7 @@ interface HealthSummary {
   insights: HealthInsight[];
   labResults?: LabResult[];
   patientInfo?: PatientInfo;
+  aiAnalysis?: AIAnalysis;
   lastUpdated: string;
 }
 
@@ -348,6 +358,74 @@ export default function HealthInsights() {
                       <p className="text-xs text-gray-500">Chronic Conditions</p>
                       <p className="font-semibold text-purple-700">{summary.patientInfo.chronicConditionsCount} tracked</p>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* AI Analysis Section */}
+            {summary.aiAnalysis && (
+              <div className={`rounded-2xl border shadow-lg p-6 ${
+                summary.aiAnalysis.riskLevel === 'high' ? 'bg-red-50 border-red-200' :
+                summary.aiAnalysis.riskLevel === 'elevated' ? 'bg-amber-50 border-amber-200' :
+                summary.aiAnalysis.riskLevel === 'moderate' ? 'bg-yellow-50 border-yellow-200' :
+                'bg-green-50 border-green-200'
+              }`}>
+                <div className="flex items-start gap-4">
+                  <div className={`p-3 rounded-xl ${
+                    summary.aiAnalysis.riskLevel === 'high' ? 'bg-red-100' :
+                    summary.aiAnalysis.riskLevel === 'elevated' ? 'bg-amber-100' :
+                    summary.aiAnalysis.riskLevel === 'moderate' ? 'bg-yellow-100' :
+                    'bg-green-100'
+                  }`}>
+                    <SparklesIcon className={`h-6 w-6 ${
+                      summary.aiAnalysis.riskLevel === 'high' ? 'text-red-600' :
+                      summary.aiAnalysis.riskLevel === 'elevated' ? 'text-amber-600' :
+                      summary.aiAnalysis.riskLevel === 'moderate' ? 'text-yellow-600' :
+                      'text-green-600'
+                    }`} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-lg font-semibold text-gray-900">AI Health Assessment</h3>
+                      {summary.aiAnalysis.aiPowered && (
+                        <span className="flex items-center gap-1 text-xs text-purple-600 bg-purple-100 px-2 py-1 rounded-full">
+                          <SparklesIcon className="h-3 w-3" />
+                          GPT-4o Powered
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-gray-700 mb-4">{summary.aiAnalysis.overallAssessment}</p>
+
+                    {/* Warning Flags */}
+                    {summary.aiAnalysis.warningFlags && summary.aiAnalysis.warningFlags.length > 0 && (
+                      <div className="mb-4">
+                        <h4 className="text-sm font-medium text-red-700 mb-2">Attention Required</h4>
+                        <div className="space-y-2">
+                          {summary.aiAnalysis.warningFlags.map((flag, idx) => (
+                            <div key={idx} className="flex items-start gap-2 text-sm text-red-700 bg-red-100 rounded-lg p-2">
+                              <ExclamationTriangleIcon className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                              <span>{flag}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* AI Recommendations */}
+                    {summary.aiAnalysis.recommendations && summary.aiAnalysis.recommendations.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">AI Recommendations</h4>
+                        <ul className="space-y-1">
+                          {summary.aiAnalysis.recommendations.slice(0, 4).map((rec, idx) => (
+                            <li key={idx} className="flex items-start gap-2 text-sm text-gray-600">
+                              <CheckCircleIcon className="h-4 w-4 text-green-500 flex-shrink-0 mt-0.5" />
+                              <span>{rec}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

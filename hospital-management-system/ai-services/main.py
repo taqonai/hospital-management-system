@@ -15,7 +15,7 @@ load_dotenv()
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 import uvicorn
 
 # Import shared OpenAI client for health checks
@@ -778,6 +778,350 @@ async def health_assistant_status():
         "model": "gpt-4o" if health_assistant_ai.is_available() else None,
         "modelVersion": health_assistant_ai.model_version
     }
+
+
+# ===== Comprehensive AI Health Analysis =====
+
+class HealthAnalysisVital(BaseModel):
+    """Vital sign data structure"""
+    name: str
+    value: Optional[Union[str, float, int]] = None
+    unit: Optional[str] = None
+    status: Optional[str] = None
+    trend: Optional[str] = None
+
+class HealthAnalysisLabResult(BaseModel):
+    """Lab result data structure"""
+    testName: str
+    value: Optional[Union[str, float, int]] = None
+    unit: Optional[str] = None
+    normalRange: Optional[str] = None
+    status: Optional[str] = None
+
+class HealthAnalysisRequest(BaseModel):
+    """Request model for comprehensive health analysis"""
+    patientAge: Optional[int] = None
+    patientGender: Optional[str] = None
+    bloodGroup: Optional[str] = None
+    chronicConditions: Optional[List[str]] = []
+    allergies: Optional[List[str]] = []
+    currentMedications: Optional[List[str]] = []
+    vitals: Optional[List[Dict[str, Any]]] = []
+    labResults: Optional[List[Dict[str, Any]]] = []
+    recentDiagnoses: Optional[List[str]] = []
+    lifestyleFactors: Optional[Dict[str, Any]] = None
+
+class HealthAnalysisInsight(BaseModel):
+    """AI-generated health insight"""
+    id: str
+    type: str  # recommendation, alert, tip, warning
+    title: str
+    description: str
+    priority: str  # high, medium, low
+    actionLabel: Optional[str] = None
+    actionRoute: Optional[str] = None
+    category: Optional[str] = None  # vitals, labs, medications, lifestyle
+
+class HealthAnalysisResponse(BaseModel):
+    """Response model for health analysis"""
+    overallAssessment: str
+    riskLevel: str  # low, moderate, elevated, high
+    insights: List[HealthAnalysisInsight]
+    recommendations: List[str]
+    warningFlags: List[str]
+    aiPowered: bool
+    model: Optional[str] = None
+    modelVersion: str = "1.0.0"
+
+
+@app.post("/api/health-analysis", response_model=HealthAnalysisResponse)
+async def analyze_health_data(request: HealthAnalysisRequest):
+    """
+    Comprehensive AI-powered health data analysis.
+    Uses GPT-4o to analyze patient health data and generate personalized insights.
+    """
+    try:
+        from shared.openai_client import openai_manager, TaskComplexity
+
+        if not openai_manager.is_available():
+            # Return rule-based fallback analysis
+            return _generate_fallback_health_analysis(request)
+
+        # Build comprehensive health summary for GPT
+        health_summary = _build_health_summary(request)
+
+        system_prompt = """You are an expert AI Health Analyst assistant for a patient health portal. Your role is to analyze comprehensive patient health data and provide personalized, actionable insights.
+
+IMPORTANT GUIDELINES:
+1. You are NOT diagnosing conditions - you are analyzing existing data to provide health insights
+2. Always recommend consulting healthcare providers for specific medical concerns
+3. Be empathetic and supportive in your language
+4. Prioritize safety - flag any concerning patterns prominently
+5. Provide practical, actionable recommendations
+6. Consider the whole picture - how different factors interact
+
+RESPONSE FORMAT - You must respond with valid JSON in this exact structure:
+{
+    "overallAssessment": "A 2-3 sentence summary of the patient's overall health picture",
+    "riskLevel": "low|moderate|elevated|high",
+    "insights": [
+        {
+            "id": "unique-id-1",
+            "type": "recommendation|alert|tip|warning",
+            "title": "Brief title (5-8 words)",
+            "description": "Detailed explanation (2-3 sentences)",
+            "priority": "high|medium|low",
+            "category": "vitals|labs|medications|lifestyle|general"
+        }
+    ],
+    "recommendations": ["Specific actionable recommendation 1", "Recommendation 2"],
+    "warningFlags": ["Any urgent concerns that need attention"]
+}
+
+INSIGHT TYPES:
+- "alert": Immediate attention needed (abnormal values, concerning trends)
+- "warning": Caution advised (borderline values, potential risks)
+- "recommendation": Suggested actions for improvement
+- "tip": General health optimization suggestions
+
+Generate 4-8 relevant insights based on the data provided. Prioritize the most important findings."""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Please analyze this patient's health data and provide insights:\n\n{health_summary}"}
+        ]
+
+        result = openai_manager.chat_completion(
+            messages=messages,
+            task_complexity=TaskComplexity.COMPLEX,  # Use GPT-4o for medical analysis
+            max_tokens=1500,
+            temperature=0.3,  # Lower temperature for more consistent medical analysis
+        )
+
+        if not result or not result.get("success"):
+            logger.error(f"GPT health analysis error: {result.get('error') if result else 'No response'}")
+            return _generate_fallback_health_analysis(request)
+
+        # Parse GPT response
+        try:
+            import json
+            response_text = result["content"]
+            # Clean up potential markdown code blocks
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0]
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].split("```")[0]
+
+            analysis_data = json.loads(response_text.strip())
+
+            # Ensure insights have proper structure
+            insights = []
+            for i, insight in enumerate(analysis_data.get("insights", [])):
+                insights.append(HealthAnalysisInsight(
+                    id=insight.get("id", f"insight-{i+1}"),
+                    type=insight.get("type", "tip"),
+                    title=insight.get("title", "Health Insight"),
+                    description=insight.get("description", ""),
+                    priority=insight.get("priority", "medium"),
+                    category=insight.get("category", "general"),
+                    actionLabel=insight.get("actionLabel"),
+                    actionRoute=insight.get("actionRoute")
+                ))
+
+            return HealthAnalysisResponse(
+                overallAssessment=analysis_data.get("overallAssessment", "Health data analysis complete."),
+                riskLevel=analysis_data.get("riskLevel", "moderate"),
+                insights=insights,
+                recommendations=analysis_data.get("recommendations", []),
+                warningFlags=analysis_data.get("warningFlags", []),
+                aiPowered=True,
+                model=result.get("model", "gpt-4o"),
+                modelVersion="1.0.0"
+            )
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse GPT response: {e}")
+            return _generate_fallback_health_analysis(request)
+
+    except Exception as e:
+        logger.error(f"Health analysis error: {e}")
+        return _generate_fallback_health_analysis(request)
+
+
+def _build_health_summary(request: HealthAnalysisRequest) -> str:
+    """Build a comprehensive text summary of patient health data for GPT analysis"""
+    summary_parts = []
+
+    # Demographics
+    demographics = []
+    if request.patientAge:
+        demographics.append(f"Age: {request.patientAge}")
+    if request.patientGender:
+        demographics.append(f"Gender: {request.patientGender}")
+    if request.bloodGroup:
+        demographics.append(f"Blood Group: {request.bloodGroup}")
+    if demographics:
+        summary_parts.append("PATIENT DEMOGRAPHICS:\n" + ", ".join(demographics))
+
+    # Chronic Conditions
+    if request.chronicConditions:
+        summary_parts.append(f"CHRONIC CONDITIONS:\n{', '.join(request.chronicConditions)}")
+
+    # Allergies
+    if request.allergies:
+        summary_parts.append(f"ALLERGIES:\n{', '.join(request.allergies)}")
+
+    # Current Medications
+    if request.currentMedications:
+        summary_parts.append(f"CURRENT MEDICATIONS:\n{', '.join(request.currentMedications)}")
+
+    # Vitals
+    if request.vitals:
+        vitals_text = []
+        for v in request.vitals:
+            vital_str = f"- {v.get('name', 'Unknown')}: {v.get('value', 'N/A')} {v.get('unit', '')}"
+            if v.get('status'):
+                vital_str += f" (Status: {v['status']})"
+            if v.get('trend'):
+                vital_str += f" [Trend: {v['trend']}]"
+            vitals_text.append(vital_str)
+        summary_parts.append("VITAL SIGNS:\n" + "\n".join(vitals_text))
+
+    # Lab Results
+    if request.labResults:
+        labs_text = []
+        for lab in request.labResults:
+            lab_str = f"- {lab.get('testName', 'Unknown')}: {lab.get('value', 'N/A')} {lab.get('unit', '')}"
+            if lab.get('normalRange'):
+                lab_str += f" (Normal: {lab['normalRange']})"
+            if lab.get('status'):
+                lab_str += f" [{lab['status']}]"
+            labs_text.append(lab_str)
+        summary_parts.append("LABORATORY RESULTS:\n" + "\n".join(labs_text))
+
+    # Recent Diagnoses
+    if request.recentDiagnoses:
+        summary_parts.append(f"RECENT DIAGNOSES:\n{', '.join(request.recentDiagnoses)}")
+
+    # Lifestyle Factors
+    if request.lifestyleFactors:
+        lifestyle_text = []
+        for key, value in request.lifestyleFactors.items():
+            lifestyle_text.append(f"- {key}: {value}")
+        summary_parts.append("LIFESTYLE FACTORS:\n" + "\n".join(lifestyle_text))
+
+    return "\n\n".join(summary_parts) if summary_parts else "No health data provided."
+
+
+def _generate_fallback_health_analysis(request: HealthAnalysisRequest) -> HealthAnalysisResponse:
+    """Generate rule-based health analysis when AI is unavailable"""
+    insights = []
+    recommendations = []
+    warning_flags = []
+    risk_level = "low"
+
+    # Analyze vitals
+    if request.vitals:
+        for vital in request.vitals:
+            status = vital.get("status", "").lower()
+            name = vital.get("name", "")
+
+            if status in ["critical", "high", "attention"]:
+                risk_level = "elevated" if risk_level == "low" else risk_level
+                insights.append(HealthAnalysisInsight(
+                    id=f"vital-{name.lower().replace(' ', '-')}",
+                    type="alert",
+                    title=f"{name} Needs Attention",
+                    description=f"Your {name.lower()} reading shows values that may need medical attention. Please discuss with your healthcare provider.",
+                    priority="high",
+                    category="vitals"
+                ))
+                warning_flags.append(f"Abnormal {name} reading detected")
+
+    # Analyze chronic conditions
+    if request.chronicConditions:
+        for condition in request.chronicConditions:
+            condition_lower = condition.lower()
+            if "diabetes" in condition_lower:
+                insights.append(HealthAnalysisInsight(
+                    id="diabetes-management",
+                    type="recommendation",
+                    title="Diabetes Management",
+                    description="Regular monitoring of blood sugar levels is important. Maintain a balanced diet and follow your medication schedule.",
+                    priority="high",
+                    category="medications"
+                ))
+                risk_level = "moderate" if risk_level == "low" else risk_level
+            elif "hypertension" in condition_lower or "blood pressure" in condition_lower:
+                insights.append(HealthAnalysisInsight(
+                    id="bp-management",
+                    type="recommendation",
+                    title="Blood Pressure Management",
+                    description="Monitor your blood pressure regularly. Reduce sodium intake and maintain regular physical activity.",
+                    priority="high",
+                    category="vitals"
+                ))
+                risk_level = "moderate" if risk_level == "low" else risk_level
+
+    # Check medications
+    if request.currentMedications and len(request.currentMedications) > 3:
+        insights.append(HealthAnalysisInsight(
+            id="medication-review",
+            type="tip",
+            title="Medication Review Recommended",
+            description=f"You are currently on {len(request.currentMedications)} medications. Consider discussing with your doctor to review for potential interactions or optimizations.",
+            priority="medium",
+            category="medications"
+        ))
+
+    # Check allergies
+    if request.allergies:
+        insights.append(HealthAnalysisInsight(
+            id="allergy-awareness",
+            type="tip",
+            title="Allergy Alert",
+            description=f"You have {len(request.allergies)} known allergies. Always inform healthcare providers about these before any treatment.",
+            priority="medium",
+            category="general"
+        ))
+
+    # Add general recommendations
+    recommendations.extend([
+        "Schedule regular check-ups with your healthcare provider",
+        "Maintain a healthy diet and regular exercise routine",
+        "Keep track of any new symptoms and report them to your doctor",
+        "Ensure you're taking medications as prescribed"
+    ])
+
+    # Default insight if none generated
+    if not insights:
+        insights.append(HealthAnalysisInsight(
+            id="general-wellness",
+            type="tip",
+            title="Stay Proactive About Your Health",
+            description="Regular health monitoring and preventive care are key to maintaining good health. Consider scheduling a comprehensive check-up.",
+            priority="low",
+            category="general"
+        ))
+
+    overall = "Your health data has been reviewed. "
+    if risk_level == "low":
+        overall += "Overall indicators appear within normal ranges. Continue maintaining healthy habits."
+    elif risk_level == "moderate":
+        overall += "Some areas require ongoing attention. Follow your care plan and stay in touch with your healthcare team."
+    else:
+        overall += "Some concerning patterns were identified. Please consult with your healthcare provider soon."
+
+    return HealthAnalysisResponse(
+        overallAssessment=overall,
+        riskLevel=risk_level,
+        insights=insights,
+        recommendations=recommendations,
+        warningFlags=warning_flags,
+        aiPowered=False,
+        model=None,
+        modelVersion="1.0.0"
+    )
 
 
 # Speech-to-text (Whisper) endpoint
