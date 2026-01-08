@@ -33,6 +33,9 @@ app.use(cors({
   credentials: true,
 }));
 
+// Trust proxy - required when behind ALB/nginx for correct IP identification
+app.set('trust proxy', 1);
+
 // Rate limiting
 const limiter = rateLimit({
   windowMs: config.rateLimit.windowMs,

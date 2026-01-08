@@ -77,6 +77,15 @@ router.post(
   '/ai/analyze-symptoms',
   asyncHandler(async (req: Request, res: Response) => {
     const { symptoms } = req.body;
+    if (!symptoms) {
+      return sendSuccess(res, {
+        suggestedDepartment: 'general',
+        urgencyLevel: 'low',
+        confidence: 0.5,
+        matchedKeywords: [],
+        recommendations: ['Please describe your symptoms for better department recommendation.'],
+      });
+    }
     const analysis = await aiBookingService.analyzeSymptoms(symptoms);
     sendSuccess(res, analysis);
   })

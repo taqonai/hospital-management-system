@@ -236,8 +236,10 @@ export class AIBookingService {
   /**
    * Analyze symptoms and suggest appropriate department
    */
-  async analyzeSymptoms(symptoms: string[]): Promise<SymptomAnalysis> {
-    const symptomText = symptoms.join(' ').toLowerCase();
+  async analyzeSymptoms(symptoms: string | string[]): Promise<SymptomAnalysis> {
+    // Handle both string and array inputs
+    const symptomArray = Array.isArray(symptoms) ? symptoms : [symptoms];
+    const symptomText = symptomArray.join(' ').toLowerCase();
     const departmentScores: Record<string, number> = {};
 
     // Score departments based on symptoms
