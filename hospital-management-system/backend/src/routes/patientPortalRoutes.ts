@@ -337,15 +337,16 @@ router.post(
       // Continue without patient context
     }
 
-    // Try to use AI service for response
+    // Try to use AI Health Assistant service for dynamic response
     try {
       const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
-      const aiResponse = await fetch(`${AI_SERVICE_URL}/api/chat`, {
+      const aiResponse = await fetch(`${AI_SERVICE_URL}/api/health-assistant`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message,
           context: `${context}. ${patientContext}`,
+          patient_context: patientContext ? { raw_context: patientContext } : null,
           history: history || [],
           role: 'patient_health_assistant'
         })
@@ -355,11 +356,14 @@ router.post(
         const aiData = await aiResponse.json();
         sendSuccess(res, {
           response: aiData.response || aiData.message,
-          suggestedActions: getSuggestedActions(message)
+          suggestedActions: aiData.suggestedActions || getSuggestedActions(message),
+          aiPowered: aiData.aiPowered || false,
+          model: aiData.model
         }, 'AI response generated');
         return;
       }
     } catch (e) {
+      console.error('AI Health Assistant error:', e);
       // Fall through to rule-based response
     }
 
@@ -367,7 +371,8 @@ router.post(
     const response = generateLocalResponse(message);
     sendSuccess(res, {
       response,
-      suggestedActions: getSuggestedActions(message)
+      suggestedActions: getSuggestedActions(message),
+      aiPowered: false
     }, 'Response generated');
   })
 );

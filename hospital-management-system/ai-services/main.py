@@ -36,6 +36,7 @@ from early_warning.service import EarlyWarningAI
 from med_safety.service import MedicationSafetyAI
 from smart_orders.service import SmartOrdersAI, PatientContext as SmartOrdersPatientContext
 from ai_scribe.service import AIScribeService
+from health_assistant.service import HealthAssistantAI
 
 app = FastAPI(
     title="HMS AI Services",
@@ -68,6 +69,7 @@ early_warning_ai = EarlyWarningAI()
 med_safety_ai = MedicationSafetyAI()
 smart_orders_ai = SmartOrdersAI()
 ai_scribe = AIScribeService()
+health_assistant_ai = HealthAssistantAI()
 
 
 # Request/Response Models
@@ -718,6 +720,64 @@ async def process_voice_command(request: VoiceCommandRequest):
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# Patient Health Assistant Endpoints
+# =============================================================================
+
+class HealthAssistantRequest(BaseModel):
+    message: str
+    context: Optional[str] = None
+    patient_context: Optional[Dict[str, Any]] = None
+    history: Optional[List[Dict[str, str]]] = None
+    role: Optional[str] = "patient_health_assistant"
+
+
+class HealthAssistantResponse(BaseModel):
+    response: str
+    suggestedActions: Optional[List[Dict[str, str]]] = None
+    aiPowered: bool = False
+    model: Optional[str] = None
+    timestamp: Optional[str] = None
+    modelVersion: Optional[str] = None
+
+
+@app.post("/api/health-assistant", response_model=HealthAssistantResponse)
+async def health_assistant_chat(request: HealthAssistantRequest):
+    """
+    AI Health Assistant for patient health questions.
+    Provides dynamic, GPT-powered responses to health queries.
+    """
+    try:
+        # Parse patient context from string if provided
+        patient_ctx = request.patient_context
+        if request.context and isinstance(request.context, str):
+            # Try to extract patient info from context string
+            if not patient_ctx:
+                patient_ctx = {}
+            if "Patient:" in request.context:
+                # Context like "Patient: John Smith, Age: 45, Gender: Male"
+                patient_ctx["raw_context"] = request.context
+
+        result = await health_assistant_ai.get_response(
+            message=request.message,
+            patient_context=patient_ctx,
+            conversation_history=request.history
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/health-assistant/status")
+async def health_assistant_status():
+    """Check if health assistant AI is available"""
+    return {
+        "available": health_assistant_ai.is_available(),
+        "model": "gpt-4o" if health_assistant_ai.is_available() else None,
+        "modelVersion": health_assistant_ai.model_version
+    }
 
 
 # Speech-to-text (Whisper) endpoint
