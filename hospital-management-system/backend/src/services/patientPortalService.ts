@@ -273,10 +273,15 @@ export class PatientPortalService {
       }
 
       // Get the maximum token number for this doctor on this date
+      // Use date range to handle appointments with time in date field
       const maxTokenResult = await tx.appointment.findFirst({
         where: {
           doctorId: data.doctorId,
-          appointmentDate: normalizedDate,
+          appointmentDate: {
+            gte: startOfDay,
+            lt: endOfDay,
+          },
+          status: { notIn: ['CANCELLED', 'NO_SHOW'] },
         },
         orderBy: { tokenNumber: 'desc' },
         select: { tokenNumber: true },
@@ -452,10 +457,15 @@ export class PatientPortalService {
       }
 
       // Generate new token number for the new date
+      // Use date range to handle appointments with time in date field
       const maxTokenResult = await tx.appointment.findFirst({
         where: {
           doctorId: appointment.doctorId,
-          appointmentDate: normalizedDate,
+          appointmentDate: {
+            gte: startOfDay,
+            lt: endOfDay,
+          },
+          status: { notIn: ['CANCELLED', 'NO_SHOW'] },
           id: { not: appointmentId },
         },
         orderBy: { tokenNumber: 'desc' },

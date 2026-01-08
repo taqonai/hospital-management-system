@@ -25,11 +25,21 @@ export class AppointmentService {
       throw new NotFoundError('Doctor not found');
     }
 
+    // Normalize the date and create date range for consistent comparison
+    const appointmentDate = new Date(data.appointmentDate);
+    const startOfDay = new Date(appointmentDate);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
+
     // Check for conflicting appointments
     const existingAppointment = await prisma.appointment.findFirst({
       where: {
         doctorId: data.doctorId,
-        appointmentDate: new Date(data.appointmentDate),
+        appointmentDate: {
+          gte: startOfDay,
+          lt: endOfDay,
+        },
         startTime: data.startTime,
         status: { notIn: ['CANCELLED', 'NO_SHOW'] },
       },
@@ -39,11 +49,14 @@ export class AppointmentService {
       throw new ConflictError('This time slot is already booked');
     }
 
-    // Get token number for the day
+    // Get token number for the day - use date range for consistent matching
     const todayAppointments = await prisma.appointment.count({
       where: {
         doctorId: data.doctorId,
-        appointmentDate: new Date(data.appointmentDate),
+        appointmentDate: {
+          gte: startOfDay,
+          lt: endOfDay,
+        },
         status: { notIn: ['CANCELLED'] },
       },
     });
@@ -53,7 +66,7 @@ export class AppointmentService {
         hospitalId,
         patientId: data.patientId,
         doctorId: data.doctorId,
-        appointmentDate: new Date(data.appointmentDate),
+        appointmentDate: startOfDay, // Use normalized date
         startTime: data.startTime,
         endTime: data.endTime,
         type: data.type,

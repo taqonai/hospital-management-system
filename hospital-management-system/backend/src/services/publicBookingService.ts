@@ -123,9 +123,15 @@ export class PublicBookingService {
       throw new NotFoundError(`No doctor available in ${departmentName}`);
     }
 
-    // Parse date and time
+    // Parse date and time - normalize to start of day for consistent comparison
     const appointmentDate = new Date(data.preferredDate);
+    appointmentDate.setUTCHours(0, 0, 0, 0);
     const startTime = convertTo24Hour(data.preferredTime);
+
+    // Create date range for queries (handles appointments with time in date field)
+    const startOfDay = new Date(appointmentDate);
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
 
     // Calculate end time (30 min slot by default)
     const [hours, mins] = startTime.split(':').map(Number);
@@ -136,7 +142,10 @@ export class PublicBookingService {
     const existingAppointment = await prisma.appointment.findFirst({
       where: {
         doctorId: doctor.id,
-        appointmentDate: appointmentDate,
+        appointmentDate: {
+          gte: startOfDay,
+          lt: endOfDay,
+        },
         startTime: startTime,
         status: { notIn: ['CANCELLED', 'NO_SHOW'] },
       },
@@ -146,11 +155,14 @@ export class PublicBookingService {
       throw new AppError('This time slot is no longer available. Please choose a different time.');
     }
 
-    // Get token number for the day
+    // Get token number for the day - use date range for consistent matching
     const todayAppointments = await prisma.appointment.count({
       where: {
         doctorId: doctor.id,
-        appointmentDate: appointmentDate,
+        appointmentDate: {
+          gte: startOfDay,
+          lt: endOfDay,
+        },
         status: { notIn: ['CANCELLED'] },
       },
     });
