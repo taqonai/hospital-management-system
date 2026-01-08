@@ -34,10 +34,8 @@ import {
   useEntityExtraction,
   useSaveNote,
   SoapNote,
-  IcdCodeSuggestion,
-  CptCodeSuggestion,
-  ExtractedEntities,
 } from '../../hooks/useAIScribe';
+import { patientApi } from '../../services/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
 const AI_SCRIBE_URL = `${API_URL}/ai-scribe`;
@@ -81,55 +79,6 @@ interface Patient {
   mrn: string;
   dateOfBirth: string;
 }
-
-const MOCK_PATIENTS: Patient[] = [
-  { id: '1', firstName: 'John', lastName: 'Smith', mrn: 'MRN001', dateOfBirth: '1985-03-15' },
-  { id: '2', firstName: 'Sarah', lastName: 'Johnson', mrn: 'MRN002', dateOfBirth: '1972-08-22' },
-  { id: '3', firstName: 'Michael', lastName: 'Williams', mrn: 'MRN003', dateOfBirth: '1990-11-30' },
-  { id: '4', firstName: 'Emily', lastName: 'Brown', mrn: 'MRN004', dateOfBirth: '1965-05-08' },
-  { id: '5', firstName: 'David', lastName: 'Garcia', mrn: 'MRN005', dateOfBirth: '1988-12-01' },
-];
-
-// Mock ICD-10 codes for demo
-const MOCK_ICD_CODES: IcdCodeSuggestion[] = [
-  { code: 'J06.9', description: 'Acute upper respiratory infection, unspecified', confidence: 'high', supportingText: 'Patient presents with sore throat and nasal congestion' },
-  { code: 'R50.9', description: 'Fever, unspecified', confidence: 'high', supportingText: 'Temperature of 101.2F' },
-  { code: 'R05.9', description: 'Cough, unspecified', confidence: 'medium', supportingText: 'Productive cough for 3 days' },
-];
-
-// Mock CPT codes for demo
-const MOCK_CPT_CODES: CptCodeSuggestion[] = [
-  { code: '99213', description: 'Office visit, established patient, low complexity', confidence: 'high', category: 'E/M' },
-  { code: '99214', description: 'Office visit, established patient, moderate complexity', confidence: 'medium', category: 'E/M' },
-  { code: '87880', description: 'Strep test, rapid', confidence: 'medium', category: 'Lab' },
-];
-
-// Mock entities for demo
-const MOCK_ENTITIES: ExtractedEntities = {
-  symptoms: [
-    { type: 'symptom', value: 'Sore throat', confidence: 0.95 },
-    { type: 'symptom', value: 'Nasal congestion', confidence: 0.88 },
-    { type: 'symptom', value: 'Productive cough', confidence: 0.92 },
-    { type: 'symptom', value: 'Fatigue', confidence: 0.85 },
-  ],
-  diagnoses: [
-    { type: 'diagnosis', value: 'Acute upper respiratory infection', confidence: 0.91 },
-  ],
-  medications: [
-    { type: 'medication', value: 'Acetaminophen 500mg', confidence: 0.89 },
-    { type: 'medication', value: 'Guaifenesin 400mg', confidence: 0.87 },
-  ],
-  vitals: [
-    { type: 'vital', value: 'Temperature: 101.2F', confidence: 0.98 },
-    { type: 'vital', value: 'Blood Pressure: 120/80 mmHg', confidence: 0.96 },
-    { type: 'vital', value: 'Heart Rate: 88 bpm', confidence: 0.97 },
-    { type: 'vital', value: 'SpO2: 98%', confidence: 0.95 },
-  ],
-  procedures: [],
-  allergies: [
-    { type: 'allergy', value: 'Penicillin', confidence: 0.92 },
-  ],
-};
 
 // Waveform visualization component
 function WaveformVisualizer({ isRecording, analyserRef }: { isRecording: boolean; analyserRef: React.RefObject<AnalyserNode | null> }) {
@@ -200,10 +149,12 @@ function WaveformVisualizer({ isRecording, analyserRef }: { isRecording: boolean
 export default function AIScribe() {
   const [serviceStatus, setServiceStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  const [patients] = useState<Patient[]>(MOCK_PATIENTS);
+  const [patients, setPatients] = useState<Patient[]>([]);
   const [patientSearch, setPatientSearch] = useState('');
   const [showPatientDropdown, setShowPatientDropdown] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState(NOTE_TEMPLATES[0]);
+  const [isSearchingPatients, setIsSearchingPatients] = useState(false);
+  const [processError, setProcessError] = useState<string | null>(null);
 
   // Custom hooks
   const transcription = useTranscription();
@@ -233,6 +184,37 @@ export default function AIScribe() {
     checkServiceStatus();
   }, []);
 
+  // Search patients when search query changes
+  useEffect(() => {
+    const searchPatients = async () => {
+      if (patientSearch.length < 2) {
+        setPatients([]);
+        return;
+      }
+
+      setIsSearchingPatients(true);
+      try {
+        const response = await patientApi.getAll({ search: patientSearch, limit: 10 });
+        const patientData = response.data?.data || [];
+        setPatients(patientData.map((p: any) => ({
+          id: p.id,
+          firstName: p.firstName,
+          lastName: p.lastName,
+          mrn: p.mrn,
+          dateOfBirth: p.dateOfBirth,
+        })));
+      } catch (error) {
+        console.error('Failed to search patients:', error);
+        setPatients([]);
+      } finally {
+        setIsSearchingPatients(false);
+      }
+    };
+
+    const debounceTimer = setTimeout(searchPatients, 300);
+    return () => clearTimeout(debounceTimer);
+  }, [patientSearch]);
+
   const checkServiceStatus = async () => {
     try {
       const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
@@ -253,15 +235,8 @@ export default function AIScribe() {
     }
   };
 
-  // Filter patients based on search
-  const filteredPatients = patients.filter((patient) => {
-    const search = patientSearch.toLowerCase();
-    return (
-      patient.firstName.toLowerCase().includes(search) ||
-      patient.lastName.toLowerCase().includes(search) ||
-      patient.mrn.toLowerCase().includes(search)
-    );
-  });
+  // Use patients from API search directly (already filtered by backend)
+  const filteredPatients = patients;
 
   const handleSelectPatient = (patient: Patient) => {
     setSelectedPatient(patient);
@@ -277,6 +252,7 @@ export default function AIScribe() {
     saveNoteHook.resetSaveState();
     setSessionId(null);
     setHasProcessedResult(false);
+    setProcessError(null);
   };
 
   // Audio recording with visualization
@@ -313,6 +289,7 @@ export default function AIScribe() {
     if (!transcription.audioBlob) return;
 
     setIsProcessing(true);
+    setProcessError(null);
 
     try {
       // Start session
@@ -331,7 +308,7 @@ export default function AIScribe() {
       });
 
       if (!sessionResponse.ok) {
-        throw new Error('Failed to start session');
+        throw new Error('Failed to start AI Scribe session. Please check if the AI service is running.');
       }
 
       const sessionData = await sessionResponse.json();
@@ -374,31 +351,12 @@ export default function AIScribe() {
         }
         setHasProcessedResult(true);
       } else {
-        // Use mock data for demo if API fails
-        noteGeneration.setSoapNote({
-          subjective: 'Patient presents with a 3-day history of sore throat, nasal congestion, and productive cough. Reports low-grade fever and fatigue. Denies shortness of breath, chest pain, or difficulty swallowing. No sick contacts. Last seen 6 months ago for routine physical.',
-          objective: 'Vital Signs: Temperature 101.2F, BP 120/80 mmHg, HR 88 bpm, RR 16, SpO2 98% on room air.\n\nGeneral: Alert, oriented, appears mildly ill.\nHEENT: Pharyngeal erythema with tonsillar exudates. Nasal mucosa erythematous with clear discharge. TMs clear bilaterally.\nNeck: Tender anterior cervical lymphadenopathy.\nLungs: Clear to auscultation bilaterally. No wheezes or crackles.\nHeart: Regular rate and rhythm. No murmurs.',
-          assessment: '1. Acute pharyngitis - likely viral etiology given symptoms and presentation\n2. Upper respiratory infection\n3. Rule out streptococcal pharyngitis',
-          plan: '1. Rapid strep test - pending\n2. Symptomatic treatment:\n   - Acetaminophen 500mg every 6 hours as needed for fever/pain\n   - Guaifenesin 400mg every 4 hours as needed for cough\n   - Increase fluid intake\n3. If strep positive, start amoxicillin 500mg TID x 10 days\n4. Return if symptoms worsen or no improvement in 5-7 days',
-        });
-        noteGeneration.setIcdCodes(MOCK_ICD_CODES);
-        noteGeneration.setCptCodes(MOCK_CPT_CODES);
-        entityExtraction.setEntities(MOCK_ENTITIES);
-        setHasProcessedResult(true);
+        const errorData = await processResponse.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to process recording. Please try again.');
       }
     } catch (err) {
       console.error('Processing error:', err);
-      // Use mock data for demo
-      noteGeneration.setSoapNote({
-        subjective: 'Patient presents with a 3-day history of sore throat, nasal congestion, and productive cough. Reports low-grade fever and fatigue. Denies shortness of breath, chest pain, or difficulty swallowing.',
-        objective: 'Vital Signs: Temperature 101.2F, BP 120/80 mmHg, HR 88 bpm, SpO2 98%.\nGeneral: Alert, mildly ill appearance.\nHEENT: Pharyngeal erythema with tonsillar exudates.\nLungs: Clear bilaterally.',
-        assessment: '1. Acute pharyngitis - likely viral\n2. Upper respiratory infection',
-        plan: '1. Symptomatic treatment with acetaminophen and guaifenesin\n2. Increase fluid intake\n3. Return if no improvement in 5-7 days',
-      });
-      noteGeneration.setIcdCodes(MOCK_ICD_CODES);
-      noteGeneration.setCptCodes(MOCK_CPT_CODES);
-      entityExtraction.setEntities(MOCK_ENTITIES);
-      setHasProcessedResult(true);
+      setProcessError(err instanceof Error ? err.message : 'Failed to process recording. Please ensure the AI service is running and try again.');
     } finally {
       setIsProcessing(false);
     }
@@ -656,7 +614,12 @@ export default function AIScribe() {
 
                 {showPatientDropdown && (
                   <div className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
-                    {filteredPatients.length > 0 ? (
+                    {isSearchingPatients ? (
+                      <div className="px-4 py-3 text-gray-500 text-center flex items-center justify-center gap-2">
+                        <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                        Searching...
+                      </div>
+                    ) : filteredPatients.length > 0 ? (
                       filteredPatients.map((patient) => (
                         <button
                           key={patient.id}
@@ -676,6 +639,10 @@ export default function AIScribe() {
                           </div>
                         </button>
                       ))
+                    ) : patientSearch.length < 2 ? (
+                      <div className="px-4 py-3 text-gray-500 text-center">
+                        Type at least 2 characters to search
+                      </div>
                     ) : (
                       <div className="px-4 py-3 text-gray-500 text-center">
                         No patients found
@@ -920,12 +887,12 @@ export default function AIScribe() {
             </div>
           )}
 
-          {saveNoteHook.error && (
+          {(saveNoteHook.error || processError) && (
             <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
               <ExclamationCircleIcon className="h-5 w-5 text-red-500 mt-0.5" />
               <div>
                 <p className="font-medium text-red-800">Error</p>
-                <p className="text-sm text-red-600">{saveNoteHook.error}</p>
+                <p className="text-sm text-red-600">{saveNoteHook.error || processError}</p>
               </div>
             </div>
           )}

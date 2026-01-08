@@ -23,6 +23,7 @@ import { appointmentApi } from '../services/api';
 import { Appointment } from '../types';
 import { format, addDays, subDays } from 'date-fns';
 import toast from 'react-hot-toast';
+import { useAuth } from '../hooks/useAuth';
 
 const statusConfig: Record<string, { bg: string; text: string; dot: string }> = {
   SCHEDULED: { bg: 'bg-blue-100', text: 'text-blue-700', dot: 'bg-blue-500' },
@@ -39,6 +40,10 @@ export default function Appointments() {
   const [statusFilter, setStatusFilter] = useState('');
   const [cancelConfirm, setCancelConfirm] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const { isDoctor, hasRole } = useAuth();
+
+  // Check if user can perform check-in actions (nurses, receptionists, admins - not doctors)
+  const canCheckIn = hasRole(['NURSE', 'RECEPTIONIST', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['appointments', { date: selectedDate, status: statusFilter }],
@@ -91,8 +96,14 @@ export default function Appointments() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Appointments</h1>
-          <p className="text-gray-500 mt-1">Manage patient appointments and schedules</p>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {isDoctor() ? 'My Appointments' : 'Appointments'}
+          </h1>
+          <p className="text-gray-500 mt-1">
+            {isDoctor()
+              ? 'View and manage your scheduled appointments'
+              : 'Manage patient appointments and schedules'}
+          </p>
         </div>
         <Link
           to="/appointments/new"
@@ -284,14 +295,17 @@ export default function Appointments() {
                     <div className="flex items-center gap-2 lg:flex-shrink-0">
                       {appointment.status === 'SCHEDULED' && (
                         <>
-                          <button
-                            onClick={() => handleStatusUpdate(appointment.id, 'CHECKED_IN')}
-                            disabled={updateStatusMutation.isPending}
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-green-50 text-green-600 border border-green-200 hover:bg-green-100 transition-colors disabled:opacity-50"
-                          >
-                            <CheckCircleIcon className="h-4 w-4" />
-                            Check In
-                          </button>
+                          {/* Check In button - only for nurses, receptionists, admins (not doctors) */}
+                          {canCheckIn && (
+                            <button
+                              onClick={() => handleStatusUpdate(appointment.id, 'CHECKED_IN')}
+                              disabled={updateStatusMutation.isPending}
+                              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-green-50 text-green-600 border border-green-200 hover:bg-green-100 transition-colors disabled:opacity-50"
+                            >
+                              <CheckCircleIcon className="h-4 w-4" />
+                              Check In
+                            </button>
+                          )}
                           <button
                             onClick={() => setCancelConfirm(appointment.id)}
                             disabled={updateStatusMutation.isPending}

@@ -123,76 +123,6 @@ interface OrderHistoryFilters {
   category: string;
 }
 
-// Mock data for demonstration (will be replaced with API calls)
-const generateMockOrderHistory = (): OrderHistoryItem[] => {
-  const diagnoses = [
-    { name: 'Sepsis, unspecified organism', code: 'A41.9' },
-    { name: 'Acute myocardial infarction', code: 'I21.9' },
-    { name: 'Pneumonia, unspecified organism', code: 'J18.9' },
-    { name: 'Type 2 diabetes with ketoacidosis', code: 'E11.10' },
-    { name: 'Heart failure, unspecified', code: 'I50.9' },
-  ];
-  const statuses: ('pending' | 'completed' | 'cancelled' | 'in_progress')[] = ['pending', 'completed', 'cancelled', 'in_progress'];
-  const categories = ['Lab', 'Imaging', 'Medication', 'Procedure', 'Consult'];
-  const providers = ['Dr. Sarah Johnson', 'Dr. Michael Chen', 'Dr. Emily Williams', 'Dr. Robert Brown'];
-  const patients = [
-    { id: 'P001', name: 'John Smith' },
-    { id: 'P002', name: 'Jane Doe' },
-    { id: 'P003', name: 'Robert Johnson' },
-    { id: 'P004', name: 'Maria Garcia' },
-    { id: 'P005', name: 'William Davis' },
-  ];
-
-  return Array.from({ length: 25 }, (_, i) => {
-    const diagnosis = diagnoses[i % diagnoses.length];
-    const patient = patients[i % patients.length];
-    const status = statuses[i % statuses.length];
-    const itemCount = Math.floor(Math.random() * 5) + 2;
-
-    return {
-      id: `order-${1000 + i}`,
-      orderNumber: `SO-${String(1000 + i).padStart(6, '0')}`,
-      patientId: patient.id,
-      patientName: patient.name,
-      diagnosis: diagnosis.name,
-      icdCode: diagnosis.code,
-      status,
-      totalCost: Math.floor(Math.random() * 500) + 100,
-      itemCount,
-      orderedBy: providers[i % providers.length],
-      orderedAt: new Date(Date.now() - i * 3600000 * 24).toISOString(),
-      completedAt: status === 'completed' ? new Date(Date.now() - i * 3600000 * 12).toISOString() : undefined,
-      items: Array.from({ length: itemCount }, (_, j) => ({
-        id: `item-${i}-${j}`,
-        name: ['CBC with Differential', 'BMP', 'Chest X-ray', 'CT Abdomen', 'Amoxicillin 500mg', 'IV Fluids'][j % 6],
-        category: categories[j % categories.length],
-        urgency: ['stat', 'routine', 'urgent'][j % 3],
-        status: status === 'completed' ? 'completed' : (j < itemCount / 2 ? 'completed' : 'pending') as 'pending' | 'completed' | 'cancelled',
-        rationale: 'Standard protocol for suspected infection',
-        warnings: j === 0 ? ['Check renal function before ordering'] : undefined,
-        executedBy: status === 'completed' || j < itemCount / 2 ? 'Lab Tech - Anna Wilson' : undefined,
-        executedAt: status === 'completed' || j < itemCount / 2 ? new Date(Date.now() - i * 3600000 * 6).toISOString() : undefined,
-      })),
-    };
-  });
-};
-
-const mockOrderHistory = generateMockOrderHistory();
-
-const generateMockStats = (): OrderStats => ({
-  totalOrdersToday: 47,
-  pendingOrders: 12,
-  completedOrders: 32,
-  cancelledOrders: 3,
-  commonDiagnoses: [
-    { diagnosis: 'Sepsis', count: 15 },
-    { diagnosis: 'Pneumonia', count: 12 },
-    { diagnosis: 'Heart Failure', count: 8 },
-    { diagnosis: 'Diabetes', count: 7 },
-    { diagnosis: 'Stroke', count: 5 },
-  ],
-});
-
 export default function SmartOrders() {
   const [activeTab, setActiveTab] = useState<'diagnosis' | 'bundles' | 'history'>('diagnosis');
   const [diagnosis, setDiagnosis] = useState('');
@@ -305,43 +235,15 @@ export default function SmartOrders() {
         setOrderHistory(data.orders);
         setTotalOrders(data.total || data.orders.length);
       } else {
-        // Use mock data for demonstration
-        let filtered = [...mockOrderHistory];
-        if (historyFilters.patientSearch) {
-          filtered = filtered.filter(o =>
-            o.patientName.toLowerCase().includes(historyFilters.patientSearch.toLowerCase()) ||
-            o.patientId.toLowerCase().includes(historyFilters.patientSearch.toLowerCase())
-          );
-        }
-        if (historyFilters.status !== 'all') {
-          filtered = filtered.filter(o => o.status === historyFilters.status);
-        }
-        if (historyFilters.category !== 'all') {
-          filtered = filtered.filter(o => o.items.some(item => item.category === historyFilters.category));
-        }
-        setTotalOrders(filtered.length);
-        const start = (currentPage - 1) * pageSize;
-        setOrderHistory(filtered.slice(start, start + pageSize));
+        // No orders found - show empty state
+        setOrderHistory([]);
+        setTotalOrders(0);
       }
     } catch (err) {
       console.error('Error loading order history:', err);
-      // Use mock data on error
-      let filtered = [...mockOrderHistory];
-      if (historyFilters.patientSearch) {
-        filtered = filtered.filter(o =>
-          o.patientName.toLowerCase().includes(historyFilters.patientSearch.toLowerCase()) ||
-          o.patientId.toLowerCase().includes(historyFilters.patientSearch.toLowerCase())
-        );
-      }
-      if (historyFilters.status !== 'all') {
-        filtered = filtered.filter(o => o.status === historyFilters.status);
-      }
-      if (historyFilters.category !== 'all') {
-        filtered = filtered.filter(o => o.items.some(item => item.category === historyFilters.category));
-      }
-      setTotalOrders(filtered.length);
-      const start = (currentPage - 1) * pageSize;
-      setOrderHistory(filtered.slice(start, start + pageSize));
+      // Show empty state on error
+      setOrderHistory([]);
+      setTotalOrders(0);
     } finally {
       setLoadingHistory(false);
     }
@@ -355,11 +257,25 @@ export default function SmartOrders() {
       if (data) {
         setOrderStats(data);
       } else {
-        setOrderStats(generateMockStats());
+        // Show empty stats
+        setOrderStats({
+          totalOrdersToday: 0,
+          pendingOrders: 0,
+          completedOrders: 0,
+          cancelledOrders: 0,
+          commonDiagnoses: [],
+        });
       }
     } catch (err) {
       console.error('Error loading order stats:', err);
-      setOrderStats(generateMockStats());
+      // Show empty stats on error
+      setOrderStats({
+        totalOrdersToday: 0,
+        pendingOrders: 0,
+        completedOrders: 0,
+        cancelledOrders: 0,
+        commonDiagnoses: [],
+      });
     }
   }, []);
 

@@ -16,6 +16,7 @@ import { useAIHealth } from '../../hooks/useAI';
 import { opdApi, appointmentApi, doctorApi, patientApi } from '../../services/api';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
+import { useAuth } from '../../hooks/useAuth';
 
 interface QueueItem {
   id: string;
@@ -675,6 +676,13 @@ export default function OPD() {
   const [selectedAppointmentForVitals, setSelectedAppointmentForVitals] = useState<QueueItem | null>(null);
   const { data: healthStatus } = useAIHealth();
   const isAIOnline = healthStatus?.status === 'connected';
+  const { hasRole } = useAuth();
+
+  // Role-based permissions
+  // Nurses and receptionists can: add walk-ins, record vitals, manage queue
+  // Doctors can: view queue, call next patient
+  const canAddWalkIn = hasRole(['NURSE', 'RECEPTIONIST', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']);
+  const canRecordVitals = hasRole(['NURSE', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']);
 
   // Fetch queue
   useEffect(() => {
@@ -789,13 +797,16 @@ export default function OPD() {
                 <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-purple-400/0 via-purple-400/30 to-purple-400/0 opacity-0 group-hover:opacity-100 transition-opacity" />
               </button>
             )}
-            <button
-              onClick={() => setShowWalkInModal(true)}
-              className="group relative inline-flex items-center gap-2 px-5 py-2.5 bg-white/20 backdrop-blur-md border border-white/30 rounded-xl text-white font-semibold shadow-lg hover:bg-white/30 hover:scale-105 transition-all duration-300"
-            >
-              <PlusIcon className="h-5 w-5 group-hover:rotate-90 transition-transform duration-300" />
-              Walk-in Patient
-            </button>
+            {/* Walk-in Patient button - only for nurses, receptionists, admins (not doctors) */}
+            {canAddWalkIn && (
+              <button
+                onClick={() => setShowWalkInModal(true)}
+                className="group relative inline-flex items-center gap-2 px-5 py-2.5 bg-white/20 backdrop-blur-md border border-white/30 rounded-xl text-white font-semibold shadow-lg hover:bg-white/30 hover:scale-105 transition-all duration-300"
+              >
+                <PlusIcon className="h-5 w-5 group-hover:rotate-90 transition-transform duration-300" />
+                Walk-in Patient
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -927,8 +938,8 @@ export default function OPD() {
                             </div>
                           </div>
                         </div>
-                        {/* Record Vitals Button */}
-                        {patient.status !== 'IN_CONSULTATION' && (
+                        {/* Record Vitals Button - only for nurses and admins (not doctors) */}
+                        {patient.status !== 'IN_CONSULTATION' && canRecordVitals && (
                           <button
                             onClick={() => setSelectedAppointmentForVitals(patient)}
                             className={clsx(

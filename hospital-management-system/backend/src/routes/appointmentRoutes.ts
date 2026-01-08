@@ -5,22 +5,44 @@ import { validate, createAppointmentSchema, uuidParamSchema, paginationSchema } 
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
+import prisma from '../config/database';
 
 const router = Router();
 
+// Helper function to get doctorId for DOCTOR users
+async function getDoctorIdForUser(userId: string): Promise<string | null> {
+  const doctor = await prisma.doctor.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+  return doctor?.id || null;
+}
+
 // Get all appointments
+// DOCTOR role: automatically filtered to only their own appointments
+// Other roles: see all appointments (can optionally filter by doctorId)
 router.get(
   '/',
   authenticate,
   validate(paginationSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { page, limit, sortBy, sortOrder, doctorId, patientId, status, date, startDate, endDate } = req.query;
+
+    // For DOCTOR role, auto-filter to their own appointments
+    let effectiveDoctorId = doctorId as string;
+    if (req.user!.role === 'DOCTOR') {
+      const userDoctorId = await getDoctorIdForUser(req.user!.userId);
+      if (userDoctorId) {
+        effectiveDoctorId = userDoctorId;
+      }
+    }
+
     const { appointments, total } = await appointmentService.findAll(req.user!.hospitalId, {
       page: Number(page) || 1,
       limit: Number(limit) || 10,
       sortBy: sortBy as string,
       sortOrder: sortOrder as 'asc' | 'desc',
-      doctorId: doctorId as string,
+      doctorId: effectiveDoctorId,
       patientId: patientId as string,
       status: status as any,
       date: date ? new Date(date as string) : undefined,
@@ -134,14 +156,25 @@ router.get(
 );
 
 // Get dashboard stats
+// DOCTOR role: automatically filtered to their own stats
 router.get(
   '/stats/dashboard',
   authenticate,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { doctorId } = req.query;
+
+    // For DOCTOR role, auto-filter to their own stats
+    let effectiveDoctorId = doctorId as string;
+    if (req.user!.role === 'DOCTOR') {
+      const userDoctorId = await getDoctorIdForUser(req.user!.userId);
+      if (userDoctorId) {
+        effectiveDoctorId = userDoctorId;
+      }
+    }
+
     const stats = await appointmentService.getDashboardStats(
       req.user!.hospitalId,
-      doctorId as string
+      effectiveDoctorId
     );
     sendSuccess(res, stats);
   })
