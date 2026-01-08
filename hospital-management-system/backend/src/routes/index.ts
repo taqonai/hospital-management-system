@@ -42,6 +42,7 @@ import pdfRoutes from './pdfRoutes';
 import rbacRoutes from './rbacRoutes';
 import patientAuthRoutes from './patientAuthRoutes';
 import notificationRoutes from './notificationRoutes';
+import wellnessRoutes from './wellnessRoutes';
 
 const router = Router();
 
@@ -107,5 +108,8 @@ router.use('/rbac', rbacRoutes);
 
 // Notification routes
 router.use('/notifications', notificationRoutes);
+
+// Wellness & Health Sync routes (Patient Portal)
+router.use('/wellness', wellnessRoutes);
 
 export default router;

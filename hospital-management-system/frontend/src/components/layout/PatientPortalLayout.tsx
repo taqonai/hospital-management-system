@@ -22,6 +22,10 @@ import {
   LightBulbIcon,
   ChartBarIcon,
   ClipboardDocumentListIcon,
+  DevicePhoneMobileIcon,
+  FireIcon,
+  CakeIcon,
+  TrophyIcon,
 } from '@heroicons/react/24/outline';
 import { HeartIcon } from '@heroicons/react/24/solid';
 
@@ -95,35 +99,53 @@ const decodeJWT = (token: string): PatientTokenPayload | null => {
 // Helper function to get patient info from localStorage
 const getPatientInfo = (): PatientInfo | null => {
   try {
-    // Try to get patient token from localStorage
+    // First, check if patient token exists
     const patientToken = localStorage.getItem('patientPortalToken');
+    if (!patientToken) {
+      return null;
+    }
 
-    if (patientToken) {
-      const decoded = decodeJWT(patientToken);
-      if (decoded) {
+    // Try to get patient info from localStorage (stored during login)
+    const patientUserStr = localStorage.getItem('patientUser');
+    if (patientUserStr) {
+      const patient = JSON.parse(patientUserStr);
+      if (patient) {
         return {
-          id: decoded.id,
-          email: decoded.email,
-          firstName: decoded.firstName,
-          lastName: decoded.lastName,
-          fullName: `${decoded.firstName} ${decoded.lastName}`,
-          initials: `${decoded.firstName?.[0] || ''}${decoded.lastName?.[0] || ''}`.toUpperCase(),
+          id: patient.id,
+          email: patient.email,
+          firstName: patient.firstName,
+          lastName: patient.lastName,
+          fullName: `${patient.firstName} ${patient.lastName}`,
+          initials: `${patient.firstName?.[0] || ''}${patient.lastName?.[0] || ''}`.toUpperCase(),
         };
       }
     }
 
-    // Fallback: try to get from general auth token
+    // Fallback: try to decode patient token
+    const decoded = decodeJWT(patientToken);
+    if (decoded) {
+      return {
+        id: decoded.patientId || decoded.id,
+        email: decoded.email,
+        firstName: decoded.firstName,
+        lastName: decoded.lastName,
+        fullName: `${decoded.firstName} ${decoded.lastName}`,
+        initials: `${decoded.firstName?.[0] || ''}${decoded.lastName?.[0] || ''}`.toUpperCase(),
+      };
+    }
+
+    // Last fallback: try general auth token if it's a patient
     const authToken = localStorage.getItem('accessToken');
     if (authToken) {
-      const decoded = decodeJWT(authToken);
-      if (decoded && decoded.role === 'PATIENT') {
+      const authDecoded = decodeJWT(authToken);
+      if (authDecoded && authDecoded.role === 'PATIENT') {
         return {
-          id: decoded.id,
-          email: decoded.email,
-          firstName: decoded.firstName,
-          lastName: decoded.lastName,
-          fullName: `${decoded.firstName} ${decoded.lastName}`,
-          initials: `${decoded.firstName?.[0] || ''}${decoded.lastName?.[0] || ''}`.toUpperCase(),
+          id: authDecoded.id,
+          email: authDecoded.email,
+          firstName: authDecoded.firstName,
+          lastName: authDecoded.lastName,
+          fullName: `${authDecoded.firstName} ${authDecoded.lastName}`,
+          initials: `${authDecoded.firstName?.[0] || ''}${authDecoded.lastName?.[0] || ''}`.toUpperCase(),
         };
       }
     }
@@ -149,6 +171,10 @@ const navigationItems: NavItem[] = [
   { name: 'Health Insights', href: '/patient-portal/health-insights', icon: ChartBarIcon },
   { name: 'Symptom Checker', href: '/patient-portal/symptom-checker', icon: SparklesIcon },
   { name: 'Medical History', href: '/patient-portal/medical-history', icon: ClipboardDocumentListIcon },
+  { name: 'Health Sync', href: '/patient-portal/health-sync', icon: DevicePhoneMobileIcon },
+  { name: 'Fitness Tracker', href: '/patient-portal/fitness', icon: FireIcon },
+  { name: 'Nutrition & Diet', href: '/patient-portal/nutrition', icon: CakeIcon },
+  { name: 'Wellness Hub', href: '/patient-portal/wellness', icon: TrophyIcon },
   { name: 'My Appointments', href: '/patient-portal/appointments', icon: CalendarDaysIcon },
   { name: 'Medical Records', href: '/patient-portal/records', icon: FolderIcon },
   { name: 'Prescriptions', href: '/patient-portal/prescriptions', icon: PillIcon },

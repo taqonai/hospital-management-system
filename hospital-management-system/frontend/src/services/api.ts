@@ -15,16 +15,20 @@ export const api = axios.create({
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     // Check if this is a patient portal request
+    // Include wellness routes as they use patient authentication
     const isPatientPortalRequest = config.url?.includes('/patient-portal') ||
-                                    config.url?.includes('/patient-auth');
+                                    config.url?.includes('/patient-auth') ||
+                                    config.url?.includes('/wellness');
 
     let token: string | null = null;
 
     if (isPatientPortalRequest) {
-      // Use patient portal token for patient portal requests
+      // Use patient portal token for patient portal and wellness requests
       token = localStorage.getItem('patientPortalToken');
-    } else {
-      // Use staff token from Redux for other requests
+    }
+
+    // If no patient token or not a patient request, use staff token
+    if (!token) {
       const state = store.getState();
       token = state.auth.accessToken;
     }
@@ -46,9 +50,10 @@ api.interceptors.response.use(
       _retry?: boolean;
     };
 
-    // Check if this is a patient portal request
+    // Check if this is a patient portal request (including wellness routes)
     const isPatientPortalRequest = originalRequest.url?.includes('/patient-portal') ||
-                                    originalRequest.url?.includes('/patient-auth');
+                                    originalRequest.url?.includes('/patient-auth') ||
+                                    originalRequest.url?.includes('/wellness');
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;

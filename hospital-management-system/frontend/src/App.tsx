@@ -100,6 +100,10 @@ import PatientPortalSymptomChecker from './pages/PatientPortal/SymptomChecker';
 import PatientPortalHealthAssistant from './pages/PatientPortal/HealthAssistant';
 import PatientPortalHealthInsights from './pages/PatientPortal/HealthInsights';
 import PatientPortalMedicalHistory from './pages/PatientPortal/MedicalHistory';
+import PatientPortalHealthSync from './pages/PatientPortal/HealthSync';
+import PatientPortalFitnessTracker from './pages/PatientPortal/FitnessTracker';
+import PatientPortalNutritionPlan from './pages/PatientPortal/NutritionPlan';
+import PatientPortalWellnessHub from './pages/PatientPortal/WellnessHub';
 import PatientPortalLayout from './components/layout/PatientPortalLayout';
 
 // Asset Management
@@ -248,6 +252,10 @@ function App() {
         <Route path="health-assistant" element={<PatientPortalHealthAssistant />} />
         <Route path="health-insights" element={<PatientPortalHealthInsights />} />
         <Route path="medical-history" element={<PatientPortalMedicalHistory />} />
+        <Route path="health-sync" element={<PatientPortalHealthSync />} />
+        <Route path="fitness" element={<PatientPortalFitnessTracker />} />
+        <Route path="nutrition" element={<PatientPortalNutritionPlan />} />
+        <Route path="wellness" element={<PatientPortalWellnessHub />} />
       </Route>
 
       {/* Redirects */}

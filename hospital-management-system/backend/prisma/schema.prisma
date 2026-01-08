@@ -364,6 +364,16 @@ model Patient {
   clinicalNotes       ClinicalNote[]
   aiScribeSessions    AiScribeSession[]
 
+  // Health & Wellness
+  healthDeviceConnections HealthDeviceConnection[]
+  healthMetrics           HealthMetric[]
+  fitnessActivities       FitnessActivity[]
+  fitnessGoals            FitnessGoal[]
+  nutritionLogs           NutritionLog[]
+  nutritionPlans          NutritionPlan[]
+  wellnessGoals           WellnessGoal[]
+  wellnessAssessments     WellnessAssessment[]
+
   @@unique([hospitalId, mrn])
   @@map("patients")
 }
@@ -2960,10 +2970,14 @@ model MealOrder {
 
 enum MealType {
   BREAKFAST
+  MORNING_SNACK
   LUNCH
+  AFTERNOON_SNACK
   DINNER
+  EVENING_SNACK
   SNACK
   SPECIAL
+  OTHER
 }
 
 enum MealOrderStatus {
@@ -4118,4 +4132,449 @@ enum ScribeSessionStatus {
   COMPLETED
   CANCELLED
   ERROR
+}
+
+// =============================================================================
+// HEALTH SYNC & WELLNESS MODELS
+// =============================================================================
+
+model HealthDeviceConnection {
+  id            String   @id @default(uuid())
+  patientId     String
+  patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  provider      HealthProvider
+  providerUserId String?
+  accessToken   String?  @db.Text
+  refreshToken  String?  @db.Text
+  tokenExpiry   DateTime?
+  scopes        String[]
+
+  isActive      Boolean  @default(true)
+  lastSyncAt    DateTime?
+  syncFrequency Int      @default(60) // minutes
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([patientId, provider])
+  @@index([patientId])
+  @@map("health_device_connections")
+}
+
+enum HealthProvider {
+  APPLE_HEALTH
+  SAMSUNG_HEALTH
+  GOOGLE_FIT
+  FITBIT
+  GARMIN
+  WITHINGS
+  MANUAL
+}
+
+model HealthMetric {
+  id          String   @id @default(uuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  metricType  HealthMetricType
+  value       Decimal  @db.Decimal(10, 2)
+  unit        String
+
+  // Additional data
+  source      HealthProvider @default(MANUAL)
+  metadata    Json?
+
+  // Time tracking
+  recordedAt  DateTime
+  syncedAt    DateTime @default(now())
+
+  createdAt   DateTime @default(now())
+
+  @@index([patientId, metricType])
+  @@index([patientId, recordedAt])
+  @@map("health_metrics")
+}
+
+enum HealthMetricType {
+  STEPS
+  HEART_RATE
+  HEART_RATE_RESTING
+  HEART_RATE_VARIABILITY
+  BLOOD_PRESSURE_SYSTOLIC
+  BLOOD_PRESSURE_DIASTOLIC
+  BLOOD_OXYGEN
+  BLOOD_GLUCOSE
+  BODY_TEMPERATURE
+  WEIGHT
+  HEIGHT
+  BMI
+  BODY_FAT
+  SLEEP_DURATION
+  SLEEP_QUALITY
+  CALORIES_BURNED
+  CALORIES_CONSUMED
+  WATER_INTAKE
+  STRESS_LEVEL
+  RESPIRATORY_RATE
+  ACTIVE_MINUTES
+  DISTANCE_WALKED
+  FLOORS_CLIMBED
+}
+
+model FitnessActivity {
+  id            String   @id @default(uuid())
+  patientId     String
+  patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  activityType  FitnessActivityType
+  name          String
+  description   String?
+
+  // Duration and intensity
+  durationMinutes Int
+  intensity     ActivityIntensity @default(MODERATE)
+
+  // Metrics
+  caloriesBurned  Int?
+  distanceKm      Decimal? @db.Decimal(6, 2)
+  steps           Int?
+  avgHeartRate    Int?
+  maxHeartRate    Int?
+
+  // Exercise details
+  sets            Int?
+  reps            Int?
+  weightKg        Decimal? @db.Decimal(6, 2)
+
+  // Location (for outdoor activities)
+  location        String?
+  routeData       Json?
+
+  // Source
+  source          HealthProvider @default(MANUAL)
+  externalId      String?
+
+  // Time
+  startTime       DateTime
+  endTime         DateTime?
+
+  // Notes and ratings
+  notes           String?
+  moodBefore      Int?     // 1-5
+  moodAfter       Int?     // 1-5
+  difficultyRating Int?    // 1-5
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([patientId, activityType])
+  @@index([patientId, startTime])
+  @@map("fitness_activities")
+}
+
+enum FitnessActivityType {
+  // Cardio
+  WALKING
+  RUNNING
+  CYCLING
+  SWIMMING
+  HIIT
+  ELLIPTICAL
+  ROWING
+  JUMP_ROPE
+  DANCING
+  AEROBICS
+  STAIR_CLIMBING
+
+  // Strength
+  WEIGHT_TRAINING
+  BODYWEIGHT
+  RESISTANCE_BANDS
+  CROSSFIT
+  POWERLIFTING
+  CALISTHENICS
+
+  // Flexibility & Mind-Body
+  YOGA
+  PILATES
+  STRETCHING
+  TAI_CHI
+  MEDITATION
+  BREATHING_EXERCISES
+
+  // Sports
+  BASKETBALL
+  FOOTBALL
+  TENNIS
+  BADMINTON
+  VOLLEYBALL
+  GOLF
+  SOCCER
+  CRICKET
+  MARTIAL_ARTS
+  BOXING
+
+  // Other
+  HIKING
+  CLIMBING
+  SKIING
+  SNOWBOARDING
+  SURFING
+  KAYAKING
+  OTHER
+}
+
+enum ActivityIntensity {
+  LIGHT
+  MODERATE
+  VIGOROUS
+  VERY_VIGOROUS
+}
+
+model FitnessGoal {
+  id            String   @id @default(uuid())
+  patientId     String
+  patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  goalType      FitnessGoalType
+  targetValue   Decimal  @db.Decimal(10, 2)
+  currentValue  Decimal  @db.Decimal(10, 2) @default(0)
+  unit          String
+
+  frequency     GoalFrequency @default(DAILY)
+
+  startDate     DateTime
+  endDate       DateTime?
+
+  isActive      Boolean  @default(true)
+  isCompleted   Boolean  @default(false)
+  completedAt   DateTime?
+
+  // AI recommendations
+  aiRecommendations Json?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([patientId, goalType])
+  @@map("fitness_goals")
+}
+
+enum FitnessGoalType {
+  STEPS_DAILY
+  CALORIES_BURNED
+  WORKOUT_MINUTES
+  WORKOUT_SESSIONS
+  WEIGHT_LOSS
+  WEIGHT_GAIN
+  MUSCLE_GAIN
+  FLEXIBILITY
+  ENDURANCE
+  STRENGTH
+  WATER_INTAKE
+  SLEEP_HOURS
+  MEDITATION_MINUTES
+  DISTANCE_RUNNING
+  DISTANCE_WALKING
+  CUSTOM
+}
+
+enum GoalFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+  ONE_TIME
+}
+
+model NutritionLog {
+  id            String   @id @default(uuid())
+  patientId     String
+  patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  mealType      MealType
+  mealName      String
+  description   String?
+
+  // Nutritional info
+  calories      Int?
+  protein       Decimal? @db.Decimal(6, 2)
+  carbohydrates Decimal? @db.Decimal(6, 2)
+  fat           Decimal? @db.Decimal(6, 2)
+  fiber         Decimal? @db.Decimal(6, 2)
+  sugar         Decimal? @db.Decimal(6, 2)
+  sodium        Decimal? @db.Decimal(6, 2)
+
+  // Serving info
+  servingSize   String?
+  servings      Decimal? @db.Decimal(4, 2) @default(1)
+
+  // Food items
+  foodItems     Json?    // Array of food items with details
+
+  // Photo
+  photoUrl      String?
+
+  // AI analysis
+  aiAnalysis    Json?
+  healthScore   Int?     // 1-100
+
+  loggedAt      DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([patientId, mealType])
+  @@index([patientId, loggedAt])
+  @@map("nutrition_logs")
+}
+
+model NutritionPlan {
+  id            String   @id @default(uuid())
+  patientId     String
+  patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  name          String
+  description   String?
+  goal          NutritionGoalType
+
+  // Daily targets
+  targetCalories    Int
+  targetProtein     Decimal? @db.Decimal(6, 2)
+  targetCarbs       Decimal? @db.Decimal(6, 2)
+  targetFat         Decimal? @db.Decimal(6, 2)
+  targetFiber       Decimal? @db.Decimal(6, 2)
+  targetWater       Decimal? @db.Decimal(4, 2) // liters
+
+  // Restrictions
+  dietaryRestrictions String[]
+  allergies           String[]
+  preferences         String[]
+
+  // Meal plan
+  mealPlan      Json?    // Weekly meal suggestions
+
+  // AI generated
+  isAiGenerated Boolean  @default(false)
+  aiNotes       String?  @db.Text
+
+  startDate     DateTime
+  endDate       DateTime?
+  isActive      Boolean  @default(true)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([patientId])
+  @@map("nutrition_plans")
+}
+
+enum NutritionGoalType {
+  WEIGHT_LOSS
+  WEIGHT_GAIN
+  MUSCLE_BUILDING
+  MAINTAIN_WEIGHT
+  IMPROVE_ENERGY
+  HEART_HEALTH
+  DIABETES_MANAGEMENT
+  DIGESTIVE_HEALTH
+  GENERAL_WELLNESS
+  ATHLETIC_PERFORMANCE
+  PREGNANCY
+  POSTPARTUM
+}
+
+model WellnessGoal {
+  id            String   @id @default(uuid())
+  patientId     String
+  patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  category      WellnessCategory
+  title         String
+  description   String?
+
+  // Target
+  targetValue   Decimal? @db.Decimal(10, 2)
+  currentValue  Decimal? @db.Decimal(10, 2)
+  unit          String?
+
+  // Progress tracking
+  milestones    Json?    // Array of milestone checkpoints
+
+  // AI coaching
+  aiCoachNotes  Json?    // AI-generated tips and encouragement
+
+  priority      Int      @default(1) // 1-5
+
+  startDate     DateTime
+  targetDate    DateTime?
+
+  status        WellnessGoalStatus @default(ACTIVE)
+  completedAt   DateTime?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([patientId, category])
+  @@map("wellness_goals")
+}
+
+enum WellnessCategory {
+  PHYSICAL_FITNESS
+  MENTAL_HEALTH
+  NUTRITION
+  SLEEP
+  STRESS_MANAGEMENT
+  HYDRATION
+  WEIGHT_MANAGEMENT
+  CHRONIC_DISEASE_MANAGEMENT
+  PREVENTIVE_CARE
+  SOCIAL_WELLNESS
+  MINDFULNESS
+  HABIT_BUILDING
+}
+
+enum WellnessGoalStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ABANDONED
+}
+
+model WellnessAssessment {
+  id            String   @id @default(uuid())
+  patientId     String
+  patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  assessmentType WellnessAssessmentType
+
+  // Scores
+  overallScore  Int      // 1-100
+  categoryScores Json    // Breakdown by category
+
+  // Analysis
+  strengths     String[]
+  areasToImprove String[]
+
+  // AI recommendations
+  recommendations Json   // Array of personalized recommendations
+  actionPlan    Json?    // Suggested action items
+
+  // Risk assessment
+  healthRisks   Json?    // Identified health risks
+
+  assessedAt    DateTime @default(now())
+  validUntil    DateTime?
+
+  createdAt     DateTime @default(now())
+
+  @@index([patientId])
+  @@map("wellness_assessments")
+}
+
+enum WellnessAssessmentType {
+  INITIAL
+  PERIODIC
+  GOAL_BASED
+  COMPREHENSIVE
 }
