@@ -304,13 +304,23 @@ export default function Consultation() {
   // AI Diagnosis
   const diagnosisMutation = useMutation({
     mutationFn: async (data: { symptoms: string[]; patientAge: number; gender: string }) => {
+      // Safely extract medical history - ensure it's an array before mapping
+      const medicalHistory = Array.isArray(patientData?.medicalHistory)
+        ? patientData.medicalHistory.map(h => h?.condition).filter(Boolean)
+        : [];
+
+      // Safely extract allergies - ensure it's an array before mapping
+      const allergies = Array.isArray(patientData?.allergies)
+        ? patientData.allergies.map(a => a?.allergen).filter(Boolean)
+        : [];
+
       const response = await aiApi.analyzeDiagnosis({
         symptoms: data.symptoms,
         patientAge: data.patientAge,
         gender: data.gender,
-        medicalHistory: patientData?.medicalHistory?.map(h => h.condition) || [],
+        medicalHistory,
         currentMedications: [],
-        allergies: patientData?.allergies?.map(a => a.allergen) || [],
+        allergies,
       });
       return response.data.data;
     },
