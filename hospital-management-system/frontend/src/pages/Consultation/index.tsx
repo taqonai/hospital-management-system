@@ -328,8 +328,16 @@ export default function Consultation() {
       }
       toast.success('AI diagnosis analysis complete');
     },
-    onError: () => {
-      toast.error('Failed to get AI diagnosis');
+    onError: (error: any) => {
+      console.error('AI diagnosis error:', error);
+      const message = error?.response?.data?.message || error?.message || 'Unknown error';
+      if (message.includes('timeout') || error?.code === 'ECONNABORTED') {
+        toast.error('AI diagnosis timed out. Please try again.');
+      } else if (message.includes('401') || message.includes('Unauthorized')) {
+        toast.error('Session expired. Please refresh the page and try again.');
+      } else {
+        toast.error(`Failed to get AI diagnosis: ${message}`);
+      }
     },
   });
 
@@ -458,10 +466,19 @@ export default function Consultation() {
       toast.error('Please select a patient first');
       return;
     }
+    if (!patientData.dateOfBirth) {
+      toast.error('Patient date of birth is missing');
+      return;
+    }
+    const age = calculateAge(patientData.dateOfBirth);
+    if (isNaN(age) || age < 0 || age > 150) {
+      toast.error('Invalid patient age. Please check patient details.');
+      return;
+    }
     diagnosisMutation.mutate({
       symptoms: symptoms.map(s => s.name),
-      patientAge: calculateAge(patientData.dateOfBirth),
-      gender: patientData.gender,
+      patientAge: age,
+      gender: patientData.gender || 'unknown',
     });
   };
 
@@ -973,14 +990,19 @@ export default function Consultation() {
             </h4>
             <button
               onClick={() => {
-                // Extract symptoms from chief complaint using AI
-                const words = chiefComplaint.toLowerCase().split(/\s+/);
-                const extracted = COMMON_SYMPTOMS.filter(s =>
-                  words.some(w => s.includes(w) || w.includes(s))
-                );
-                extracted.forEach(s => addSymptom(s));
+                // Extract symptoms from chief complaint using proper matching
+                const complaintLower = chiefComplaint.toLowerCase();
+                const extracted = COMMON_SYMPTOMS.filter(symptom => {
+                  // Check if the full symptom phrase exists in the complaint
+                  // Use word boundary matching to avoid partial matches
+                  const symptomRegex = new RegExp(`\\b${symptom.replace(/\s+/g, '\\s+')}\\b`, 'i');
+                  return symptomRegex.test(complaintLower);
+                });
+                extracted.forEach(s => addSymptom(s, 'moderate'));
                 if (extracted.length > 0) {
                   toast.success(`Extracted ${extracted.length} symptoms from complaint`);
+                } else {
+                  toast('No matching symptoms found. Try adding them manually.', { icon: 'ℹ️' });
                 }
               }}
               className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 transition-colors flex items-center gap-1"

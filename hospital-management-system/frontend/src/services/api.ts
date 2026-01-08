@@ -242,7 +242,7 @@ export const aiApi = {
     medicalHistory?: string[];
     currentMedications?: string[];
     allergies?: string[];
-  }) => api.post('/ai/diagnose', data),
+  }) => api.post('/ai/diagnose', data, { timeout: 60000 }), // 60 second timeout for AI
   predictRisk: (data: {
     patientId?: string;
     predictionType: string;
