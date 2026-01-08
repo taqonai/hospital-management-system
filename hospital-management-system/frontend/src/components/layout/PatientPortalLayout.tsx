@@ -21,6 +21,7 @@ import {
   ChevronDownIcon,
   LightBulbIcon,
   ChartBarIcon,
+  ClipboardDocumentListIcon,
 } from '@heroicons/react/24/outline';
 import { HeartIcon } from '@heroicons/react/24/solid';
 
@@ -147,13 +148,14 @@ const navigationItems: NavItem[] = [
   { name: 'AI Health Assistant', href: '/patient-portal/health-assistant', icon: LightBulbIcon },
   { name: 'Health Insights', href: '/patient-portal/health-insights', icon: ChartBarIcon },
   { name: 'Symptom Checker', href: '/patient-portal/symptom-checker', icon: SparklesIcon },
+  { name: 'Medical History', href: '/patient-portal/medical-history', icon: ClipboardDocumentListIcon },
   { name: 'My Appointments', href: '/patient-portal/appointments', icon: CalendarDaysIcon },
   { name: 'Medical Records', href: '/patient-portal/records', icon: FolderIcon },
   { name: 'Prescriptions', href: '/patient-portal/prescriptions', icon: PillIcon },
   { name: 'Lab Results', href: '/patient-portal/labs', icon: BeakerIcon },
   { name: 'Bills & Payments', href: '/patient-portal/billing', icon: CreditCardIcon },
   { name: 'Messages', href: '/patient-portal/messages', icon: ChatBubbleLeftRightIcon },
-  { name: 'Settings', href: '/patient-portal/settings', icon: Cog6ToothIcon },
+  { name: 'My Profile', href: '/patient-portal/settings', icon: UserCircleIcon },
 ];
 
 export default function PatientPortalLayout() {
@@ -538,26 +540,13 @@ export default function PatientPortalLayout() {
                       <Menu.Item>
                         {({ active }) => (
                           <NavLink
-                            to="/patient-portal/profile"
+                            to="/patient-portal/settings"
                             className={`${
                               active ? 'bg-teal-50 text-teal-700' : 'text-gray-700'
                             } flex items-center gap-3 px-4 py-2.5 text-sm transition-colors`}
                           >
                             <UserCircleIcon className="h-5 w-5" />
                             My Profile
-                          </NavLink>
-                        )}
-                      </Menu.Item>
-                      <Menu.Item>
-                        {({ active }) => (
-                          <NavLink
-                            to="/patient-portal/settings"
-                            className={`${
-                              active ? 'bg-teal-50 text-teal-700' : 'text-gray-700'
-                            } flex items-center gap-3 px-4 py-2.5 text-sm transition-colors`}
-                          >
-                            <Cog6ToothIcon className="h-5 w-5" />
-                            Settings
                           </NavLink>
                         )}
                       </Menu.Item>

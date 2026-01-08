@@ -614,6 +614,504 @@ function generateDefaultInsights() {
   };
 }
 
+// =============================================================================
+// Medical History & Allergies Routes
+// =============================================================================
+
+/**
+ * Get patient medical history
+ * GET /api/v1/patient-portal/medical-history
+ */
+router.get(
+  '/medical-history',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+
+    const medicalHistory = await prisma.medicalHistory.findUnique({
+      where: { patientId },
+    });
+
+    if (!medicalHistory) {
+      // Create empty medical history if not exists
+      const newHistory = await prisma.medicalHistory.create({
+        data: {
+          patientId,
+          chronicConditions: [],
+          pastSurgeries: [],
+          familyHistory: [],
+          currentMedications: [],
+          immunizations: [],
+        }
+      });
+      sendSuccess(res, newHistory, 'Medical history created');
+      return;
+    }
+
+    sendSuccess(res, medicalHistory, 'Medical history retrieved');
+  })
+);
+
+/**
+ * Update patient medical history
+ * PUT /api/v1/patient-portal/medical-history
+ */
+router.put(
+  '/medical-history',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const { chronicConditions, pastSurgeries, familyHistory, currentMedications, immunizations, lifestyle, notes } = req.body;
+
+    // Upsert medical history
+    const medicalHistory = await prisma.medicalHistory.upsert({
+      where: { patientId },
+      update: {
+        chronicConditions: chronicConditions || [],
+        pastSurgeries: pastSurgeries || [],
+        familyHistory: familyHistory || [],
+        currentMedications: currentMedications || [],
+        immunizations: immunizations || [],
+        lifestyle: lifestyle || null,
+        notes: notes || null,
+      },
+      create: {
+        patientId,
+        chronicConditions: chronicConditions || [],
+        pastSurgeries: pastSurgeries || [],
+        familyHistory: familyHistory || [],
+        currentMedications: currentMedications || [],
+        immunizations: immunizations || [],
+        lifestyle: lifestyle || null,
+        notes: notes || null,
+      }
+    });
+
+    sendSuccess(res, medicalHistory, 'Medical history updated successfully');
+  })
+);
+
+/**
+ * Get patient allergies
+ * GET /api/v1/patient-portal/allergies
+ */
+router.get(
+  '/allergies',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+
+    const allergies = await prisma.allergy.findMany({
+      where: { patientId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    sendSuccess(res, allergies, 'Allergies retrieved');
+  })
+);
+
+/**
+ * Add new allergy
+ * POST /api/v1/patient-portal/allergies
+ */
+router.post(
+  '/allergies',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const { allergen, type, severity, reaction, notes } = req.body;
+
+    if (!allergen || !type || !severity) {
+      return res.status(400).json({
+        success: false,
+        message: 'Allergen, type, and severity are required',
+      });
+    }
+
+    const allergy = await prisma.allergy.create({
+      data: {
+        patientId,
+        allergen,
+        type,
+        severity,
+        reaction: reaction || null,
+        notes: notes || null,
+      }
+    });
+
+    sendSuccess(res, allergy, 'Allergy added successfully');
+  })
+);
+
+/**
+ * Update allergy
+ * PUT /api/v1/patient-portal/allergies/:id
+ */
+router.put(
+  '/allergies/:id',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const allergyId = req.params.id;
+    const { allergen, type, severity, reaction, notes } = req.body;
+
+    // Verify ownership
+    const existing = await prisma.allergy.findFirst({
+      where: { id: allergyId, patientId }
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Allergy not found',
+      });
+    }
+
+    const allergy = await prisma.allergy.update({
+      where: { id: allergyId },
+      data: {
+        allergen: allergen || existing.allergen,
+        type: type || existing.type,
+        severity: severity || existing.severity,
+        reaction: reaction !== undefined ? reaction : existing.reaction,
+        notes: notes !== undefined ? notes : existing.notes,
+      }
+    });
+
+    sendSuccess(res, allergy, 'Allergy updated successfully');
+  })
+);
+
+/**
+ * Delete allergy
+ * DELETE /api/v1/patient-portal/allergies/:id
+ */
+router.delete(
+  '/allergies/:id',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const allergyId = req.params.id;
+
+    // Verify ownership
+    const existing = await prisma.allergy.findFirst({
+      where: { id: allergyId, patientId }
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Allergy not found',
+      });
+    }
+
+    await prisma.allergy.delete({
+      where: { id: allergyId }
+    });
+
+    sendSuccess(res, null, 'Allergy deleted successfully');
+  })
+);
+
+/**
+ * AI-powered allergy suggestions based on symptoms or conditions
+ * POST /api/v1/patient-portal/allergies/ai-suggest
+ */
+router.post(
+  '/allergies/ai-suggest',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const { symptoms, medications, foods } = req.body;
+    const patientId = req.patient?.patientId || '';
+
+    // Get patient's existing data
+    const patient = await prisma.patient.findUnique({
+      where: { id: patientId },
+      select: {
+        allergies: true,
+        medicalHistory: true,
+      }
+    });
+
+    // Try AI service first
+    try {
+      const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+      const aiResponse = await fetch(`${AI_SERVICE_URL}/api/allergy-suggest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symptoms,
+          medications,
+          foods,
+          existingAllergies: patient?.allergies || [],
+          medicalHistory: patient?.medicalHistory || null,
+        })
+      });
+
+      if (aiResponse.ok) {
+        const aiData = await aiResponse.json();
+        sendSuccess(res, aiData, 'AI allergy suggestions generated');
+        return;
+      }
+    } catch (e) {
+      // Fall through to rule-based suggestions
+    }
+
+    // Rule-based suggestions
+    const suggestions = generateAllergySuggestions(symptoms, medications, foods);
+    sendSuccess(res, suggestions, 'Allergy suggestions generated');
+  })
+);
+
+/**
+ * AI-powered medical history analysis and recommendations
+ * POST /api/v1/patient-portal/medical-history/ai-analyze
+ */
+router.post(
+  '/medical-history/ai-analyze',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+
+    // Get patient data
+    const patient = await prisma.patient.findUnique({
+      where: { id: patientId },
+      select: {
+        firstName: true,
+        lastName: true,
+        dateOfBirth: true,
+        gender: true,
+        medicalHistory: true,
+        allergies: true,
+        prescriptions: {
+          take: 10,
+          orderBy: { createdAt: 'desc' },
+          include: { medications: true }
+        },
+        vitals: {
+          take: 10,
+          orderBy: { recordedAt: 'desc' }
+        },
+        labOrders: {
+          take: 5,
+          orderBy: { createdAt: 'desc' },
+          include: { tests: { include: { labTest: true } } }
+        }
+      }
+    });
+
+    if (!patient) {
+      return res.status(404).json({ success: false, message: 'Patient not found' });
+    }
+
+    // Calculate age
+    const age = patient.dateOfBirth
+      ? Math.floor((Date.now() - new Date(patient.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+      : null;
+
+    // Try AI service first
+    try {
+      const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+      const aiResponse = await fetch(`${AI_SERVICE_URL}/api/health-analysis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          age,
+          gender: patient.gender,
+          medicalHistory: patient.medicalHistory,
+          allergies: patient.allergies,
+          recentMedications: patient.prescriptions?.flatMap(p => p.medications) || [],
+          vitals: patient.vitals || [],
+          labResults: patient.labOrders || [],
+        })
+      });
+
+      if (aiResponse.ok) {
+        const aiData = await aiResponse.json();
+        sendSuccess(res, aiData, 'AI health analysis generated');
+        return;
+      }
+    } catch (e) {
+      // Fall through to rule-based analysis
+    }
+
+    // Generate rule-based analysis
+    const analysis = generateHealthAnalysis(patient, age);
+    sendSuccess(res, analysis, 'Health analysis generated');
+  })
+);
+
+// Helper: Generate rule-based allergy suggestions
+function generateAllergySuggestions(symptoms?: string[], medications?: string[], foods?: string[]) {
+  const suggestions: any[] = [];
+
+  // Common drug allergies
+  const commonDrugAllergies = ['Penicillin', 'Aspirin', 'Ibuprofen', 'Sulfa drugs', 'Codeine'];
+
+  // Common food allergies
+  const commonFoodAllergies = ['Peanuts', 'Tree nuts', 'Shellfish', 'Eggs', 'Milk', 'Wheat', 'Soy', 'Fish'];
+
+  // Environmental allergies
+  const environmentalAllergies = ['Pollen', 'Dust mites', 'Pet dander', 'Mold', 'Latex'];
+
+  // Based on symptoms
+  if (symptoms?.some(s => s.toLowerCase().includes('rash') || s.toLowerCase().includes('hives'))) {
+    suggestions.push({
+      type: 'DRUG',
+      possible: commonDrugAllergies.slice(0, 3),
+      reason: 'Skin reactions like rash and hives are common signs of drug allergies'
+    });
+    suggestions.push({
+      type: 'FOOD',
+      possible: commonFoodAllergies.slice(0, 4),
+      reason: 'Food allergies can also cause skin reactions'
+    });
+  }
+
+  if (symptoms?.some(s => s.toLowerCase().includes('breath') || s.toLowerCase().includes('wheez'))) {
+    suggestions.push({
+      type: 'ENVIRONMENTAL',
+      possible: environmentalAllergies,
+      reason: 'Respiratory symptoms may indicate environmental allergies'
+    });
+  }
+
+  // Common allergy info
+  if (suggestions.length === 0) {
+    suggestions.push({
+      type: 'GENERAL',
+      categories: [
+        { type: 'DRUG', common: commonDrugAllergies },
+        { type: 'FOOD', common: commonFoodAllergies },
+        { type: 'ENVIRONMENTAL', common: environmentalAllergies }
+      ],
+      message: 'Consider these common allergens when adding your allergies'
+    });
+  }
+
+  return { suggestions, disclaimer: 'These are suggestions only. Please consult with a healthcare provider for proper allergy testing.' };
+}
+
+// Helper: Generate rule-based health analysis
+function generateHealthAnalysis(patient: any, age: number | null) {
+  const recommendations: any[] = [];
+  const riskFactors: any[] = [];
+  const preventiveCare: any[] = [];
+
+  const medicalHistory = patient.medicalHistory;
+
+  // Analyze chronic conditions
+  if (medicalHistory?.chronicConditions?.length > 0) {
+    medicalHistory.chronicConditions.forEach((condition: string) => {
+      const lowerCondition = condition.toLowerCase();
+
+      if (lowerCondition.includes('diabetes')) {
+        recommendations.push({
+          title: 'Diabetes Management',
+          description: 'Regular blood sugar monitoring and HbA1c tests are important. Maintain a healthy diet and exercise routine.',
+          priority: 'high'
+        });
+        riskFactors.push({ factor: 'Diabetes', level: 'elevated' });
+      }
+
+      if (lowerCondition.includes('hypertension') || lowerCondition.includes('blood pressure')) {
+        recommendations.push({
+          title: 'Blood Pressure Monitoring',
+          description: 'Regular BP checks are essential. Limit sodium intake and maintain regular physical activity.',
+          priority: 'high'
+        });
+        riskFactors.push({ factor: 'Cardiovascular', level: 'elevated' });
+      }
+
+      if (lowerCondition.includes('asthma')) {
+        recommendations.push({
+          title: 'Asthma Management',
+          description: 'Keep your inhaler accessible. Avoid known triggers and monitor air quality.',
+          priority: 'medium'
+        });
+      }
+    });
+  }
+
+  // Age-based preventive care
+  if (age) {
+    if (age >= 40) {
+      preventiveCare.push({
+        test: 'Annual Physical Exam',
+        frequency: 'Yearly',
+        importance: 'Essential for monitoring overall health'
+      });
+      preventiveCare.push({
+        test: 'Cholesterol Check',
+        frequency: 'Every 4-6 years (more often if elevated)',
+        importance: 'Cardiovascular health monitoring'
+      });
+    }
+
+    if (age >= 45) {
+      preventiveCare.push({
+        test: 'Diabetes Screening',
+        frequency: 'Every 3 years',
+        importance: 'Early detection of prediabetes/diabetes'
+      });
+    }
+
+    if (age >= 50) {
+      preventiveCare.push({
+        test: 'Colonoscopy',
+        frequency: 'Every 10 years',
+        importance: 'Colorectal cancer screening'
+      });
+    }
+
+    if (patient.gender === 'FEMALE') {
+      if (age >= 21) {
+        preventiveCare.push({
+          test: 'Pap Smear',
+          frequency: 'Every 3 years (21-65)',
+          importance: 'Cervical cancer screening'
+        });
+      }
+      if (age >= 40) {
+        preventiveCare.push({
+          test: 'Mammogram',
+          frequency: 'Every 1-2 years',
+          importance: 'Breast cancer screening'
+        });
+      }
+    }
+
+    if (patient.gender === 'MALE' && age >= 50) {
+      preventiveCare.push({
+        test: 'Prostate Screening',
+        frequency: 'Discuss with doctor',
+        importance: 'Prostate health monitoring'
+      });
+    }
+  }
+
+  // Default recommendations
+  if (recommendations.length === 0) {
+    recommendations.push({
+      title: 'Maintain Healthy Lifestyle',
+      description: 'Regular exercise, balanced diet, adequate sleep, and stress management are key to good health.',
+      priority: 'medium'
+    });
+  }
+
+  return {
+    summary: {
+      totalConditions: medicalHistory?.chronicConditions?.length || 0,
+      totalAllergies: patient.allergies?.length || 0,
+      riskLevel: riskFactors.length > 1 ? 'elevated' : 'normal'
+    },
+    recommendations,
+    riskFactors,
+    preventiveCare,
+    lastAnalyzed: new Date().toISOString()
+  };
+}
+
 // Helper function to get suggested actions based on query
 function getSuggestedActions(query: string): Array<{ label: string; route: string }> {
   const lowerQuery = query.toLowerCase();

@@ -33,20 +33,19 @@ interface UserProfile {
   phone?: string;
   dateOfBirth?: string;
   gender?: string;
-  address?: {
-    street?: string;
-    city?: string;
-    state?: string;
-    postalCode?: string;
-    country?: string;
-  };
-  emergencyContact?: {
-    name?: string;
-    relationship?: string;
-    phone?: string;
-  };
+  // Flat address fields (matching backend)
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  nationality?: string;
+  // Flat emergency contact fields (matching backend)
+  emergencyContact?: string;
+  emergencyPhone?: string;
+  occupation?: string;
   bloodGroup?: string;
   avatarUrl?: string;
+  photo?: string;
   language?: string;
   timezone?: string;
 }
@@ -70,7 +69,7 @@ interface CommunicationPreferences {
   allowMarketingCommunications: boolean;
 }
 
-// Mock data
+// Mock data (flat structure matching backend)
 const mockProfile: UserProfile = {
   id: 'patient-1',
   firstName: 'John',
@@ -79,18 +78,13 @@ const mockProfile: UserProfile = {
   phone: '(555) 123-4567',
   dateOfBirth: '1985-06-15',
   gender: 'Male',
-  address: {
-    street: '123 Main Street',
-    city: 'New York',
-    state: 'NY',
-    postalCode: '10001',
-    country: 'United States',
-  },
-  emergencyContact: {
-    name: 'Jane Doe',
-    relationship: 'Spouse',
-    phone: '(555) 987-6543',
-  },
+  address: '123 Main Street',
+  city: 'New York',
+  state: 'NY',
+  zipCode: '10001',
+  nationality: 'United States',
+  emergencyContact: 'Jane Doe - Spouse',
+  emergencyPhone: '(555) 987-6543',
   bloodGroup: 'O+',
   language: 'en',
   timezone: 'America/New_York',
@@ -176,7 +170,19 @@ export default function Settings() {
       setIsEditing(false);
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to update profile');
+      // Handle validation errors properly
+      const errorData = error.response?.data;
+      if (errorData?.errors && Array.isArray(errorData.errors)) {
+        // Show each validation error
+        errorData.errors.forEach((err: { message: string; path?: string[] }) => {
+          const fieldName = err.path?.join('.') || 'Field';
+          toast.error(`${fieldName}: ${err.message}`);
+        });
+      } else if (errorData?.message) {
+        toast.error(errorData.message);
+      } else {
+        toast.error('Failed to update profile. Please check your input.');
+      }
     },
   });
 
@@ -220,7 +226,44 @@ export default function Settings() {
   });
 
   const handleSaveProfile = () => {
-    updateProfileMutation.mutate(profileForm);
+    // Validate mandatory fields
+    const errors: string[] = [];
+
+    if (!profileForm.firstName?.trim()) {
+      errors.push('First name is required');
+    }
+    if (!profileForm.lastName?.trim()) {
+      errors.push('Last name is required');
+    }
+    if (!profileForm.emergencyContact?.trim()) {
+      errors.push('Emergency contact name is required');
+    }
+    if (!profileForm.emergencyPhone?.trim()) {
+      errors.push('Emergency contact phone is required');
+    }
+
+    if (errors.length > 0) {
+      errors.forEach(err => toast.error(err));
+      return;
+    }
+
+    // Send only the fields that backend expects
+    const updateData: Partial<UserProfile> = {
+      firstName: profileForm.firstName,
+      lastName: profileForm.lastName,
+      phone: profileForm.phone,
+      email: profileForm.email,
+      address: profileForm.address,
+      city: profileForm.city,
+      state: profileForm.state,
+      zipCode: profileForm.zipCode,
+      emergencyContact: profileForm.emergencyContact,
+      emergencyPhone: profileForm.emergencyPhone,
+      occupation: profileForm.occupation,
+      nationality: profileForm.nationality,
+    };
+
+    updateProfileMutation.mutate(updateData);
   };
 
   const handleChangePassword = () => {
@@ -462,9 +505,10 @@ export default function Settings() {
                           <label className="block text-sm font-medium text-gray-700 mb-2">Street Address</label>
                           <input
                             type="text"
-                            value={profileForm.address?.street || ''}
-                            onChange={(e) => setProfileForm({ ...profileForm, address: { ...profileForm.address, street: e.target.value } })}
+                            value={profileForm.address || ''}
+                            onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
                             disabled={!isEditing}
+                            placeholder="Enter your street address"
                             className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-slate-500 focus:border-slate-500 disabled:bg-gray-50 disabled:text-gray-500"
                           />
                         </div>
@@ -472,9 +516,10 @@ export default function Settings() {
                           <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
                           <input
                             type="text"
-                            value={profileForm.address?.city || ''}
-                            onChange={(e) => setProfileForm({ ...profileForm, address: { ...profileForm.address, city: e.target.value } })}
+                            value={profileForm.city || ''}
+                            onChange={(e) => setProfileForm({ ...profileForm, city: e.target.value })}
                             disabled={!isEditing}
+                            placeholder="Enter city"
                             className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-slate-500 focus:border-slate-500 disabled:bg-gray-50 disabled:text-gray-500"
                           />
                         </div>
@@ -482,9 +527,10 @@ export default function Settings() {
                           <label className="block text-sm font-medium text-gray-700 mb-2">State</label>
                           <input
                             type="text"
-                            value={profileForm.address?.state || ''}
-                            onChange={(e) => setProfileForm({ ...profileForm, address: { ...profileForm.address, state: e.target.value } })}
+                            value={profileForm.state || ''}
+                            onChange={(e) => setProfileForm({ ...profileForm, state: e.target.value })}
                             disabled={!isEditing}
+                            placeholder="Enter state"
                             className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-slate-500 focus:border-slate-500 disabled:bg-gray-50 disabled:text-gray-500"
                           />
                         </div>
@@ -492,59 +538,89 @@ export default function Settings() {
                           <label className="block text-sm font-medium text-gray-700 mb-2">Postal Code</label>
                           <input
                             type="text"
-                            value={profileForm.address?.postalCode || ''}
-                            onChange={(e) => setProfileForm({ ...profileForm, address: { ...profileForm.address, postalCode: e.target.value } })}
+                            value={profileForm.zipCode || ''}
+                            onChange={(e) => setProfileForm({ ...profileForm, zipCode: e.target.value })}
                             disabled={!isEditing}
+                            placeholder="Enter ZIP/postal code"
                             className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-slate-500 focus:border-slate-500 disabled:bg-gray-50 disabled:text-gray-500"
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Country</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Nationality</label>
                           <input
                             type="text"
-                            value={profileForm.address?.country || ''}
-                            onChange={(e) => setProfileForm({ ...profileForm, address: { ...profileForm.address, country: e.target.value } })}
+                            value={profileForm.nationality || ''}
+                            onChange={(e) => setProfileForm({ ...profileForm, nationality: e.target.value })}
                             disabled={!isEditing}
+                            placeholder="Enter nationality"
                             className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-slate-500 focus:border-slate-500 disabled:bg-gray-50 disabled:text-gray-500"
                           />
                         </div>
                       </div>
                     </div>
 
-                    {/* Emergency Contact */}
+                    {/* Emergency Contact - Mandatory */}
                     <div>
                       <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
                         <ExclamationTriangleIcon className="h-4 w-4 text-red-500" />
                         Emergency Contact
+                        <span className="text-red-500 text-xs font-normal">(Required)</span>
                       </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Contact Name & Relationship <span className="text-red-500">*</span>
+                          </label>
                           <input
                             type="text"
-                            value={profileForm.emergencyContact?.name || ''}
-                            onChange={(e) => setProfileForm({ ...profileForm, emergencyContact: { ...profileForm.emergencyContact, name: e.target.value } })}
+                            value={profileForm.emergencyContact || ''}
+                            onChange={(e) => setProfileForm({ ...profileForm, emergencyContact: e.target.value })}
                             disabled={!isEditing}
-                            className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-slate-500 focus:border-slate-500 disabled:bg-gray-50 disabled:text-gray-500"
+                            placeholder="e.g., Jane Doe - Spouse"
+                            className={`w-full px-4 py-3 rounded-xl border bg-white focus:ring-2 focus:ring-slate-500 focus:border-slate-500 disabled:bg-gray-50 disabled:text-gray-500 ${
+                              isEditing && !profileForm.emergencyContact?.trim() ? 'border-red-300' : 'border-gray-200'
+                            }`}
                           />
+                          {isEditing && !profileForm.emergencyContact?.trim() && (
+                            <p className="text-red-500 text-xs mt-1">Emergency contact name is required</p>
+                          )}
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Relationship</label>
-                          <input
-                            type="text"
-                            value={profileForm.emergencyContact?.relationship || ''}
-                            onChange={(e) => setProfileForm({ ...profileForm, emergencyContact: { ...profileForm.emergencyContact, relationship: e.target.value } })}
-                            disabled={!isEditing}
-                            className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-slate-500 focus:border-slate-500 disabled:bg-gray-50 disabled:text-gray-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Emergency Phone <span className="text-red-500">*</span>
+                          </label>
                           <input
                             type="tel"
-                            value={profileForm.emergencyContact?.phone || ''}
-                            onChange={(e) => setProfileForm({ ...profileForm, emergencyContact: { ...profileForm.emergencyContact, phone: e.target.value } })}
+                            value={profileForm.emergencyPhone || ''}
+                            onChange={(e) => setProfileForm({ ...profileForm, emergencyPhone: e.target.value })}
                             disabled={!isEditing}
+                            placeholder="e.g., +1 555-987-6543"
+                            className={`w-full px-4 py-3 rounded-xl border bg-white focus:ring-2 focus:ring-slate-500 focus:border-slate-500 disabled:bg-gray-50 disabled:text-gray-500 ${
+                              isEditing && !profileForm.emergencyPhone?.trim() ? 'border-red-300' : 'border-gray-200'
+                            }`}
+                          />
+                          {isEditing && !profileForm.emergencyPhone?.trim() && (
+                            <p className="text-red-500 text-xs mt-1">Emergency phone number is required</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Occupation */}
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <IdentificationIcon className="h-4 w-4" />
+                        Other Information
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Occupation</label>
+                          <input
+                            type="text"
+                            value={profileForm.occupation || ''}
+                            onChange={(e) => setProfileForm({ ...profileForm, occupation: e.target.value })}
+                            disabled={!isEditing}
+                            placeholder="Enter your occupation"
                             className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-slate-500 focus:border-slate-500 disabled:bg-gray-50 disabled:text-gray-500"
                           />
                         </div>

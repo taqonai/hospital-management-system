@@ -188,9 +188,15 @@ export class PatientPortalService {
       throw new NotFoundError('Doctor not found or unavailable');
     }
 
-    // Normalize the date to start of day (UTC) for consistent comparison
+    // Normalize the date to start of day (UTC) for storage
     const normalizedDate = new Date(data.appointmentDate);
     normalizedDate.setUTCHours(0, 0, 0, 0);
+
+    // Create date range for comparison (to handle old appointments with time in date field)
+    const startOfDay = new Date(data.appointmentDate);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
 
     // Calculate end time (30 min default)
     const [hours, mins] = data.startTime.split(':').map(Number);
@@ -200,12 +206,15 @@ export class PatientPortalService {
     // Use a serializable transaction to prevent race conditions
     const appointment = await prisma.$transaction(async (tx) => {
       // VALIDATION 1: Check if patient already has an appointment at this date/time
-      // This prevents double-booking regardless of doctor or department
+      // Use date range to handle old appointments with time stored in date field
       const patientConflict = await tx.appointment.findFirst({
         where: {
           patientId,
           hospitalId,
-          appointmentDate: normalizedDate,
+          appointmentDate: {
+            gte: startOfDay,
+            lt: endOfDay,
+          },
           startTime: data.startTime,
           status: { notIn: ['CANCELLED', 'NO_SHOW'] },
         },
@@ -232,7 +241,10 @@ export class PatientPortalService {
       const doctorConflict = await tx.appointment.findFirst({
         where: {
           doctorId: data.doctorId,
-          appointmentDate: normalizedDate,
+          appointmentDate: {
+            gte: startOfDay,
+            lt: endOfDay,
+          },
           startTime: data.startTime,
           status: { notIn: ['CANCELLED', 'NO_SHOW'] },
         },
@@ -367,6 +379,12 @@ export class PatientPortalService {
     const normalizedDate = new Date(data.appointmentDate);
     normalizedDate.setUTCHours(0, 0, 0, 0);
 
+    // Create date range for comparison (to handle old appointments with time in date field)
+    const startOfDay = new Date(data.appointmentDate);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
+
     // Calculate new end time (30 min default)
     const [hours, mins] = data.startTime.split(':').map(Number);
     const endMinutes = hours * 60 + mins + 30;
@@ -376,11 +394,15 @@ export class PatientPortalService {
     const updatedAppointment = await prisma.$transaction(async (tx) => {
       // VALIDATION 1: Check if patient already has another appointment at the new time
       // This prevents double-booking regardless of doctor
+      // Use date range to handle old appointments with time stored in date field
       const patientConflict = await tx.appointment.findFirst({
         where: {
           patientId,
           hospitalId,
-          appointmentDate: normalizedDate,
+          appointmentDate: {
+            gte: startOfDay,
+            lt: endOfDay,
+          },
           startTime: data.startTime,
           status: { notIn: ['CANCELLED', 'NO_SHOW'] },
           id: { not: appointmentId }, // Exclude current appointment being rescheduled
@@ -405,10 +427,14 @@ export class PatientPortalService {
       }
 
       // VALIDATION 2: Check if doctor's slot is available (not booked by another patient)
+      // Use date range to handle old appointments with time stored in date field
       const doctorConflict = await tx.appointment.findFirst({
         where: {
           doctorId: appointment.doctorId,
-          appointmentDate: normalizedDate,
+          appointmentDate: {
+            gte: startOfDay,
+            lt: endOfDay,
+          },
           startTime: data.startTime,
           status: { notIn: ['CANCELLED', 'NO_SHOW'] },
           id: { not: appointmentId }, // Exclude current appointment being rescheduled

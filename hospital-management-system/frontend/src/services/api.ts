@@ -1258,6 +1258,52 @@ export const patientPortalApi = {
   getDoctors: (params?: { departmentId?: string; search?: string }) =>
     api.get('/patient-portal/doctors', { params }),
   getDepartments: () => api.get('/patient-portal/departments'),
+
+  // Medical History
+  getMedicalHistory: () => api.get('/patient-portal/medical-history'),
+  updateMedicalHistory: (data: {
+    chronicConditions?: string[];
+    pastSurgeries?: string[];
+    familyHistory?: string[];
+    currentMedications?: string[];
+    immunizations?: string[];
+    lifestyle?: {
+      smoking?: string;
+      alcohol?: string;
+      exercise?: string;
+      diet?: string;
+    };
+    notes?: string;
+  }) => api.put('/patient-portal/medical-history', data),
+  analyzeMedicalHistory: () => api.post('/patient-portal/medical-history/ai-analyze'),
+
+  // Allergies
+  getAllergies: () => api.get('/patient-portal/allergies'),
+  addAllergy: (data: {
+    allergen: string;
+    type: 'DRUG' | 'FOOD' | 'ENVIRONMENTAL' | 'OTHER';
+    severity: 'MILD' | 'MODERATE' | 'SEVERE' | 'LIFE_THREATENING';
+    reaction?: string;
+    notes?: string;
+  }) => api.post('/patient-portal/allergies', data),
+  updateAllergy: (id: string, data: {
+    allergen?: string;
+    type?: 'DRUG' | 'FOOD' | 'ENVIRONMENTAL' | 'OTHER';
+    severity?: 'MILD' | 'MODERATE' | 'SEVERE' | 'LIFE_THREATENING';
+    reaction?: string;
+    notes?: string;
+  }) => api.put(`/patient-portal/allergies/${id}`, data),
+  deleteAllergy: (id: string) => api.delete(`/patient-portal/allergies/${id}`),
+  getAllergySuggestions: (data: {
+    symptoms?: string[];
+    medications?: string[];
+    foods?: string[];
+  }) => api.post('/patient-portal/allergies/ai-suggest', data),
+
+  // AI Health Insights
+  getHealthInsights: () => api.get('/patient-portal/health-insights'),
+  aiChat: (data: { message: string; context?: string; history?: any[] }) =>
+    api.post('/patient-portal/ai-chat', data),
 };
 
 // Symptom Checker APIs

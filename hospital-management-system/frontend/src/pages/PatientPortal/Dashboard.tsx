@@ -25,6 +25,8 @@ import {
   ArrowRightIcon,
   ShieldCheckIcon,
   SunIcon,
+  LightBulbIcon,
+  ShieldExclamationIcon,
 } from '@heroicons/react/24/outline';
 import { patientPortalApi } from '../../services/api';
 
@@ -78,6 +80,23 @@ interface HealthReminder {
   priority: 'high' | 'medium' | 'low';
 }
 
+interface AIHealthInsight {
+  summary: {
+    totalConditions: number;
+    totalAllergies: number;
+    riskLevel: string;
+  };
+  recommendations: Array<{
+    title: string;
+    description: string;
+    priority: string;
+  }>;
+  riskFactors: Array<{
+    factor: string;
+    level: string;
+  }>;
+}
+
 interface DashboardData {
   patient: {
     firstName: string;
@@ -92,6 +111,7 @@ interface DashboardData {
   totalAmountDue: number;
   healthReminders: HealthReminder[];
   unreadMessages: number;
+  aiHealthInsights?: AIHealthInsight;
 }
 
 // Health tips array
@@ -403,12 +423,28 @@ export default function PatientPortalDashboard() {
           }
         });
 
+        // Fetch AI Health Insights
+        let aiHealthInsights: AIHealthInsight | undefined;
+        try {
+          const aiResponse = await patientPortalApi.analyzeMedicalHistory();
+          const aiData = aiResponse.data?.data || aiResponse.data;
+          if (aiData) {
+            aiHealthInsights = {
+              summary: aiData.summary || { totalConditions: 0, totalAllergies: 0, riskLevel: 'normal' },
+              recommendations: aiData.recommendations || [],
+              riskFactors: aiData.riskFactors || [],
+            };
+          }
+        } catch (aiErr) {
+          console.error('Error fetching AI health insights:', aiErr);
+        }
+
         return {
           patient: {
-            firstName: user?.firstName || 'Patient',
-            lastName: user?.lastName || '',
-            dateOfBirth: user?.dateOfBirth,
-            bloodGroup: user?.bloodGroup,
+            firstName: summary?.patient?.firstName || 'Patient',
+            lastName: summary?.patient?.lastName || '',
+            dateOfBirth: summary?.patient?.dateOfBirth,
+            bloodGroup: summary?.patient?.bloodGroup,
           },
           upcomingAppointments,
           recentPrescriptions,
@@ -417,14 +453,15 @@ export default function PatientPortalDashboard() {
           totalAmountDue: Number(billing.totalBalance || 0),
           healthReminders,
           unreadMessages: summary?.unreadMessages || 0,
+          aiHealthInsights,
         };
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
         // Return mock data for demo
         return {
           patient: {
-            firstName: user?.firstName || 'John',
-            lastName: user?.lastName || 'Doe',
+            firstName: 'Patient',
+            lastName: '',
           },
           upcomingAppointments: [
             {
@@ -512,6 +549,28 @@ export default function PatientPortalDashboard() {
             },
           ],
           unreadMessages: 2,
+          aiHealthInsights: {
+            summary: {
+              totalConditions: 2,
+              totalAllergies: 1,
+              riskLevel: 'moderate',
+            },
+            recommendations: [
+              {
+                title: 'Schedule Annual Checkup',
+                description: 'Regular health checkups help detect issues early.',
+                priority: 'medium',
+              },
+              {
+                title: 'Review Medications',
+                description: 'Discuss your current medications with your doctor.',
+                priority: 'low',
+              },
+            ],
+            riskFactors: [
+              { factor: 'Family history of heart disease', level: 'moderate' },
+            ],
+          },
         };
       }
     },
@@ -526,6 +585,7 @@ export default function PatientPortalDashboard() {
   const navigateToRecords = () => navigate('/patient-portal/records');
   const navigateToProfile = () => navigate('/patient-portal/profile');
   const navigateToSymptomChecker = () => navigate('/patient-portal/symptom-checker');
+  const navigateToMedicalHistory = () => navigate('/patient-portal/medical-history');
 
   // Loading state
   if (isLoading) {
@@ -898,6 +958,111 @@ export default function PatientPortalDashboard() {
               </button>
             </div>
           </GlassCard>
+
+          {/* AI Health Insights Card */}
+          {data.aiHealthInsights && (
+            <GlassCard>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-xl">
+                    <SparklesIcon className="h-6 w-6 text-emerald-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">AI Health Insights</h2>
+                    <p className="text-xs text-gray-500">Personalized for you</p>
+                  </div>
+                </div>
+                <button
+                  onClick={navigateToMedicalHistory}
+                  className="text-emerald-600 text-sm font-medium hover:text-emerald-700 flex items-center gap-1 group"
+                >
+                  View All
+                  <ChevronRightIcon className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
+                </button>
+              </div>
+
+              {/* Summary Stats */}
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                <div className="p-3 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl text-center">
+                  <p className="text-2xl font-bold text-blue-600">{data.aiHealthInsights.summary.totalConditions}</p>
+                  <p className="text-xs text-gray-600">Conditions</p>
+                </div>
+                <div className="p-3 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl text-center">
+                  <p className="text-2xl font-bold text-amber-600">{data.aiHealthInsights.summary.totalAllergies}</p>
+                  <p className="text-xs text-gray-600">Allergies</p>
+                </div>
+                <div className={`p-3 rounded-xl text-center ${
+                  data.aiHealthInsights.summary.riskLevel === 'high' ? 'bg-gradient-to-br from-red-50 to-rose-50' :
+                  data.aiHealthInsights.summary.riskLevel === 'moderate' ? 'bg-gradient-to-br from-amber-50 to-yellow-50' :
+                  'bg-gradient-to-br from-green-50 to-emerald-50'
+                }`}>
+                  <p className={`text-lg font-bold capitalize ${
+                    data.aiHealthInsights.summary.riskLevel === 'high' ? 'text-red-600' :
+                    data.aiHealthInsights.summary.riskLevel === 'moderate' ? 'text-amber-600' :
+                    'text-green-600'
+                  }`}>{data.aiHealthInsights.summary.riskLevel}</p>
+                  <p className="text-xs text-gray-600">Risk Level</p>
+                </div>
+              </div>
+
+              {/* Recommendations */}
+              {data.aiHealthInsights.recommendations.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Recommendations</p>
+                  {data.aiHealthInsights.recommendations.slice(0, 2).map((rec, index) => (
+                    <div
+                      key={index}
+                      className={`p-3 rounded-xl flex items-start gap-3 ${
+                        rec.priority === 'high' ? 'bg-red-50 border border-red-100' :
+                        rec.priority === 'medium' ? 'bg-amber-50 border border-amber-100' :
+                        'bg-blue-50 border border-blue-100'
+                      }`}
+                    >
+                      <LightBulbIcon className={`h-5 w-5 flex-shrink-0 mt-0.5 ${
+                        rec.priority === 'high' ? 'text-red-500' :
+                        rec.priority === 'medium' ? 'text-amber-500' :
+                        'text-blue-500'
+                      }`} />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{rec.title}</p>
+                        <p className="text-xs text-gray-600 mt-0.5">{rec.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Risk Factors */}
+              {data.aiHealthInsights.riskFactors.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Risk Factors</p>
+                  <div className="flex flex-wrap gap-2">
+                    {data.aiHealthInsights.riskFactors.slice(0, 3).map((rf, index) => (
+                      <span
+                        key={index}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${
+                          rf.level === 'high' ? 'bg-red-100 text-red-700' :
+                          rf.level === 'moderate' ? 'bg-amber-100 text-amber-700' :
+                          'bg-blue-100 text-blue-700'
+                        }`}
+                      >
+                        <ShieldExclamationIcon className="h-3.5 w-3.5" />
+                        {rf.factor}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={navigateToMedicalHistory}
+                className="w-full mt-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-medium rounded-xl hover:from-emerald-700 hover:to-teal-700 transition-all text-sm flex items-center justify-center gap-2"
+              >
+                <ClipboardDocumentListIcon className="h-4 w-4" />
+                Manage Medical History
+              </button>
+            </GlassCard>
+          )}
 
           {/* Health Reminders Card */}
           <GlassCard className="bg-gradient-to-br from-blue-600 to-indigo-700" padding="p-5">

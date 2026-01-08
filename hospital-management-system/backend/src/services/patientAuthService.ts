@@ -36,6 +36,8 @@ interface PatientJwtPayload {
   hospitalId: string;
   email: string | null;
   mobile: string;
+  firstName: string;
+  lastName: string;
   type: 'patient';
 }
 
@@ -253,6 +255,11 @@ export class PatientAuthService {
    * Register a new patient account
    */
   async registerPatient(data: PatientRegisterData): Promise<PatientAuthResponse> {
+    // Normalize email to lowercase
+    if (data.email) {
+      data.email = data.email.toLowerCase().trim();
+    }
+
     // Verify hospital exists
     const hospital = await prisma.hospital.findUnique({
       where: { id: data.hospitalId },
@@ -276,9 +283,10 @@ export class PatientAuthService {
     if (existingPatientResult) {
       const existingPatient = existingPatientResult.patient;
 
-      // Check if the existing patient already has a user account linked
+      // Check if the existing patient already has a user account linked (case-insensitive)
+      const emailToCheck = data.email || `patient_${data.phone}@patient.local`;
       const existingUser = await prisma.user.findFirst({
-        where: { email: data.email || `patient_${data.phone}@patient.local` }
+        where: { email: { equals: emailToCheck, mode: 'insensitive' } }
       });
 
       if (existingUser) {
@@ -311,6 +319,8 @@ export class PatientAuthService {
         hospitalId: existingPatient.hospitalId,
         email: existingPatient.email,
         mobile: existingPatient.phone,
+        firstName: existingPatient.firstName,
+        lastName: existingPatient.lastName,
         type: 'patient',
       };
 
@@ -398,6 +408,8 @@ export class PatientAuthService {
       hospitalId: patient.hospitalId,
       email: patient.email,
       mobile: patient.phone,
+      firstName: patient.firstName,
+      lastName: patient.lastName,
       type: 'patient',
     };
 
@@ -432,6 +444,9 @@ export class PatientAuthService {
     email: string,
     password: string
   ): Promise<PatientAuthResponse> {
+    // Normalize email to lowercase
+    const normalizedEmail = email.toLowerCase().trim();
+
     // Verify patient exists and can be claimed
     const patient = await prisma.patient.findFirst({
       where: {
@@ -454,9 +469,9 @@ export class PatientAuthService {
       throw new ConflictError('This patient account already has login credentials. Please login instead.');
     }
 
-    // Check if email is already in use
+    // Check if email is already in use (case-insensitive)
     const existingUser = await prisma.user.findFirst({
-      where: { email }
+      where: { email: { equals: normalizedEmail, mode: 'insensitive' } }
     });
 
     if (existingUser) {
@@ -471,10 +486,10 @@ export class PatientAuthService {
     // Hash password
     const hashedPassword = await this.hashPassword(password);
 
-    // Create user account
+    // Create user account with normalized email
     const user = await prisma.user.create({
       data: {
-        email,
+        email: normalizedEmail,
         password: hashedPassword,
         firstName: patient.firstName,
         lastName: patient.lastName,
@@ -488,11 +503,11 @@ export class PatientAuthService {
     // Link the user to the patient
     await patientLookupService.linkUserToPatient(patientId, user.id);
 
-    // Update patient email if different
-    if (patient.email !== email) {
+    // Update patient email if different (use normalized email)
+    if (patient.email?.toLowerCase() !== normalizedEmail) {
       await prisma.patient.update({
         where: { id: patientId },
-        data: { email },
+        data: { email: normalizedEmail },
       });
     }
 
@@ -500,8 +515,10 @@ export class PatientAuthService {
     const tokenPayload: PatientJwtPayload = {
       patientId: patient.id,
       hospitalId: patient.hospitalId,
-      email: email,
+      email: normalizedEmail,
       mobile: patient.phone,
+      firstName: patient.firstName,
+      lastName: patient.lastName,
       type: 'patient',
     };
 
@@ -513,7 +530,7 @@ export class PatientAuthService {
         mrn: patient.mrn,
         firstName: patient.firstName,
         lastName: patient.lastName,
-        email: email,
+        email: normalizedEmail,
         phone: patient.phone,
         hospitalId: patient.hospitalId,
         photo: patient.photo,
@@ -527,13 +544,16 @@ export class PatientAuthService {
    * Login patient with email and password
    */
   async loginWithEmail(email: string, password: string, hospitalId?: string): Promise<PatientAuthResponse> {
-    // Find patient by email
+    // Normalize email to lowercase for case-insensitive comparison
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Find patient by email (case-insensitive)
     let patient;
 
     if (hospitalId) {
       patient = await prisma.patient.findFirst({
         where: {
-          email,
+          email: { equals: normalizedEmail, mode: 'insensitive' },
           hospitalId,
           isActive: true,
         },
@@ -544,7 +564,7 @@ export class PatientAuthService {
     } else {
       patient = await prisma.patient.findFirst({
         where: {
-          email,
+          email: { equals: normalizedEmail, mode: 'insensitive' },
           isActive: true,
         },
         include: {
@@ -585,6 +605,8 @@ export class PatientAuthService {
       hospitalId: patient.hospitalId,
       email: patient.email,
       mobile: patient.phone,
+      firstName: patient.firstName,
+      lastName: patient.lastName,
       type: 'patient',
     };
 
@@ -732,6 +754,8 @@ export class PatientAuthService {
       hospitalId: patient.hospitalId,
       email: patient.email,
       mobile: patient.phone,
+      firstName: patient.firstName,
+      lastName: patient.lastName,
       type: 'patient',
     };
 
@@ -879,6 +903,8 @@ export class PatientAuthService {
       hospitalId: patient.hospitalId,
       email: patient.email,
       mobile: patient.phone,
+      firstName: patient.firstName,
+      lastName: patient.lastName,
       type: 'patient',
     };
 
@@ -926,6 +952,8 @@ export class PatientAuthService {
       hospitalId: patient.hospitalId,
       email: patient.email,
       mobile: patient.phone,
+      firstName: patient.firstName,
+      lastName: patient.lastName,
       type: 'patient',
     };
 
@@ -1028,18 +1056,23 @@ export class PatientAuthService {
       throw new NotFoundError('Patient not found');
     }
 
-    // Check email uniqueness if being updated
-    if (data.email && data.email !== existingPatient.email) {
-      const emailExists = await prisma.patient.findFirst({
-        where: {
-          hospitalId: existingPatient.hospitalId,
-          email: data.email,
-          id: { not: patientId },
-        },
-      });
+    // Check email uniqueness if being updated (case-insensitive)
+    if (data.email) {
+      const normalizedEmail = data.email.toLowerCase().trim();
+      if (normalizedEmail !== existingPatient.email?.toLowerCase()) {
+        const emailExists = await prisma.patient.findFirst({
+          where: {
+            hospitalId: existingPatient.hospitalId,
+            email: { equals: normalizedEmail, mode: 'insensitive' },
+            id: { not: patientId },
+          },
+        });
 
-      if (emailExists) {
-        throw new ConflictError('A patient with this email already exists');
+        if (emailExists) {
+          throw new ConflictError('A patient with this email already exists');
+        }
+        // Update data.email to normalized version
+        data.email = normalizedEmail;
       }
     }
 
