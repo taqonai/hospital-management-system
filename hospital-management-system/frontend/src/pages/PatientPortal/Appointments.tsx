@@ -1111,30 +1111,47 @@ export default function Appointments() {
                             </div>
                           ))}
                           {(!doctors || doctors.length === 0) && (
-                            <div className="text-center py-8 text-gray-500">
-                              No doctors available. Please try Quick Booking.
+                            <div className="text-center py-8">
+                              <ExclamationTriangleIcon className="h-12 w-12 mx-auto text-amber-400 mb-3" />
+                              <p className="text-gray-700 font-medium">No doctors available for emergency</p>
+                              <p className="text-gray-500 text-sm mt-1">Please try Quick Booking or select a different department</p>
                             </div>
                           )}
                         </div>
 
+                        {/* Reason field for Emergency */}
                         {selectedDoctor && selectedTime && (
-                          <button
-                            onClick={handleBookAppointment}
-                            disabled={bookMutation.isPending}
-                            className="w-full py-4 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 text-white font-bold text-lg hover:from-red-700 hover:to-orange-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
-                          >
-                            {bookMutation.isPending ? (
-                              <>
-                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
-                                Booking...
-                              </>
-                            ) : (
-                              <>
-                                <CheckCircleIcon className="h-6 w-6" />
-                                Book Emergency Appointment
-                              </>
-                            )}
-                          </button>
+                          <div className="space-y-3">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Reason for Emergency Visit *
+                              </label>
+                              <textarea
+                                value={appointmentReason}
+                                onChange={(e) => setAppointmentReason(e.target.value)}
+                                placeholder="Describe your emergency symptoms or reason..."
+                                rows={2}
+                                className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 transition-all text-sm"
+                              />
+                            </div>
+                            <button
+                              onClick={handleBookAppointment}
+                              disabled={bookMutation.isPending}
+                              className="w-full py-4 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 text-white font-bold text-lg hover:from-red-700 hover:to-orange-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
+                            >
+                              {bookMutation.isPending ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+                                  Booking...
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircleIcon className="h-6 w-6" />
+                                  Book Emergency Appointment
+                                </>
+                              )}
+                            </button>
+                          </div>
                         )}
                       </div>
                     )}
@@ -1204,30 +1221,47 @@ export default function Appointments() {
                             </div>
                           ))}
                           {(!doctors || doctors.length === 0) && (
-                            <div className="text-center py-8 text-gray-500">
-                              No doctors available in this department
+                            <div className="text-center py-8">
+                              <ExclamationTriangleIcon className="h-12 w-12 mx-auto text-amber-400 mb-3" />
+                              <p className="text-gray-700 font-medium">No doctors available</p>
+                              <p className="text-gray-500 text-sm mt-1">No doctors found for this department. Please select a different department or try another date.</p>
                             </div>
                           )}
                         </div>
 
+                        {/* Reason field for Quick Booking */}
                         {selectedDoctor && selectedTime && (
-                          <button
-                            onClick={handleBookAppointment}
-                            disabled={bookMutation.isPending}
-                            className="w-full py-4 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold text-lg hover:from-blue-700 hover:to-cyan-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
-                          >
-                            {bookMutation.isPending ? (
-                              <>
-                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
-                                Booking...
-                              </>
-                            ) : (
-                              <>
-                                <CheckCircleIcon className="h-6 w-6" />
-                                Confirm Booking
-                              </>
-                            )}
-                          </button>
+                          <div className="space-y-3">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Reason for Visit (Optional)
+                              </label>
+                              <textarea
+                                value={appointmentReason}
+                                onChange={(e) => setAppointmentReason(e.target.value)}
+                                placeholder="Describe your reason for the appointment..."
+                                rows={2}
+                                className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-sm"
+                              />
+                            </div>
+                            <button
+                              onClick={handleBookAppointment}
+                              disabled={bookMutation.isPending}
+                              className="w-full py-4 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold text-lg hover:from-blue-700 hover:to-cyan-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
+                            >
+                              {bookMutation.isPending ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+                                  Booking...
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircleIcon className="h-6 w-6" />
+                                  Confirm Booking
+                                </>
+                              )}
+                            </button>
+                          </div>
                         )}
                       </div>
                     )}
@@ -1330,8 +1364,10 @@ export default function Appointments() {
                             </button>
                           ))}
                           {(!doctors || doctors.length === 0) && (
-                            <div className="col-span-full text-center py-8 text-gray-500">
-                              No doctors available in this department
+                            <div className="col-span-full text-center py-8">
+                              <ExclamationTriangleIcon className="h-12 w-12 mx-auto text-amber-400 mb-3" />
+                              <p className="text-gray-700 font-medium">No doctors available</p>
+                              <p className="text-gray-500 text-sm mt-1">No doctors found for this department. Please select a different department.</p>
                             </div>
                           )}
                         </div>
