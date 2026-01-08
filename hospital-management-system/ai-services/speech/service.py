@@ -191,4 +191,4 @@ class SpeechToTextService:
 
     def is_available(self) -> bool:
         """Check if Whisper service is available"""
-        return self.openai_client is not None
+        return openai_manager.is_available()

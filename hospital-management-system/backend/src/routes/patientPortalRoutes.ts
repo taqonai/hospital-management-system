@@ -1141,4 +1141,168 @@ function getSuggestedActions(query: string): Array<{ label: string; route: strin
   return actions;
 }
 
+// =============================================================================
+// Settings Routes - Notification and Communication Preferences
+// =============================================================================
+
+/**
+ * Get notification preferences
+ * GET /api/v1/patient-portal/settings/notifications
+ */
+router.get(
+  '/settings/notifications',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+
+    // Get or create notification preferences
+    let prefs = await prisma.patientNotificationPreference.findUnique({
+      where: { patientId },
+    });
+
+    if (!prefs) {
+      // Create default preferences
+      prefs = await prisma.patientNotificationPreference.create({
+        data: {
+          patientId,
+          emailNotifications: true,
+          smsNotifications: true,
+          whatsappNotifications: false,
+          appointmentReminders: true,
+          labResultsReady: true,
+          prescriptionReminders: true,
+          billingAlerts: true,
+          promotionalEmails: false,
+          reminderTime: '1_DAY',
+        },
+      });
+    }
+
+    sendSuccess(res, prefs, 'Notification preferences retrieved');
+  })
+);
+
+/**
+ * Update notification preferences
+ * PUT /api/v1/patient-portal/settings/notifications
+ */
+router.put(
+  '/settings/notifications',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const {
+      emailNotifications,
+      smsNotifications,
+      whatsappNotifications,
+      appointmentReminders,
+      labResultsReady,
+      prescriptionReminders,
+      billingAlerts,
+      promotionalEmails,
+      reminderTime,
+    } = req.body;
+
+    const prefs = await prisma.patientNotificationPreference.upsert({
+      where: { patientId },
+      update: {
+        emailNotifications: emailNotifications ?? undefined,
+        smsNotifications: smsNotifications ?? undefined,
+        whatsappNotifications: whatsappNotifications ?? undefined,
+        appointmentReminders: appointmentReminders ?? undefined,
+        labResultsReady: labResultsReady ?? undefined,
+        prescriptionReminders: prescriptionReminders ?? undefined,
+        billingAlerts: billingAlerts ?? undefined,
+        promotionalEmails: promotionalEmails ?? undefined,
+        reminderTime: reminderTime ?? undefined,
+        updatedAt: new Date(),
+      },
+      create: {
+        patientId,
+        emailNotifications: emailNotifications ?? true,
+        smsNotifications: smsNotifications ?? true,
+        whatsappNotifications: whatsappNotifications ?? false,
+        appointmentReminders: appointmentReminders ?? true,
+        labResultsReady: labResultsReady ?? true,
+        prescriptionReminders: prescriptionReminders ?? true,
+        billingAlerts: billingAlerts ?? true,
+        promotionalEmails: promotionalEmails ?? false,
+        reminderTime: reminderTime ?? '1_DAY',
+      },
+    });
+
+    sendSuccess(res, prefs, 'Notification preferences updated');
+  })
+);
+
+/**
+ * Get communication preferences
+ * GET /api/v1/patient-portal/settings/communication
+ */
+router.get(
+  '/settings/communication',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+
+    // Get or create communication preferences
+    let prefs = await prisma.patientCommunicationPreference.findUnique({
+      where: { patientId },
+    });
+
+    if (!prefs) {
+      // Create default preferences
+      prefs = await prisma.patientCommunicationPreference.create({
+        data: {
+          patientId,
+          preferredContactMethod: 'EMAIL',
+          preferredLanguage: 'en',
+          preferredTimeForCalls: 'MORNING',
+          allowMarketingCommunications: false,
+        },
+      });
+    }
+
+    sendSuccess(res, prefs, 'Communication preferences retrieved');
+  })
+);
+
+/**
+ * Update communication preferences
+ * PUT /api/v1/patient-portal/settings/communication
+ */
+router.put(
+  '/settings/communication',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const {
+      preferredContactMethod,
+      preferredLanguage,
+      preferredTimeForCalls,
+      allowMarketingCommunications,
+    } = req.body;
+
+    const prefs = await prisma.patientCommunicationPreference.upsert({
+      where: { patientId },
+      update: {
+        preferredContactMethod: preferredContactMethod ?? undefined,
+        preferredLanguage: preferredLanguage ?? undefined,
+        preferredTimeForCalls: preferredTimeForCalls ?? undefined,
+        allowMarketingCommunications: allowMarketingCommunications ?? undefined,
+        updatedAt: new Date(),
+      },
+      create: {
+        patientId,
+        preferredContactMethod: preferredContactMethod ?? 'EMAIL',
+        preferredLanguage: preferredLanguage ?? 'en',
+        preferredTimeForCalls: preferredTimeForCalls ?? 'MORNING',
+        allowMarketingCommunications: allowMarketingCommunications ?? false,
+      },
+    });
+
+    sendSuccess(res, prefs, 'Communication preferences updated');
+  })
+);
+
 export default router;

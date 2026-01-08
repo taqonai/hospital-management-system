@@ -374,6 +374,10 @@ model Patient {
   wellnessGoals           WellnessGoal[]
   wellnessAssessments     WellnessAssessment[]
 
+  // Settings & Preferences
+  notificationPreference  PatientNotificationPreference?
+  communicationPreference PatientCommunicationPreference?
+
   @@unique([hospitalId, mrn])
   @@map("patients")
 }
@@ -4570,6 +4574,50 @@ model WellnessAssessment {
 
   @@index([patientId])
   @@map("wellness_assessments")
+}
+
+// ==================== PATIENT SETTINGS & PREFERENCES ====================
+
+model PatientNotificationPreference {
+  id                     String   @id @default(uuid())
+  patientId              String   @unique
+  patient                Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  // Notification channels
+  emailNotifications     Boolean  @default(true)
+  smsNotifications       Boolean  @default(true)
+  whatsappNotifications  Boolean  @default(false)
+
+  // Notification types
+  appointmentReminders   Boolean  @default(true)
+  labResultsReady        Boolean  @default(true)
+  prescriptionReminders  Boolean  @default(true)
+  billingAlerts          Boolean  @default(true)
+  promotionalEmails      Boolean  @default(false)
+
+  // Timing preference
+  reminderTime           String   @default("1_DAY")  // 30_MINS, 2_HOURS, 1_DAY, 2_DAYS
+
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@map("patient_notification_preferences")
+}
+
+model PatientCommunicationPreference {
+  id                         String   @id @default(uuid())
+  patientId                  String   @unique
+  patient                    Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  preferredContactMethod     String   @default("EMAIL")  // EMAIL, SMS, WHATSAPP, PHONE
+  preferredLanguage          String   @default("en")
+  preferredTimeForCalls      String   @default("MORNING")  // MORNING, AFTERNOON, EVENING, ANYTIME
+  allowMarketingCommunications Boolean @default(false)
+
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  @@map("patient_communication_preferences")
 }
 
 enum WellnessAssessmentType {
