@@ -288,3 +288,45 @@ npx prisma migrate dev
 3. Import and instantiate in `ai-services/main.py`
 4. Add FastAPI endpoint in `main.py`
 5. Create backend proxy route in `backend/src/routes/aiRoutes.ts`
+
+## Recent Improvements (January 2026)
+
+### AI Features Completed
+
+**Risk Score Auto-Update (OPD Vitals)**
+- When vitals are recorded via OPD flow, the system now automatically calculates:
+  - NEWS2 Score (National Early Warning Score)
+  - qSOFA Score for sepsis screening
+  - Fall Risk assessment
+- Creates `AIPrediction` record with risk level (LOW/MODERATE/HIGH/CRITICAL)
+- Files: `backend/src/services/opdService.ts`, `backend/src/services/earlyWarningService.ts`
+
+**AI Symptom Checker Contextual Questions**
+- Skips irrelevant questions based on symptoms entered
+- Example: If user says "stomach pain", won't ask "which body part?"
+- Uses GPT-4o-mini for intelligent follow-up question generation
+- Files: `ai-services/symptom_checker/service.py`, `ai-services/main.py`
+
+**AI Symptom Extraction (Consultation View)**
+- Fixed bug where extraction selected all symptoms
+- Now uses proper word boundary regex matching
+- Files: `frontend/src/pages/Consultation/index.tsx`
+
+**AI Diagnosis Improvements**
+- Added 60-second timeout for AI diagnosis calls
+- Better error handling with descriptive messages
+- Validation for patient data before diagnosis
+- Files: `frontend/src/services/api.ts`, `frontend/src/pages/Consultation/index.tsx`
+
+### Test Credentials
+
+| Role | Email | Password |
+|------|-------|----------|
+| Hospital Admin | admin@hospital.com | password123 |
+| Doctor | dr.johnson@hospital.com | password123 |
+| Patient Portal | kamil@taqon.ai | password123 |
+
+### Production URLs
+- Frontend: https://medint.taqon.ai
+- API: https://medint.taqon.ai/api/v1
+- AI Services (internal): http://localhost:8000 (via Docker network)
