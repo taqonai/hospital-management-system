@@ -1568,7 +1568,8 @@ async def symptom_checker_start(request: SymptomCheckerStartRequest):
     """Start a new symptom checking session"""
     try:
         from symptom_checker.service import (
-            sessions, check_red_flags, QUESTION_BANK, SessionStatus
+            sessions, check_red_flags, QUESTION_BANK, SessionStatus,
+            get_contextual_questions
         )
         import uuid
         from datetime import datetime
@@ -1610,12 +1611,22 @@ async def symptom_checker_start(request: SymptomCheckerStartRequest):
                 "redFlagMessage": emergency_flags[0]["message"]
             }
 
-        # Get first questions
-        first_questions = [QUESTION_BANK["initial"]]
+        # Get first questions using contextual question generation
+        # This intelligently skips irrelevant questions (e.g., body_location if symptom implies it)
         if request.initialSymptoms and len(request.initialSymptoms) > 0:
+            # Patient already provided symptoms - use contextual questions
             session["answers"]["main_symptoms"] = request.initialSymptoms
             session["currentQuestionIndex"] = 1
-            first_questions = [QUESTION_BANK["body_location"], QUESTION_BANK["severity"]]
+            first_questions = get_contextual_questions(
+                symptoms=request.initialSymptoms,
+                answered_questions=session["answers"]
+            )
+            # If no questions generated, fall back to severity
+            if not first_questions:
+                first_questions = [QUESTION_BANK["severity"]]
+        else:
+            # No initial symptoms - ask for symptoms first
+            first_questions = [QUESTION_BANK["initial"]]
 
         return {
             "sessionId": session_id,
@@ -1636,7 +1647,8 @@ async def symptom_checker_respond(request: SymptomCheckerRespondRequest):
     try:
         from symptom_checker.service import (
             sessions, check_red_flags, QUESTION_BANK, QUESTION_FLOW,
-            SessionStatus, calculate_urgency_score, determine_triage_level, TriageLevel
+            SessionStatus, calculate_urgency_score, determine_triage_level, TriageLevel,
+            get_contextual_questions
         )
         from datetime import datetime
 
@@ -1670,9 +1682,10 @@ async def symptom_checker_respond(request: SymptomCheckerRespondRequest):
 
         session["lastUpdatedAt"] = datetime.now().isoformat()
 
-        # Calculate progress
-        answered_count = len([q for q in QUESTION_FLOW if q in session["answers"]])
-        progress = min(int((answered_count / len(QUESTION_FLOW)) * 100), 100)
+        # Calculate progress based on minimum required questions
+        answers = session.get("answers", {})
+        has_minimum = "main_symptoms" in answers and "severity" in answers and "duration" in answers
+        progress = min(int((len(answers) / 5) * 100), 100) if has_minimum else min(int((len(answers) / 5) * 100), 80)
 
         # Check for emergency red flags
         emergency_flags = [rf for rf in session["redFlags"] if rf.get("triageLevel") == "EMERGENCY"]
@@ -1690,21 +1703,13 @@ async def symptom_checker_respond(request: SymptomCheckerRespondRequest):
                 "triageLevel": TriageLevel.EMERGENCY.value
             }
 
-        # Determine next questions
-        next_questions = []
-        current_index = session.get("currentQuestionIndex", 0)
+        # Determine next questions using contextual question generation
+        # This intelligently skips irrelevant questions (e.g., body_location if symptom implies it)
+        symptoms = session.get("collectedSymptoms", [])
+        next_questions = get_contextual_questions(symptoms, session["answers"])
 
-        for i, question_key in enumerate(QUESTION_FLOW):
-            if question_key not in session["answers"]:
-                if question_key in QUESTION_BANK:
-                    next_questions.append(QUESTION_BANK[question_key])
-                if len(next_questions) >= 2:
-                    break
-                current_index = i
-
-        session["currentQuestionIndex"] = current_index
-
-        is_complete = len(next_questions) == 0 or progress >= 100
+        # Complete when we have minimum data for triage or no more questions
+        is_complete = len(next_questions) == 0 or (has_minimum and len(answers) >= 3)
 
         if is_complete:
             session["status"] = SessionStatus.COMPLETED.value
