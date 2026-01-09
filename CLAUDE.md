@@ -227,7 +227,9 @@ Receptionist (Check-in) → Nurse (Vitals) → Doctor (Consultation) → Lab (Re
 | Hospital Admin | admin@hospital.com | password123 |
 | Doctor | dr.johnson@hospital.com | password123 |
 | Receptionist | receptionist@hospital.com | password123 |
-| Nurse | nurse@hospital.com | password123 |
+| Nurse | nurse.miller@hospital.com | password123 |
+| Nurse | nurse.moore@hospital.com | password123 |
+| Nurse | nurse.clark@hospital.com | password123 |
 | Lab Technician | labtech@hospital.com | password123 |
 | Patient Portal | kamil@taqon.ai | password123 |
 

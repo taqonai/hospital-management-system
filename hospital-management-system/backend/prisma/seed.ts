@@ -111,8 +111,8 @@ async function main() {
       hospitalId: hospital.id,
       email: 'receptionist@hospital.com',
       password: receptionistPassword,
-      firstName: 'Front',
-      lastName: 'Desk',
+      firstName: 'Sarah',
+      lastName: 'Johnson',
       phone: '+1-555-100-0003',
       role: UserRole.RECEPTIONIST,
       isActive: true,
@@ -122,27 +122,34 @@ async function main() {
 
   console.log(`Created receptionist user: ${receptionistUser.email}`);
 
-  // Create Nurse User
+  // Create Nurse Users
   const nursePassword = await bcrypt.hash('password123', 12);
-  const nurseUser = await prisma.user.upsert({
-    where: {
-      hospitalId_email: { hospitalId: hospital.id, email: 'nurse@hospital.com' },
-    },
-    update: {},
-    create: {
-      hospitalId: hospital.id,
-      email: 'nurse@hospital.com',
-      password: nursePassword,
-      firstName: 'Mary',
-      lastName: 'Smith',
-      phone: '+1-555-100-0004',
-      role: UserRole.NURSE,
-      isActive: true,
-      isEmailVerified: true,
-    },
-  });
+  const nursesData = [
+    { email: 'nurse.miller@hospital.com', firstName: 'Nancy', lastName: 'Miller', phone: '+1-555-100-0004' },
+    { email: 'nurse.moore@hospital.com', firstName: 'Helen', lastName: 'Moore', phone: '+1-555-100-0005' },
+    { email: 'nurse.clark@hospital.com', firstName: 'Patricia', lastName: 'Clark', phone: '+1-555-100-0006' },
+  ];
 
-  console.log(`Created nurse user: ${nurseUser.email}`);
+  for (const nurseData of nursesData) {
+    const nurseUser = await prisma.user.upsert({
+      where: {
+        hospitalId_email: { hospitalId: hospital.id, email: nurseData.email },
+      },
+      update: {},
+      create: {
+        hospitalId: hospital.id,
+        email: nurseData.email,
+        password: nursePassword,
+        firstName: nurseData.firstName,
+        lastName: nurseData.lastName,
+        phone: nurseData.phone,
+        role: UserRole.NURSE,
+        isActive: true,
+        isEmailVerified: true,
+      },
+    });
+    console.log(`Created nurse user: ${nurseUser.email}`);
+  }
 
   // Create Lab Technician User
   const labTechPassword = await bcrypt.hash('password123', 12);
@@ -155,9 +162,9 @@ async function main() {
       hospitalId: hospital.id,
       email: 'labtech@hospital.com',
       password: labTechPassword,
-      firstName: 'Lab',
-      lastName: 'Technician',
-      phone: '+1-555-100-0005',
+      firstName: 'James',
+      lastName: 'Wilson',
+      phone: '+1-555-100-0007',
       role: UserRole.LAB_TECHNICIAN,
       isActive: true,
       isEmailVerified: true,
