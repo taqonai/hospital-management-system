@@ -911,10 +911,37 @@ export default function Consultation() {
 
   const renderVitalsStep = () => (
     <div className="space-y-6">
+      {/* Nurse Recording Indicator */}
+      {vitalsPrefilledByNurse && bookingData?.vitals && (
+        <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-2xl p-4">
+          <div className="flex items-center gap-3">
+            <div className="flex-shrink-0 w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
+              <CheckCircleIcon className="h-6 w-6 text-emerald-600" />
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-emerald-800">Vitals Recorded by Nurse</h4>
+              <p className="text-sm text-emerald-600">
+                Recorded at {bookingData.vitals.recordedAt
+                  ? new Date(bookingData.vitals.recordedAt).toLocaleString()
+                  : 'earlier today'}
+                {bookingData.vitals.recordedBy && typeof bookingData.vitals.recordedBy === 'object' && (
+                  <span className="ml-1">
+                    by {(bookingData.vitals.recordedBy as { firstName?: string; lastName?: string }).firstName} {(bookingData.vitals.recordedBy as { firstName?: string; lastName?: string }).lastName}
+                  </span>
+                )}
+              </p>
+            </div>
+            <span className="text-xs px-2 py-1 bg-emerald-200 text-emerald-700 rounded-full font-medium">
+              Pre-filled
+            </span>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
         <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2">
           <HeartIcon className="h-5 w-5 text-red-500" />
-          Record Vital Signs
+          {vitalsPrefilledByNurse ? 'Review & Update Vital Signs' : 'Record Vital Signs'}
         </h3>
 
         <div className="grid md:grid-cols-3 gap-4">

@@ -586,6 +586,15 @@ export class OPDService {
       orderBy: { createdAt: 'desc' },
     });
 
+    // Fetch user info for the nurse who recorded vitals
+    let vitalsRecordedByUser = null;
+    if (appointment.vitals[0]?.recordedBy) {
+      vitalsRecordedByUser = await prisma.user.findUnique({
+        where: { id: appointment.vitals[0].recordedBy },
+        select: { id: true, firstName: true, lastName: true, role: true },
+      });
+    }
+
     // Build timeline of events
     const timeline: Array<{ timestamp: Date; event: string; actor?: string; details?: string }> = [];
 
@@ -673,7 +682,10 @@ export class OPDService {
         specialization: appointment.doctor.specialization,
         department: appointment.doctor.department,
       },
-      vitals: appointment.vitals[0] || null,
+      vitals: appointment.vitals[0] ? {
+        ...appointment.vitals[0],
+        recordedBy: vitalsRecordedByUser,
+      } : null,
       riskPrediction: riskPrediction ? {
         riskScore: riskPrediction.riskScore,
         riskLevel: riskPrediction.riskLevel,

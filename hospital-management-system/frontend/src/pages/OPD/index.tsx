@@ -22,10 +22,10 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../../hooks/useAuth';
 
 interface QueueItem {
-  id: string;
+  id: string; // Appointment/Booking ID
   tokenNumber: string;
   patient: {
-    id: string;
+    id: string; // Patient ID
     firstName: string;
     lastName: string;
     mrn?: string;
@@ -365,6 +365,7 @@ interface VitalsModalProps {
 
 function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalProps) {
   const [loading, setLoading] = useState(false);
+  const [loadingExisting, setLoadingExisting] = useState(false);
   const [vitals, setVitals] = useState({
     temperature: '',
     bloodPressureSys: '',
@@ -378,6 +379,40 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
     painLevel: '',
     notes: '',
   });
+
+  // Fetch existing vitals to pre-populate the form when updating
+  useEffect(() => {
+    const fetchExistingVitals = async () => {
+      if (!appointment.vitalsRecordedAt) return; // Only fetch if vitals were previously recorded
+
+      setLoadingExisting(true);
+      try {
+        const response = await opdApi.getBookingTicket(appointment.id);
+        const existingVitals = response.data?.data?.vitals;
+        if (existingVitals) {
+          setVitals({
+            temperature: existingVitals.temperature?.toString() || '',
+            bloodPressureSys: existingVitals.bloodPressureSys?.toString() || '',
+            bloodPressureDia: existingVitals.bloodPressureDia?.toString() || '',
+            heartRate: existingVitals.heartRate?.toString() || '',
+            respiratoryRate: existingVitals.respiratoryRate?.toString() || '',
+            oxygenSaturation: existingVitals.oxygenSaturation?.toString() || '',
+            weight: existingVitals.weight?.toString() || '',
+            height: existingVitals.height?.toString() || '',
+            bloodSugar: existingVitals.bloodSugar?.toString() || '',
+            painLevel: existingVitals.painLevel?.toString() || '',
+            notes: existingVitals.notes || '',
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch existing vitals:', error);
+      } finally {
+        setLoadingExisting(false);
+      }
+    };
+
+    fetchExistingVitals();
+  }, [appointment.id, appointment.vitalsRecordedAt]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -424,12 +459,18 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
               <div>
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
                   <HeartIcon className="h-6 w-6" />
-                  Record Pre-Consultation Vitals
+                  {appointment.vitalsRecordedAt ? 'Update' : 'Record'} Pre-Consultation Vitals
                 </h2>
-                <p className="text-white/80 text-sm mt-1">
-                  Patient: {appointment.patient?.firstName} {appointment.patient?.lastName}
-                  {appointment.patient?.mrn && <span className="ml-2 opacity-75">MRN: {appointment.patient.mrn}</span>}
-                </p>
+                <div className="text-white/90 text-sm mt-1 space-y-0.5">
+                  <p className="font-medium">
+                    {appointment.patient?.firstName} {appointment.patient?.lastName}
+                  </p>
+                  <p className="text-white/70 text-xs flex flex-wrap gap-x-3">
+                    <span>Booking ID: {appointment.id.slice(0, 8)}...</span>
+                    <span>Patient ID: {appointment.patient?.id?.slice(0, 8)}...</span>
+                    {appointment.patient?.mrn && <span>MRN: {appointment.patient.mrn}</span>}
+                  </p>
+                </div>
               </div>
               <button
                 onClick={onClose}
@@ -441,6 +482,26 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
           </div>
 
           <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+            {/* Loading indicator when fetching existing vitals */}
+            {loadingExisting && (
+              <div className="flex items-center justify-center py-4 text-gray-500">
+                <ArrowPathIcon className="h-5 w-5 animate-spin mr-2" />
+                Loading existing vitals...
+              </div>
+            )}
+
+            {/* Update notice */}
+            {appointment.vitalsRecordedAt && !loadingExisting && (
+              <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-sm">
+                <HeartIconSolid className="h-5 w-5 text-amber-500" />
+                <span>
+                  Vitals previously recorded at{' '}
+                  {new Date(appointment.vitalsRecordedAt).toLocaleTimeString()}
+                  . You are updating existing values.
+                </span>
+              </div>
+            )}
+
             {/* Primary Vitals */}
             <div>
               <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
