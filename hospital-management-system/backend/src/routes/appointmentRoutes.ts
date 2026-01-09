@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { appointmentService } from '../services/appointmentService';
 import { authenticate, authorize } from '../middleware/auth';
-import { validate, createAppointmentSchema, uuidParamSchema, paginationSchema } from '../middleware/validation';
+import { validate, createAppointmentSchema, uuidParamSchema, paginationSchema, updateAppointmentStatusSchema } from '../middleware/validation';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -99,6 +99,7 @@ router.patch(
   authenticate,
   authorize('HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'),
   validate(uuidParamSchema),
+  validate(updateAppointmentStatusSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { status } = req.body;
     const appointment = await appointmentService.updateStatus(

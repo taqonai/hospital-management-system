@@ -112,6 +112,14 @@ export const createAppointmentSchema = z.object({
   }),
 });
 
+export const updateAppointmentStatusSchema = z.object({
+  body: z.object({
+    status: z.enum(['SCHEDULED', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'NO_SHOW'], {
+      errorMap: () => ({ message: 'Invalid appointment status' })
+    }),
+  }),
+});
+
 // Consultation schemas
 export const createConsultationSchema = z.object({
   body: z.object({

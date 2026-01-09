@@ -25,7 +25,7 @@ import {
   MagnifyingGlassIcon,
   ChartBarIcon,
 } from '@heroicons/react/24/outline';
-import { patientApi, aiApi, smartOrderApi, medSafetyApi, ipdApi } from '../../services/api';
+import { patientApi, aiApi, smartOrderApi, medSafetyApi, ipdApi, appointmentApi } from '../../services/api';
 import { useAIHealth } from '../../hooks/useAI';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
@@ -209,6 +209,10 @@ export default function Consultation() {
   const [drugInteractions, setDrugInteractions] = useState<DrugInteraction[]>([]);
   const [recommendedTests, setRecommendedTests] = useState<string[]>([]);
 
+  // Allergy Conflict State
+  const [allergyConflicts, setAllergyConflicts] = useState<{medication: string; allergen: string}[]>([]);
+  const [acknowledgedConflicts, setAcknowledgedConflicts] = useState<string[]>([]);
+
   // AI Health Check
   const { data: aiHealth } = useAIHealth();
   const isAIOnline = aiHealth?.status === 'connected';
@@ -225,6 +229,24 @@ export default function Consultation() {
   }, [consultationStartTime]);
 
   // =============== API Queries ===============
+
+  // Fetch appointment data to auto-populate patient
+  const { data: appointmentData } = useQuery({
+    queryKey: ['appointment', appointmentId],
+    queryFn: async () => {
+      if (!appointmentId) return null;
+      const response = await appointmentApi.getById(appointmentId);
+      return response.data.data;
+    },
+    enabled: !!appointmentId,
+  });
+
+  // Auto-set patient from appointment
+  useEffect(() => {
+    if (appointmentData?.patientId && !selectedPatientId) {
+      setSelectedPatientId(appointmentData.patientId);
+    }
+  }, [appointmentData, selectedPatientId]);
 
   // Patient Search Query
   const { data: searchResults, isLoading: searchingPatients } = useQuery({
@@ -430,6 +452,29 @@ export default function Consultation() {
     return cleanup;
   }, [prescriptions, validatePrescriptions]);
 
+  // =============== Allergy Check ===============
+
+  // Check if a medication conflicts with patient allergies
+  const checkMedicationAllergies = useCallback((medication: string) => {
+    if (!patientData?.allergies || !medication) return null;
+
+    const medLower = medication.toLowerCase();
+    for (const allergy of patientData.allergies) {
+      const allergenLower = allergy.allergen.toLowerCase();
+      // Check for direct match or partial match (e.g., "penicillin" in "amoxicillin")
+      if (medLower.includes(allergenLower) || allergenLower.includes(medLower)) {
+        return allergy;
+      }
+    }
+    return null;
+  }, [patientData?.allergies]);
+
+  // Acknowledge allergy conflict and allow proceeding
+  const acknowledgeAllergyConflict = (medication: string) => {
+    setAcknowledgedConflicts(prev => [...prev, medication]);
+    toast.success(`Allergy warning acknowledged for ${medication}`);
+  };
+
   // =============== Event Handlers ===============
 
   const handlePatientSelect = (patient: Patient) => {
@@ -506,12 +551,55 @@ export default function Consultation() {
   };
 
   const updatePrescription = (id: string, field: keyof Prescription, value: string) => {
+    // Get OLD medication name BEFORE updating state
+    const oldRx = prescriptions.find(rx => rx.id === id);
+    const oldMedication = oldRx?.medication || '';
+
     setPrescriptions(prev => prev.map(rx =>
       rx.id === id ? { ...rx, [field]: value } : rx
     ));
+
+    // Check for allergy conflicts when medication name changes
+    if (field === 'medication') {
+      // First, clear conflict for OLD medication name (if it had one)
+      if (oldMedication) {
+        setAllergyConflicts(prev =>
+          prev.filter(c => c.medication.toLowerCase() !== oldMedication.toLowerCase())
+        );
+        setAcknowledgedConflicts(prev =>
+          prev.filter(m => m.toLowerCase() !== oldMedication.toLowerCase())
+        );
+      }
+
+      // Then, check if NEW value has a conflict
+      if (value) {
+        const allergyMatch = checkMedicationAllergies(value);
+        if (allergyMatch) {
+          setAllergyConflicts(prev => [
+            ...prev.filter(c => c.medication.toLowerCase() !== value.toLowerCase()),
+            { medication: value, allergen: allergyMatch.allergen }
+          ]);
+          toast.error(`ALLERGY ALERT: ${value} may conflict with patient allergy to ${allergyMatch.allergen}!`, {
+            duration: 5000,
+          });
+        }
+      }
+    }
   };
 
   const removePrescription = (id: string) => {
+    // Get the medication name BEFORE removing to clear its conflict
+    const rxToRemove = prescriptions.find(rx => rx.id === id);
+    if (rxToRemove?.medication) {
+      // Clear allergy conflict for this medication
+      setAllergyConflicts(prev =>
+        prev.filter(c => c.medication.toLowerCase() !== rxToRemove.medication.toLowerCase())
+      );
+      // Clear acknowledged status for this medication
+      setAcknowledgedConflicts(prev =>
+        prev.filter(m => m.toLowerCase() !== rxToRemove.medication.toLowerCase())
+      );
+    }
     setPrescriptions(prev => prev.filter(rx => rx.id !== id));
   };
 
@@ -526,12 +614,49 @@ export default function Consultation() {
   };
 
   const completeConsultation = async () => {
+    if (!selectedPatientId) {
+      toast.error('No patient selected');
+      return;
+    }
+
+    // Check for unacknowledged allergy conflicts
+    const unacknowledged = allergyConflicts.filter(
+      c => !acknowledgedConflicts.some(m => m.toLowerCase() === c.medication.toLowerCase())
+    );
+    if (unacknowledged.length > 0) {
+      toast.error('Please acknowledge all allergy warnings before completing consultation');
+      return;
+    }
+
     try {
       // Generate final SOAP notes
       await generateSOAPMutation.mutateAsync();
+
+      // Update appointment status to COMPLETED if we have an appointmentId
+      if (appointmentId) {
+        try {
+          await appointmentApi.updateStatus(appointmentId, 'COMPLETED');
+        } catch (statusError: any) {
+          console.error('Failed to update appointment status:', {
+            appointmentId,
+            error: statusError.response?.data || statusError.message,
+            status: statusError.response?.status
+          });
+          // Show actual error message if available
+          const errorMsg = statusError.response?.data?.message || 'Appointment status could not be updated';
+          toast.error(`Note: ${errorMsg}`);
+        }
+      }
+
       toast.success('Consultation completed successfully');
+
+      // Invalidate appointment queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['appointment', appointmentId] });
+
       navigate('/opd');
     } catch (error) {
+      console.error('Failed to complete consultation:', error);
       toast.error('Failed to complete consultation');
     }
   };
@@ -1233,7 +1358,12 @@ export default function Consultation() {
                     value={rx.medication}
                     onChange={(e) => updatePrescription(rx.id, 'medication', e.target.value)}
                     placeholder="e.g., Amoxicillin"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className={clsx(
+                      "w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500",
+                      allergyConflicts.some(c => c.medication.toLowerCase() === rx.medication.toLowerCase())
+                        ? "border-red-500 bg-red-50"
+                        : "border-gray-300"
+                    )}
                   />
                 </div>
                 <div>
@@ -1291,6 +1421,33 @@ export default function Consultation() {
                   />
                 </div>
               </div>
+
+              {/* Allergy Conflict Warning */}
+              {allergyConflicts.find(c => c.medication.toLowerCase() === rx.medication.toLowerCase()) && (
+                <div className="mt-4 p-3 bg-red-100 border-2 border-red-300 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ExclamationTriangleIcon className="h-5 w-5 text-red-600" />
+                      <span className="text-red-700 font-medium">
+                        ALLERGY CONFLICT: Patient is allergic to {allergyConflicts.find(c => c.medication.toLowerCase() === rx.medication.toLowerCase())?.allergen}
+                      </span>
+                    </div>
+                    {!acknowledgedConflicts.some(m => m.toLowerCase() === rx.medication.toLowerCase()) ? (
+                      <button
+                        onClick={() => acknowledgeAllergyConflict(rx.medication)}
+                        className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition-colors"
+                      >
+                        Acknowledge & Proceed
+                      </button>
+                    ) : (
+                      <span className="text-sm text-green-700 font-medium flex items-center gap-1">
+                        <CheckCircleIcon className="h-4 w-4" />
+                        Acknowledged
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Warnings for this medication */}
               {rx.warnings && rx.warnings.length > 0 && (
