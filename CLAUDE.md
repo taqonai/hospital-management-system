@@ -170,6 +170,37 @@ Key routes (`/api/v1/`):
 - Routes: `/api/v1/rbac/*` - Role and permission management
 - Middleware: `rbac.ts` for permission checking
 
+### Unified Booking Workflow
+
+The system implements a unified "Booking Ticket" where the **Appointment** entity serves as the central record. All clinical data (vitals, consultation, lab orders, notes) links to this appointment and is accessible by authorized roles.
+
+**Data Flow:**
+```
+Receptionist (Check-in) → Nurse (Vitals) → Doctor (Consultation) → Lab (Results)
+     ↓                        ↓                   ↓                    ↓
+  All roles can view the unified booking ticket at any stage via polling
+```
+
+**Key Endpoints:**
+- `GET /api/v1/opd/booking-ticket/:appointmentId` - Unified booking data (patient, vitals, consultation, lab orders, timeline)
+- `GET /api/v1/opd/patient-history/:patientId` - Past completed appointments for follow-up context
+
+**Frontend Components:**
+- `frontend/src/components/booking/BookingTicket.tsx` - Main unified view component
+- `frontend/src/components/booking/BookingStatusTimeline.tsx` - Visual progress (Scheduled → Checked-in → Vitals → Consultation → Completed)
+- `frontend/src/components/booking/VitalsSummaryCard.tsx` - Vitals with abnormal value highlighting
+- `frontend/src/components/booking/LabOrdersCard.tsx` - Lab orders with status badges and critical flags
+- `frontend/src/hooks/useBookingData.ts` - Polling hook (15-30s intervals)
+
+**Page Enhancements:**
+| Page | Feature |
+|------|---------|
+| OPD (Nurse) | Queue auto-refresh (15s), "View Booking" button on patient rows |
+| Consultation (Doctor) | Nurse vitals pre-populate, "Past Visits" for patient history |
+| Laboratory | Orders refresh (15s), "View Booking" links to consultation context |
+
+**Data Chain:** Appointment → Consultation → LabOrder (linked via `consultationId` and `appointmentId`)
+
 ## Configuration
 
 ### Environment Variables
