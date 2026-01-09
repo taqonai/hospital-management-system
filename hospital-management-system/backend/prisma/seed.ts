@@ -100,6 +100,72 @@ async function main() {
 
   console.log(`Created HR user: ${hrUser.email}`);
 
+  // Create Receptionist User
+  const receptionistPassword = await bcrypt.hash('password123', 12);
+  const receptionistUser = await prisma.user.upsert({
+    where: {
+      hospitalId_email: { hospitalId: hospital.id, email: 'receptionist@hospital.com' },
+    },
+    update: {},
+    create: {
+      hospitalId: hospital.id,
+      email: 'receptionist@hospital.com',
+      password: receptionistPassword,
+      firstName: 'Front',
+      lastName: 'Desk',
+      phone: '+1-555-100-0003',
+      role: UserRole.RECEPTIONIST,
+      isActive: true,
+      isEmailVerified: true,
+    },
+  });
+
+  console.log(`Created receptionist user: ${receptionistUser.email}`);
+
+  // Create Nurse User
+  const nursePassword = await bcrypt.hash('password123', 12);
+  const nurseUser = await prisma.user.upsert({
+    where: {
+      hospitalId_email: { hospitalId: hospital.id, email: 'nurse@hospital.com' },
+    },
+    update: {},
+    create: {
+      hospitalId: hospital.id,
+      email: 'nurse@hospital.com',
+      password: nursePassword,
+      firstName: 'Mary',
+      lastName: 'Smith',
+      phone: '+1-555-100-0004',
+      role: UserRole.NURSE,
+      isActive: true,
+      isEmailVerified: true,
+    },
+  });
+
+  console.log(`Created nurse user: ${nurseUser.email}`);
+
+  // Create Lab Technician User
+  const labTechPassword = await bcrypt.hash('password123', 12);
+  const labTechUser = await prisma.user.upsert({
+    where: {
+      hospitalId_email: { hospitalId: hospital.id, email: 'labtech@hospital.com' },
+    },
+    update: {},
+    create: {
+      hospitalId: hospital.id,
+      email: 'labtech@hospital.com',
+      password: labTechPassword,
+      firstName: 'Lab',
+      lastName: 'Technician',
+      phone: '+1-555-100-0005',
+      role: UserRole.LAB_TECHNICIAN,
+      isActive: true,
+      isEmailVerified: true,
+    },
+  });
+
+  console.log(`Created lab technician user: ${labTechUser.email}`);
+
   // Create Lab Tests Catalog
   const labTestsData = [
     { name: 'Complete Blood Count (CBC)', code: 'CBC001', category: 'Hematology', sampleType: 'Blood', price: 50, turnaroundTime: 4 },
