@@ -185,6 +185,7 @@ export class LaboratoryService {
         include: {
           patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
           tests: { include: { labTest: true } },
+          consultation: { select: { id: true, appointmentId: true } },
         },
       }),
       prisma.labOrder.count({ where }),
@@ -371,6 +372,7 @@ export class LaboratoryService {
       include: {
         patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
         tests: { include: { labTest: true } },
+        consultation: { select: { id: true, appointmentId: true } },
       },
       orderBy: [{ priority: 'asc' }, { orderedAt: 'asc' }],
     });

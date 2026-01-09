@@ -606,6 +606,10 @@ export const opdApi = {
     notes?: string;
   }) => api.post(`/opd/appointments/${appointmentId}/vitals`, vitalsData),
   getAppointmentVitals: (appointmentId: string) => api.get(`/opd/appointments/${appointmentId}/vitals`),
+  // Unified booking ticket
+  getBookingTicket: (appointmentId: string) => api.get(`/opd/booking-ticket/${appointmentId}`),
+  getPatientHistory: (patientId: string, limit?: number) =>
+    api.get(`/opd/patient-history/${patientId}`, { params: { limit } }),
 };
 
 // Emergency APIs

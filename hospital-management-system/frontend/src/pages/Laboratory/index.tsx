@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   BeakerIcon,
   PlusIcon,
@@ -12,9 +12,12 @@ import {
   ClipboardDocumentCheckIcon,
   ChartBarIcon,
   QrCodeIcon,
+  EyeIcon,
 } from '@heroicons/react/24/outline';
 import { useAIHealth } from '../../hooks/useAI';
 import { laboratoryApi } from '../../services/api';
+import { useBookingData } from '../../hooks/useBookingData';
+import { BookingTicket } from '../../components/booking';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import SampleTracker from '../../components/laboratory/SampleTracker';
@@ -43,6 +46,10 @@ interface LabOrder {
   priority: string;
   createdAt: string;
   completedAt?: string;
+  consultation?: {
+    id: string;
+    appointmentId?: string;
+  };
 }
 
 interface CriticalResult {
@@ -409,35 +416,50 @@ export default function Laboratory() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const { data: healthStatus } = useAIHealth();
 
   const isAIOnline = healthStatus?.status === 'connected';
 
-  useEffect(() => {
-    const fetchOrders = async () => {
-      try {
-        setLoading(true);
-        const response = await laboratoryApi.getOrders({
-          page,
-          limit: 20,
-          status: statusFilter || undefined,
-          search: search || undefined,
-        });
-        setLabOrders(response.data.data || []);
-        if (response.data.pagination) {
-          setTotalPages(response.data.pagination.totalPages);
-        }
-      } catch (error) {
-        console.error('Failed to fetch lab orders:', error);
-        toast.error('Failed to load lab orders');
-      } finally {
-        setLoading(false);
-      }
-    };
+  // Fetch booking ticket data for selected appointment
+  const { data: bookingTicketData, isLoading: loadingBookingTicket, refetch: refetchBookingTicket } = useBookingData(
+    selectedBookingId,
+    15000, // Poll every 15 seconds
+    !!selectedBookingId
+  );
 
-    fetchOrders();
+  // Fetch orders function with polling support
+  const fetchOrders = useCallback(async (showLoading = true) => {
+    try {
+      if (showLoading) setLoading(true);
+      const response = await laboratoryApi.getOrders({
+        page,
+        limit: 20,
+        status: statusFilter || undefined,
+        search: search || undefined,
+      });
+      setLabOrders(response.data.data || []);
+      if (response.data.pagination) {
+        setTotalPages(response.data.pagination.totalPages);
+      }
+    } catch (error) {
+      console.error('Failed to fetch lab orders:', error);
+      if (showLoading) toast.error('Failed to load lab orders');
+    } finally {
+      if (showLoading) setLoading(false);
+    }
   }, [page, statusFilter, search]);
 
+  // Initial fetch and polling for orders
+  useEffect(() => {
+    fetchOrders();
+    const interval = setInterval(() => {
+      fetchOrders(false); // Silent refresh
+    }, 15000); // Poll every 15 seconds
+    return () => clearInterval(interval);
+  }, [fetchOrders]);
+
+  // Fetch critical results with polling
   useEffect(() => {
     const fetchCritical = async () => {
       try {
@@ -449,8 +471,11 @@ export default function Laboratory() {
     };
 
     fetchCritical();
+    const interval = setInterval(fetchCritical, 15000); // Poll every 15 seconds
+    return () => clearInterval(interval);
   }, []);
 
+  // Fetch stats with polling
   useEffect(() => {
     const fetchStats = async () => {
       try {
@@ -467,6 +492,8 @@ export default function Laboratory() {
     };
 
     fetchStats();
+    const interval = setInterval(fetchStats, 15000); // Poll every 15 seconds
+    return () => clearInterval(interval);
   }, []);
 
   const handleAISuggestTests = () => {
@@ -707,6 +734,15 @@ export default function Laboratory() {
                                 AI Interpret
                               </button>
                             )}
+                            {order.consultation?.appointmentId && (
+                              <button
+                                onClick={() => setSelectedBookingId(order.consultation!.appointmentId!)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 transition-all"
+                              >
+                                <EyeIcon className="h-3.5 w-3.5" />
+                                View Booking
+                              </button>
+                            )}
                             <button className="px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-all">
                               View Details
                             </button>
@@ -826,6 +862,24 @@ export default function Laboratory() {
             fetchOrders();
           }}
         />
+      )}
+
+      {/* Booking Ticket Modal */}
+      {selectedBookingId && bookingTicketData && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setSelectedBookingId(null)} />
+            <div className="relative w-full max-w-3xl">
+              <BookingTicket
+                data={bookingTicketData}
+                isLoading={loadingBookingTicket}
+                onRefresh={() => refetchBookingTicket()}
+                onClose={() => setSelectedBookingId(null)}
+                showActions={true}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

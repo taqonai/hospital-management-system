@@ -10,9 +10,12 @@ import {
   HeartIcon,
   CheckCircleIcon,
   XMarkIcon,
+  EyeIcon,
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
 import { useAIHealth } from '../../hooks/useAI';
+import { useBookingData } from '../../hooks/useBookingData';
+import { BookingTicket } from '../../components/booking';
 import { opdApi, appointmentApi, doctorApi, patientApi } from '../../services/api';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
@@ -674,9 +677,17 @@ export default function OPD() {
   const [loading, setLoading] = useState(true);
   const [showWalkInModal, setShowWalkInModal] = useState(false);
   const [selectedAppointmentForVitals, setSelectedAppointmentForVitals] = useState<QueueItem | null>(null);
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const { data: healthStatus } = useAIHealth();
   const isAIOnline = healthStatus?.status === 'connected';
   const { hasRole } = useAuth();
+
+  // Fetch booking ticket data when a booking is selected
+  const { data: bookingTicketData, isLoading: loadingBookingTicket, refetch: refetchBookingTicket } = useBookingData(
+    selectedBookingId,
+    15000, // Poll every 15 seconds
+    !!selectedBookingId
+  );
 
   // Role-based permissions
   // Nurses and receptionists can: add walk-ins, record vitals, manage queue
@@ -684,22 +695,30 @@ export default function OPD() {
   const canAddWalkIn = hasRole(['NURSE', 'RECEPTIONIST', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']);
   const canRecordVitals = hasRole(['NURSE', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']);
 
-  // Fetch queue
+  // Fetch queue with polling (every 15 seconds)
   useEffect(() => {
-    const fetchQueue = async () => {
+    const fetchQueue = async (showLoading = true) => {
       try {
-        setLoading(true);
+        if (showLoading) setLoading(true);
         const response = await opdApi.getQueue();
         setQueue(response.data.data || []);
       } catch (error) {
         console.error('Failed to fetch queue:', error);
-        toast.error('Failed to load queue');
+        // Only show error on initial load
+        if (showLoading) toast.error('Failed to load queue');
       } finally {
-        setLoading(false);
+        if (showLoading) setLoading(false);
       }
     };
 
     fetchQueue();
+
+    // Poll every 15 seconds
+    const interval = setInterval(() => {
+      fetchQueue(false);
+    }, 15000);
+
+    return () => clearInterval(interval);
   }, []);
 
   // Fetch stats
@@ -938,21 +957,31 @@ export default function OPD() {
                             </div>
                           </div>
                         </div>
-                        {/* Record Vitals Button - only for nurses and admins (not doctors) */}
-                        {patient.status !== 'IN_CONSULTATION' && canRecordVitals && (
+                        <div className="flex items-center gap-2">
+                          {/* View Booking Button */}
                           <button
-                            onClick={() => setSelectedAppointmentForVitals(patient)}
-                            className={clsx(
-                              'group relative inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-300',
-                              patient.vitalsRecordedAt
-                                ? 'bg-rose-100 text-rose-700 hover:bg-rose-200'
-                                : 'bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-md shadow-rose-500/25 hover:shadow-rose-500/40 hover:scale-105'
-                            )}
+                            onClick={() => setSelectedBookingId(patient.id)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-all duration-300"
                           >
-                            <HeartIcon className="h-3.5 w-3.5" />
-                            {patient.vitalsRecordedAt ? 'Update Vitals' : 'Record Vitals'}
+                            <EyeIcon className="h-3.5 w-3.5" />
+                            View
                           </button>
-                        )}
+                          {/* Record Vitals Button - only for nurses and admins (not doctors) */}
+                          {patient.status !== 'IN_CONSULTATION' && canRecordVitals && (
+                            <button
+                              onClick={() => setSelectedAppointmentForVitals(patient)}
+                              className={clsx(
+                                'group relative inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-300',
+                                patient.vitalsRecordedAt
+                                  ? 'bg-rose-100 text-rose-700 hover:bg-rose-200'
+                                  : 'bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-md shadow-rose-500/25 hover:shadow-rose-500/40 hover:scale-105'
+                              )}
+                            >
+                              <HeartIcon className="h-3.5 w-3.5" />
+                              {patient.vitalsRecordedAt ? 'Update Vitals' : 'Record Vitals'}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1066,6 +1095,20 @@ export default function OPD() {
             fetchQueue();
           }}
         />
+      )}
+
+      {/* Booking Ticket Modal */}
+      {selectedBookingId && bookingTicketData && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <BookingTicket
+              data={bookingTicketData}
+              isLoading={loadingBookingTicket}
+              onRefresh={() => refetchBookingTicket()}
+              onClose={() => setSelectedBookingId(null)}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

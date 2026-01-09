@@ -170,4 +170,29 @@ router.get(
   })
 );
 
+// Get unified booking ticket with all clinical data
+router.get(
+  '/booking-ticket/:appointmentId',
+  authenticate,
+  authorize('RECEPTIONIST', 'NURSE', 'DOCTOR', 'LAB_TECHNICIAN', 'RADIOLOGIST', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { appointmentId } = req.params;
+    const result = await opdService.getBookingTicket(appointmentId, req.user!.hospitalId);
+    sendSuccess(res, result);
+  })
+);
+
+// Get patient booking history for follow-up context
+router.get(
+  '/patient-history/:patientId',
+  authenticate,
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { patientId } = req.params;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const result = await opdService.getPatientBookingHistory(patientId, req.user!.hospitalId, limit);
+    sendSuccess(res, result);
+  })
+);
+
 export default router;

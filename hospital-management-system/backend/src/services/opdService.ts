@@ -482,6 +482,371 @@ export class OPDService {
       vitals: appointment.vitals[0] || null,
     };
   }
+
+  // Get unified booking ticket with all related clinical data
+  async getBookingTicket(appointmentId: string, hospitalId: string) {
+    const appointmentData = await prisma.appointment.findFirst({
+      where: { id: appointmentId, hospitalId },
+      include: {
+        patient: {
+          include: {
+            allergies: true,
+            medicalHistory: true,
+          },
+        },
+        doctor: {
+          include: {
+            user: { select: { firstName: true, lastName: true } },
+            department: { select: { id: true, name: true } },
+          },
+        },
+        vitals: {
+          orderBy: { recordedAt: 'desc' },
+          take: 1,
+        },
+        consultation: {
+          include: {
+            labOrders: {
+              include: {
+                tests: {
+                  include: {
+                    labTest: { select: { id: true, name: true, category: true } },
+                  },
+                },
+              },
+              orderBy: { orderedAt: 'desc' },
+            },
+            prescriptions: {
+              include: {
+                medications: true,
+              },
+            },
+            imagingOrders: {
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+        },
+        clinicalNotes: {
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          include: {
+            author: { select: { firstName: true, lastName: true } },
+          },
+        },
+      },
+    });
+
+    if (!appointmentData) {
+      throw new NotFoundError('Appointment not found');
+    }
+
+    // Type assertion for nested relations
+    const appointment = appointmentData as typeof appointmentData & {
+      patient: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        mrn: string;
+        phone: string;
+        email: string | null;
+        dateOfBirth: Date;
+        gender: string;
+        bloodGroup: string | null;
+        allergies: Array<{ id: string; allergen: string; severity: string; reaction: string | null }>;
+        medicalHistory: { conditions: string[]; surgeries: string[] } | null;
+      };
+      doctor: {
+        id: string;
+        specialization: string;
+        user: { firstName: string; lastName: string };
+        department: { id: string; name: string } | null;
+      };
+      vitals: Array<{ recordedBy: string; bloodPressureSys: number | null; bloodPressureDia: number | null; heartRate: number | null; temperature: number | null; respiratoryRate: number | null; oxygenSaturation: number | null; weight: number | null; height: number | null; bmi: number | null; painLevel: number | null; bloodGlucose: number | null; recordedAt: Date }>;
+      consultation: {
+        id: string;
+        chiefComplaint: string | null;
+        historyOfIllness: string | null;
+        examination: string | null;
+        diagnosis: string[];
+        icdCodes: string[];
+        treatmentPlan: string | null;
+        advice: string | null;
+        followUpDate: Date | null;
+        prescriptions: Array<{ medications: Array<{ name: string; dosage: string; frequency: string; duration: string; quantity: number; instructions: string | null }> }>;
+        labOrders: Array<{ id: string; orderNumber: string; status: string; priority: string; orderedAt: Date; completedAt: Date | null; tests: Array<{ id: string; status: string; result: string | null; resultValue: number | null; unit: string | null; normalRange: string | null; isAbnormal: boolean; isCritical: boolean; comments: string | null; performedAt: Date | null; labTest: { id: string; name: string; category: string } }> }>;
+        imagingOrders: Array<{ id: string; orderNumber: string; modalityType: string; bodyPart: string; priority: string; status: string }>;
+        createdAt: Date;
+      } | null;
+      clinicalNotes: Array<{ id: string; noteType: string; subjective: string | null; objective: string | null; assessment: string | null; plan: string | null; createdAt: Date; author: { firstName: string; lastName: string } }>;
+    };
+
+    // Fetch latest AI risk prediction for this patient
+    const riskPrediction = await prisma.aIPrediction.findFirst({
+      where: { patientId: appointment.patientId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Build timeline of events
+    const timeline: Array<{ timestamp: Date; event: string; actor?: string; details?: string }> = [];
+
+    // Add appointment creation
+    timeline.push({
+      timestamp: appointment.createdAt,
+      event: 'APPOINTMENT_CREATED',
+      details: `${appointment.type} appointment scheduled`,
+    });
+
+    // Add check-in if occurred
+    if (appointment.checkedInAt) {
+      timeline.push({
+        timestamp: appointment.checkedInAt,
+        event: 'CHECKED_IN',
+        details: `Token #${appointment.tokenNumber} assigned`,
+      });
+    }
+
+    // Add vitals recording if occurred
+    if (appointment.vitalsRecordedAt && appointment.vitals[0]) {
+      timeline.push({
+        timestamp: appointment.vitalsRecordedAt,
+        event: 'VITALS_RECORDED',
+        actor: appointment.vitals[0].recordedBy,
+        details: 'Pre-consultation vitals recorded',
+      });
+    }
+
+    // Add consultation if exists
+    if (appointment.consultation) {
+      timeline.push({
+        timestamp: appointment.consultation.createdAt,
+        event: 'CONSULTATION_STARTED',
+        details: appointment.consultation.chiefComplaint || 'Consultation in progress',
+      });
+
+      // Add lab orders
+      for (const labOrder of appointment.consultation.labOrders) {
+        timeline.push({
+          timestamp: labOrder.orderedAt,
+          event: 'LAB_ORDERED',
+          details: `${labOrder.tests.length} test(s) ordered - ${labOrder.status}`,
+        });
+      }
+    }
+
+    // Sort timeline by timestamp
+    timeline.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+    return {
+      appointment: {
+        id: appointment.id,
+        tokenNumber: appointment.tokenNumber,
+        status: appointment.status,
+        type: appointment.type,
+        appointmentDate: appointment.appointmentDate,
+        startTime: appointment.startTime,
+        endTime: appointment.endTime,
+        reason: appointment.reason,
+        notes: appointment.notes,
+        checkedInAt: appointment.checkedInAt,
+        vitalsRecordedAt: appointment.vitalsRecordedAt,
+        isFollowUp: appointment.isFollowUp,
+        parentAppointmentId: appointment.parentAppointmentId,
+        createdAt: appointment.createdAt,
+      },
+      patient: {
+        id: appointment.patient.id,
+        firstName: appointment.patient.firstName,
+        lastName: appointment.patient.lastName,
+        mrn: appointment.patient.mrn,
+        phone: appointment.patient.phone,
+        email: appointment.patient.email,
+        dateOfBirth: appointment.patient.dateOfBirth,
+        gender: appointment.patient.gender,
+        bloodGroup: appointment.patient.bloodGroup,
+        allergies: appointment.patient.allergies,
+        medicalHistory: appointment.patient.medicalHistory,
+      },
+      doctor: {
+        id: appointment.doctor.id,
+        firstName: appointment.doctor.user.firstName,
+        lastName: appointment.doctor.user.lastName,
+        specialization: appointment.doctor.specialization,
+        department: appointment.doctor.department,
+      },
+      vitals: appointment.vitals[0] || null,
+      riskPrediction: riskPrediction ? {
+        riskScore: riskPrediction.riskScore,
+        riskLevel: riskPrediction.riskLevel,
+        predictionType: riskPrediction.predictionType,
+        factors: riskPrediction.factors,
+        recommendations: riskPrediction.recommendations,
+        createdAt: riskPrediction.createdAt,
+      } : null,
+      consultation: appointment.consultation ? {
+        id: appointment.consultation.id,
+        chiefComplaint: appointment.consultation.chiefComplaint,
+        historyOfIllness: appointment.consultation.historyOfIllness,
+        examination: appointment.consultation.examination,
+        diagnosis: appointment.consultation.diagnosis,
+        icdCodes: appointment.consultation.icdCodes,
+        treatmentPlan: appointment.consultation.treatmentPlan,
+        advice: appointment.consultation.advice,
+        followUpDate: appointment.consultation.followUpDate,
+        prescriptions: appointment.consultation.prescriptions,
+        createdAt: appointment.consultation.createdAt,
+      } : null,
+      labOrders: appointment.consultation?.labOrders.map(order => ({
+        id: order.id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        priority: order.priority,
+        orderedAt: order.orderedAt,
+        completedAt: order.completedAt,
+        tests: order.tests.map(test => ({
+          id: test.id,
+          name: test.labTest.name,
+          category: test.labTest.category,
+          status: test.status,
+          result: test.result,
+          resultValue: test.resultValue,
+          unit: test.unit,
+          normalRange: test.normalRange,
+          isAbnormal: test.isAbnormal,
+          isCritical: test.isCritical,
+          comments: test.comments,
+          performedAt: test.performedAt,
+        })),
+      })) || [],
+      imagingOrders: appointment.consultation?.imagingOrders.map(order => ({
+        id: order.id,
+        orderNumber: order.orderNumber,
+        modalityType: order.modalityType,
+        bodyPart: order.bodyPart,
+        status: order.status,
+        priority: order.priority,
+        orderedAt: order.createdAt,
+      })) || [],
+      clinicalNotes: appointment.clinicalNotes.map(note => ({
+        id: note.id,
+        noteType: note.noteType,
+        subjective: note.subjective,
+        objective: note.objective,
+        assessment: note.assessment,
+        plan: note.plan,
+        status: note.status,
+        author: note.author ? `${note.author.firstName} ${note.author.lastName}` : null,
+        createdAt: note.createdAt,
+      })),
+      timeline,
+    };
+  }
+
+  // Get patient's booking history for follow-up context
+  async getPatientBookingHistory(patientId: string, hospitalId: string, limit: number = 10) {
+    // Verify patient belongs to hospital
+    const patient = await prisma.patient.findFirst({
+      where: { id: patientId, hospitalId },
+    });
+
+    if (!patient) {
+      throw new NotFoundError('Patient not found');
+    }
+
+    const appointments = await prisma.appointment.findMany({
+      where: {
+        patientId,
+        hospitalId,
+        status: 'COMPLETED',
+      },
+      orderBy: { appointmentDate: 'desc' },
+      take: limit,
+      include: {
+        doctor: {
+          include: {
+            user: { select: { firstName: true, lastName: true } },
+            department: { select: { name: true } },
+          },
+        },
+        vitals: {
+          orderBy: { recordedAt: 'desc' },
+          take: 1,
+        },
+        consultation: {
+          select: {
+            id: true,
+            chiefComplaint: true,
+            diagnosis: true,
+            icdCodes: true,
+            treatmentPlan: true,
+            followUpDate: true,
+            prescriptions: {
+              include: { medications: true },
+            },
+            labOrders: {
+              select: {
+                id: true,
+                orderNumber: true,
+                status: true,
+                tests: {
+                  select: {
+                    labTest: { select: { name: true } },
+                    result: true,
+                    isAbnormal: true,
+                    isCritical: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      patient: {
+        id: patient.id,
+        firstName: patient.firstName,
+        lastName: patient.lastName,
+        mrn: patient.mrn,
+      },
+      bookings: appointments.map(apt => ({
+        id: apt.id,
+        appointmentDate: apt.appointmentDate,
+        type: apt.type,
+        doctor: {
+          name: `Dr. ${apt.doctor.user.firstName} ${apt.doctor.user.lastName}`,
+          specialization: apt.doctor.specialization,
+          department: apt.doctor.department?.name || null,
+        },
+        vitals: apt.vitals[0] ? {
+          bloodPressureSys: apt.vitals[0].bloodPressureSys,
+          bloodPressureDia: apt.vitals[0].bloodPressureDia,
+          heartRate: apt.vitals[0].heartRate,
+          temperature: apt.vitals[0].temperature,
+          oxygenSaturation: apt.vitals[0].oxygenSaturation,
+          weight: apt.vitals[0].weight,
+          recordedAt: apt.vitals[0].recordedAt,
+        } : null,
+        consultation: apt.consultation ? {
+          chiefComplaint: apt.consultation.chiefComplaint,
+          diagnosis: apt.consultation.diagnosis,
+          icdCodes: apt.consultation.icdCodes,
+          treatmentPlan: apt.consultation.treatmentPlan,
+          followUpDate: apt.consultation.followUpDate,
+          prescriptionCount: apt.consultation.prescriptions.length,
+          labOrderCount: apt.consultation.labOrders.length,
+          labResults: apt.consultation.labOrders.flatMap(order =>
+            order.tests.map(test => ({
+              testName: test.labTest.name,
+              result: test.result,
+              isAbnormal: test.isAbnormal,
+              isCritical: test.isCritical,
+            }))
+          ),
+        } : null,
+      })),
+    };
+  }
 }
 
 export const opdService = new OPDService();

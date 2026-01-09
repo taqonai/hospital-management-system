@@ -24,9 +24,11 @@ import {
   XMarkIcon,
   MagnifyingGlassIcon,
   ChartBarIcon,
+  CalendarIcon,
 } from '@heroicons/react/24/outline';
-import { patientApi, aiApi, smartOrderApi, medSafetyApi, ipdApi, appointmentApi } from '../../services/api';
+import { patientApi, aiApi, smartOrderApi, medSafetyApi, ipdApi, appointmentApi, opdApi } from '../../services/api';
 import { useAIHealth } from '../../hooks/useAI';
+import { useBookingData, usePatientHistory } from '../../hooks/useBookingData';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 
@@ -247,6 +249,44 @@ export default function Consultation() {
       setSelectedPatientId(appointmentData.patientId);
     }
   }, [appointmentData, selectedPatientId]);
+
+  // Fetch unified booking data with nurse-recorded vitals (polls every 30s for lab results)
+  const { data: bookingData, refetch: refetchBookingData } = useBookingData(
+    appointmentId || null,
+    30000, // Poll every 30 seconds for lab result updates
+    !!appointmentId
+  );
+
+  // State to track if vitals were pre-filled by nurse
+  const [vitalsPrefilledByNurse, setVitalsPrefilledByNurse] = useState(false);
+  const [showPatientHistory, setShowPatientHistory] = useState(false);
+
+  // Pre-populate vitals from nurse-recorded data
+  useEffect(() => {
+    if (bookingData?.vitals && !vitalsPrefilledByNurse && Object.keys(vitals).length === 0) {
+      const nurseVitals = bookingData.vitals;
+      setVitals({
+        bloodPressureSys: nurseVitals.bloodPressureSys || undefined,
+        bloodPressureDia: nurseVitals.bloodPressureDia || undefined,
+        heartRate: nurseVitals.heartRate || undefined,
+        temperature: nurseVitals.temperature ? Number(nurseVitals.temperature) : undefined,
+        oxygenSaturation: nurseVitals.oxygenSaturation ? Number(nurseVitals.oxygenSaturation) : undefined,
+        respiratoryRate: nurseVitals.respiratoryRate || undefined,
+        weight: nurseVitals.weight ? Number(nurseVitals.weight) : undefined,
+        height: nurseVitals.height ? Number(nurseVitals.height) : undefined,
+        painLevel: nurseVitals.painLevel || undefined,
+      });
+      setVitalsPrefilledByNurse(true);
+      toast.success('Vitals pre-filled from nurse recording');
+    }
+  }, [bookingData, vitalsPrefilledByNurse, vitals]);
+
+  // Fetch patient booking history for follow-up context
+  const { data: patientHistoryData } = usePatientHistory(
+    selectedPatientId,
+    10,
+    !!selectedPatientId && showPatientHistory
+  );
 
   // Patient Search Query
   const { data: searchResults, isLoading: searchingPatients } = useQuery({
@@ -790,13 +830,32 @@ export default function Consultation() {
                 <p className="text-sm text-blue-200">MRN: {patientData.mrn}</p>
               </div>
             </div>
-            <button
-              onClick={() => setSelectedPatientId(null)}
-              className="px-3 py-1 bg-white/20 rounded-lg text-sm hover:bg-white/30 transition-colors"
-            >
-              Change
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowPatientHistory(true)}
+                className="px-3 py-1 bg-white/20 rounded-lg text-sm hover:bg-white/30 transition-colors flex items-center gap-1"
+              >
+                <ClockIcon className="w-4 h-4" />
+                Past Visits
+              </button>
+              <button
+                onClick={() => setSelectedPatientId(null)}
+                className="px-3 py-1 bg-white/20 rounded-lg text-sm hover:bg-white/30 transition-colors"
+              >
+                Change
+              </button>
+            </div>
           </div>
+
+          {/* Nurse Vitals Pre-filled Indicator */}
+          {vitalsPrefilledByNurse && bookingData?.vitals && (
+            <div className="mt-3 p-2 bg-green-500/30 backdrop-blur border border-green-300/30 rounded-xl">
+              <div className="flex items-center gap-2 text-sm">
+                <CheckCircleIcon className="h-5 w-5 text-green-100" />
+                <span>Vitals recorded by nurse at {new Date(bookingData.vitals.recordedAt).toLocaleTimeString()}</span>
+              </div>
+            </div>
+          )}
 
           {/* Allergies */}
           {patientData.allergies && patientData.allergies.length > 0 && (
@@ -1854,6 +1913,116 @@ export default function Consultation() {
           </div>
         </div>
       </div>
+
+      {/* Patient History Modal */}
+      {showPatientHistory && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-500 to-indigo-600 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <ClockIcon className="w-5 h-5" />
+                Past Visits - {patientData?.firstName} {patientData?.lastName}
+              </h3>
+              <button
+                onClick={() => setShowPatientHistory(false)}
+                className="text-white/80 hover:text-white"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
+              {patientHistoryData?.bookings && patientHistoryData.bookings.length > 0 ? (
+                <div className="space-y-4">
+                  {patientHistoryData.bookings.map((booking) => (
+                    <div key={booking.id} className="border border-gray-200 rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                            <CalendarIcon className="w-5 h-5 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">
+                              {new Date(booking.appointmentDate).toLocaleDateString()}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              {booking.doctor.name} - {booking.doctor.department}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">
+                          {booking.type}
+                        </span>
+                      </div>
+
+                      {booking.consultation && (
+                        <div className="mt-3 space-y-2">
+                          {booking.consultation.chiefComplaint && (
+                            <div>
+                              <span className="text-xs font-medium text-gray-500 uppercase">Chief Complaint</span>
+                              <p className="text-sm text-gray-700">{booking.consultation.chiefComplaint}</p>
+                            </div>
+                          )}
+                          {booking.consultation.diagnosis && booking.consultation.diagnosis.length > 0 && (
+                            <div>
+                              <span className="text-xs font-medium text-gray-500 uppercase">Diagnosis</span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {booking.consultation.diagnosis.map((dx, idx) => (
+                                  <span key={idx} className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
+                                    {dx}
+                                    {booking.consultation?.icdCodes[idx] && (
+                                      <span className="ml-1 text-blue-600">({booking.consultation.icdCodes[idx]})</span>
+                                    )}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {booking.vitals && (
+                            <div className="flex items-center gap-4 text-xs text-gray-500 mt-2">
+                              {booking.vitals.bloodPressureSys && (
+                                <span>BP: {booking.vitals.bloodPressureSys}/{booking.vitals.bloodPressureDia}</span>
+                              )}
+                              {booking.vitals.heartRate && <span>HR: {booking.vitals.heartRate}</span>}
+                              {booking.vitals.temperature && <span>Temp: {Number(booking.vitals.temperature).toFixed(1)}°C</span>}
+                            </div>
+                          )}
+                          {booking.consultation.labResults && booking.consultation.labResults.length > 0 && (
+                            <div className="mt-2">
+                              <span className="text-xs font-medium text-gray-500 uppercase">Lab Results</span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {booking.consultation.labResults.map((lab, idx) => (
+                                  <span
+                                    key={idx}
+                                    className={clsx(
+                                      'px-2 py-0.5 rounded text-xs',
+                                      lab.isCritical
+                                        ? 'bg-red-100 text-red-800'
+                                        : lab.isAbnormal
+                                        ? 'bg-yellow-100 text-yellow-800'
+                                        : 'bg-green-100 text-green-800'
+                                    )}
+                                  >
+                                    {lab.testName}: {lab.result || 'N/A'}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-gray-500">
+                  <ClockIcon className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+                  <p>No previous visits found for this patient.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
