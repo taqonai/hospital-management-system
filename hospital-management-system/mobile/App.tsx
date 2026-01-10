@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
+import { View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { Provider } from 'react-redux';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -10,6 +11,7 @@ import { store } from './src/store';
 import RootNavigator from './src/navigation/RootNavigator';
 import { colors } from './src/theme';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
+import { OfflineBanner } from './src/components/common/OfflineBanner';
 
 // Create a React Query client with sensible defaults
 const queryClient = new QueryClient({
@@ -26,9 +28,10 @@ const queryClient = new QueryClient({
   },
 });
 
-// Wrapper component to initialize push notifications inside NavigationContainer
+// Wrapper component to initialize push notifications and offline banner
 function AppContent() {
   const { error } = usePushNotifications();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (error) {
@@ -37,10 +40,13 @@ function AppContent() {
   }, [error]);
 
   return (
-    <>
+    <View style={{ flex: 1 }}>
       <StatusBar style="dark" backgroundColor={colors.background} />
+      <View style={{ paddingTop: insets.top }}>
+        <OfflineBanner />
+      </View>
       <RootNavigator />
-    </>
+    </View>
   );
 }
 

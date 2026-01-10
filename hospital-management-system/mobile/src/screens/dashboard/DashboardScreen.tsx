@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -11,12 +11,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme';
 import { useAppSelector } from '../../store';
-import { patientPortalApi } from '../../services/api';
+import { offlinePatientApi } from '../../services/api';
 import { DashboardSummary, Appointment } from '../../types';
+import { useOfflineData } from '../../hooks/useOfflineData';
+import { OfflineIndicator } from '../../components/common/OfflineBanner';
 
 const DashboardScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -25,19 +26,17 @@ const DashboardScreen: React.FC = () => {
   const {
     data: summary,
     isLoading,
-    isRefetching,
-    refetch,
-  } = useQuery({
-    queryKey: ['patient-portal-summary'],
-    queryFn: async () => {
-      const response = await patientPortalApi.getSummary();
-      return response.data.data as DashboardSummary;
-    },
+    isRefreshing,
+    isFromCache,
+    isStale,
+    refresh,
+  } = useOfflineData<DashboardSummary>({
+    fetcher: (forceRefresh) => offlinePatientApi.getSummary(forceRefresh),
   });
 
   const onRefresh = useCallback(() => {
-    refetch();
-  }, [refetch]);
+    refresh();
+  }, [refresh]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -113,10 +112,15 @@ const DashboardScreen: React.FC = () => {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={isRefetching} onRefresh={onRefresh} />
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
         }
         showsVerticalScrollIndicator={false}
       >
+        {/* Offline Indicator */}
+        {isFromCache && (
+          <OfflineIndicator isFromCache={isFromCache} isStale={isStale} />
+        )}
+
         {/* Header */}
         <View style={styles.header}>
           <View>
