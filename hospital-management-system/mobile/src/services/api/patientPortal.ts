@@ -1,0 +1,173 @@
+import api from './client';
+import {
+  ApiResponse,
+  DashboardSummary,
+  Appointment,
+  MedicalRecord,
+  Prescription,
+  LabResult,
+  Bill,
+  HealthInsight,
+  MedicalHistory,
+  Allergy,
+  Doctor,
+  Department,
+  TimeSlot,
+} from '../../types';
+
+export const patientPortalApi = {
+  // Dashboard
+  getSummary: () =>
+    api.get<ApiResponse<DashboardSummary>>('/patient-portal/summary'),
+
+  // Appointments
+  getAppointments: (params?: {
+    type?: string;
+    status?: string;
+    page?: number;
+    limit?: number;
+    startDate?: string;
+    endDate?: string;
+  }) =>
+    api.get<ApiResponse<Appointment[]>>('/patient-portal/appointments', { params }),
+
+  getAppointmentById: (id: string) =>
+    api.get<ApiResponse<Appointment>>(`/patient-portal/appointments/${id}`),
+
+  bookAppointment: (data: {
+    doctorId: string;
+    appointmentDate: string;
+    startTime: string;
+    type: string;
+    reason?: string;
+  }) =>
+    api.post<ApiResponse<Appointment>>('/patient-portal/appointments', data),
+
+  cancelAppointment: (id: string, reason?: string) =>
+    api.post<ApiResponse<Appointment>>(`/patient-portal/appointments/${id}/cancel`, { reason }),
+
+  rescheduleAppointment: (id: string, data: { appointmentDate: string; startTime: string }) =>
+    api.put<ApiResponse<Appointment>>(`/patient-portal/appointments/${id}/reschedule`, data),
+
+  getAvailableSlots: (doctorId: string, date: string) =>
+    api.get<ApiResponse<TimeSlot[]>>(`/patient-portal/doctors/${doctorId}/slots`, {
+      params: { date },
+    }),
+
+  // Doctors and Departments
+  getDoctors: (params?: { departmentId?: string; search?: string }) =>
+    api.get<ApiResponse<Doctor[]>>('/patient-portal/doctors', { params }),
+
+  getDepartments: () =>
+    api.get<ApiResponse<Department[]>>('/patient-portal/departments'),
+
+  // Medical Records
+  getMedicalRecords: (params?: {
+    type?: string;
+    visitType?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+    startDate?: string;
+    endDate?: string;
+  }) =>
+    api.get<ApiResponse<MedicalRecord[]>>('/patient-portal/records', { params }),
+
+  getMedicalRecordById: (id: string) =>
+    api.get<ApiResponse<MedicalRecord>>(`/patient-portal/records/${id}`),
+
+  // Prescriptions
+  getPrescriptions: (params?: { status?: string; page?: number; limit?: number }) =>
+    api.get<ApiResponse<Prescription[]>>('/patient-portal/prescriptions', { params }),
+
+  getPrescriptionById: (id: string) =>
+    api.get<ApiResponse<Prescription>>(`/patient-portal/prescriptions/${id}`),
+
+  requestRefill: (id: string) =>
+    api.post<ApiResponse<{ message: string }>>(`/patient-portal/prescriptions/${id}/refill`),
+
+  // Lab Results
+  getLabResults: (params?: { status?: string; page?: number; limit?: number }) =>
+    api.get<ApiResponse<LabResult[]>>('/patient-portal/labs', { params }),
+
+  getLabResultById: (id: string) =>
+    api.get<ApiResponse<LabResult>>(`/patient-portal/labs/${id}`),
+
+  // Billing
+  getBillingSummary: () =>
+    api.get<ApiResponse<{ totalDue: number; lastPaymentDate?: string; pendingBills: number }>>('/patient-portal/billing/summary'),
+
+  getBills: (params?: { type?: 'pending' | 'history' | 'all'; page?: number; limit?: number }) =>
+    api.get<ApiResponse<Bill[]>>('/patient-portal/bills', { params }),
+
+  getBillById: (id: string) =>
+    api.get<ApiResponse<Bill>>(`/patient-portal/bills/${id}`),
+
+  // Health Insights
+  getHealthInsights: () =>
+    api.get<ApiResponse<HealthInsight>>('/patient-portal/health-insights'),
+
+  // AI Chat
+  aiChat: (data: { message: string; context?: string; history?: any[] }) =>
+    api.post<ApiResponse<{ response: string; suggestions?: string[] }>>('/patient-portal/ai-chat', data),
+
+  // Medical History
+  getMedicalHistory: () =>
+    api.get<ApiResponse<MedicalHistory>>('/patient-portal/medical-history'),
+
+  updateMedicalHistory: (data: Partial<MedicalHistory>) =>
+    api.put<ApiResponse<MedicalHistory>>('/patient-portal/medical-history', data),
+
+  analyzeMedicalHistory: () =>
+    api.post<ApiResponse<{ insights: string[]; recommendations: string[] }>>('/patient-portal/medical-history/ai-analyze'),
+
+  // Allergies
+  getAllergies: () =>
+    api.get<ApiResponse<Allergy[]>>('/patient-portal/allergies'),
+
+  addAllergy: (data: Omit<Allergy, 'id'>) =>
+    api.post<ApiResponse<Allergy>>('/patient-portal/allergies', data),
+
+  updateAllergy: (id: string, data: Partial<Allergy>) =>
+    api.put<ApiResponse<Allergy>>(`/patient-portal/allergies/${id}`, data),
+
+  deleteAllergy: (id: string) =>
+    api.delete<ApiResponse<{ message: string }>>(`/patient-portal/allergies/${id}`),
+
+  // Settings
+  getNotificationPreferences: () =>
+    api.get<ApiResponse<{
+      appointmentReminders: boolean;
+      labResultsReady: boolean;
+      prescriptionReminders: boolean;
+      healthTips: boolean;
+      billingAlerts: boolean;
+    }>>('/patient-portal/settings/notifications'),
+
+  updateNotificationPreferences: (data: {
+    appointmentReminders?: boolean;
+    labResultsReady?: boolean;
+    prescriptionReminders?: boolean;
+    healthTips?: boolean;
+    billingAlerts?: boolean;
+  }) =>
+    api.put<ApiResponse<any>>('/patient-portal/settings/notifications', data),
+
+  getCommunicationPreferences: () =>
+    api.get<ApiResponse<{
+      emailNotifications: boolean;
+      smsNotifications: boolean;
+      pushNotifications: boolean;
+      preferredLanguage: string;
+    }>>('/patient-portal/settings/communication'),
+
+  updateCommunicationPreferences: (data: {
+    emailNotifications?: boolean;
+    smsNotifications?: boolean;
+    pushNotifications?: boolean;
+    preferredLanguage?: string;
+  }) =>
+    api.put<ApiResponse<any>>('/patient-portal/settings/communication', data),
+};
+
+export default patientPortalApi;
