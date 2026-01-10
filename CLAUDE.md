@@ -21,6 +21,11 @@ npm run build:strict         # TypeScript compile with strict mode
 npm test                     # Run Jest tests
 npm test -- path/to/test.ts  # Run single test file
 npm run lint                 # ESLint
+
+# Additional Prisma aliases
+npm run db:generate          # Alias for prisma generate
+npm run db:migrate           # Alias for prisma migrate dev
+npm run db:push              # Direct schema push (skips migrations, useful for prototyping)
 ```
 
 ### Frontend (React/Vite/TypeScript)
@@ -29,6 +34,7 @@ cd hospital-management-system/frontend
 npm install
 npm run dev                  # Start dev server (port 3000)
 npm run build                # TypeScript + Vite build
+npm run preview              # Preview production build locally
 npm run lint                 # ESLint
 ```
 
