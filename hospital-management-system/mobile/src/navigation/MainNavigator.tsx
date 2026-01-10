@@ -17,6 +17,7 @@ import DashboardScreen from '../screens/dashboard/DashboardScreen';
 // Appointments screens
 import AppointmentsScreen from '../screens/appointments/AppointmentsScreen';
 import BookAppointmentScreen from '../screens/appointments/BookAppointmentScreen';
+import AppointmentDetailScreen from '../screens/appointments/AppointmentDetailScreen';
 
 // Health screens
 import HealthHubScreen from '../screens/health/HealthHubScreen';
@@ -25,7 +26,9 @@ import SymptomCheckerScreen from '../screens/health/SymptomCheckerScreen';
 import HealthAssistantScreen from '../screens/health/HealthAssistantScreen';
 import MedicalRecordsScreen from '../screens/records/MedicalRecordsScreen';
 import PrescriptionsScreen from '../screens/records/PrescriptionsScreen';
+import PrescriptionDetailScreen from '../screens/records/PrescriptionDetailScreen';
 import LabResultsScreen from '../screens/records/LabResultsScreen';
+import LabResultDetailScreen from '../screens/records/LabResultDetailScreen';
 
 // Settings screens
 import SettingsScreen from '../screens/settings/SettingsScreen';
@@ -35,6 +38,7 @@ import CommunicationSettingsScreen from '../screens/settings/CommunicationSettin
 import ChangePasswordScreen from '../screens/settings/ChangePasswordScreen';
 import AboutScreen from '../screens/settings/AboutScreen';
 import BillingScreen from '../screens/billing/BillingScreen';
+import BillDetailScreen from '../screens/billing/BillDetailScreen';
 
 // Create navigators
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -78,6 +82,11 @@ const AppointmentsStackNavigator = () => (
       component={BookAppointmentScreen}
       options={{ title: 'Book Appointment' }}
     />
+    <AppointmentsStack.Screen
+      name="AppointmentDetail"
+      component={AppointmentDetailScreen}
+      options={{ title: 'Appointment Details' }}
+    />
   </AppointmentsStack.Navigator>
 );
 
@@ -120,9 +129,19 @@ const HealthStackNavigator = () => (
       options={{ title: 'Prescriptions' }}
     />
     <HealthStack.Screen
+      name="PrescriptionDetail"
+      component={PrescriptionDetailScreen}
+      options={{ title: 'Prescription Details' }}
+    />
+    <HealthStack.Screen
       name="LabResults"
       component={LabResultsScreen}
       options={{ title: 'Lab Results' }}
+    />
+    <HealthStack.Screen
+      name="LabResultDetail"
+      component={LabResultDetailScreen}
+      options={{ title: 'Lab Result Details' }}
     />
   </HealthStack.Navigator>
 );
@@ -169,6 +188,11 @@ const SettingsStackNavigator = () => (
       name="Billing"
       component={BillingScreen}
       options={{ title: 'Billing' }}
+    />
+    <SettingsStack.Screen
+      name="BillDetail"
+      component={BillDetailScreen}
+      options={{ title: 'Bill Details' }}
     />
   </SettingsStack.Navigator>
 );

@@ -9,6 +9,7 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme';
 import { patientPortalApi } from '../../services/api';
@@ -17,12 +18,12 @@ import { LabResult } from '../../types';
 type FilterType = 'all' | 'pending' | 'completed' | 'abnormal';
 
 const LabResultsScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
   const [labResults, setLabResults] = useState<LabResult[]>([]);
   const [filteredResults, setFilteredResults] = useState<LabResult[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     loadLabResults();
@@ -115,13 +116,12 @@ const LabResultsScreen: React.FC = () => {
   ];
 
   const renderLabResultItem = ({ item }: { item: LabResult }) => {
-    const isExpanded = expandedId === item.id;
     const statusColor = getStatusColor(item.status);
 
     return (
       <TouchableOpacity
         style={styles.card}
-        onPress={() => setExpandedId(isExpanded ? null : item.id)}
+        onPress={() => navigation.navigate('LabResultDetail', { resultId: item.id })}
         activeOpacity={0.7}
       >
         <View style={styles.cardHeader}>
@@ -157,85 +157,8 @@ const LabResultsScreen: React.FC = () => {
           </View>
         )}
 
-        {isExpanded && item.status === 'COMPLETED' && (
-          <View style={styles.expandedContent}>
-            {item.results && item.results.length > 0 ? (
-              <View style={styles.resultsTable}>
-                <View style={styles.tableHeader}>
-                  <Text style={[styles.tableHeaderText, { flex: 2 }]}>Test</Text>
-                  <Text style={[styles.tableHeaderText, { flex: 1 }]}>Result</Text>
-                  <Text style={[styles.tableHeaderText, { flex: 1.5 }]}>Reference</Text>
-                </View>
-                {item.results.map((result, index) => {
-                  const valueStatus = getValueStatus(result.value, result.minRange, result.maxRange);
-                  return (
-                    <View
-                      key={index}
-                      style={[
-                        styles.tableRow,
-                        index % 2 === 0 && styles.tableRowAlt,
-                      ]}
-                    >
-                      <Text style={[styles.tableCell, { flex: 2 }]} numberOfLines={1}>
-                        {result.parameter || result.name}
-                      </Text>
-                      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={[styles.tableCell, { color: getValueColor(valueStatus) }]}>
-                          {result.value} {result.unit}
-                        </Text>
-                        {valueStatus !== 'normal' && (
-                          <Ionicons
-                            name={valueStatus === 'high' ? 'arrow-up' : 'arrow-down'}
-                            size={12}
-                            color={getValueColor(valueStatus)}
-                            style={{ marginLeft: 2 }}
-                          />
-                        )}
-                      </View>
-                      <Text style={[styles.tableCell, styles.referenceText, { flex: 1.5 }]}>
-                        {result.minRange !== undefined && result.maxRange !== undefined
-                          ? `${result.minRange} - ${result.maxRange}`
-                          : result.normalRange || '-'}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
-            ) : (
-              <Text style={styles.noResultsText}>No detailed results available</Text>
-            )}
-
-            {item.notes && (
-              <View style={styles.notesSection}>
-                <Text style={styles.notesLabel}>Notes:</Text>
-                <Text style={styles.notesText}>{item.notes}</Text>
-              </View>
-            )}
-
-            {item.reportUrl && (
-              <TouchableOpacity style={styles.downloadButton}>
-                <Ionicons name="download-outline" size={18} color={colors.primary[600]} />
-                <Text style={styles.downloadText}>Download Full Report</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-
-        {item.status === 'PENDING' && isExpanded && (
-          <View style={styles.pendingMessage}>
-            <Ionicons name="time-outline" size={20} color={colors.warning[600]} />
-            <Text style={styles.pendingText}>
-              Results are being processed. Check back later.
-            </Text>
-          </View>
-        )}
-
-        <View style={styles.expandIndicator}>
-          <Ionicons
-            name={isExpanded ? 'chevron-up' : 'chevron-down'}
-            size={20}
-            color={colors.gray[400]}
-          />
+        <View style={styles.chevronIndicator}>
+          <Ionicons name="chevron-forward" size={20} color={colors.gray[400]} />
         </View>
       </TouchableOpacity>
     );
@@ -512,9 +435,9 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     color: colors.warning[700],
   },
-  expandIndicator: {
-    alignItems: 'center',
-    marginTop: spacing.sm,
+  chevronIndicator: {
+    justifyContent: 'center',
+    paddingLeft: spacing.sm,
   },
   emptyState: {
     flex: 1,

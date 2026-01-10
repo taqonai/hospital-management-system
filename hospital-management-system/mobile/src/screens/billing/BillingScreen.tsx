@@ -9,6 +9,7 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme';
 import { patientPortalApi } from '../../services/api';
@@ -17,13 +18,13 @@ import { Bill } from '../../types';
 type FilterType = 'all' | 'pending' | 'paid';
 
 const BillingScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
   const [bills, setBills] = useState<Bill[]>([]);
   const [filteredBills, setFilteredBills] = useState<Bill[]>([]);
   const [summary, setSummary] = useState<{ totalDue: number; pendingBills: number } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -129,14 +130,12 @@ const BillingScreen: React.FC = () => {
   };
 
   const renderBillItem = ({ item }: { item: Bill }) => {
-    const isExpanded = expandedId === item.id;
     const statusColor = getStatusColor(item.status);
-    const isPending = item.status === 'PENDING' || item.status === 'OVERDUE';
 
     return (
       <TouchableOpacity
         style={styles.billCard}
-        onPress={() => setExpandedId(isExpanded ? null : item.id)}
+        onPress={() => navigation.navigate('BillDetail', { billId: item.id })}
         activeOpacity={0.7}
       >
         <View style={styles.billHeader}>
@@ -161,68 +160,8 @@ const BillingScreen: React.FC = () => {
           </View>
         </View>
 
-        {isExpanded && (
-          <View style={styles.billDetails}>
-            {item.items && item.items.length > 0 && (
-              <View style={styles.itemsSection}>
-                <Text style={styles.sectionLabel}>Items</Text>
-                {item.items.map((lineItem, index) => (
-                  <View key={index} style={styles.lineItem}>
-                    <Text style={styles.lineItemName}>{lineItem.description || lineItem.name}</Text>
-                    <Text style={styles.lineItemAmount}>{formatCurrency(lineItem.amount || lineItem.total)}</Text>
-                  </View>
-                ))}
-                <View style={styles.totalRow}>
-                  <Text style={styles.totalLabel}>Total</Text>
-                  <Text style={styles.totalAmount}>{formatCurrency(item.totalAmount || item.amount)}</Text>
-                </View>
-              </View>
-            )}
-
-            {item.paidAmount && Number(item.paidAmount) > 0 && (
-              <View style={styles.paymentInfo}>
-                <View style={styles.paymentRow}>
-                  <Text style={styles.paymentLabel}>Paid Amount</Text>
-                  <Text style={styles.paymentValue}>{formatCurrency(item.paidAmount)}</Text>
-                </View>
-                {(item.balanceAmount || item.balanceDue) && Number(item.balanceAmount || item.balanceDue) > 0 && (
-                  <View style={styles.paymentRow}>
-                    <Text style={styles.paymentLabel}>Balance Due</Text>
-                    <Text style={[styles.paymentValue, { color: colors.error[600] }]}>
-                      {formatCurrency(item.balanceAmount || item.balanceDue)}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
-
-            {item.dueDate && (
-              <View style={styles.dueDateContainer}>
-                <Ionicons name="calendar-outline" size={16} color={colors.gray[500]} />
-                <Text style={styles.dueDateText}>Due: {formatDate(item.dueDate)}</Text>
-              </View>
-            )}
-
-            {isPending && (
-              <TouchableOpacity style={styles.payButton}>
-                <Ionicons name="card" size={18} color={colors.white} />
-                <Text style={styles.payButtonText}>Pay Now</Text>
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity style={styles.downloadButton}>
-              <Ionicons name="download-outline" size={18} color={colors.primary[600]} />
-              <Text style={styles.downloadText}>Download Invoice</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        <View style={styles.expandIndicator}>
-          <Ionicons
-            name={isExpanded ? 'chevron-up' : 'chevron-down'}
-            size={20}
-            color={colors.gray[400]}
-          />
+        <View style={styles.chevronIndicator}>
+          <Ionicons name="chevron-forward" size={20} color={colors.gray[400]} />
         </View>
       </TouchableOpacity>
     );
@@ -543,9 +482,9 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.medium,
     color: colors.primary[600],
   },
-  expandIndicator: {
-    alignItems: 'center',
-    marginTop: spacing.sm,
+  chevronIndicator: {
+    justifyContent: 'center',
+    paddingLeft: spacing.sm,
   },
   emptyState: {
     flex: 1,

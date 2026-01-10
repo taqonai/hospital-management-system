@@ -39,6 +39,14 @@ export const colors = {
     600: '#DC2626',
     700: '#B91C1C',
   },
+  // Info colors
+  info: {
+    50: '#EFF6FF',
+    100: '#DBEAFE',
+    500: '#3B82F6',
+    600: '#2563EB',
+    700: '#1D4ED8',
+  },
   // Neutral colors
   gray: {
     50: '#F9FAFB',

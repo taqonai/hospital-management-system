@@ -9,6 +9,7 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme';
 import { patientPortalApi } from '../../services/api';
@@ -17,13 +18,12 @@ import { Prescription } from '../../types';
 type FilterType = 'all' | 'active' | 'completed' | 'refill';
 
 const PrescriptionsScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [filteredPrescriptions, setFilteredPrescriptions] = useState<Prescription[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [refillLoading, setRefillLoading] = useState<string | null>(null);
 
   useEffect(() => {
     loadPrescriptions();
@@ -69,19 +69,6 @@ const PrescriptionsScreen: React.FC = () => {
     loadPrescriptions();
   }, []);
 
-  const handleRequestRefill = async (prescriptionId: string) => {
-    setRefillLoading(prescriptionId);
-    try {
-      await patientPortalApi.requestRefill(prescriptionId);
-      Alert.alert('Success', 'Refill request submitted successfully');
-      loadPrescriptions();
-    } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Failed to request refill');
-    } finally {
-      setRefillLoading(null);
-    }
-  };
-
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -110,14 +97,12 @@ const PrescriptionsScreen: React.FC = () => {
   ];
 
   const renderPrescriptionItem = ({ item }: { item: Prescription }) => {
-    const isExpanded = expandedId === item.id;
     const statusColor = getStatusColor(item.status);
-    const canRefill = item.refillsRemaining && item.refillsRemaining > 0 && item.status === 'ACTIVE';
 
     return (
       <TouchableOpacity
         style={styles.card}
-        onPress={() => setExpandedId(isExpanded ? null : item.id)}
+        onPress={() => navigation.navigate('PrescriptionDetail', { prescriptionId: item.id })}
         activeOpacity={0.7}
       >
         <View style={styles.cardHeader}>
@@ -146,68 +131,8 @@ const PrescriptionsScreen: React.FC = () => {
           </View>
         </View>
 
-        {isExpanded && (
-          <View style={styles.expandedContent}>
-            {item.instructions && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Instructions:</Text>
-                <Text style={styles.detailValue}>{item.instructions}</Text>
-              </View>
-            )}
-
-            {item.duration && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Duration:</Text>
-                <Text style={styles.detailValue}>{item.duration}</Text>
-              </View>
-            )}
-
-            {item.quantity && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Quantity:</Text>
-                <Text style={styles.detailValue}>{item.quantity}</Text>
-              </View>
-            )}
-
-            {item.refillsRemaining !== undefined && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Refills Remaining:</Text>
-                <Text style={styles.detailValue}>{item.refillsRemaining}</Text>
-              </View>
-            )}
-
-            {item.pharmacy && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Pharmacy:</Text>
-                <Text style={styles.detailValue}>{item.pharmacy}</Text>
-              </View>
-            )}
-
-            {canRefill && (
-              <TouchableOpacity
-                style={styles.refillButton}
-                onPress={() => handleRequestRefill(item.id)}
-                disabled={refillLoading === item.id}
-              >
-                {refillLoading === item.id ? (
-                  <ActivityIndicator size="small" color={colors.white} />
-                ) : (
-                  <>
-                    <Ionicons name="refresh" size={18} color={colors.white} />
-                    <Text style={styles.refillButtonText}>Request Refill</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-
-        <View style={styles.expandIndicator}>
-          <Ionicons
-            name={isExpanded ? 'chevron-up' : 'chevron-down'}
-            size={20}
-            color={colors.gray[400]}
-          />
+        <View style={styles.chevronIndicator}>
+          <Ionicons name="chevron-forward" size={20} color={colors.gray[400]} />
         </View>
       </TouchableOpacity>
     );
@@ -419,9 +344,9 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.semibold,
     color: colors.white,
   },
-  expandIndicator: {
-    alignItems: 'center',
-    marginTop: spacing.sm,
+  chevronIndicator: {
+    justifyContent: 'center',
+    paddingLeft: spacing.sm,
   },
   emptyState: {
     flex: 1,

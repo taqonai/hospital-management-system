@@ -128,6 +128,7 @@ export interface Appointment {
   reason?: string;
   notes?: string;
   tokenNumber?: number;
+  cancelReason?: string;
   patient: {
     id: string;
     firstName: string;
@@ -223,12 +224,15 @@ export interface Prescription {
 export interface LabResultItem {
   name: string;
   parameter?: string;
+  testName?: string;
   value: string;
   unit: string;
-  normalRange: string;
+  normalRange?: string;
+  referenceRange?: string;
   minRange?: number;
   maxRange?: number;
-  isAbnormal: boolean;
+  isAbnormal?: boolean;
+  flag?: string;
 }
 
 export interface LabResult {
@@ -268,7 +272,20 @@ export interface Bill {
   dueDate: string;
   billDate?: string;
   createdAt: string;
-  items: BillItem[];
+  items?: BillItem[];
+  subtotal?: number;
+  discount?: number;
+  tax?: number;
+  insuranceCoverage?: number;
+  payments?: BillPayment[];
+}
+
+export interface BillPayment {
+  id: string;
+  amount: number;
+  method: string;
+  date: string;
+  reference?: string;
 }
 
 export interface BillItem {
