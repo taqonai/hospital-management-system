@@ -46,6 +46,15 @@ export interface PatientUser {
   lastName: string;
   hospitalId: string;
   avatar?: string;
+  phone?: string;
+  dateOfBirth?: string;
+  gender?: 'MALE' | 'FEMALE' | 'OTHER';
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
 }
 
 export interface Patient {
@@ -193,18 +202,33 @@ export interface Allergy {
 export interface Prescription {
   id: string;
   medication: string;
+  medicationName?: string;
   dosage: string;
   frequency: string;
   duration: string;
   instructions?: string;
   refillsRemaining: number;
-  status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+  status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | 'DISPENSED';
   prescribedDate: string;
+  quantity?: number;
+  pharmacy?: string;
+  doctorName?: string;
   doctor: {
     firstName: string;
     lastName: string;
     specialization: string;
   };
+}
+
+export interface LabResultItem {
+  name: string;
+  parameter?: string;
+  value: string;
+  unit: string;
+  normalRange: string;
+  minRange?: number;
+  maxRange?: number;
+  isAbnormal: boolean;
 }
 
 export interface LabResult {
@@ -216,7 +240,13 @@ export interface LabResult {
   isAbnormal: boolean;
   isCritical: boolean;
   resultDate: string;
-  status: 'PENDING' | 'COMPLETED' | 'VERIFIED';
+  status: 'PENDING' | 'COMPLETED' | 'VERIFIED' | 'IN_PROGRESS';
+  orderedDate?: string;
+  doctorName?: string;
+  hasAbnormalValues?: boolean;
+  results?: LabResultItem[];
+  notes?: string;
+  reportUrl?: string;
   orderedBy: {
     firstName: string;
     lastName: string;
@@ -226,44 +256,89 @@ export interface LabResult {
 export interface Bill {
   id: string;
   invoiceNumber: string;
+  billNumber?: string;
+  type?: string;
+  description?: string;
   amount: number;
+  totalAmount?: number;
   paidAmount: number;
   balanceDue: number;
-  status: 'PENDING' | 'PARTIAL' | 'PAID' | 'CANCELLED';
+  balanceAmount?: number;
+  status: 'PENDING' | 'PARTIAL' | 'PAID' | 'CANCELLED' | 'OVERDUE';
   dueDate: string;
+  billDate?: string;
   createdAt: string;
   items: BillItem[];
 }
 
 export interface BillItem {
   id: string;
+  name?: string;
   description: string;
   quantity: number;
   unitPrice: number;
+  amount?: number;
   total: number;
+}
+
+export interface HealthInsightCategory {
+  name: string;
+  score: number;
+  recommendation?: string;
+}
+
+export interface HealthInsightVital {
+  type: string;
+  value: string;
+  unit: string;
+  isAbnormal?: boolean;
+}
+
+export interface HealthInsightRecommendation {
+  title: string;
+  description: string;
+  priority: 'low' | 'medium' | 'high';
 }
 
 export interface HealthInsight {
   healthScore: number;
+  lastUpdated?: string;
   vitalsTrend: {
     metric: string;
     trend: 'improving' | 'stable' | 'declining';
     value: number;
     previousValue: number;
   }[];
-  recommendations: string[];
+  categories?: HealthInsightCategory[];
+  recentVitals?: HealthInsightVital[];
+  recommendations: (string | HealthInsightRecommendation)[];
+  tips?: string[];
   alerts: {
     type: 'warning' | 'info' | 'critical';
     message: string;
   }[];
 }
 
+export interface MedicalRecordAttachment {
+  id: string;
+  name: string;
+  url: string;
+  type: string;
+}
+
 export interface MedicalRecord {
   id: string;
-  type: 'CONSULTATION' | 'LAB_RESULT' | 'IMAGING' | 'PRESCRIPTION' | 'DISCHARGE_SUMMARY';
+  type: 'CONSULTATION' | 'LAB_RESULT' | 'IMAGING' | 'PRESCRIPTION' | 'DISCHARGE_SUMMARY' | 'PROCEDURE';
   title: string;
   description?: string;
   date: string;
+  createdAt?: string;
+  diagnosis?: string;
+  doctorName?: string;
+  departmentName?: string;
+  notes?: string;
+  treatment?: string;
+  followUp?: string;
   doctor?: {
     firstName: string;
     lastName: string;
@@ -272,7 +347,7 @@ export interface MedicalRecord {
   department?: {
     name: string;
   };
-  attachments?: string[];
+  attachments?: (string | MedicalRecordAttachment)[];
 }
 
 // API Response types
@@ -341,9 +416,17 @@ export interface SymptomCheckerResult {
     severity: 'LOW' | 'MEDIUM' | 'HIGH';
   }[];
   urgency: 'SELF_CARE' | 'SCHEDULE_APPOINTMENT' | 'URGENT_CARE' | 'EMERGENCY';
+  recommendation?: string;
   recommendations: string[];
+  nextSteps?: string[];
   suggestedDepartment?: string;
   suggestedDoctor?: Doctor;
+}
+
+// TriageResult extends SymptomCheckerResult for UI purposes
+export interface TriageResult extends SymptomCheckerResult {
+  recommendation: string;
+  nextSteps: string[];
 }
 
 // Navigation types

@@ -1,10 +1,11 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme';
 import { useAppDispatch, useAppSelector } from '../../store';
-import { logout } from '../../store/authSlice';
+import { logout, enableBiometric, disableBiometric, checkBiometricStatus } from '../../store/authSlice';
+import { biometricService } from '../../services/biometric/biometricService';
 
 interface SettingItem {
   id: string;
@@ -19,7 +20,37 @@ interface SettingItem {
 const SettingsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const dispatch = useAppDispatch();
-  const { user } = useAppSelector((state) => state.auth);
+  const { user, biometricStatus, isBiometricEnabled } = useAppSelector((state) => state.auth);
+  const [biometricLoading, setBiometricLoading] = useState(false);
+
+  // Check biometric status on mount
+  useEffect(() => {
+    dispatch(checkBiometricStatus());
+  }, [dispatch]);
+
+  const biometricAvailable = biometricStatus?.isAvailable && biometricStatus?.isEnrolled;
+  const biometricDisplayName = biometricStatus
+    ? biometricService.getBiometricDisplayName(biometricStatus.biometricType)
+    : 'Biometric';
+
+  const handleBiometricToggle = async (value: boolean) => {
+    if (biometricLoading) return;
+
+    setBiometricLoading(true);
+    try {
+      if (value) {
+        await dispatch(enableBiometric()).unwrap();
+        Alert.alert('Success', `${biometricDisplayName} login enabled`);
+      } else {
+        await dispatch(disableBiometric()).unwrap();
+        Alert.alert('Success', `${biometricDisplayName} login disabled`);
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error || 'Failed to update biometric settings');
+    } finally {
+      setBiometricLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert(
@@ -171,6 +202,31 @@ const SettingsScreen: React.FC = () => {
                 )}
               </TouchableOpacity>
             ))}
+
+            {/* Add Biometric Toggle to Security Group */}
+            {group.title === 'Security' && biometricAvailable && (
+              <View style={[styles.settingItem, styles.settingItemBorder]}>
+                <Ionicons
+                  name={biometricStatus?.biometricType === 'facial' ? 'scan-outline' : 'finger-print-outline'}
+                  size={22}
+                  color={colors.gray[600]}
+                />
+                <View style={styles.biometricTextContainer}>
+                  <Text style={styles.settingTitle}>{biometricDisplayName}</Text>
+                  <Text style={styles.biometricSubtitle}>Quick sign-in with biometrics</Text>
+                </View>
+                {biometricLoading ? (
+                  <ActivityIndicator size="small" color={colors.primary[600]} />
+                ) : (
+                  <Switch
+                    value={isBiometricEnabled}
+                    onValueChange={handleBiometricToggle}
+                    trackColor={{ false: colors.gray[300], true: colors.primary[200] }}
+                    thumbColor={isBiometricEnabled ? colors.primary[600] : colors.gray[100]}
+                  />
+                )}
+              </View>
+            )}
           </View>
         </View>
       ))}
@@ -251,6 +307,14 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: typography.fontSize.base,
     color: colors.text.primary,
+  },
+  biometricTextContainer: {
+    flex: 1,
+  },
+  biometricSubtitle: {
+    fontSize: typography.fontSize.xs,
+    color: colors.text.secondary,
+    marginTop: 2,
   },
   version: {
     textAlign: 'center',

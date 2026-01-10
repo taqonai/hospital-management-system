@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -19,9 +19,10 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { colors, spacing, borderRadius, typography } from '../../theme';
 import { useAppDispatch, useAppSelector } from '../../store';
-import { loginWithEmail, clearError } from '../../store/authSlice';
+import { loginWithEmail, loginWithBiometric, clearError } from '../../store/authSlice';
 import { authApi } from '../../services/api';
 import { AuthStackScreenProps } from '../../navigation/types';
+import { biometricService } from '../../services/biometric/biometricService';
 
 type NavigationProp = AuthStackScreenProps<'Login'>['navigation'];
 
@@ -38,13 +39,49 @@ type LoginMethod = 'email' | 'phone';
 const LoginScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const dispatch = useAppDispatch();
-  const { isLoading, error } = useAppSelector((state) => state.auth);
+  const { isLoading, error, biometricStatus, isBiometricEnabled } = useAppSelector((state) => state.auth);
 
   const [loginMethod, setLoginMethod] = useState<LoginMethod>('email');
   const [phone, setPhone] = useState('');
   const [countryCode, setCountryCode] = useState('+1');
   const [showPassword, setShowPassword] = useState(false);
   const [sendingOTP, setSendingOTP] = useState(false);
+  const [biometricLoading, setBiometricLoading] = useState(false);
+
+  // Check if biometric login is available
+  const canUseBiometric = biometricStatus?.isAvailable &&
+    biometricStatus?.isEnrolled &&
+    isBiometricEnabled;
+
+  const biometricDisplayName = biometricStatus
+    ? biometricService.getBiometricDisplayName(biometricStatus.biometricType)
+    : 'Biometric';
+
+  const biometricIcon = biometricStatus
+    ? biometricService.getBiometricIcon(biometricStatus.biometricType) as keyof typeof Ionicons.glyphMap
+    : 'finger-print-outline';
+
+  // Auto-trigger biometric login on mount if available
+  useEffect(() => {
+    if (canUseBiometric) {
+      handleBiometricLogin();
+    }
+  }, [canUseBiometric]);
+
+  const handleBiometricLogin = async () => {
+    if (!canUseBiometric) return;
+
+    setBiometricLoading(true);
+    dispatch(clearError());
+
+    try {
+      await dispatch(loginWithBiometric()).unwrap();
+    } catch (err: any) {
+      // Error is handled in the slice
+    } finally {
+      setBiometricLoading(false);
+    }
+  };
 
   const {
     control,
@@ -286,6 +323,33 @@ const LoginScreen: React.FC = () => {
             </View>
           )}
 
+          {/* Biometric Login */}
+          {canUseBiometric && (
+            <View style={styles.biometricSection}>
+              <View style={styles.dividerContainer}>
+                <View style={styles.divider} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.divider} />
+              </View>
+              <TouchableOpacity
+                style={[styles.biometricButton, biometricLoading && styles.buttonDisabled]}
+                onPress={handleBiometricLogin}
+                disabled={biometricLoading || isLoading}
+              >
+                {biometricLoading ? (
+                  <ActivityIndicator color={colors.primary[600]} />
+                ) : (
+                  <>
+                    <Ionicons name={biometricIcon} size={28} color={colors.primary[600]} />
+                    <Text style={styles.biometricButtonText}>
+                      Sign in with {biometricDisplayName}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Register Link */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>Don't have an account?</Text>
@@ -474,6 +538,40 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     borderRadius: borderRadius.md,
     gap: spacing.sm,
+  },
+  biometricSection: {
+    marginTop: spacing.xl,
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.gray[300],
+  },
+  dividerText: {
+    paddingHorizontal: spacing.md,
+    fontSize: typography.fontSize.sm,
+    color: colors.text.secondary,
+  },
+  biometricButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary[50],
+    borderWidth: 1,
+    borderColor: colors.primary[200],
+    paddingVertical: spacing.lg,
+    borderRadius: borderRadius.md,
+    gap: spacing.md,
+  },
+  biometricButtonText: {
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.primary[600],
   },
   footer: {
     flexDirection: 'row',
