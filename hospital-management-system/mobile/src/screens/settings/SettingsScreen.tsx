@@ -6,6 +6,7 @@ import { colors, spacing, borderRadius, typography, shadows } from '../../theme'
 import { useAppDispatch, useAppSelector } from '../../store';
 import { logout, enableBiometric, disableBiometric, checkBiometricStatus } from '../../store/authSlice';
 import { biometricService } from '../../services/biometric/biometricService';
+import { useSecurity } from '../../components/SecurityProvider';
 
 interface SettingItem {
   id: string;
@@ -21,7 +22,9 @@ const SettingsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const dispatch = useAppDispatch();
   const { user, biometricStatus, isBiometricEnabled } = useAppSelector((state) => state.auth);
+  const { isBiometricLockEnabled, toggleBiometricLock } = useSecurity();
   const [biometricLoading, setBiometricLoading] = useState(false);
+  const [appLockLoading, setAppLockLoading] = useState(false);
 
   // Check biometric status on mount
   useEffect(() => {
@@ -49,6 +52,25 @@ const SettingsScreen: React.FC = () => {
       Alert.alert('Error', error || 'Failed to update biometric settings');
     } finally {
       setBiometricLoading(false);
+    }
+  };
+
+  const handleAppLockToggle = async () => {
+    if (appLockLoading) return;
+
+    setAppLockLoading(true);
+    try {
+      await toggleBiometricLock();
+      Alert.alert(
+        'Success',
+        isBiometricLockEnabled
+          ? 'App lock disabled'
+          : 'App lock enabled. The app will require authentication after being in the background for 30 seconds.'
+      );
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update app lock settings');
+    } finally {
+      setAppLockLoading(false);
     }
   };
 
@@ -203,29 +225,56 @@ const SettingsScreen: React.FC = () => {
               </TouchableOpacity>
             ))}
 
-            {/* Add Biometric Toggle to Security Group */}
+            {/* Add Biometric Login Toggle to Security Group */}
             {group.title === 'Security' && biometricAvailable && (
-              <View style={[styles.settingItem, styles.settingItemBorder]}>
-                <Ionicons
-                  name={biometricStatus?.biometricType === 'facial' ? 'scan-outline' : 'finger-print-outline'}
-                  size={22}
-                  color={colors.gray[600]}
-                />
-                <View style={styles.biometricTextContainer}>
-                  <Text style={styles.settingTitle}>{biometricDisplayName}</Text>
-                  <Text style={styles.biometricSubtitle}>Quick sign-in with biometrics</Text>
-                </View>
-                {biometricLoading ? (
-                  <ActivityIndicator size="small" color={colors.primary[600]} />
-                ) : (
-                  <Switch
-                    value={isBiometricEnabled}
-                    onValueChange={handleBiometricToggle}
-                    trackColor={{ false: colors.gray[300], true: colors.primary[200] }}
-                    thumbColor={isBiometricEnabled ? colors.primary[600] : colors.gray[100]}
+              <>
+                <View style={[styles.settingItem, styles.settingItemBorder]}>
+                  <Ionicons
+                    name={biometricStatus?.biometricType === 'facial' ? 'scan-outline' : 'finger-print-outline'}
+                    size={22}
+                    color={colors.gray[600]}
                   />
-                )}
-              </View>
+                  <View style={styles.biometricTextContainer}>
+                    <Text style={styles.settingTitle}>{biometricDisplayName} Login</Text>
+                    <Text style={styles.biometricSubtitle}>Quick sign-in with biometrics</Text>
+                  </View>
+                  {biometricLoading ? (
+                    <ActivityIndicator size="small" color={colors.primary[600]} />
+                  ) : (
+                    <Switch
+                      value={isBiometricEnabled}
+                      onValueChange={handleBiometricToggle}
+                      trackColor={{ false: colors.gray[300], true: colors.primary[200] }}
+                      thumbColor={isBiometricEnabled ? colors.primary[600] : colors.gray[100]}
+                    />
+                  )}
+                </View>
+
+                {/* App Lock Toggle */}
+                <View style={styles.settingItem}>
+                  <Ionicons
+                    name="shield-checkmark-outline"
+                    size={22}
+                    color={colors.gray[600]}
+                  />
+                  <View style={styles.biometricTextContainer}>
+                    <Text style={styles.settingTitle}>App Lock</Text>
+                    <Text style={styles.biometricSubtitle}>
+                      Require {biometricDisplayName} when returning to app
+                    </Text>
+                  </View>
+                  {appLockLoading ? (
+                    <ActivityIndicator size="small" color={colors.primary[600]} />
+                  ) : (
+                    <Switch
+                      value={isBiometricLockEnabled}
+                      onValueChange={handleAppLockToggle}
+                      trackColor={{ false: colors.gray[300], true: colors.primary[200] }}
+                      thumbColor={isBiometricLockEnabled ? colors.primary[600] : colors.gray[100]}
+                    />
+                  )}
+                </View>
+              </>
             )}
           </View>
         </View>

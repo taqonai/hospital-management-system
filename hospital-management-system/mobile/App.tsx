@@ -12,6 +12,7 @@ import RootNavigator from './src/navigation/RootNavigator';
 import { colors } from './src/theme';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
 import { OfflineBanner } from './src/components/common/OfflineBanner';
+import { SecurityProvider } from './src/components/SecurityProvider';
 
 // Create a React Query client with sensible defaults
 const queryClient = new QueryClient({
@@ -40,13 +41,15 @@ function AppContent() {
   }, [error]);
 
   return (
-    <View style={{ flex: 1 }}>
-      <StatusBar style="dark" backgroundColor={colors.background} />
-      <View style={{ paddingTop: insets.top }}>
-        <OfflineBanner />
+    <SecurityProvider>
+      <View style={{ flex: 1 }}>
+        <StatusBar style="dark" backgroundColor={colors.background} />
+        <View style={{ paddingTop: insets.top }}>
+          <OfflineBanner />
+        </View>
+        <RootNavigator />
       </View>
-      <RootNavigator />
-    </View>
+    </SecurityProvider>
   );
 }
 
