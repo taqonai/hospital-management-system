@@ -168,6 +168,16 @@ export const patientPortalApi = {
     preferredLanguage?: string;
   }) =>
     api.put<ApiResponse<any>>('/patient-portal/settings/communication', data),
+
+  // Push Notifications
+  registerPushToken: (token: string, platform?: 'ios' | 'android') =>
+    api.post<ApiResponse<{ success: boolean }>>('/patient-portal/settings/push-token', {
+      token,
+      platform: platform || (require('react-native').Platform.OS as 'ios' | 'android'),
+    }),
+
+  unregisterPushToken: () =>
+    api.delete<ApiResponse<{ success: boolean }>>('/patient-portal/settings/push-token'),
 };
 
 export default patientPortalApi;

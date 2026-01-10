@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { store } from './src/store';
 import RootNavigator from './src/navigation/RootNavigator';
 import { colors } from './src/theme';
+import { usePushNotifications } from './src/hooks/usePushNotifications';
 
 // Create a React Query client with sensible defaults
 const queryClient = new QueryClient({
@@ -24,6 +25,24 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Wrapper component to initialize push notifications inside NavigationContainer
+function AppContent() {
+  const { error } = usePushNotifications();
+
+  useEffect(() => {
+    if (error) {
+      console.warn('Push notification error:', error);
+    }
+  }, [error]);
+
+  return (
+    <>
+      <StatusBar style="dark" backgroundColor={colors.background} />
+      <RootNavigator />
+    </>
+  );
+}
 
 export default function App() {
   return (
@@ -62,8 +81,7 @@ export default function App() {
                 },
               }}
             >
-              <StatusBar style="dark" backgroundColor={colors.background} />
-              <RootNavigator />
+              <AppContent />
             </NavigationContainer>
           </QueryClientProvider>
         </Provider>
