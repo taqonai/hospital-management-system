@@ -1,11 +1,10 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { secureStorage } from '../storage/secureStorage';
 import { ApiResponse } from '../../types';
+import { env } from '../../config/env';
 
-// API base URL - change this for production
-const API_BASE_URL = __DEV__
-  ? 'http://localhost:3001/api/v1'
-  : 'https://your-production-api.com/api/v1';
+// API base URL from environment configuration
+const API_BASE_URL = env.API_URL;
 
 // Create axios instance
 export const api = axios.create({
