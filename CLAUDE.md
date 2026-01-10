@@ -46,12 +46,8 @@ uvicorn main:app --reload --port 8000
 cd hospital-management-system
 docker-compose up -d                          # All services
 docker-compose --profile production up -d     # With nginx
-```
-
-### Running Individual AI Microservices
-```bash
-cd hospital-management-system/ai-services
-uvicorn main:app --reload --port 8011        # AI Scribe on different port
+docker-compose logs -f [service]              # View logs
+docker-compose restart [service]              # Restart service
 ```
 
 ## Architecture
@@ -74,8 +70,19 @@ uvicorn main:app --reload --port 8011        # AI Scribe on different port
    - Entry: `ai-services/main.py` (initializes all AI service instances)
    - Each service in its own directory with `service.py` and optional `knowledge_base.py`
 
+### TypeScript Path Aliases
+
+**Backend** (`@/` resolves to `src/`):
+- `@config/*`, `@middleware/*`, `@models/*`, `@routes/*`, `@services/*`, `@utils/*`, `@types/*`
+
+**Frontend** (`@/` resolves to `src/`):
+- `@components/*`, `@pages/*`, `@hooks/*`, `@store/*`, `@services/*`, `@types/*`, `@utils/*`
+
+Note: TypeScript strict mode is disabled in both projects (`"strict": false`).
+
 ### AI Service Modules
 Located in `ai-services/`:
+
 | Directory | Service Class | Purpose |
 |-----------|--------------|---------|
 | `diagnostic/` | DiagnosticAI | Symptom analysis, differential diagnosis |
@@ -93,20 +100,6 @@ Located in `ai-services/`:
 | `ai_scribe/` | AIScribeService | Medical transcription |
 | `entity_extraction/` | EntityExtractionAI | Medical entity extraction from text |
 | `pdf_analysis/` | PDFAnalysisService | Medical PDF extraction and analysis |
-
-### AI Services API (FastAPI - port 8000)
-Direct AI endpoints (backend proxies these via `/api/v1/ai/*`):
-- `POST /api/diagnose` - Symptom analysis with ICD-10 codes
-- `POST /api/predict-risk` - Risk prediction (readmission, deterioration)
-- `POST /api/analyze-image` - Medical imaging analysis
-- `POST /api/chat`, `/api/voice-command` - Chat and voice processing
-- `POST /api/transcribe` - Whisper speech-to-text
-- `POST /api/queue/*` - Queue prediction endpoints
-- `POST /api/pharmacy/check-interactions` - Drug interaction checks
-- `POST /api/notes/*` - Clinical note generation/enhancement
-- `POST /api/symptom-checker/*` - Interactive symptom assessment
-- `POST /api/entity/*` - Entity extraction from natural language
-- `POST /api/pdf/analyze-url` - PDF document analysis
 
 ### AI Models in Use
 
@@ -132,7 +125,7 @@ Direct AI endpoints (backend proxies these via `/api/v1/ai/*`):
 
 ### Multi-Tenant Data Model
 
-All entities include `hospitalId` for tenant isolation. Prisma schema (`backend/prisma/schema.prisma`, ~4100 lines) covers 80+ models.
+All entities include `hospitalId` for tenant isolation. Prisma schema (`backend/prisma/schema.prisma`, ~4600 lines) covers 80+ models.
 
 ### User Roles (UserRole enum)
 SUPER_ADMIN, HOSPITAL_ADMIN, DOCTOR, NURSE, RECEPTIONIST, LAB_TECHNICIAN, PHARMACIST, RADIOLOGIST, ACCOUNTANT, PATIENT, HR_MANAGER, HR_STAFF, HOUSEKEEPING_MANAGER, HOUSEKEEPING_STAFF, MAINTENANCE_STAFF, SECURITY_STAFF, DIETARY_STAFF
@@ -193,6 +186,7 @@ Receptionist (Check-in) → Nurse (Vitals) → Doctor (Consultation) → Lab (Re
 - `frontend/src/hooks/useBookingData.ts` - Polling hook (15-30s intervals)
 
 **Page Enhancements:**
+
 | Page | Feature |
 |------|---------|
 | OPD (Nurse) | Queue auto-refresh (15s), "View Booking" button on patient rows |
@@ -214,7 +208,7 @@ Receptionist (Check-in) → Nurse (Vitals) → Doctor (Consultation) → Lab (Re
 - `VITE_API_URL` (default: http://localhost:3001/api/v1)
 
 **AI Services** (`ai-services/.env`):
-- `OPENAI_API_KEY` - For Whisper STT
+- `OPENAI_API_KEY` - Required for Whisper, GPT models
 
 **S3/Storage** (in `backend/.env`):
 - `AWS_REGION`, `AWS_S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` - For AWS S3
@@ -242,25 +236,6 @@ Receptionist (Check-in) → Nurse (Vitals) → Doctor (Consultation) → Lab (Re
 | PostgreSQL | 5433 (Docker) / 5432 (local) |
 | Redis | 6379 |
 | MinIO | 9000 (API), 9001 (Console) |
-
-## Key Dependencies
-
-### Backend
-- Prisma ORM for database access
-- express-validator and zod for request validation
-- jsonwebtoken for JWT auth
-- winston for logging
-- ioredis for Redis caching
-
-### Frontend
-- @tanstack/react-query for server state
-- react-hook-form with zod for form handling
-- chart.js for analytics visualizations
-- react-speech-recognition for voice input
-
-### AI Services
-- FastAPI with Pydantic models
-- Service classes instantiated in `main.py` and exposed via REST endpoints
 
 ## Infrastructure (AWS Deployment)
 
