@@ -41,11 +41,11 @@
         "resourceClass": "m-medium"
       },
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "apk"
       },
       "env": {
         "APP_ENV": "production",
-        "API_URL": "https://api.hms.example.com/api/v1"
+        "API_URL": "https://medint.taqon.ai/api/v1"
       }
     }
   },
