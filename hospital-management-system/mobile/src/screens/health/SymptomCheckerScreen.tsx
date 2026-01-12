@@ -135,6 +135,7 @@ const SymptomCheckerScreen: React.FC = () => {
   const [fallbackQuestionIndex, setFallbackQuestionIndex] = useState(0);
   const [fallbackResponses, setFallbackResponses] = useState<string[]>([]);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [currentQuestionId, setCurrentQuestionId] = useState<string | null>(null);
 
   // Keyboard listeners for Android to scroll when keyboard appears
   useEffect(() => {
@@ -317,6 +318,11 @@ const SymptomCheckerScreen: React.FC = () => {
         const questions = data.nextQuestions || data.questions || [];
         const firstQuestion = questions[0];
 
+        // Store the current question ID for responses
+        if (firstQuestion?.id) {
+          setCurrentQuestionId(firstQuestion.id);
+        }
+
         // Show welcome message from API or default
         const welcomeMessage = data.message || firstQuestion?.question || "Hello! I'm your AI health assistant. Please describe your main symptoms or concern.";
         addMessage({
@@ -493,14 +499,19 @@ const SymptomCheckerScreen: React.FC = () => {
 
     setIsLoading(true);
     try {
+      // Use the stored currentQuestionId or fallback to provided questionId or 'main'
+      const effectiveQuestionId = currentQuestionId || questionId || 'main';
+      console.log('Sending response:', { sessionId, questionId: effectiveQuestionId, answer: responseText });
+
       const apiResponse = await symptomCheckerApi.respond({
         sessionId: sessionId!,
         responses: [{
-          questionId: questionId || 'main',
+          questionId: effectiveQuestionId,
           answer: responseText,
         }],
       });
       const data = apiResponse.data?.data || apiResponse.data;
+      console.log('API response:', data);
 
       if (data) {
         if (data.isComplete) {
@@ -541,8 +552,14 @@ const SymptomCheckerScreen: React.FC = () => {
           }
 
           if (nextQuestion) {
+            // Store the new question ID for the next response
+            if (nextQuestion.id) {
+              setCurrentQuestionId(nextQuestion.id);
+              console.log('Set currentQuestionId to:', nextQuestion.id);
+            }
+
             // Show the question if not already in message
-            if (!data.message) {
+            if (!data.message && nextQuestion.question) {
               addMessage({
                 id: Date.now().toString(),
                 type: 'bot',
@@ -556,7 +573,7 @@ const SymptomCheckerScreen: React.FC = () => {
                 type: 'options',
                 content: '',
                 options: nextQuestion.options.map((opt: any, idx: number) => ({
-                  id: `${nextQuestion.id || 'q'}_${idx}`,
+                  id: `option_${idx}`,
                   text: typeof opt === 'string' ? opt : opt.label || opt.value,
                 })),
               });
