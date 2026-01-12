@@ -17,8 +17,53 @@ import {
 
 export const patientPortalApi = {
   // Dashboard
-  getSummary: () =>
-    api.get<ApiResponse<DashboardSummary>>('/patient-portal/summary'),
+  getSummary: async () => {
+    const response = await api.get<ApiResponse<any>>('/patient-portal/summary');
+    const raw = response.data?.data || response.data;
+
+    // Transform backend response to expected DashboardSummary format
+    // Backend returns: { upcomingAppointments: [{date, time, doctorName, status}], activePrescriptions, pendingLabResults }
+    // We need: { upcomingAppointments: [{appointmentDate, startTime, doctor:{user:{}}}], quickStats:{} }
+    const transformed: DashboardSummary = {
+      upcomingAppointments: (raw?.upcomingAppointments || []).map((apt: any) => ({
+        id: apt.id,
+        appointmentDate: apt.appointmentDate || apt.date,
+        startTime: apt.startTime || apt.time,
+        endTime: apt.endTime,
+        type: apt.type,
+        reason: apt.reason,
+        status: apt.status,
+        doctor: apt.doctor || {
+          user: {
+            firstName: apt.doctorName?.replace('Dr. ', '').split(' ')[0] || '',
+            lastName: apt.doctorName?.replace('Dr. ', '').split(' ').slice(1).join(' ') || '',
+          },
+          specialization: apt.doctorSpecialty || '',
+          department: { id: '', name: apt.departmentName || '' },
+        },
+      })),
+      recentPrescriptions: raw?.recentPrescriptions || [],
+      pendingLabResults: raw?.pendingLabResults || [],
+      pendingBills: raw?.pendingBills || [],
+      healthScore: raw?.healthScore,
+      reminders: raw?.healthReminders?.map((r: string, i: number) => ({
+        id: `reminder-${i}`,
+        type: 'FOLLOW_UP' as const,
+        title: 'Health Reminder',
+        description: r,
+        dueDate: new Date().toISOString(),
+        isRead: false,
+      })) || [],
+      quickStats: {
+        totalAppointments: raw?.upcomingAppointments?.length || 0,
+        activePrescriptions: raw?.activePrescriptions || 0,
+        pendingLabs: typeof raw?.pendingLabResults === 'number' ? raw.pendingLabResults : (raw?.pendingLabResults?.length || 0),
+        unreadMessages: raw?.unreadMessages || 0,
+      },
+    };
+
+    return { ...response, data: { ...response.data, data: transformed } };
+  },
 
   // Appointments
   getAppointments: (params?: {
@@ -50,9 +95,7 @@ export const patientPortalApi = {
     api.put<ApiResponse<Appointment>>(`/patient-portal/appointments/${id}/reschedule`, data),
 
   getAvailableSlots: (doctorId: string, date: string) =>
-    api.get<ApiResponse<TimeSlot[]>>(`/patient-portal/doctors/${doctorId}/slots`, {
-      params: { date },
-    }),
+    api.get<ApiResponse<TimeSlot[]>>(`/public/slots/${doctorId}/${date}`),
 
   // Doctors and Departments
   getDoctors: (params?: { departmentId?: string; search?: string }) =>
@@ -178,6 +221,74 @@ export const patientPortalApi = {
 
   unregisterPushToken: () =>
     api.delete<ApiResponse<{ success: boolean }>>('/patient-portal/settings/push-token'),
+
+  // Messages
+  getMessages: (params?: { status?: 'unread' | 'read' | 'all'; page?: number; limit?: number }) =>
+    api.get<ApiResponse<MessageThread[]>>('/patient-portal/messages', { params }),
+
+  getThread: (threadId: string) =>
+    api.get<ApiResponse<MessageThread>>(`/patient-portal/messages/thread/${threadId}`),
+
+  sendMessage: (data: { recipientId: string; subject: string; body: string; threadId?: string }) =>
+    api.post<ApiResponse<Message>>('/patient-portal/messages', data),
+
+  markAsRead: (messageId: string) =>
+    api.put<ApiResponse<Message>>(`/patient-portal/messages/${messageId}/read`),
+
+  deleteMessage: (messageId: string) =>
+    api.delete<ApiResponse<void>>(`/patient-portal/messages/${messageId}`),
+
+  getUnreadCount: () =>
+    api.get<ApiResponse<{ count: number }>>('/patient-portal/messages/unread-count'),
+
+  getProviders: () =>
+    api.get<ApiResponse<MessageProvider[]>>('/patient-portal/messages/providers'),
 };
+
+// Message types
+export interface Message {
+  id: string;
+  threadId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: 'patient' | 'doctor' | 'nurse' | 'staff';
+  senderAvatar?: string;
+  recipientId: string;
+  recipientName: string;
+  body: string;
+  isRead: boolean;
+  createdAt: string;
+  attachments?: Array<{
+    id: string;
+    name: string;
+    type: string;
+    url: string;
+  }>;
+}
+
+export interface MessageThread {
+  id: string;
+  subject: string;
+  participants: Array<{
+    id: string;
+    name: string;
+    role: string;
+    avatar?: string;
+  }>;
+  messages: Message[];
+  lastMessage?: Message;
+  unreadCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MessageProvider {
+  id: string;
+  name: string;
+  role: string;
+  department?: string;
+  avatar?: string;
+  isAvailable: boolean;
+}
 
 export default patientPortalApi;

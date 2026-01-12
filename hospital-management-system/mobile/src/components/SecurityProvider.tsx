@@ -36,12 +36,26 @@ export const SecurityProvider: React.FC<SecurityProviderProps> = ({ children }) 
   const {
     isLocked,
     isBiometricEnabled,
+    isInitialized: isAppLockInitialized,
     unlockWithBiometric,
     toggleBiometricLock,
   } = useAppLock();
 
   const [internalLocked, setInternalLocked] = useState(false);
   const [lastActivityTime, setLastActivityTime] = useState(Date.now());
+  const [isStabilized, setIsStabilized] = useState(false);
+
+  // Add stabilization delay after authentication to prevent flickering
+  useEffect(() => {
+    if (isAuthenticated && isAppLockInitialized) {
+      const timer = setTimeout(() => {
+        setIsStabilized(true);
+      }, 100);
+      return () => clearTimeout(timer);
+    } else {
+      setIsStabilized(false);
+    }
+  }, [isAuthenticated, isAppLockInitialized]);
 
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
@@ -200,8 +214,20 @@ export const SecurityProvider: React.FC<SecurityProviderProps> = ({ children }) 
     lastActivityTime,
   };
 
-  // Show lock screen if locked
-  if (isAuthenticated && isAppLocked) {
+  // Wait for app lock to initialize and stabilize before deciding to show lock screen
+  // This prevents flickering when loading biometric preferences
+  if (isAuthenticated && (!isAppLockInitialized || !isStabilized)) {
+    return (
+      <SecurityContext.Provider value={contextValue}>
+        <View style={styles.container}>
+          {children}
+        </View>
+      </SecurityContext.Provider>
+    );
+  }
+
+  // Show lock screen if locked (only after stabilization)
+  if (isAuthenticated && isStabilized && isAppLocked) {
     return (
       <SecurityContext.Provider value={contextValue}>
         <LockScreen onUnlock={handleUnlock} onLogout={handleLogout} />

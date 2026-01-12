@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNetworkStatus } from './useNetworkStatus';
 import { offlineActionQueue, QueuedAction } from '../services/offline';
 
@@ -58,11 +58,13 @@ export function useOfflineData<T>({
     [fetcher]
   );
 
-  // Initial fetch
+  // Initial fetch - use ref to prevent re-running
+  const hasFetched = useRef(false);
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || hasFetched.current) return;
 
     const load = async () => {
+      hasFetched.current = true;
       setIsLoading(true);
       await fetchData(false);
       setIsLoading(false);
@@ -71,7 +73,7 @@ export function useOfflineData<T>({
     if (refetchOnMount) {
       load();
     }
-  }, [enabled, fetchData, refetchOnMount]);
+  }, [enabled, refetchOnMount]); // Removed fetchData from deps to prevent re-fetching
 
   // Refetch when coming back online
   useEffect(() => {

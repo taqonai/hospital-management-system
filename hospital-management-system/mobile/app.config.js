@@ -5,6 +5,9 @@
  * and is used by EAS Build to inject environment variables.
  */
 
+// Load environment variables from .env file for local builds
+require('dotenv').config();
+
 const IS_DEV = process.env.APP_ENV === 'development';
 const IS_PREVIEW = process.env.APP_ENV === 'preview';
 const IS_PROD = process.env.APP_ENV === 'production';

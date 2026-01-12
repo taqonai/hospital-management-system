@@ -492,6 +492,40 @@ export type HealthStackParamList = {
   LabResultDetail: { resultId: string };
   MedicalHistory: undefined;
   Allergies: undefined;
+  // Health Sync
+  HealthSync: undefined;
+  DeviceConnection: { provider?: string };
+  ManualMetricLog: { metricType?: string };
+};
+
+// Fitness Stack
+export type FitnessStackParamList = {
+  FitnessTracker: undefined;
+  LogActivity: { activityType?: string };
+  FitnessGoals: undefined;
+  FitnessStats: undefined;
+};
+
+// Nutrition Stack
+export type NutritionStackParamList = {
+  Nutrition: undefined;
+  LogMeal: { mealType?: string };
+  NutritionPlan: undefined;
+};
+
+// Wellness Stack
+export type WellnessStackParamList = {
+  WellnessHub: undefined;
+  WellnessAssessment: undefined;
+  WellnessGoals: undefined;
+  HealthCoach: undefined;
+};
+
+// Messages Stack
+export type MessagesStackParamList = {
+  MessagesList: undefined;
+  MessageThread: { threadId: string };
+  NewMessage: { recipientId?: string };
 };
 
 export type SettingsStackParamList = {

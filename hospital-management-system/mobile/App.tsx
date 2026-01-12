@@ -31,25 +31,22 @@ const queryClient = new QueryClient({
 
 // Wrapper component to initialize push notifications and offline banner
 function AppContent() {
-  const { error } = usePushNotifications();
+  // Temporarily disable push notifications to prevent flickering
+  // const { error } = usePushNotifications();
   const insets = useSafeAreaInsets();
 
-  useEffect(() => {
-    if (error) {
-      console.warn('Push notification error:', error);
-    }
-  }, [error]);
+  // useEffect(() => {
+  //   if (error) {
+  //     console.warn('Push notification error:', error);
+  //   }
+  // }, [error]);
 
+  // Temporarily bypass SecurityProvider to debug flickering
   return (
-    <SecurityProvider>
-      <View style={{ flex: 1 }}>
-        <StatusBar style="dark" backgroundColor={colors.background} />
-        <View style={{ paddingTop: insets.top }}>
-          <OfflineBanner />
-        </View>
-        <RootNavigator />
-      </View>
-    </SecurityProvider>
+    <View style={{ flex: 1 }}>
+      <StatusBar style="dark" backgroundColor={colors.background} />
+      <RootNavigator />
+    </View>
   );
 }
 

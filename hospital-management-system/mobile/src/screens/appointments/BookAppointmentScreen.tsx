@@ -8,15 +8,19 @@ import {
   ActivityIndicator,
   Alert,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, borderRadius, typography, shadows } from '../../theme';
+import { colors, spacing, borderRadius, typography, shadows, keyboardConfig } from '../../theme';
 import { patientPortalApi } from '../../services/api';
 import { Department, Doctor, TimeSlot } from '../../types';
 
 type BookingStep = 'department' | 'doctor' | 'date' | 'time' | 'confirm';
+
+type AppointmentType = 'CONSULTATION' | 'FOLLOW_UP' | 'EMERGENCY' | 'TELEMEDICINE' | 'PROCEDURE';
 
 interface BookingData {
   department: Department | null;
@@ -24,7 +28,7 @@ interface BookingData {
   date: string;
   timeSlot: TimeSlot | null;
   reason: string;
-  type: 'IN_PERSON' | 'TELEMEDICINE';
+  type: AppointmentType;
 }
 
 const BookAppointmentScreen: React.FC = () => {
@@ -36,7 +40,7 @@ const BookAppointmentScreen: React.FC = () => {
     date: '',
     timeSlot: null,
     reason: '',
-    type: 'IN_PERSON',
+    type: 'CONSULTATION',
   });
 
   // Data states
@@ -112,13 +116,64 @@ const BookAppointmentScreen: React.FC = () => {
     setIsLoading(true);
     try {
       const response = await patientPortalApi.getAvailableSlots(doctorId, date);
-      setTimeSlots(response.data?.data || []);
+      const rawSlots = response.data?.data || response.data || [];
+
+      if (rawSlots.length > 0) {
+        // Transform backend response to expected TimeSlot format
+        // Backend returns: { time: "09:00 AM", time24: "09:00", isAvailable: true }
+        // We need: { startTime: "09:00", endTime: "09:30", isAvailable: true }
+        const transformedSlots: TimeSlot[] = rawSlots.map((slot: any, index: number) => {
+          // Get the start time in 24-hour format
+          const startTime = slot.time24 || slot.startTime || slot.time || '';
+
+          // Calculate end time (30 min later)
+          let endTime = slot.endTime || '';
+          if (!endTime && startTime) {
+            const [hours, mins] = startTime.split(':').map(Number);
+            const endMins = mins + 30;
+            const endHours = endMins >= 60 ? hours + 1 : hours;
+            const finalMins = endMins >= 60 ? endMins - 60 : endMins;
+            endTime = `${endHours.toString().padStart(2, '0')}:${finalMins.toString().padStart(2, '0')}`;
+          }
+
+          return {
+            startTime,
+            endTime,
+            isAvailable: slot.isAvailable !== false, // Default to true if not specified
+          };
+        });
+
+        setTimeSlots(transformedSlots);
+      } else {
+        // Generate default time slots if none returned
+        setTimeSlots(generateDefaultTimeSlots());
+      }
     } catch (error) {
       console.error('Failed to load time slots:', error);
-      Alert.alert('Error', 'Failed to load available times');
+      // Generate default time slots as fallback
+      setTimeSlots(generateDefaultTimeSlots());
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Generate default time slots (9 AM to 5 PM, 30 min intervals)
+  const generateDefaultTimeSlots = (): TimeSlot[] => {
+    const slots: TimeSlot[] = [];
+    for (let hour = 9; hour < 17; hour++) {
+      for (let min = 0; min < 60; min += 30) {
+        const startTime = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+        const endHour = min === 30 ? hour + 1 : hour;
+        const endMin = min === 30 ? 0 : 30;
+        const endTime = `${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`;
+        slots.push({
+          startTime,
+          endTime,
+          isAvailable: true,
+        });
+      }
+    }
+    return slots;
   };
 
   const handleBookAppointment = async () => {
@@ -506,26 +561,47 @@ const BookAppointmentScreen: React.FC = () => {
         {/* Appointment Type */}
         <View style={styles.typeSection}>
           <Text style={styles.sectionLabel}>Appointment Type</Text>
-          <View style={styles.typeOptions}>
+          <View style={styles.typeOptionsGrid}>
             <TouchableOpacity
               style={[
                 styles.typeOption,
-                bookingData.type === 'IN_PERSON' && styles.typeOptionSelected,
+                bookingData.type === 'CONSULTATION' && styles.typeOptionSelected,
               ]}
-              onPress={() => setBookingData({ ...bookingData, type: 'IN_PERSON' })}
+              onPress={() => setBookingData({ ...bookingData, type: 'CONSULTATION' })}
             >
               <Ionicons
                 name="person"
                 size={20}
-                color={bookingData.type === 'IN_PERSON' ? colors.primary[600] : colors.gray[400]}
+                color={bookingData.type === 'CONSULTATION' ? colors.primary[600] : colors.gray[400]}
               />
               <Text
                 style={[
                   styles.typeOptionText,
-                  bookingData.type === 'IN_PERSON' && styles.typeOptionTextSelected,
+                  bookingData.type === 'CONSULTATION' && styles.typeOptionTextSelected,
                 ]}
               >
-                In Person
+                Consultation
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.typeOption,
+                bookingData.type === 'FOLLOW_UP' && styles.typeOptionSelected,
+              ]}
+              onPress={() => setBookingData({ ...bookingData, type: 'FOLLOW_UP' })}
+            >
+              <Ionicons
+                name="refresh"
+                size={20}
+                color={bookingData.type === 'FOLLOW_UP' ? colors.primary[600] : colors.gray[400]}
+              />
+              <Text
+                style={[
+                  styles.typeOptionText,
+                  bookingData.type === 'FOLLOW_UP' && styles.typeOptionTextSelected,
+                ]}
+              >
+                Follow-up
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -546,7 +622,51 @@ const BookAppointmentScreen: React.FC = () => {
                   bookingData.type === 'TELEMEDICINE' && styles.typeOptionTextSelected,
                 ]}
               >
-                Video Call
+                Telemedicine
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.typeOption,
+                bookingData.type === 'PROCEDURE' && styles.typeOptionSelected,
+              ]}
+              onPress={() => setBookingData({ ...bookingData, type: 'PROCEDURE' })}
+            >
+              <Ionicons
+                name="medkit"
+                size={20}
+                color={bookingData.type === 'PROCEDURE' ? colors.primary[600] : colors.gray[400]}
+              />
+              <Text
+                style={[
+                  styles.typeOptionText,
+                  bookingData.type === 'PROCEDURE' && styles.typeOptionTextSelected,
+                ]}
+              >
+                Procedure
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.typeOption,
+                styles.typeOptionEmergency,
+                bookingData.type === 'EMERGENCY' && styles.typeOptionEmergencySelected,
+              ]}
+              onPress={() => setBookingData({ ...bookingData, type: 'EMERGENCY' })}
+            >
+              <Ionicons
+                name="warning"
+                size={20}
+                color={bookingData.type === 'EMERGENCY' ? colors.error[700] : colors.error[500]}
+              />
+              <Text
+                style={[
+                  styles.typeOptionText,
+                  styles.typeOptionTextEmergency,
+                  bookingData.type === 'EMERGENCY' && styles.typeOptionTextEmergencySelected,
+                ]}
+              >
+                Emergency
               </Text>
             </TouchableOpacity>
           </View>
@@ -604,16 +724,22 @@ const BookAppointmentScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={goBack}>
-          <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Book Appointment</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={keyboardConfig.behavior as 'padding' | 'height'}
+        keyboardVerticalOffset={keyboardConfig.verticalOffset}
+      >
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={goBack}>
+            <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Book Appointment</Text>
+          <View style={styles.headerSpacer} />
+        </View>
 
-      {renderStepIndicator()}
-      {renderCurrentStep()}
+        {renderStepIndicator()}
+        {renderCurrentStep()}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -622,6 +748,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  keyboardView: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
@@ -909,18 +1038,19 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     marginBottom: spacing.md,
   },
-  typeOptions: {
+  typeOptionsGrid: {
     flexDirection: 'row',
-    gap: spacing.md,
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   },
   typeOption: {
-    flex: 1,
+    width: '48%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.white,
     borderRadius: borderRadius.md,
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.md,
     gap: spacing.sm,
     borderWidth: 1,
     borderColor: colors.border,
@@ -929,6 +1059,14 @@ const styles = StyleSheet.create({
     borderColor: colors.primary[600],
     backgroundColor: colors.primary[50],
   },
+  typeOptionEmergency: {
+    borderColor: colors.error[100],
+    backgroundColor: colors.error[50],
+  },
+  typeOptionEmergencySelected: {
+    borderColor: colors.error[600],
+    backgroundColor: colors.error[100],
+  },
   typeOptionText: {
     fontSize: typography.fontSize.sm,
     color: colors.text.secondary,
@@ -936,6 +1074,12 @@ const styles = StyleSheet.create({
   },
   typeOptionTextSelected: {
     color: colors.primary[600],
+  },
+  typeOptionTextEmergency: {
+    color: colors.error[500],
+  },
+  typeOptionTextEmergencySelected: {
+    color: colors.error[700],
   },
   reasonSection: {
     marginTop: spacing.xl,

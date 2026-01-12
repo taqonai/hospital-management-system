@@ -22,16 +22,54 @@ const AppointmentsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const [activeTab, setActiveTab] = useState<TabType>('upcoming');
 
-  const { data, isLoading, refetch, isRefetching } = useQuery({
+  const { data, isLoading, refetch, isRefetching, error } = useQuery({
     queryKey: ['patient-appointments', activeTab],
     queryFn: async () => {
       const response = await patientPortalApi.getAppointments({
         type: activeTab === 'upcoming' ? 'upcoming' : 'past',
         limit: 20,
       });
-      return response.data.data as Appointment[];
+      // Handle different API response formats
+      // Backend may return { data: [...], pagination: {...} } or just [...]
+      const rawData = response.data?.data?.data || response.data?.data || response.data || [];
+      const appointments = Array.isArray(rawData) ? rawData : [];
+
+      // Transform backend format to expected Appointment format
+      // Backend: { date, time, doctorName, doctorSpecialty, departmentName }
+      // Expected: { appointmentDate, startTime, doctor: { user: {}, specialization, department: {} } }
+      return appointments.map((apt: any) => ({
+        id: apt.id,
+        appointmentDate: apt.appointmentDate || apt.date,
+        startTime: apt.startTime || apt.time,
+        endTime: apt.endTime,
+        type: apt.type,
+        reason: apt.reason,
+        status: apt.status,
+        notes: apt.notes,
+        tokenNumber: apt.tokenNumber,
+        // Handle both nested doctor object and flat doctorName format
+        doctor: apt.doctor || {
+          user: {
+            firstName: apt.doctorName?.replace('Dr. ', '').split(' ')[0] || '',
+            lastName: apt.doctorName?.replace('Dr. ', '').split(' ').slice(1).join(' ') || '',
+          },
+          specialization: apt.doctorSpecialty || apt.doctorSpecialization || '',
+          department: {
+            id: apt.departmentId || '',
+            name: apt.departmentName || '',
+          },
+        },
+      })) as Appointment[];
     },
+    retry: 1,
   });
+
+  // Log error for debugging
+  React.useEffect(() => {
+    if (error) {
+      console.error('Failed to fetch appointments:', error);
+    }
+  }, [error]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -50,6 +88,17 @@ const AppointmentsScreen: React.FC = () => {
     }
   };
 
+  const formatAppointmentDate = (dateString: string) => {
+    if (!dateString) return 'Date TBD';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Date TBD';
+      return format(date, 'EEEE, MMMM dd, yyyy');
+    } catch {
+      return 'Date TBD';
+    }
+  };
+
   const renderAppointment = ({ item }: { item: Appointment }) => (
     <TouchableOpacity
       style={styles.appointmentCard}
@@ -62,16 +111,16 @@ const AppointmentsScreen: React.FC = () => {
           </View>
           <View style={styles.doctorDetails}>
             <Text style={styles.doctorName}>
-              Dr. {item.doctor.user.firstName} {item.doctor.user.lastName}
+              Dr. {item.doctor?.user?.firstName ?? ''} {item.doctor?.user?.lastName ?? 'Unknown'}
             </Text>
-            <Text style={styles.specialty}>{item.doctor.specialization}</Text>
-            <Text style={styles.department}>{item.doctor.department.name}</Text>
+            <Text style={styles.specialty}>{item.doctor?.specialization ?? 'Specialist'}</Text>
+            <Text style={styles.department}>{item.doctor?.department?.name ?? 'General'}</Text>
           </View>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
-          <View style={[styles.statusDot, { backgroundColor: getStatusColor(item.status) }]} />
-          <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-            {item.status.replace('_', ' ')}
+        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status || 'SCHEDULED') + '20' }]}>
+          <View style={[styles.statusDot, { backgroundColor: getStatusColor(item.status || 'SCHEDULED') }]} />
+          <Text style={[styles.statusText, { color: getStatusColor(item.status || 'SCHEDULED') }]}>
+            {(item.status || 'SCHEDULED').replace('_', ' ')}
           </Text>
         </View>
       </View>
@@ -82,13 +131,13 @@ const AppointmentsScreen: React.FC = () => {
         <View style={styles.detailRow}>
           <Ionicons name="calendar-outline" size={18} color={colors.gray[500]} />
           <Text style={styles.detailText}>
-            {format(new Date(item.appointmentDate), 'EEEE, MMMM dd, yyyy')}
+            {formatAppointmentDate(item.appointmentDate)}
           </Text>
         </View>
         <View style={styles.detailRow}>
           <Ionicons name="time-outline" size={18} color={colors.gray[500]} />
           <Text style={styles.detailText}>
-            {item.startTime} - {item.endTime}
+            {item.startTime ?? 'TBD'} - {item.endTime ?? 'TBD'}
           </Text>
         </View>
         {item.type && (

@@ -13,7 +13,8 @@
       },
       "android": {
         "buildType": "apk",
-        "gradleCommand": ":app:assembleDebug"
+        "gradleCommand": ":app:assembleDebug",
+        "credentialsSource": "local"
       },
       "env": {
         "APP_ENV": "development",
@@ -27,7 +28,8 @@
         "simulator": false
       },
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "credentialsSource": "local"
       },
       "env": {
         "APP_ENV": "preview",

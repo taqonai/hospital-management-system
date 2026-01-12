@@ -9,11 +9,14 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme';
-import { patientPortalApi } from '../../services/api';
+import { patientPortalApi, symptomCheckerApi } from '../../services/api';
 
 interface Message {
   id: string;
@@ -25,9 +28,146 @@ interface Message {
 
 const HealthAssistantScreen: React.FC = () => {
   const scrollViewRef = useRef<ScrollView>(null);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+
+  // Voice recording functions
+  const startPulseAnimation = () => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.2,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  };
+
+  const stopPulseAnimation = () => {
+    pulseAnim.stopAnimation();
+    pulseAnim.setValue(1);
+  };
+
+  const requestMicrophonePermission = async () => {
+    try {
+      const { status } = await Audio.requestPermissionsAsync();
+      return status === 'granted';
+    } catch (error) {
+      console.error('Error requesting microphone permission:', error);
+      return false;
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const hasPermission = await requestMicrophonePermission();
+      if (!hasPermission) {
+        Alert.alert(
+          'Permission Required',
+          'Microphone access is needed to use voice input. Please enable it in your device settings.'
+        );
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+
+      recordingRef.current = recording;
+      setIsRecording(true);
+      startPulseAnimation();
+    } catch (error) {
+      console.error('Failed to start recording:', error);
+      Alert.alert('Error', 'Failed to start voice recording. Please try again.');
+    }
+  };
+
+  const stopRecording = async () => {
+    try {
+      if (!recordingRef.current) return;
+
+      setIsRecording(false);
+      stopPulseAnimation();
+
+      await recordingRef.current.stopAndUnloadAsync();
+      const uri = recordingRef.current.getURI();
+      recordingRef.current = null;
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+      });
+
+      if (uri) {
+        await transcribeAudio(uri);
+      }
+    } catch (error) {
+      console.error('Failed to stop recording:', error);
+      setIsRecording(false);
+      stopPulseAnimation();
+      Alert.alert('Error', 'Failed to process voice recording. Please try again.');
+    }
+  };
+
+  const transcribeAudio = async (audioUri: string) => {
+    setIsTranscribing(true);
+    try {
+      const response = await symptomCheckerApi.transcribeAudio(audioUri);
+      const responseData = response.data as any;
+      const data = responseData?.data || responseData;
+      // Backend returns 'transcript' field, support both for compatibility
+      const transcribedText = data?.transcript || data?.text;
+
+      if (transcribedText) {
+        setInputText(transcribedText);
+      } else {
+        Alert.alert(
+          'Transcription Failed',
+          'Could not transcribe your voice. Please try speaking more clearly or type your message instead.'
+        );
+      }
+    } catch (error: any) {
+      console.error('Transcription error:', error);
+      const status = error?.response?.status;
+      if (status === 404 || status === 503) {
+        Alert.alert(
+          'Service Unavailable',
+          'Voice transcription service is currently unavailable. Please type your message instead.'
+        );
+      } else {
+        Alert.alert(
+          'Transcription Error',
+          'Failed to transcribe audio. Please try again or type your message.'
+        );
+      }
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  const handleMicPress = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  };
 
   useEffect(() => {
     // Add initial greeting
@@ -77,8 +217,8 @@ const HealthAssistantScreen: React.FC = () => {
         })),
       });
 
-      const data = response.data?.data;
-      if (data) {
+      const data = response.data?.data || response.data;
+      if (data && data.response) {
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
@@ -87,14 +227,23 @@ const HealthAssistantScreen: React.FC = () => {
           suggestions: data.suggestions,
         };
         addMessage(assistantMessage);
+      } else {
+        throw new Error('Invalid response');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to get response:', error);
+      const errorMessage = error?.response?.status === 404
+        ? "The AI Health Assistant service is currently unavailable. Please try again later or contact support."
+        : error?.response?.status === 503
+        ? "The AI service is temporarily unavailable due to high demand. Please try again in a few minutes."
+        : "I'm sorry, I couldn't process your request. Please check your connection and try again.";
+
       addMessage({
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: "I'm sorry, I encountered an error. Please try again.",
+        content: errorMessage,
         timestamp: new Date(),
+        suggestions: ['Book an appointment', 'View medical records'],
       });
     } finally {
       setIsLoading(false);
@@ -174,8 +323,8 @@ const HealthAssistantScreen: React.FC = () => {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <KeyboardAvoidingView
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={90}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         <ScrollView
           ref={scrollViewRef}
@@ -235,9 +384,30 @@ const HealthAssistantScreen: React.FC = () => {
             onChangeText={setInputText}
             multiline
             maxLength={500}
-            editable={!isLoading}
+            editable={!isLoading && !isTranscribing}
             onSubmitEditing={() => handleSendMessage()}
           />
+          <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+            <TouchableOpacity
+              style={[
+                styles.micButton,
+                isRecording && styles.micButtonRecording,
+                isTranscribing && styles.micButtonDisabled,
+              ]}
+              onPress={handleMicPress}
+              disabled={isLoading || isTranscribing}
+            >
+              {isTranscribing ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <Ionicons
+                  name={isRecording ? 'stop' : 'mic'}
+                  size={20}
+                  color={colors.white}
+                />
+              )}
+            </TouchableOpacity>
+          </Animated.View>
           <TouchableOpacity
             style={[styles.sendButton, (!inputText.trim() || isLoading) && styles.sendButtonDisabled]}
             onPress={() => handleSendMessage()}
@@ -265,6 +435,7 @@ const styles = StyleSheet.create({
   messagesContent: {
     padding: spacing.lg,
     paddingBottom: spacing.xl,
+    flexGrow: 1,
   },
   disclaimerCard: {
     flexDirection: 'row',
@@ -312,6 +483,7 @@ const styles = StyleSheet.create({
   },
   messageWrapper: {
     marginBottom: spacing.md,
+    flexShrink: 0,
   },
   timestamp: {
     fontSize: typography.fontSize.xs,
@@ -328,6 +500,7 @@ const styles = StyleSheet.create({
     maxWidth: '85%',
     padding: spacing.md,
     borderRadius: borderRadius.lg,
+    flexShrink: 1,
   },
   userBubble: {
     alignSelf: 'flex-end',
@@ -340,6 +513,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 4,
     flexDirection: 'row',
     alignItems: 'flex-start',
+    flexShrink: 1,
     ...shadows.sm,
   },
   assistantAvatar: {
@@ -352,12 +526,13 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
   },
   messageContent: {
-    flex: 1,
+    flexShrink: 1,
   },
   messageText: {
     fontSize: typography.fontSize.base,
     color: colors.text.primary,
     lineHeight: 22,
+    flexWrap: 'wrap',
   },
   userText: {
     color: colors.white,
@@ -446,6 +621,20 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: colors.gray[300],
+  },
+  micButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.gray[500],
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  micButtonRecording: {
+    backgroundColor: colors.error[500],
+  },
+  micButtonDisabled: {
+    backgroundColor: colors.gray[400],
   },
 });
 

@@ -61,9 +61,9 @@ const DashboardScreen: React.FC = () => {
           </View>
           <View>
             <Text style={styles.doctorName}>
-              Dr. {appointment.doctor.user.firstName} {appointment.doctor.user.lastName}
+              Dr. {appointment.doctor?.user?.firstName ?? ''} {appointment.doctor?.user?.lastName ?? 'Unknown'}
             </Text>
-            <Text style={styles.specialty}>{appointment.doctor.specialization}</Text>
+            <Text style={styles.specialty}>{appointment.doctor?.specialization ?? 'Specialist'}</Text>
           </View>
         </View>
         <View style={[styles.statusBadge, getStatusStyle(appointment.status)]}>
@@ -74,12 +74,14 @@ const DashboardScreen: React.FC = () => {
         <View style={styles.detailItem}>
           <Ionicons name="calendar-outline" size={16} color={colors.gray[500]} />
           <Text style={styles.detailText}>
-            {format(new Date(appointment.appointmentDate), 'MMM dd, yyyy')}
+            {appointment.appointmentDate && !isNaN(new Date(appointment.appointmentDate).getTime())
+              ? format(new Date(appointment.appointmentDate), 'MMM dd, yyyy')
+              : 'Date TBD'}
           </Text>
         </View>
         <View style={styles.detailItem}>
           <Ionicons name="time-outline" size={16} color={colors.gray[500]} />
-          <Text style={styles.detailText}>{appointment.startTime}</Text>
+          <Text style={styles.detailText}>{appointment.startTime ?? 'Time TBD'}</Text>
         </View>
       </View>
     </TouchableOpacity>

@@ -15,6 +15,13 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({
   const { isOffline } = useNetworkStatus();
   const [pendingCount, setPendingCount] = useState(0);
   const [slideAnim] = useState(new Animated.Value(-60));
+  const [isReady, setIsReady] = useState(false);
+
+  // Delay showing the banner to prevent flickering on app startup
+  useEffect(() => {
+    const timer = setTimeout(() => setIsReady(true), 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     // Load pending actions count
@@ -41,7 +48,7 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({
     }).start();
   }, [isOffline, slideAnim]);
 
-  if (!isOffline && pendingCount === 0) {
+  if (!isReady || (!isOffline && pendingCount === 0)) {
     return null;
   }
 

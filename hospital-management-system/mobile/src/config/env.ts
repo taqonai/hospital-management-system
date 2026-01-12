@@ -44,7 +44,7 @@ const APP_ENV = getEnvVar('APP_ENV', 'development') as Environment;
 const configs: Record<Environment, EnvironmentConfig> = {
   development: {
     APP_ENV: 'development',
-    API_URL: 'http://localhost:3001/api/v1',
+    API_URL: getEnvVar('API_URL', 'http://localhost:3001/api/v1'),
     ENABLE_DEBUG: true,
     ANALYTICS_ENABLED: false,
     PUSH_NOTIFICATIONS_ENABLED: true,

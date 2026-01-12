@@ -62,7 +62,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#3B82F6"
       },
-      "edgeToEdgeEnabled": true,
+      "edgeToEdgeEnabled": false,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -115,7 +115,7 @@
     ],
     "extra": {
       "APP_ENV": "development",
-      "API_URL": "http://localhost:3001/api/v1",
+      "API_URL": "https://medint.taqon.ai/api/v1",
       "SENTRY_DSN": "",
       "eas": {
         "projectId": "bcfea148-f3e9-4410-834b-bcc5b271bb45"

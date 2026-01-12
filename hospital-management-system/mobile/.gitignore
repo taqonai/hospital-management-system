@@ -39,3 +39,10 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Local build files
+credentials.json
+cmdline-tools.zip
+.env
+.env.local
+tunnel-proxy.js

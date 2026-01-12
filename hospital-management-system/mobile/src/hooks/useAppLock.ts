@@ -10,6 +10,7 @@ const BACKGROUND_THRESHOLD_MS = 30 * 1000; // 30 seconds - require auth after th
 interface UseAppLockReturn {
   isLocked: boolean;
   isBiometricEnabled: boolean;
+  isInitialized: boolean;
   unlockWithBiometric: () => Promise<boolean>;
   enableBiometricLock: () => Promise<void>;
   disableBiometricLock: () => Promise<void>;
@@ -20,6 +21,7 @@ export const useAppLock = (): UseAppLockReturn => {
   const { isAuthenticated } = useAuth();
   const [isLocked, setIsLocked] = useState(false);
   const [isBiometricEnabled, setIsBiometricEnabled] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   const backgroundTimeRef = useRef<number | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
@@ -31,6 +33,8 @@ export const useAppLock = (): UseAppLockReturn => {
         setIsBiometricEnabled(enabled === 'true');
       } catch (error) {
         console.error('Failed to load biometric preference:', error);
+      } finally {
+        setIsInitialized(true);
       }
     };
 
@@ -157,6 +161,7 @@ export const useAppLock = (): UseAppLockReturn => {
   return {
     isLocked,
     isBiometricEnabled,
+    isInitialized,
     unlockWithBiometric,
     enableBiometricLock,
     disableBiometricLock,

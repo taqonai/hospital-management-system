@@ -54,6 +54,28 @@ export type HealthStackParamList = {
   LabResultDetail: { resultId: string };
   MedicalHistory: undefined;
   Allergies: undefined;
+  // Health Sync
+  HealthSync: undefined;
+  DeviceConnection: { provider?: string };
+  ManualMetricLog: { metricType?: string };
+  // Fitness
+  FitnessTracker: undefined;
+  LogActivity: { activityType?: string };
+  FitnessGoals: undefined;
+  FitnessStats: undefined;
+  // Nutrition
+  Nutrition: undefined;
+  LogMeal: { mealType?: string };
+  NutritionPlan: undefined;
+  // Wellness
+  WellnessHub: undefined;
+  WellnessAssessment: undefined;
+  WellnessGoals: undefined;
+  HealthCoach: undefined;
+  // Messages
+  Messages: undefined;
+  MessageThread: { threadId: string };
+  NewMessage: { recipientId?: string };
 };
 
 // Settings stack

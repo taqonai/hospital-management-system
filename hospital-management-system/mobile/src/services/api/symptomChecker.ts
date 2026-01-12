@@ -34,6 +34,25 @@ export interface RespondData {
 }
 
 export const symptomCheckerApi = {
+  // Transcribe audio to text using Whisper AI service
+  transcribeAudio: async (audioUri: string) => {
+    const formData = new FormData();
+    const audioFile = {
+      uri: audioUri,
+      type: 'audio/m4a',
+      name: 'recording.m4a',
+    } as any;
+    formData.append('audio', audioFile);
+
+    // Uses public transcribe endpoint with Whisper AI
+    // Backend returns 'transcript' field, but we support both for compatibility
+    return api.post<ApiResponse<{ transcript: string; text?: string; confidence?: number; duration?: number }>>('/ai/transcribe', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+
   // Start a new symptom checker session
   startSession: (data?: StartSessionData) =>
     api.post<ApiResponse<SessionResponse>>('/ai/symptom-checker/start', data || {}),

@@ -1,7 +1,9 @@
 import React from 'react';
+import { Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme';
 import {
   MainTabParamList,
@@ -29,6 +31,27 @@ import PrescriptionsScreen from '../screens/records/PrescriptionsScreen';
 import PrescriptionDetailScreen from '../screens/records/PrescriptionDetailScreen';
 import LabResultsScreen from '../screens/records/LabResultsScreen';
 import LabResultDetailScreen from '../screens/records/LabResultDetailScreen';
+
+// Health Sync screens
+import HealthSyncScreen from '../screens/health/HealthSyncScreen';
+import DeviceConnectionScreen from '../screens/health/DeviceConnectionScreen';
+import ManualMetricLogScreen from '../screens/health/ManualMetricLogScreen';
+
+// Medical History screens
+import MedicalHistoryScreen from '../screens/health/MedicalHistoryScreen';
+import AllergiesScreen from '../screens/health/AllergiesScreen';
+
+// Fitness screens
+import { FitnessTrackerScreen, LogActivityScreen, FitnessGoalsScreen, FitnessStatsScreen } from '../screens/fitness';
+
+// Nutrition screens
+import { NutritionScreen, LogMealScreen, NutritionPlanScreen } from '../screens/nutrition';
+
+// Wellness screens
+import { WellnessHubScreen, WellnessAssessmentScreen, WellnessGoalsScreen, HealthCoachScreen } from '../screens/wellness';
+
+// Messages screens
+import { MessagesScreen, MessageThreadScreen, NewMessageScreen } from '../screens/messages';
 
 // Settings screens
 import SettingsScreen from '../screens/settings/SettingsScreen';
@@ -143,6 +166,107 @@ const HealthStackNavigator = () => (
       component={LabResultDetailScreen}
       options={{ title: 'Lab Result Details' }}
     />
+    {/* Health Sync */}
+    <HealthStack.Screen
+      name="HealthSync"
+      component={HealthSyncScreen}
+      options={{ title: 'Health Sync' }}
+    />
+    <HealthStack.Screen
+      name="DeviceConnection"
+      component={DeviceConnectionScreen}
+      options={{ title: 'Connect Device' }}
+    />
+    <HealthStack.Screen
+      name="ManualMetricLog"
+      component={ManualMetricLogScreen}
+      options={{ title: 'Log Health Metric' }}
+    />
+    {/* Medical History */}
+    <HealthStack.Screen
+      name="MedicalHistory"
+      component={MedicalHistoryScreen}
+      options={{ title: 'Medical History' }}
+    />
+    <HealthStack.Screen
+      name="Allergies"
+      component={AllergiesScreen}
+      options={{ title: 'Allergies' }}
+    />
+    {/* Fitness */}
+    <HealthStack.Screen
+      name="FitnessTracker"
+      component={FitnessTrackerScreen}
+      options={{ title: 'Fitness Tracker' }}
+    />
+    <HealthStack.Screen
+      name="LogActivity"
+      component={LogActivityScreen}
+      options={{ title: 'Log Activity' }}
+    />
+    <HealthStack.Screen
+      name="FitnessGoals"
+      component={FitnessGoalsScreen}
+      options={{ title: 'Fitness Goals' }}
+    />
+    <HealthStack.Screen
+      name="FitnessStats"
+      component={FitnessStatsScreen}
+      options={{ title: 'Fitness Statistics' }}
+    />
+    {/* Nutrition */}
+    <HealthStack.Screen
+      name="Nutrition"
+      component={NutritionScreen}
+      options={{ title: 'Nutrition' }}
+    />
+    <HealthStack.Screen
+      name="LogMeal"
+      component={LogMealScreen}
+      options={{ title: 'Log Meal' }}
+    />
+    <HealthStack.Screen
+      name="NutritionPlan"
+      component={NutritionPlanScreen}
+      options={{ title: 'Nutrition Plans' }}
+    />
+    {/* Wellness */}
+    <HealthStack.Screen
+      name="WellnessHub"
+      component={WellnessHubScreen}
+      options={{ title: 'Wellness Hub' }}
+    />
+    <HealthStack.Screen
+      name="WellnessAssessment"
+      component={WellnessAssessmentScreen}
+      options={{ title: 'Wellness Assessment' }}
+    />
+    <HealthStack.Screen
+      name="WellnessGoals"
+      component={WellnessGoalsScreen}
+      options={{ title: 'Wellness Goals' }}
+    />
+    <HealthStack.Screen
+      name="HealthCoach"
+      component={HealthCoachScreen}
+      options={{ title: 'Health Coach' }}
+    />
+    {/* Messages */}
+    <HealthStack.Screen
+      name="Messages"
+      component={MessagesScreen}
+      options={{ title: 'Messages' }}
+    />
+    <HealthStack.Screen
+      name="MessageThread"
+      component={MessageThreadScreen}
+      options={{ title: 'Conversation' }}
+    />
+    <HealthStack.Screen
+      name="NewMessage"
+      component={NewMessageScreen}
+      options={{ title: 'New Message' }}
+    />
   </HealthStack.Navigator>
 );
 
@@ -199,6 +323,12 @@ const SettingsStackNavigator = () => (
 
 // Main tab navigator
 const MainNavigator: React.FC = () => {
+  const insets = useSafeAreaInsets();
+  // Ensure minimum bottom padding for devices with gesture navigation
+  // Android devices often need more padding to avoid system navigation overlap
+  const androidExtraPadding = Platform.OS === 'android' ? 10 : 0;
+  const bottomPadding = Math.max(insets.bottom, 24) + androidExtraPadding;
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -208,9 +338,15 @@ const MainNavigator: React.FC = () => {
         tabBarStyle: {
           backgroundColor: colors.white,
           borderTopColor: colors.border,
+          borderTopWidth: 1,
           paddingTop: 8,
-          paddingBottom: 8,
-          height: 60,
+          paddingBottom: bottomPadding,
+          height: 60 + bottomPadding,
+          elevation: 8,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
         },
         tabBarLabelStyle: {
           fontSize: 12,

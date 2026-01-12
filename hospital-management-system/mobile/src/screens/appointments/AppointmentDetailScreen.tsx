@@ -40,12 +40,16 @@ const AppointmentDetailScreen: React.FC = () => {
     isLoading,
     isRefetching,
     refetch,
+    error,
   } = useQuery({
     queryKey: ['appointment', appointmentId],
     queryFn: async () => {
       const response = await patientPortalApi.getAppointmentById(appointmentId);
-      return response.data.data as Appointment;
+      // Handle different API response formats
+      const data = response.data?.data || response.data;
+      return data as Appointment;
     },
+    retry: 1,
   });
 
   const cancelMutation = useMutation({
@@ -197,11 +201,16 @@ const AppointmentDetailScreen: React.FC = () => {
     );
   }
 
-  if (!appointment) {
+  if (!appointment || error) {
     return (
       <View style={styles.errorContainer}>
         <Ionicons name="alert-circle-outline" size={64} color={colors.error[500]} />
-        <Text style={styles.errorText}>Appointment not found</Text>
+        <Text style={styles.errorText}>
+          {error ? 'Failed to load appointment' : 'Appointment not found'}
+        </Text>
+        <Text style={styles.errorSubtext}>
+          {error ? 'Please check your connection and try again' : 'This appointment may have been deleted'}
+        </Text>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
@@ -209,8 +218,9 @@ const AppointmentDetailScreen: React.FC = () => {
     );
   }
 
-  const statusColor = getStatusColor(appointment.status);
-  const appointmentDate = new Date(appointment.appointmentDate);
+  const statusColor = getStatusColor(appointment.status || 'SCHEDULED');
+  const appointmentDate = appointment.appointmentDate ? new Date(appointment.appointmentDate) : new Date();
+  const isValidDate = !isNaN(appointmentDate.getTime());
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -260,7 +270,7 @@ const AppointmentDetailScreen: React.FC = () => {
               <View style={styles.detailContent}>
                 <Text style={styles.detailLabel}>Date</Text>
                 <Text style={styles.detailValue}>
-                  {format(appointmentDate, 'EEEE, MMMM dd, yyyy')}
+                  {isValidDate ? format(appointmentDate, 'EEEE, MMMM dd, yyyy') : 'Date not available'}
                 </Text>
               </View>
             </View>
@@ -405,7 +415,13 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.lg,
     color: colors.text.secondary,
     marginTop: spacing.md,
+  },
+  errorSubtext: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[400],
+    marginTop: spacing.sm,
     marginBottom: spacing.xl,
+    textAlign: 'center',
   },
   backButton: {
     backgroundColor: colors.primary[600],

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,11 +10,14 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Animated,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, borderRadius, typography, shadows } from '../../theme';
+import { Audio } from 'expo-av';
+import { colors, spacing, borderRadius, typography, shadows, keyboardConfig } from '../../theme';
 import { symptomCheckerApi } from '../../services/api';
 import { SymptomCheckerResult, SymptomQuestion } from '../../types';
 
@@ -34,9 +37,92 @@ interface TriageResult {
   recommendations: string[];
 }
 
+// Fallback questions when AI service is unavailable
+const FALLBACK_QUESTIONS = [
+  {
+    id: 'duration',
+    question: 'How long have you been experiencing these symptoms?',
+    options: ['Less than 24 hours', '1-3 days', '4-7 days', 'More than a week'],
+  },
+  {
+    id: 'severity',
+    question: 'On a scale of 1-10, how severe is your discomfort?',
+    options: ['Mild (1-3)', 'Moderate (4-6)', 'Severe (7-8)', 'Very Severe (9-10)'],
+  },
+  {
+    id: 'fever',
+    question: 'Are you experiencing any fever?',
+    options: ['No fever', 'Low-grade (99-100°F)', 'Moderate (100-102°F)', 'High (above 102°F)'],
+  },
+  {
+    id: 'breathing',
+    question: 'Are you having any difficulty breathing?',
+    options: ['No difficulty', 'Mild shortness of breath', 'Moderate difficulty', 'Severe difficulty'],
+  },
+  {
+    id: 'emergency_signs',
+    question: 'Are you experiencing any of these warning signs?',
+    options: ['None of these', 'Chest pain', 'Severe headache/confusion', 'Uncontrolled bleeding'],
+  },
+];
+
+// Calculate triage based on fallback responses
+const calculateFallbackTriage = (responses: string[]): TriageResult => {
+  let urgencyScore = 0;
+
+  // Analyze severity response (index 1)
+  if (responses[1]?.includes('Very Severe') || responses[1]?.includes('9-10')) urgencyScore += 3;
+  else if (responses[1]?.includes('Severe') || responses[1]?.includes('7-8')) urgencyScore += 2;
+  else if (responses[1]?.includes('Moderate')) urgencyScore += 1;
+
+  // Analyze fever response (index 2)
+  if (responses[2]?.includes('High') || responses[2]?.includes('above 102')) urgencyScore += 2;
+  else if (responses[2]?.includes('Moderate') || responses[2]?.includes('100-102')) urgencyScore += 1;
+
+  // Analyze breathing response (index 3)
+  if (responses[3]?.includes('Severe difficulty')) urgencyScore += 3;
+  else if (responses[3]?.includes('Moderate difficulty')) urgencyScore += 2;
+  else if (responses[3]?.includes('Mild')) urgencyScore += 1;
+
+  // Analyze emergency signs (index 4) - highest weight
+  if (responses[4] && !responses[4].includes('None')) urgencyScore += 4;
+
+  // Determine urgency level
+  let urgency: TriageResult['urgency'];
+  let recommendation: string;
+
+  if (urgencyScore >= 6) {
+    urgency = 'EMERGENCY';
+    recommendation = 'Based on your symptoms, you should seek immediate emergency care. Please call 911 or go to the nearest emergency room.';
+  } else if (urgencyScore >= 4) {
+    urgency = 'URGENT_CARE';
+    recommendation = 'Your symptoms suggest you should see a doctor within 24 hours. Please visit an urgent care center or schedule a same-day appointment.';
+  } else if (urgencyScore >= 2) {
+    urgency = 'SCHEDULE_APPOINTMENT';
+    recommendation = 'Based on your symptoms, we recommend scheduling an appointment with a healthcare provider within the next few days.';
+  } else {
+    urgency = 'SELF_CARE';
+    recommendation = 'Your symptoms appear mild. Rest, stay hydrated, and monitor your condition. If symptoms worsen, consult a healthcare provider.';
+  }
+
+  return {
+    urgency,
+    recommendation,
+    possibleConditions: [],
+    nextSteps: urgency === 'EMERGENCY'
+      ? ['Call 911 or go to emergency room immediately', 'Do not drive yourself if symptoms are severe']
+      : ['Book an appointment with your doctor', 'Note down all your symptoms', 'Prepare a list of any medications you are taking'],
+    recommendations: urgency === 'SELF_CARE'
+      ? ['Rest and stay hydrated', 'Monitor your symptoms', 'Take over-the-counter medication if appropriate', 'Seek care if symptoms worsen']
+      : ['Seek medical attention as recommended', 'Avoid strenuous activity', 'Keep a symptom diary'],
+  };
+};
+
 const SymptomCheckerScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const scrollViewRef = useRef<ScrollView>(null);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -44,6 +130,36 @@ const SymptomCheckerScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [triageResult, setTriageResult] = useState<TriageResult | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [fallbackQuestionIndex, setFallbackQuestionIndex] = useState(0);
+  const [fallbackResponses, setFallbackResponses] = useState<string[]>([]);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  // Keyboard listeners for Android to scroll when keyboard appears
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => {
+        setKeyboardVisible(true);
+        // Scroll to bottom when keyboard appears
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardVisible(false);
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
 
   const addMessage = (message: Message) => {
     setMessages((prev) => [...prev, message]);
@@ -52,13 +168,149 @@ const SymptomCheckerScreen: React.FC = () => {
     }, 100);
   };
 
+  // Voice recording functions
+  const startPulseAnimation = () => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.2,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  };
+
+  const stopPulseAnimation = () => {
+    pulseAnim.stopAnimation();
+    pulseAnim.setValue(1);
+  };
+
+  const requestMicrophonePermission = async () => {
+    try {
+      const { status } = await Audio.requestPermissionsAsync();
+      return status === 'granted';
+    } catch (error) {
+      console.error('Error requesting microphone permission:', error);
+      return false;
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const hasPermission = await requestMicrophonePermission();
+      if (!hasPermission) {
+        Alert.alert(
+          'Permission Required',
+          'Microphone access is needed to use voice input. Please enable it in your device settings.'
+        );
+        return;
+      }
+
+      // Configure audio mode for recording
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      // Create and start recording
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+
+      recordingRef.current = recording;
+      setIsRecording(true);
+      startPulseAnimation();
+    } catch (error) {
+      console.error('Failed to start recording:', error);
+      Alert.alert('Error', 'Failed to start voice recording. Please try again.');
+    }
+  };
+
+  const stopRecording = async () => {
+    try {
+      if (!recordingRef.current) return;
+
+      setIsRecording(false);
+      stopPulseAnimation();
+
+      await recordingRef.current.stopAndUnloadAsync();
+      const uri = recordingRef.current.getURI();
+      recordingRef.current = null;
+
+      // Reset audio mode
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+      });
+
+      if (uri) {
+        await transcribeAudio(uri);
+      }
+    } catch (error) {
+      console.error('Failed to stop recording:', error);
+      setIsRecording(false);
+      stopPulseAnimation();
+      Alert.alert('Error', 'Failed to process voice recording. Please try again.');
+    }
+  };
+
+  const transcribeAudio = async (audioUri: string) => {
+    setIsTranscribing(true);
+    try {
+      const response = await symptomCheckerApi.transcribeAudio(audioUri);
+      const responseData = response.data as any;
+      const data = responseData?.data || responseData;
+      // Backend returns 'transcript' field, support both for compatibility
+      const transcribedText = data?.transcript || data?.text;
+
+      if (transcribedText) {
+        setInputText(transcribedText);
+      } else {
+        Alert.alert(
+          'Transcription Failed',
+          'Could not transcribe your voice. Please try speaking more clearly or type your symptoms instead.'
+        );
+      }
+    } catch (error: any) {
+      console.error('Transcription error:', error);
+      // Check if it's a 404/service unavailable error
+      const status = error?.response?.status;
+      if (status === 404 || status === 503) {
+        Alert.alert(
+          'Service Unavailable',
+          'Voice transcription service is currently unavailable. Please type your symptoms instead.'
+        );
+      } else {
+        Alert.alert(
+          'Transcription Error',
+          'Failed to transcribe audio. Please try again or type your symptoms.'
+        );
+      }
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  const handleMicPress = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  };
+
   const startSession = async () => {
     setIsLoading(true);
     try {
       const response = await symptomCheckerApi.startSession();
-      const data = response.data?.data;
+      const data = response.data?.data || response.data;
 
-      if (data) {
+      if (data && data.sessionId) {
         setSessionId(data.sessionId);
 
         // Get first question from questions array
@@ -80,12 +332,53 @@ const SymptomCheckerScreen: React.FC = () => {
             })),
           });
         }
+      } else {
+        // Fallback to structured questions mode
+        startFallbackMode();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to start session:', error);
-      Alert.alert('Error', 'Failed to start symptom checker. Please try again.');
+      // Start in fallback mode instead of showing error
+      startFallbackMode();
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const startFallbackMode = () => {
+    setSessionId('fallback-' + Date.now());
+    setFallbackQuestionIndex(0);
+    setFallbackResponses([]);
+
+    // Welcome message
+    addMessage({
+      id: Date.now().toString(),
+      type: 'bot',
+      content: "Hello! I'm your health assistant. The AI service is currently limited, but I can still help assess your symptoms with a few questions. Please describe your main symptoms or concern first.",
+    });
+
+    // After user describes symptoms, we'll show the first structured question
+    // The first question will be shown after they submit their initial description
+  };
+
+  const showNextFallbackQuestion = () => {
+    const question = FALLBACK_QUESTIONS[fallbackQuestionIndex];
+    if (question) {
+      addMessage({
+        id: Date.now().toString(),
+        type: 'bot',
+        content: question.question,
+      });
+
+      addMessage({
+        id: (Date.now() + 1).toString(),
+        type: 'options',
+        content: '',
+        options: question.options.map((opt, idx) => ({
+          id: `fallback_${question.id}_${idx}`,
+          text: opt,
+        })),
+      });
     }
   };
 
@@ -117,6 +410,83 @@ const SymptomCheckerScreen: React.FC = () => {
   };
 
   const processResponse = async (responseText: string, questionId?: string) => {
+    // Handle fallback mode with structured questions
+    if (sessionId?.startsWith('fallback-')) {
+      // Check if this is the initial symptom description (before structured questions)
+      if (fallbackResponses.length === 0 && fallbackQuestionIndex === 0) {
+        // Store initial symptom description and show first structured question
+        setFallbackResponses([responseText]);
+
+        addMessage({
+          id: Date.now().toString(),
+          type: 'bot',
+          content: "Thank you for sharing. Let me ask you a few questions to better understand your condition.",
+        });
+
+        // Show first structured question
+        setTimeout(() => {
+          const firstQuestion = FALLBACK_QUESTIONS[0];
+          addMessage({
+            id: Date.now().toString(),
+            type: 'bot',
+            content: firstQuestion.question,
+          });
+
+          addMessage({
+            id: (Date.now() + 1).toString(),
+            type: 'options',
+            content: '',
+            options: firstQuestion.options.map((opt, idx) => ({
+              id: `fallback_${firstQuestion.id}_${idx}`,
+              text: opt,
+            })),
+          });
+        }, 500);
+        return;
+      }
+
+      // Store the response for structured questions
+      const newResponses = [...fallbackResponses, responseText];
+      setFallbackResponses(newResponses);
+
+      // Check if we have more questions (subtract 1 because index 0 is initial symptoms)
+      const nextQuestionIndex = fallbackQuestionIndex + 1;
+
+      if (nextQuestionIndex < FALLBACK_QUESTIONS.length) {
+        // Show next question
+        const nextQuestion = FALLBACK_QUESTIONS[nextQuestionIndex];
+        setFallbackQuestionIndex(nextQuestionIndex);
+
+        addMessage({
+          id: Date.now().toString(),
+          type: 'bot',
+          content: nextQuestion.question,
+        });
+
+        addMessage({
+          id: (Date.now() + 1).toString(),
+          type: 'options',
+          content: '',
+          options: nextQuestion.options.map((opt, idx) => ({
+            id: `fallback_${nextQuestion.id}_${idx}`,
+            text: opt,
+          })),
+        });
+      } else {
+        // All questions answered - calculate triage (skip first response which is symptoms)
+        const result = calculateFallbackTriage(newResponses.slice(1));
+        setTriageResult(result);
+        setIsComplete(true);
+
+        addMessage({
+          id: Date.now().toString(),
+          type: 'bot',
+          content: 'Based on your responses, here is my assessment:',
+        });
+      }
+      return;
+    }
+
     setIsLoading(true);
     try {
       const apiResponse = await symptomCheckerApi.respond({
@@ -126,23 +496,23 @@ const SymptomCheckerScreen: React.FC = () => {
           answer: responseText,
         }],
       });
-      const data = apiResponse.data?.data;
+      const data = apiResponse.data?.data || apiResponse.data;
 
       if (data) {
         if (data.isComplete) {
           // Get final result
           const completeResponse = await symptomCheckerApi.complete(sessionId!);
-          const result = completeResponse.data?.data;
+          const result = completeResponse.data?.data || completeResponse.data;
 
           if (result) {
             // Map the API result to our local TriageResult type
             const triageData: TriageResult = {
-              urgency: result.urgency,
+              urgency: result.urgency || 'SCHEDULE_APPOINTMENT',
               recommendation: result.recommendation || result.recommendations?.[0] || 'Please consult a healthcare professional.',
-              possibleConditions: result.possibleConditions,
+              possibleConditions: result.possibleConditions || [],
               suggestedDepartment: result.suggestedDepartment,
               nextSteps: result.nextSteps || [],
-              recommendations: result.recommendations,
+              recommendations: result.recommendations || [],
             };
             setTriageResult(triageData);
             setIsComplete(true);
@@ -173,12 +543,48 @@ const SymptomCheckerScreen: React.FC = () => {
                 })),
               });
             }
+          } else {
+            // No questions returned - switch to fallback mode with structured questions
+            console.log('AI returned no questions, switching to fallback mode');
+            setSessionId('fallback-' + Date.now());
+            setFallbackQuestionIndex(0);
+            setFallbackResponses([responseText]);
+
+            addMessage({
+              id: Date.now().toString(),
+              type: 'bot',
+              content: "Let me ask you a few questions to better understand your condition.",
+            });
+
+            // Show first structured question
+            setTimeout(() => {
+              const firstQuestion = FALLBACK_QUESTIONS[0];
+              addMessage({
+                id: Date.now().toString(),
+                type: 'bot',
+                content: firstQuestion.question,
+              });
+
+              addMessage({
+                id: (Date.now() + 1).toString(),
+                type: 'options',
+                content: '',
+                options: firstQuestion.options.map((opt, idx) => ({
+                  id: `fallback_${firstQuestion.id}_${idx}`,
+                  text: opt,
+                })),
+              });
+            }, 300);
           }
         }
       }
     } catch (error) {
       console.error('Failed to process response:', error);
-      Alert.alert('Error', 'Failed to process your response. Please try again.');
+      addMessage({
+        id: Date.now().toString(),
+        type: 'bot',
+        content: "I'm having trouble processing your response. Please try again, or book an appointment with a healthcare provider for assistance.",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -228,6 +634,8 @@ const SymptomCheckerScreen: React.FC = () => {
     setMessages([]);
     setIsComplete(false);
     setTriageResult(null);
+    setFallbackQuestionIndex(0);
+    setFallbackResponses([]);
   };
 
   // Start session on mount
@@ -345,14 +753,16 @@ const SymptomCheckerScreen: React.FC = () => {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <KeyboardAvoidingView
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={90}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 80}
       >
         <ScrollView
           ref={scrollViewRef}
           style={styles.messagesContainer}
           contentContainerStyle={styles.messagesContent}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
         >
           {/* Info Card */}
           <View style={styles.infoCard}>
@@ -378,18 +788,39 @@ const SymptomCheckerScreen: React.FC = () => {
           <View style={styles.inputContainer}>
             <TextInput
               style={styles.input}
-              placeholder="Describe your symptoms..."
+              placeholder={isTranscribing ? 'Transcribing...' : 'Describe your symptoms...'}
               placeholderTextColor={colors.gray[400]}
               value={inputText}
               onChangeText={setInputText}
               multiline
               maxLength={500}
-              editable={!isLoading}
+              editable={!isLoading && !isTranscribing}
             />
+            <Animated.View style={{ transform: [{ scale: isRecording ? pulseAnim : 1 }] }}>
+              <TouchableOpacity
+                style={[
+                  styles.micButton,
+                  isRecording && styles.micButtonRecording,
+                  (isLoading || isTranscribing) && styles.micButtonDisabled,
+                ]}
+                onPress={handleMicPress}
+                disabled={isLoading || isTranscribing}
+              >
+                {isTranscribing ? (
+                  <ActivityIndicator size="small" color={colors.white} />
+                ) : (
+                  <Ionicons
+                    name={isRecording ? 'stop' : 'mic'}
+                    size={20}
+                    color={colors.white}
+                  />
+                )}
+              </TouchableOpacity>
+            </Animated.View>
             <TouchableOpacity
-              style={[styles.sendButton, (!inputText.trim() || isLoading) && styles.sendButtonDisabled]}
+              style={[styles.sendButton, (!inputText.trim() || isLoading || isRecording) && styles.sendButtonDisabled]}
               onPress={handleSendMessage}
-              disabled={!inputText.trim() || isLoading}
+              disabled={!inputText.trim() || isLoading || isRecording}
             >
               <Ionicons name="send" size={20} color={colors.white} />
             </TouchableOpacity>
@@ -414,6 +845,7 @@ const styles = StyleSheet.create({
   messagesContent: {
     padding: spacing.lg,
     paddingBottom: spacing.xl,
+    flexGrow: 1,
   },
   infoCard: {
     flexDirection: 'row',
@@ -434,6 +866,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     padding: spacing.md,
     borderRadius: borderRadius.lg,
+    flexShrink: 1,
   },
   userBubble: {
     alignSelf: 'flex-end',
@@ -446,6 +879,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 4,
     flexDirection: 'row',
     alignItems: 'flex-start',
+    flexShrink: 1,
     ...shadows.sm,
   },
   botAvatar: {
@@ -460,7 +894,8 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: typography.fontSize.base,
     lineHeight: 22,
-    flex: 1,
+    flexShrink: 1,
+    flexWrap: 'wrap',
   },
   userText: {
     color: colors.white,
@@ -620,6 +1055,20 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.base,
     color: colors.text.primary,
     maxHeight: 100,
+  },
+  micButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primary[600],
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  micButtonRecording: {
+    backgroundColor: colors.error[600],
+  },
+  micButtonDisabled: {
+    backgroundColor: colors.gray[300],
   },
   sendButton: {
     width: 44,

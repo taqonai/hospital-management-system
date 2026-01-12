@@ -162,6 +162,14 @@ export const shadows = {
   },
 };
 
+// Keyboard configuration for consistent handling across screens
+import { Platform } from 'react-native';
+
+export const keyboardConfig = {
+  behavior: Platform.OS === 'ios' ? 'padding' : 'height',
+  verticalOffset: Platform.OS === 'ios' ? 90 : 60,
+} as const;
+
 export const theme = {
   colors,
   typography,
