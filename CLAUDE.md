@@ -38,6 +38,30 @@ npm run preview              # Preview production build locally
 npm run lint                 # ESLint
 ```
 
+### Mobile App (React Native/Expo)
+```bash
+cd hospital-management-system/mobile
+npm install
+npm start                    # Start Expo dev server
+npm run android              # Run on Android emulator/device
+npm run ios                  # Run on iOS simulator/device
+npm run web                  # Run in browser
+npm run lint                 # ESLint
+npm run typecheck            # TypeScript type checking
+npm run doctor               # Expo diagnostics
+
+# EAS Build Commands
+npm run build:dev            # Development build (both platforms)
+npm run build:dev:ios        # Development build (iOS only)
+npm run build:dev:android    # Development build (Android only)
+npm run build:preview        # Preview/testing build
+npm run build:prod           # Production build
+
+# OTA Updates
+npm run update:preview       # Push update to preview channel
+npm run update:prod          # Push update to production channel
+```
+
 ### AI Services (Python/FastAPI)
 ```bash
 cd hospital-management-system/ai-services
@@ -75,6 +99,13 @@ docker-compose restart [service]              # Restart service
 3. **AI Services** (Python + FastAPI)
    - Entry: `ai-services/main.py` (initializes all AI service instances)
    - Each service in its own directory with `service.py` and optional `knowledge_base.py`
+
+4. **Mobile App** (React Native + Expo SDK 54 + TypeScript)
+   - Patient-facing mobile portal for iOS and Android
+   - Entry: `mobile/index.ts`, navigation: `mobile/src/navigation/RootNavigator.tsx`
+   - State: Redux Toolkit (`mobile/src/store/`) + TanStack Query for server state
+   - API client: `mobile/src/services/api/client.ts`
+   - Key features: biometric auth, push notifications, offline support, secure storage
 
 ### TypeScript Path Aliases
 
@@ -201,6 +232,43 @@ Receptionist (Check-in) → Nurse (Vitals) → Doctor (Consultation) → Lab (Re
 
 **Data Chain:** Appointment → Consultation → LabOrder (linked via `consultationId` and `appointmentId`)
 
+### Mobile App Architecture
+
+**Navigation Structure:**
+- `RootNavigator` - Handles auth state (shows AuthNavigator or MainNavigator)
+- `AuthNavigator` - Login, Register, OTP verification screens
+- `MainNavigator` - Bottom tab navigation for authenticated users
+
+**Key Services:**
+| Directory | Purpose |
+|-----------|---------|
+| `services/api/` | API client, auth, patient portal, symptom checker endpoints |
+| `services/offline/` | Cache manager, action queue for offline support |
+| `services/biometric/` | Face ID/Touch ID authentication |
+| `services/notifications/` | Push notification registration and handling |
+| `services/storage/` | Secure storage for tokens and sensitive data |
+
+**Screen Organization:**
+- `screens/auth/` - Login, Register, OTP verification
+- `screens/dashboard/` - Patient dashboard
+- `screens/appointments/` - Booking, list, detail views
+- `screens/records/` - Medical records, prescriptions, lab results
+- `screens/health/` - Symptom checker, health insights, health assistant
+- `screens/billing/` - Bills and payment history
+- `screens/settings/` - Profile, notifications, security settings
+
+**Offline Support:**
+- `CacheManager` stores critical data locally via AsyncStorage
+- `ActionQueue` queues mutations when offline, syncs when back online
+- `useOfflineData` hook provides cached data with network status
+- `OfflineBanner` component shows connectivity status
+
+**Security Features:**
+- Biometric authentication (Face ID, Touch ID, fingerprint)
+- Secure token storage via expo-secure-store
+- App lock with inactivity timer
+- Screen security (prevents screenshots on sensitive screens)
+
 ## Configuration
 
 ### Environment Variables
@@ -215,6 +283,10 @@ Receptionist (Check-in) → Nurse (Vitals) → Doctor (Consultation) → Lab (Re
 
 **AI Services** (`ai-services/.env`):
 - `OPENAI_API_KEY` - Required for Whisper, GPT models
+
+**Mobile** (`mobile/.env` or Expo config):
+- `EXPO_PUBLIC_API_URL` - Backend API URL (default: http://localhost:3001/api/v1)
+- Configure EAS project ID in `app.json` → `extra.eas.projectId`
 
 **S3/Storage** (in `backend/.env`):
 - `AWS_REGION`, `AWS_S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` - For AWS S3
@@ -308,3 +380,11 @@ npx prisma migrate dev
 3. Import and instantiate in `ai-services/main.py`
 4. Add FastAPI endpoint in `main.py`
 5. Create backend proxy route in `backend/src/routes/aiRoutes.ts`
+
+### Mobile App Issues
+- **Expo doctor**: Run `npm run doctor` to diagnose common Expo issues
+- **Metro bundler cache**: Clear with `npx expo start --clear`
+- **iOS simulator**: Requires macOS with Xcode installed
+- **Android emulator**: Requires Android Studio with an AVD configured
+- **Push notifications**: Requires physical device (simulators don't support push)
+- **Biometric auth**: Test on physical device; simulators have limited support
