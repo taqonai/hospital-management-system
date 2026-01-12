@@ -51,6 +51,8 @@ services:
       REDIS_PORT: 6379
       JWT_SECRET: your-super-secret-jwt-key-change-in-production
       JWT_REFRESH_SECRET: your-super-secret-refresh-key-change-in-production
+      # CORS - Allow all origins for ALB/proxy access
+      CORS_ORIGIN: "*"
       # All AI services run in single container on port 8000
       AI_SERVICE_URL: http://ai-services:8000
       AI_SCRIBE_URL: http://ai-services:8000
