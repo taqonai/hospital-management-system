@@ -313,12 +313,16 @@ const SymptomCheckerScreen: React.FC = () => {
       if (data && data.sessionId) {
         setSessionId(data.sessionId);
 
-        // Get first question from questions array
-        const firstQuestion = data.questions?.[0];
+        // Backend returns nextQuestions (like web), support both field names
+        const questions = data.nextQuestions || data.questions || [];
+        const firstQuestion = questions[0];
+
+        // Show welcome message from API or default
+        const welcomeMessage = data.message || firstQuestion?.question || "Hello! I'm your AI health assistant. Please describe your main symptoms or concern.";
         addMessage({
           id: Date.now().toString(),
           type: 'bot',
-          content: firstQuestion?.question || "Hello! I'm your AI health assistant. Please describe your main symptoms or concern.",
+          content: welcomeMessage,
         });
 
         if (firstQuestion?.options && firstQuestion.options.length > 0) {
@@ -326,7 +330,7 @@ const SymptomCheckerScreen: React.FC = () => {
             id: (Date.now() + 1).toString(),
             type: 'options',
             content: '',
-            options: firstQuestion.options.map((opt, idx) => ({
+            options: firstQuestion.options.map((opt: any, idx: number) => ({
               id: `option_${idx}`,
               text: opt,
             })),
@@ -523,23 +527,37 @@ const SymptomCheckerScreen: React.FC = () => {
             });
           }
         } else {
-          // Continue conversation - get first question
-          const nextQuestion = data.questions?.[0];
-          if (nextQuestion) {
+          // Continue conversation - get next question (backend returns nextQuestions, not questions)
+          const questions = data.nextQuestions || data.questions || [];
+          const nextQuestion = questions[0];
+
+          // Show bot message if provided
+          if (data.message) {
             addMessage({
               id: Date.now().toString(),
               type: 'bot',
-              content: nextQuestion.question,
+              content: data.message,
             });
+          }
+
+          if (nextQuestion) {
+            // Show the question if not already in message
+            if (!data.message) {
+              addMessage({
+                id: Date.now().toString(),
+                type: 'bot',
+                content: nextQuestion.question,
+              });
+            }
 
             if (nextQuestion.options && nextQuestion.options.length > 0) {
               addMessage({
                 id: (Date.now() + 1).toString(),
                 type: 'options',
                 content: '',
-                options: nextQuestion.options.map((opt, idx) => ({
-                  id: `${nextQuestion.id}_${idx}`,
-                  text: opt,
+                options: nextQuestion.options.map((opt: any, idx: number) => ({
+                  id: `${nextQuestion.id || 'q'}_${idx}`,
+                  text: typeof opt === 'string' ? opt : opt.label || opt.value,
                 })),
               });
             }
