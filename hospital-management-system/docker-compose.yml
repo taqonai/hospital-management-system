@@ -105,11 +105,10 @@ services:
       context: ./ai-services
       dockerfile: Dockerfile
     container_name: hms-ai-services
-    environment:
-      PYTHONUNBUFFERED: 1
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     env_file:
       - ./ai-services/.env
+    environment:
+      PYTHONUNBUFFERED: 1
     ports:
       - "8000:8000"
     volumes:
