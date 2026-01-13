@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatCurrency } from '../../utils/currency';
 import {
   BeakerIcon,
   PhotoIcon,
@@ -171,7 +172,7 @@ export default function OrderSetRecommendation({
           <div className="text-right">
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <CurrencyDollarIcon className="h-4 w-4" />
-              <span>Est. Total: ${recommendations.totalEstimatedCost.toFixed(2)}</span>
+              <span>Est. Total: {formatCurrency(recommendations.totalEstimatedCost)}</span>
             </div>
             <p className="text-xs text-gray-400 mt-1">
               Evidence: {recommendations.evidenceLevel}
@@ -340,7 +341,7 @@ export default function OrderSetRecommendation({
                           {order.estimatedCost && (
                             <div className="mt-2 flex items-center gap-1 text-xs text-gray-500">
                               <CurrencyDollarIcon className="h-3 w-3" />
-                              <span>Est. ${order.estimatedCost.toFixed(2)}</span>
+                              <span>Est. {formatCurrency(order.estimatedCost)}</span>
                             </div>
                           )}
                         </div>

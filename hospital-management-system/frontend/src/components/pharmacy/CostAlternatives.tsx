@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { formatCurrency, CURRENCY_SYMBOL } from '../../utils/currency';
 import {
   CurrencyDollarIcon,
   ArrowPathIcon,
@@ -513,7 +514,7 @@ export default function CostAlternatives() {
                 </div>
                 <div className="text-right">
                   <span className="text-sm text-gray-500">Est. Monthly Cost</span>
-                  <p className="font-bold text-red-600">${searchResult.originalCost.toFixed(2)}</p>
+                  <p className="font-bold text-red-600">{formatCurrency(searchResult.originalCost)}</p>
                 </div>
               </div>
             </div>
@@ -582,7 +583,7 @@ export default function CostAlternatives() {
                           </div>
                         )}
                         <p className="text-sm text-gray-500">
-                          ~${alt.avgCostPerUnit.toFixed(2)}/unit
+                          ~{formatCurrency(alt.avgCostPerUnit)}/unit
                         </p>
                         <button
                           onClick={() => handleSelectAlternative(alt)}

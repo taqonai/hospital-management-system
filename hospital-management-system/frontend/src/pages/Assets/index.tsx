@@ -28,6 +28,7 @@ import {
 import { assetApi, departmentApi } from '../../services/api';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
+import { formatCurrency } from '../../utils/currency';
 
 // Types
 interface Asset {
@@ -940,13 +941,13 @@ function AssetDetailModal({
                       <p className="text-sm font-medium text-blue-800 mb-2">Cost Analysis:</p>
                       <div className="space-y-1 text-sm">
                         <p className="text-gray-600">
-                          Maintenance Cost to Date: <span className="font-medium">${Number(lifecycleAnalysis.costAnalysis.maintenanceCostToDate || 0).toLocaleString()}</span>
+                          Maintenance Cost to Date: <span className="font-medium">{formatCurrency(lifecycleAnalysis.costAnalysis.maintenanceCostToDate)}</span>
                         </p>
                         <p className="text-gray-600">
-                          Projected Maintenance: <span className="font-medium">${Number(lifecycleAnalysis.costAnalysis.projectedMaintenanceCost || 0).toLocaleString()}</span>
+                          Projected Maintenance: <span className="font-medium">{formatCurrency(lifecycleAnalysis.costAnalysis.projectedMaintenanceCost)}</span>
                         </p>
                         <p className="text-gray-600">
-                          Replacement Cost: <span className="font-medium">${Number(lifecycleAnalysis.costAnalysis.replacementCost || 0).toLocaleString()}</span>
+                          Replacement Cost: <span className="font-medium">{formatCurrency(lifecycleAnalysis.costAnalysis.replacementCost)}</span>
                         </p>
                         <p className="text-blue-700 font-medium mt-2">
                           Recommendation: {lifecycleAnalysis.costAnalysis.recommendation}

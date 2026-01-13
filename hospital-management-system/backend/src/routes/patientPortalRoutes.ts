@@ -638,11 +638,11 @@ router.get(
       // Temperature
       if (latestVitals.temperature) {
         const temp = Number(latestVitals.temperature);
-        const tempStatus = temp >= 97 && temp <= 99.5 ? 'normal' : temp > 100.4 ? 'critical' : 'attention';
+        const tempStatus = temp >= 36.1 && temp <= 37.5 ? 'normal' : temp > 38 ? 'critical' : 'attention';
         metrics.push({
           name: 'Temperature',
           value: temp.toFixed(1),
-          unit: '°F',
+          unit: '°C',
           status: tempStatus,
           trend: 'stable',
           date: dateStr
@@ -652,7 +652,7 @@ router.get(
             id: 'fever-alert',
             type: 'alert',
             title: 'Fever Detected',
-            description: `Your temperature (${temp.toFixed(1)}°F) indicates a fever. Monitor your symptoms and consult a doctor if it persists.`,
+            description: `Your temperature (${temp.toFixed(1)}°C) indicates a fever. Monitor your symptoms and consult a doctor if it persists.`,
             priority: 'high'
           });
         }

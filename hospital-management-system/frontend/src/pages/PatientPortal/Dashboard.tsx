@@ -29,6 +29,7 @@ import {
   ShieldExclamationIcon,
 } from '@heroicons/react/24/outline';
 import { patientPortalApi } from '../../services/api';
+import { formatCurrency } from '../../utils/currency';
 
 // Types
 interface Appointment {
@@ -152,11 +153,6 @@ const formatTime = (timeString: string): string => {
   }
 };
 
-// Format currency helper
-const formatCurrency = (amount: number | string | undefined | null): string => {
-  const num = Number(amount || 0);
-  return `$${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
 
 // Prescription status badge component
 const PrescriptionStatusBadge = ({ status }: { status: Prescription['status'] }) => {

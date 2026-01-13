@@ -535,7 +535,7 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Temperature (°F)
+                    Temperature (°C)
                   </label>
                   <input
                     type="number"
@@ -543,9 +543,9 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
                     value={vitals.temperature}
                     onChange={handleChange}
                     step="0.1"
-                    min="90"
-                    max="110"
-                    placeholder="98.6"
+                    min="32"
+                    max="42"
+                    placeholder="37.0"
                     className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
                   />
                 </div>

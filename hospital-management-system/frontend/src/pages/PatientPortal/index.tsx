@@ -16,6 +16,7 @@ import {
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { patientPortalApi } from '../../services/api';
+import { formatCurrency } from '../../utils/currency';
 import PatientPortalDashboard from './Dashboard';
 import AppointmentsList from './components/AppointmentsList';
 import MedicalRecords from './components/MedicalRecords';
@@ -186,7 +187,7 @@ function DashboardView({ summary, isLoading, setActiveSection }: { summary: any;
         />
         <QuickStatCard
           title="Outstanding Balance"
-          value={`$${Number(summary?.outstandingBalance || 0).toFixed(2)}`}
+          value={formatCurrency(summary?.outstandingBalance)}
           subtitle="pending payment"
           icon={CreditCardIcon}
           color="amber"

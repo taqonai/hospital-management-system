@@ -16,6 +16,7 @@ import {
 import { hrApi } from '../../services/api';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
+import { formatCurrency } from '../../utils/currency';
 
 interface Employee {
   id: string;
@@ -606,13 +607,6 @@ export default function HR() {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
 
   const tabs = [
     { id: 'employees', label: 'Employees', icon: UsersIcon },

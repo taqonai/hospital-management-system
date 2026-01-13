@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatCurrency } from '../../utils/currency';
 import {
   AdjustmentsHorizontalIcon,
   TrashIcon,
@@ -160,7 +161,7 @@ export default function OrderCustomizer({
           <div className="text-right">
             <div className="flex items-center gap-1 text-lg font-bold text-gray-900">
               <CurrencyDollarIcon className="h-5 w-5" />
-              <span>${(totalCost || 0).toFixed(2)}</span>
+              <span>{formatCurrency(totalCost)}</span>
             </div>
             <p className="text-xs text-gray-500">Estimated total</p>
           </div>
@@ -347,7 +348,7 @@ export default function OrderCustomizer({
 
                         {order.estimatedCost != null && (
                           <p className="text-xs text-gray-400 mt-1">
-                            Est. ${Number(order.estimatedCost || 0).toFixed(2)}
+                            Est. {formatCurrency(order.estimatedCost)}
                           </p>
                         )}
                       </div>

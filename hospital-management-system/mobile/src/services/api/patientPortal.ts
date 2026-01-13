@@ -177,6 +177,14 @@ export const patientPortalApi = {
   deleteAllergy: (id: string) =>
     api.delete<ApiResponse<{ message: string }>>(`/patient-portal/allergies/${id}`),
 
+  suggestAllergies: (symptoms?: string) =>
+    api.post<ApiResponse<{ suggestions: Array<{
+      allergen: string;
+      type: 'DRUG' | 'FOOD' | 'ENVIRONMENTAL' | 'OTHER';
+      confidence: number;
+      reason: string;
+    }> }>>('/patient-portal/allergies/ai-suggest', { symptoms }),
+
   // Settings
   getNotificationPreferences: () =>
     api.get<ApiResponse<{

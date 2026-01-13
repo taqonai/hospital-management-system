@@ -20,6 +20,7 @@ import {
 import { patientPortalApi } from '../../../services/api';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
+import { formatCurrency } from '../../../utils/currency';
 
 interface BillLineItem {
   id: string;
@@ -105,11 +106,6 @@ const getStatusIcon = (status: string) => {
   return icons[status] || ClockIcon;
 };
 
-// Format currency
-const formatCurrency = (amount: number | string | undefined | null) => {
-  const num = Number(amount || 0);
-  return `$${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
 
 // Format date
 const formatDate = (dateString: string) => {

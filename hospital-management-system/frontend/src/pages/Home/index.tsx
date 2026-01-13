@@ -244,7 +244,7 @@ const testimonials = [
   {
     name: 'Dr. Mohammed Ali',
     role: 'Referring Physician',
-    content: 'As a physician, I recommend MediCare for their cutting-edge AI tools and exceptional patient care. The medical imaging AI is remarkable.',
+    content: 'As a physician, I recommend Spetaar for their cutting-edge AI tools and exceptional patient care. The medical imaging AI is remarkable.',
     rating: 5,
     image: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&q=80',
   },
@@ -832,7 +832,7 @@ export default function Home() {
                 <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white" />
               </div>
               <div>
-                <span className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">MediCare</span>
+                <span className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Spetaar</span>
                 <span className="text-2xl font-light text-blue-600"> Pro</span>
                 <p className="text-xs text-gray-500 -mt-0.5">AI-Powered Healthcare</p>
               </div>
@@ -1663,7 +1663,7 @@ export default function Home() {
                   <HeartSolid className="w-7 h-7 text-white" />
                 </div>
                 <div>
-                  <span className="text-2xl font-bold text-white">MediCare</span>
+                  <span className="text-2xl font-bold text-white">Spetaar</span>
                   <span className="text-2xl font-light text-blue-400"> Pro</span>
                 </div>
               </div>

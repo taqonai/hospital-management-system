@@ -309,6 +309,31 @@ export interface HealthInsightVital {
   value: string;
   unit: string;
   isAbnormal?: boolean;
+  trend?: 'up' | 'down' | 'stable';
+  previousValue?: string;
+}
+
+export interface LabAnalysisItem {
+  testName: string;
+  value: string;
+  unit: string;
+  referenceRange: string;
+  isAbnormal: boolean;
+  interpretation?: string;
+}
+
+export interface RiskAssessmentItem {
+  condition: string;
+  level: 'low' | 'moderate' | 'high';
+  factors?: string[];
+  recommendation?: string;
+}
+
+export interface AllergySuggestion {
+  allergen: string;
+  type: 'DRUG' | 'FOOD' | 'ENVIRONMENTAL' | 'OTHER';
+  confidence: number;
+  reason: string;
 }
 
 export interface HealthInsightRecommendation {
@@ -334,6 +359,8 @@ export interface HealthInsight {
     type: 'warning' | 'info' | 'critical';
     message: string;
   }[];
+  labAnalysis?: LabAnalysisItem[];
+  riskAssessment?: RiskAssessmentItem[];
 }
 
 export interface MedicalRecordAttachment {

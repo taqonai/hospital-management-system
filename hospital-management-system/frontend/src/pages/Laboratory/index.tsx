@@ -20,6 +20,7 @@ import { useBookingData } from '../../hooks/useBookingData';
 import { BookingTicket } from '../../components/booking';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
+import { formatCurrency } from '../../utils/currency';
 import SampleTracker from '../../components/laboratory/SampleTracker';
 
 interface LabOrder {
@@ -341,7 +342,7 @@ function NewLabOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                                 <span className="ml-2 text-xs text-gray-500">({test.code})</span>
                               </div>
                             </div>
-                            <span className="text-sm text-gray-500">${Number(test.price || 0).toFixed(2)}</span>
+                            <span className="text-sm text-gray-500">{formatCurrency(test.price)}</span>
                           </label>
                         ))}
                       </div>

@@ -52,7 +52,7 @@ const FALLBACK_QUESTIONS = [
   {
     id: 'fever',
     question: 'Are you experiencing any fever?',
-    options: ['No fever', 'Low-grade (99-100°F)', 'Moderate (100-102°F)', 'High (above 102°F)'],
+    options: ['No fever', 'Low-grade (37.2-37.8°C)', 'Moderate (37.8-39°C)', 'High (above 39°C)'],
   },
   {
     id: 'breathing',

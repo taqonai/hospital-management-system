@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { reportsApi } from '../../services/api';
+import { formatCurrency } from '../../utils/currency';
 import {
   ChartBarIcon,
   CurrencyDollarIcon,
@@ -86,13 +87,6 @@ const Reports: React.FC = () => {
     setLoading(false);
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
 
   const tabs = [
     { id: 'executive', name: 'Executive Summary', icon: ChartBarIcon },

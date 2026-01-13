@@ -25,6 +25,7 @@ import { assetApi } from '../../services/api';
 import { GlassCard, GlassCardHeader, GlassCardTitle } from '../ui/GlassCard';
 import LoadingSpinner from '../common/LoadingSpinner';
 import type { RootState } from '../../store';
+import { formatCurrency } from '../../utils/currency';
 
 // Types
 type MaintenanceStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
@@ -276,14 +277,6 @@ export default function MaintenanceSchedule() {
     });
   };
 
-  // Format currency
-  const formatCurrency = (value: number | string | null) => {
-    if (value === null || value === undefined) return '$0.00';
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(Number(value));
-  };
 
   // Get upcoming maintenance for calendar view
   const upcomingMaintenance = useMemo(() => {

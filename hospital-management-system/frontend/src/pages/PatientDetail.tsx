@@ -170,7 +170,7 @@ export default function PatientDetail() {
                     {[
                       { label: 'Blood Pressure', value: `${patient.vitals[0].bloodPressureSys}/${patient.vitals[0].bloodPressureDia}`, unit: 'mmHg' },
                       { label: 'Heart Rate', value: patient.vitals[0].heartRate, unit: 'bpm' },
-                      { label: 'Temperature', value: patient.vitals[0].temperature, unit: '°F' },
+                      { label: 'Temperature', value: patient.vitals[0].temperature, unit: '°C' },
                       { label: 'SpO2', value: patient.vitals[0].oxygenSaturation, unit: '%' },
                     ].map((vital) => (
                       <div key={vital.label} className="p-4 rounded-lg bg-gray-50">

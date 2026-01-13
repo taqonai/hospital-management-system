@@ -31,6 +31,13 @@ const SEVERITY_LEVELS = [
   { value: 'LIFE_THREATENING', label: 'Life-threatening', color: colors.error[700] },
 ] as const;
 
+interface AllergySuggestion {
+  allergen: string;
+  type: Allergy['type'];
+  confidence: number;
+  reason: string;
+}
+
 const AllergiesScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -38,6 +45,11 @@ const AllergiesScreen: React.FC = () => {
   const [allergies, setAllergies] = useState<Allergy[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingAllergy, setEditingAllergy] = useState<Allergy | null>(null);
+
+  // AI Suggestions state
+  const [aiSuggestions, setAiSuggestions] = useState<AllergySuggestion[]>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   // Form state
   const [allergen, setAllergen] = useState('');
@@ -148,6 +160,34 @@ const AllergiesScreen: React.FC = () => {
     );
   };
 
+  const handleGetSuggestions = async () => {
+    setIsLoadingSuggestions(true);
+    try {
+      const response = await patientPortalApi.suggestAllergies();
+      const suggestions = response.data?.data?.suggestions || [];
+      setAiSuggestions(suggestions);
+      setShowSuggestions(suggestions.length > 0);
+      if (suggestions.length === 0) {
+        Alert.alert('No Suggestions', 'No allergy suggestions available based on your medical history.');
+      }
+    } catch (error) {
+      console.error('Failed to get AI suggestions:', error);
+      Alert.alert('Error', 'Failed to get AI suggestions. Please try again later.');
+    } finally {
+      setIsLoadingSuggestions(false);
+    }
+  };
+
+  const handleAddFromSuggestion = (suggestion: AllergySuggestion) => {
+    setAllergen(suggestion.allergen);
+    setType(suggestion.type);
+    setSeverity('MILD');
+    setReaction('');
+    setNotes(`AI suggested: ${suggestion.reason}`);
+    setEditingAllergy(null);
+    setShowModal(true);
+  };
+
   const getSeverityColor = (sev: Allergy['severity']) => {
     return SEVERITY_LEVELS.find(s => s.value === sev)?.color || colors.gray[500];
   };
@@ -185,6 +225,70 @@ const AllergiesScreen: React.FC = () => {
           <Ionicons name="add-circle" size={24} color={colors.primary[600]} />
           <Text style={styles.addButtonText}>Add Allergy</Text>
         </TouchableOpacity>
+
+        {/* AI Suggestions Button */}
+        <TouchableOpacity
+          style={styles.suggestButton}
+          onPress={handleGetSuggestions}
+          disabled={isLoadingSuggestions}
+        >
+          {isLoadingSuggestions ? (
+            <ActivityIndicator size="small" color={colors.info[600]} />
+          ) : (
+            <Ionicons name="sparkles" size={20} color={colors.info[600]} />
+          )}
+          <Text style={styles.suggestButtonText}>
+            {isLoadingSuggestions ? 'Getting Suggestions...' : 'Get AI Suggestions'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* AI Suggestions List */}
+        {showSuggestions && aiSuggestions.length > 0 && (
+          <View style={styles.suggestionsSection}>
+            <View style={styles.suggestionsSectionHeader}>
+              <Text style={styles.suggestionsSectionTitle}>AI Suggestions</Text>
+              <TouchableOpacity onPress={() => setShowSuggestions(false)}>
+                <Ionicons name="close-circle" size={20} color={colors.gray[400]} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.suggestionsSectionSubtitle}>
+              Based on your medical history, these allergies may be relevant:
+            </Text>
+            {aiSuggestions.map((suggestion, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.suggestionCard}
+                onPress={() => handleAddFromSuggestion(suggestion)}
+              >
+                <View style={styles.suggestionHeader}>
+                  <View style={styles.suggestionTypeIcon}>
+                    <Ionicons
+                      name={ALLERGY_TYPES.find(t => t.value === suggestion.type)?.icon as any || 'alert-circle'}
+                      size={18}
+                      color={colors.info[600]}
+                    />
+                  </View>
+                  <View style={styles.suggestionInfo}>
+                    <Text style={styles.suggestionName}>{suggestion.allergen}</Text>
+                    <Text style={styles.suggestionType}>
+                      {ALLERGY_TYPES.find(t => t.value === suggestion.type)?.label || suggestion.type}
+                    </Text>
+                  </View>
+                  <View style={styles.confidenceBadge}>
+                    <Text style={styles.confidenceText}>
+                      {Math.round(suggestion.confidence * 100)}%
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.suggestionReason}>{suggestion.reason}</Text>
+                <View style={styles.suggestionAction}>
+                  <Text style={styles.suggestionActionText}>Tap to add</Text>
+                  <Ionicons name="add-circle-outline" size={16} color={colors.primary[600]} />
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         {/* Allergies List */}
         {allergies.length === 0 ? (
@@ -411,6 +515,107 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.base,
     fontWeight: typography.fontWeight.medium,
     color: colors.primary[600],
+  },
+  suggestButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.info[50],
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.info[100],
+  },
+  suggestButtonText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.info[700],
+  },
+  suggestionsSection: {
+    backgroundColor: colors.info[50],
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.info[100],
+  },
+  suggestionsSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  suggestionsSectionTitle: {
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.info[700],
+  },
+  suggestionsSectionSubtitle: {
+    fontSize: typography.fontSize.sm,
+    color: colors.info[600],
+    marginBottom: spacing.md,
+  },
+  suggestionCard: {
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    ...shadows.sm,
+  },
+  suggestionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  suggestionTypeIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.info[100],
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  suggestionInfo: {
+    flex: 1,
+    marginLeft: spacing.sm,
+  },
+  suggestionName: {
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.text.primary,
+  },
+  suggestionType: {
+    fontSize: typography.fontSize.xs,
+    color: colors.text.secondary,
+  },
+  confidenceBadge: {
+    backgroundColor: colors.info[100],
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.sm,
+  },
+  confidenceText: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.info[700],
+  },
+  suggestionReason: {
+    fontSize: typography.fontSize.sm,
+    color: colors.text.secondary,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  suggestionAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: spacing.xs,
+  },
+  suggestionActionText: {
+    fontSize: typography.fontSize.xs,
+    color: colors.primary[600],
+    fontWeight: typography.fontWeight.medium,
   },
   emptyCard: {
     backgroundColor: colors.white,

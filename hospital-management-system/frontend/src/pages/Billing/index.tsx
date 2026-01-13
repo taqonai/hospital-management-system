@@ -17,6 +17,7 @@ import { useAIHealth } from '../../hooks/useAI';
 import { billingApi } from '../../services/api';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
+import { formatCurrency, CURRENCY_SYMBOL } from '../../utils/currency';
 
 interface Invoice {
   id: string;
@@ -386,7 +387,7 @@ function NewInvoiceModal({ onClose, onSuccess }: { onClose: () => void; onSucces
                       </div>
                     </div>
                     <div className="mt-2 text-right text-sm text-gray-600">
-                      Subtotal: <span className="font-medium text-gray-900">${(Number(item.quantity || 0) * Number(item.unitPrice || 0)).toFixed(2)}</span>
+                      Subtotal: <span className="font-medium text-gray-900">{formatCurrency(Number(item.quantity || 0) * Number(item.unitPrice || 0))}</span>
                     </div>
                   </div>
                 ))}
@@ -410,7 +411,7 @@ function NewInvoiceModal({ onClose, onSuccess }: { onClose: () => void; onSucces
               <div className="flex justify-between items-center text-lg">
                 <span className="font-medium text-gray-700">Total Amount:</span>
                 <span className="font-bold text-2xl bg-gradient-to-r from-orange-500 to-amber-500 bg-clip-text text-transparent">
-                  ${calculateSubtotal().toFixed(2)}
+                  {formatCurrency(calculateSubtotal())}
                 </span>
               </div>
             </div>
@@ -1008,7 +1009,7 @@ export default function Billing() {
                               Matched: "{charge.matchedKeyword}" | {charge.category}
                             </p>
                           </div>
-                          <span className="font-medium text-gray-900">${Number(charge.price || 0).toLocaleString()}</span>
+                          <span className="font-medium text-gray-900">{formatCurrency(charge.price)}</span>
                         </div>
                       </div>
                     ))}
@@ -1140,7 +1141,7 @@ export default function Billing() {
                           <p className="text-sm mt-1 text-gray-700">{code.description}</p>
                           <p className="text-xs text-gray-500 mt-1">{code.reason}</p>
                         </div>
-                        <span className="font-medium text-gray-900">${Number(code.price || 0).toLocaleString()}</span>
+                        <span className="font-medium text-gray-900">{formatCurrency(code.price)}</span>
                       </div>
                     ))}
                   </div>
@@ -1304,22 +1305,22 @@ export default function Billing() {
                           <span className="text-gray-600">
                             {item.item} {item.quantity > 1 && `(x${item.quantity})`}
                           </span>
-                          <span className="font-medium text-gray-900">${item.total.toLocaleString()}</span>
+                          <span className="font-medium text-gray-900">{formatCurrency(item.total)}</span>
                         </div>
                       ))}
                     </div>
                     <div className="border-t border-gray-200/50 mt-3 pt-3">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Subtotal</span>
-                        <span className="font-medium text-gray-900">${costSubtotal.toLocaleString()}</span>
+                        <span className="font-medium text-gray-900">{formatCurrency(costSubtotal)}</span>
                       </div>
                       <div className="flex justify-between text-sm text-green-600">
                         <span>Insurance Coverage ({insuranceCoverage}%)</span>
-                        <span>-${((costSubtotal * insuranceCoverage) / 100).toLocaleString()}</span>
+                        <span>-{formatCurrency((costSubtotal * insuranceCoverage) / 100)}</span>
                       </div>
                       <div className="flex justify-between text-lg font-bold mt-2 pt-2 border-t border-gray-200/50">
                         <span className="text-gray-900">Patient Responsibility</span>
-                        <span className="bg-gradient-to-r from-orange-500 to-amber-500 bg-clip-text text-transparent">${patientResponsibility.toLocaleString()}</span>
+                        <span className="bg-gradient-to-r from-orange-500 to-amber-500 bg-clip-text text-transparent">{formatCurrency(patientResponsibility)}</span>
                       </div>
                     </div>
                     <p className="text-xs text-gray-500 mt-3">

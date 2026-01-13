@@ -158,11 +158,24 @@ const HealthInsightsScreen: React.FC = () => {
                 <View style={styles.vitalHeader}>
                   <Ionicons name={getVitalIcon(vital.type)} size={18} color={colors.gray[500]} />
                   <Text style={styles.vitalType}>{vital.type}</Text>
+                  {vital.trend && (
+                    <Ionicons
+                      name={getTrendIcon(vital.trend).name}
+                      size={16}
+                      color={getTrendIcon(vital.trend).color}
+                      style={{ marginLeft: 4 }}
+                    />
+                  )}
                 </View>
                 <Text style={[styles.vitalValue, vital.isAbnormal && styles.vitalValueAbnormal]}>
                   {vital.value}
                 </Text>
-                <Text style={styles.vitalUnit}>{vital.unit}</Text>
+                <View style={styles.vitalFooter}>
+                  <Text style={styles.vitalUnit}>{vital.unit}</Text>
+                  {vital.previousValue && (
+                    <Text style={styles.vitalPrevious}>prev: {vital.previousValue}</Text>
+                  )}
+                </View>
                 {vital.isAbnormal && (
                   <View style={styles.abnormalIndicator}>
                     <Ionicons name="warning" size={12} color={colors.error[600]} />
@@ -208,6 +221,76 @@ const HealthInsightsScreen: React.FC = () => {
               </View>
             );
           })}
+        </View>
+      )}
+
+      {/* Lab Results Analysis */}
+      {insights?.labAnalysis && insights.labAnalysis.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Lab Results Analysis</Text>
+          {insights.labAnalysis.map((lab, index) => (
+            <View key={index} style={styles.labCard}>
+              <View style={styles.labHeader}>
+                <Text style={styles.labName}>{lab.testName}</Text>
+                <View style={[
+                  styles.labStatus,
+                  { backgroundColor: lab.isAbnormal ? `${colors.error[500]}15` : `${colors.success[500]}15` }
+                ]}>
+                  <Text style={[
+                    styles.labStatusText,
+                    { color: lab.isAbnormal ? colors.error[600] : colors.success[600] }
+                  ]}>
+                    {lab.isAbnormal ? 'Abnormal' : 'Normal'}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.labValues}>
+                <Text style={[styles.labValue, lab.isAbnormal && styles.labValueAbnormal]}>
+                  {lab.value} {lab.unit}
+                </Text>
+                <Text style={styles.labRange}>
+                  Range: {lab.referenceRange}
+                </Text>
+              </View>
+              {lab.interpretation && (
+                <Text style={styles.labInterpretation}>{lab.interpretation}</Text>
+              )}
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Risk Assessment */}
+      {insights?.riskAssessment && insights.riskAssessment.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Risk Assessment</Text>
+          {insights.riskAssessment.map((risk, index) => (
+            <View key={index} style={styles.riskCard}>
+              <View style={styles.riskHeader}>
+                <Ionicons name="shield" size={20} color={getRiskColor(risk.level)} />
+                <Text style={styles.riskName}>{risk.condition}</Text>
+                <View style={[
+                  styles.riskLevel,
+                  { backgroundColor: `${getRiskColor(risk.level)}15` }
+                ]}>
+                  <Text style={[styles.riskLevelText, { color: getRiskColor(risk.level) }]}>
+                    {risk.level.charAt(0).toUpperCase() + risk.level.slice(1)}
+                  </Text>
+                </View>
+              </View>
+              {risk.factors && risk.factors.length > 0 && (
+                <View style={styles.riskFactors}>
+                  <Text style={styles.riskFactorsLabel}>Risk Factors:</Text>
+                  {risk.factors.map((factor, i) => (
+                    <Text key={i} style={styles.riskFactor}>• {factor}</Text>
+                  ))}
+                </View>
+              )}
+              {risk.recommendation && (
+                <Text style={styles.riskRecommendation}>{risk.recommendation}</Text>
+              )}
+            </View>
+          ))}
         </View>
       )}
 
@@ -258,6 +341,30 @@ const getRecommendationColor = (priority: string) => {
     case 'high':
       return colors.error[500];
     case 'medium':
+      return colors.warning[500];
+    default:
+      return colors.success[500];
+  }
+};
+
+const getTrendIcon = (trend?: 'up' | 'down' | 'stable'): { name: keyof typeof Ionicons.glyphMap; color: string } => {
+  switch (trend) {
+    case 'up':
+      return { name: 'trending-up', color: colors.error[500] };
+    case 'down':
+      return { name: 'trending-down', color: colors.success[500] };
+    case 'stable':
+      return { name: 'remove', color: colors.gray[400] };
+    default:
+      return { name: 'remove', color: colors.gray[400] };
+  }
+};
+
+const getRiskColor = (level: string) => {
+  switch (level) {
+    case 'high':
+      return colors.error[500];
+    case 'moderate':
       return colors.warning[500];
     default:
       return colors.success[500];
@@ -430,6 +537,15 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     color: colors.text.secondary,
   },
+  vitalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  vitalPrevious: {
+    fontSize: typography.fontSize.xs,
+    color: colors.gray[400],
+  },
   abnormalIndicator: {
     position: 'absolute',
     top: spacing.sm,
@@ -482,6 +598,112 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     color: colors.text.primary,
     lineHeight: 20,
+  },
+  // Lab Analysis Styles
+  labCard: {
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    ...shadows.sm,
+  },
+  labHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  labName: {
+    flex: 1,
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.text.primary,
+  },
+  labStatus: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.sm,
+  },
+  labStatusText: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  labValues: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  labValue: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.text.primary,
+  },
+  labValueAbnormal: {
+    color: colors.error[600],
+  },
+  labRange: {
+    fontSize: typography.fontSize.sm,
+    color: colors.text.secondary,
+  },
+  labInterpretation: {
+    fontSize: typography.fontSize.sm,
+    color: colors.text.secondary,
+    fontStyle: 'italic',
+    marginTop: spacing.xs,
+  },
+  // Risk Assessment Styles
+  riskCard: {
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    ...shadows.sm,
+  },
+  riskHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  riskName: {
+    flex: 1,
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.text.primary,
+  },
+  riskLevel: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.sm,
+  },
+  riskLevelText: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  riskFactors: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  riskFactorsLabel: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs,
+  },
+  riskFactor: {
+    fontSize: typography.fontSize.sm,
+    color: colors.text.primary,
+    marginLeft: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  riskRecommendation: {
+    fontSize: typography.fontSize.sm,
+    color: colors.primary[600],
+    marginTop: spacing.sm,
+    fontStyle: 'italic',
   },
 });
 

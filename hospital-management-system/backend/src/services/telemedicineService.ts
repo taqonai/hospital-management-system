@@ -379,7 +379,7 @@ export const telemedicineService = {
     if (data.vitals) {
       if (data.vitals.bloodPressure) keyFindings.push(`BP: ${data.vitals.bloodPressure}`);
       if (data.vitals.heartRate) keyFindings.push(`HR: ${data.vitals.heartRate} bpm`);
-      if (data.vitals.temperature) keyFindings.push(`Temp: ${data.vitals.temperature}°F`);
+      if (data.vitals.temperature) keyFindings.push(`Temp: ${data.vitals.temperature}°C`);
     }
     if (data.diagnosis) {
       keyFindings.push(`Assessment: ${data.diagnosis}`);
