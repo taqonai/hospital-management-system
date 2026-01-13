@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
@@ -138,6 +139,22 @@ function QuickAction({ href, icon: Icon, label, description, gradient }: QuickAc
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const [isFirstVisit, setIsFirstVisit] = useState(false);
+
+  // Check if this is the user's first visit
+  useEffect(() => {
+    const userId = user?.id;
+    if (userId) {
+      const visitKey = `user_visited_${userId}`;
+      const hasVisited = localStorage.getItem(visitKey);
+      if (!hasVisited) {
+        setIsFirstVisit(true);
+        localStorage.setItem(visitKey, 'true');
+      } else {
+        setIsFirstVisit(false);
+      }
+    }
+  }, [user?.id]);
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['dashboardStats'],
@@ -247,7 +264,7 @@ export default function Dashboard() {
               </span>
             </div>
             <h1 className="text-3xl lg:text-4xl font-bold text-white">
-              Welcome back, {user?.firstName || 'Doctor'}!
+              {isFirstVisit ? 'Welcome' : 'Welcome back'}, {user?.firstName || ''} {user?.lastName || ''}!
             </h1>
             <p className="text-blue-100 mt-2 text-lg">
               Here's your hospital overview for today

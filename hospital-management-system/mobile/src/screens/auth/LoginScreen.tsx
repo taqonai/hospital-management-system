@@ -10,8 +10,10 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  ImageBackground,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useForm, Controller } from 'react-hook-form';
@@ -123,24 +125,41 @@ const LoginScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+    <LinearGradient
+      colors={['#2563EB', '#0D9488', '#06B6D4']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.gradientBackground}
+    >
+      <SafeAreaView style={styles.container}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardView}
         >
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.logoContainer}>
-              <Ionicons name="medical" size={48} color={colors.primary[600]} />
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Header */}
+            <View style={styles.header}>
+              <View style={styles.logoContainer}>
+                <Ionicons name="heart" size={40} color={colors.white} />
+              </View>
+              <Text style={styles.brandTitle}>Spetaar Pro</Text>
+              <Text style={styles.brandSubtitle}>Patient Portal</Text>
+              <View style={styles.heroSection}>
+                <Text style={styles.heroTitle}>Your Health,{'\n'}Your Control</Text>
+                <Text style={styles.heroSubtitle}>
+                  Access your medical records, book appointments, and communicate with your healthcare providers
+                </Text>
+              </View>
             </View>
-            <Text style={styles.title}>Patient Portal</Text>
-            <Text style={styles.subtitle}>Sign in to access your health records</Text>
-          </View>
+
+            {/* Form Card */}
+            <View style={styles.formCard}>
+              <Text style={styles.title}>Welcome Back</Text>
+              <Text style={styles.subtitle}>Sign in to access your patient portal</Text>
 
           {/* Login Method Tabs */}
           <View style={styles.tabContainer}>
@@ -357,16 +376,20 @@ const LoginScreen: React.FC = () => {
               <Text style={styles.linkText}>Sign Up</Text>
             </TouchableOpacity>
           </View>
+            </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
+  gradientBackground: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: colors.background,
   },
   keyboardView: {
     flex: 1,
@@ -377,28 +400,64 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginTop: spacing['3xl'],
-    marginBottom: spacing['2xl'],
+    marginTop: spacing.xl,
+    marginBottom: spacing.xl,
   },
   logoContainer: {
-    width: 80,
-    height: 80,
+    width: 64,
+    height: 64,
     borderRadius: borderRadius.xl,
-    backgroundColor: colors.primary[50],
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
-  title: {
+  brandTitle: {
     fontSize: typography.fontSize['2xl'],
     fontWeight: typography.fontWeight.bold,
+    color: colors.white,
+  },
+  brandSubtitle: {
+    fontSize: typography.fontSize.sm,
+    color: 'rgba(255, 255, 255, 0.7)',
+    marginBottom: spacing.lg,
+  },
+  heroSection: {
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  heroTitle: {
+    fontSize: typography.fontSize['2xl'],
+    fontWeight: typography.fontWeight.bold,
+    color: colors.white,
+    textAlign: 'center',
+    lineHeight: 32,
+  },
+  heroSubtitle: {
+    fontSize: typography.fontSize.sm,
+    color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.xl,
+  },
+  formCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: borderRadius.xl,
+    padding: spacing.xl,
+    marginTop: spacing.lg,
+  },
+  title: {
+    fontSize: typography.fontSize.xl,
+    fontWeight: typography.fontWeight.bold,
     color: colors.text.primary,
+    textAlign: 'center',
     marginBottom: spacing.xs,
   },
   subtitle: {
-    fontSize: typography.fontSize.base,
+    fontSize: typography.fontSize.sm,
     color: colors.text.secondary,
     textAlign: 'center',
+    marginBottom: spacing.lg,
   },
   tabContainer: {
     flexDirection: 'row',

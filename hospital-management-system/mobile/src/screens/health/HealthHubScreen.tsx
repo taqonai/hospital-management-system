@@ -35,7 +35,7 @@ const menuItems: MenuItem[] = [
   },
   {
     id: 'assistant',
-    title: 'Health Assistant',
+    title: 'AI Health Assistant',
     description: 'Ask health questions',
     icon: 'chatbubbles-outline',
     color: colors.success[600],

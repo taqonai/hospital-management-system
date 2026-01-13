@@ -283,6 +283,22 @@ export default function PatientPortalDashboard() {
   const navigate = useNavigate();
   const user = useSelector((state: any) => state.auth.user);
   const [healthTip, setHealthTip] = useState('');
+  const [isFirstVisit, setIsFirstVisit] = useState(false);
+
+  // Check if this is the user's first visit
+  useEffect(() => {
+    const userId = user?.id;
+    if (userId) {
+      const visitKey = `user_visited_${userId}`;
+      const hasVisited = localStorage.getItem(visitKey);
+      if (!hasVisited) {
+        setIsFirstVisit(true);
+        localStorage.setItem(visitKey, 'true');
+      } else {
+        setIsFirstVisit(false);
+      }
+    }
+  }, [user?.id]);
 
   // Set random health tip on mount
   useEffect(() => {
@@ -633,7 +649,7 @@ export default function PatientPortalDashboard() {
               Patient Portal
             </div>
             <h1 className="text-3xl lg:text-4xl font-bold text-white mb-2">
-              Welcome back, {data.patient.firstName}!
+              {isFirstVisit ? 'Welcome' : 'Welcome back'}, {data.patient.firstName} {data.patient.lastName}!
             </h1>
             <div className="flex items-start gap-3 bg-white/10 backdrop-blur-sm rounded-xl p-4 mt-4">
               <SunIcon className="h-6 w-6 text-amber-300 flex-shrink-0 mt-0.5" />

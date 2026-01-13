@@ -139,7 +139,7 @@ const HealthStackNavigator = () => (
     <HealthStack.Screen
       name="HealthAssistant"
       component={HealthAssistantScreen}
-      options={{ title: 'Health Assistant' }}
+      options={{ title: 'AI Health Assistant' }}
     />
     <HealthStack.Screen
       name="MedicalRecords"

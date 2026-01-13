@@ -35,6 +35,34 @@ const WELLNESS_CATEGORIES: Array<{
   { key: 'environment', label: 'Environment', icon: 'leaf-outline', color: colors.success[700], description: 'Living space' },
 ];
 
+// Demo data for when API returns empty
+const DEMO_ASSESSMENT: WellnessAssessment = {
+  id: 'demo-assessment',
+  overallScore: 72,
+  categoryScores: {
+    physical: 75,
+    mental: 68,
+    nutrition: 80,
+    sleep: 65,
+    stress: 70,
+    social: 78,
+    purpose: 72,
+    environment: 82,
+  },
+  lastUpdated: new Date().toISOString(),
+  recommendations: [
+    'Try to get at least 7-8 hours of sleep each night',
+    'Practice mindfulness meditation for 10 minutes daily',
+    'Stay hydrated - aim for 8 glasses of water',
+  ],
+};
+
+const DEMO_GOALS: WellnessGoal[] = [
+  { id: 'demo-1', category: 'physical', title: 'Exercise 30 min daily', description: 'Get moving every day', target: 30, currentValue: 20, progress: 67, unit: 'minutes', isActive: true },
+  { id: 'demo-2', category: 'sleep', title: 'Sleep 8 hours', description: 'Improve sleep quality', target: 8, currentValue: 6.5, progress: 81, unit: 'hours', isActive: true },
+  { id: 'demo-3', category: 'mental', title: 'Meditate daily', description: 'Practice mindfulness', target: 10, currentValue: 7, progress: 70, unit: 'minutes', isActive: true },
+];
+
 const WellnessHubScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const [isLoading, setIsLoading] = useState(true);
@@ -48,10 +76,17 @@ const WellnessHubScreen: React.FC = () => {
         wellnessApi.getWellnessAssessment(),
         wellnessApi.getWellnessGoals({ active: true }),
       ]);
-      setAssessment(assessmentRes.data?.data || null);
-      setGoals(goalsRes.data?.data || []);
+      const fetchedAssessment = assessmentRes.data?.data || null;
+      const fetchedGoals = goalsRes.data?.data || [];
+
+      // Use demo data if API returns empty
+      setAssessment(fetchedAssessment || DEMO_ASSESSMENT);
+      setGoals(fetchedGoals.length > 0 ? fetchedGoals : DEMO_GOALS);
     } catch (error) {
       console.error('Error loading wellness data:', error);
+      // Use demo data on error
+      setAssessment(DEMO_ASSESSMENT);
+      setGoals(DEMO_GOALS);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);

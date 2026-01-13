@@ -210,7 +210,7 @@ const DashboardScreen: React.FC = () => {
               <View style={[styles.actionIcon, { backgroundColor: colors.success[50] }]}>
                 <Ionicons name="chatbubbles-outline" size={28} color={colors.success[600]} />
               </View>
-              <Text style={styles.actionText}>Health Assistant</Text>
+              <Text style={styles.actionText}>AI Health Assistant</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

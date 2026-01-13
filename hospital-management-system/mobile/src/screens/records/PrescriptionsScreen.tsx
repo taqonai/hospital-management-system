@@ -129,6 +129,12 @@ const PrescriptionsScreen: React.FC = () => {
             <Ionicons name="calendar-outline" size={14} color={colors.gray[400]} />
             <Text style={styles.metaText}>{formatDate(item.prescribedDate)}</Text>
           </View>
+          {item.refillsRemaining !== undefined && item.refillsRemaining > 0 && (
+            <View style={styles.refillBadge}>
+              <Ionicons name="refresh" size={12} color={colors.primary[600]} />
+              <Text style={styles.refillBadgeText}>{item.refillsRemaining} refills</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.chevronIndicator}>
@@ -307,6 +313,20 @@ const styles = StyleSheet.create({
   metaText: {
     fontSize: typography.fontSize.sm,
     color: colors.text.secondary,
+  },
+  refillBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary[50],
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    gap: 4,
+  },
+  refillBadgeText: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.primary[600],
   },
   expandedContent: {
     marginTop: spacing.md,

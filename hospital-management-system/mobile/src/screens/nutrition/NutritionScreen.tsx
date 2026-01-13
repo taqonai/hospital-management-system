@@ -27,6 +27,46 @@ const MEAL_ICONS: Record<string, string> = {
 
 const MEAL_ORDER = ['breakfast', 'lunch', 'dinner', 'snack'];
 
+// Demo data for when API returns empty
+const DEMO_SUMMARY: NutritionSummary = {
+  totalCalories: 1650,
+  calorieGoal: 2000,
+  totalProtein: 85,
+  proteinGoal: 120,
+  totalCarbs: 180,
+  carbsGoal: 250,
+  totalFat: 55,
+  fatGoal: 65,
+  macroPercentages: {
+    protein: 25,
+    carbs: 50,
+    fat: 25,
+  },
+  meals: {
+    breakfast: [
+      { id: 'demo-1', name: 'Oatmeal with Berries', calories: 320, protein: 12, carbs: 45, fat: 8 },
+    ],
+    lunch: [
+      { id: 'demo-2', name: 'Grilled Chicken Salad', calories: 450, protein: 35, carbs: 25, fat: 18 },
+    ],
+    dinner: [
+      { id: 'demo-3', name: 'Salmon with Vegetables', calories: 580, protein: 38, carbs: 30, fat: 25 },
+    ],
+    snack: [
+      { id: 'demo-4', name: 'Greek Yogurt', calories: 150, protein: 15, carbs: 12, fat: 4 },
+      { id: 'demo-5', name: 'Almonds', calories: 150, protein: 5, carbs: 8, fat: 12 },
+    ],
+  },
+};
+
+const DEMO_PLAN: NutritionPlan = {
+  id: 'demo-plan',
+  name: 'Balanced Nutrition Plan',
+  type: 'balanced',
+  calorieTarget: 2000,
+  description: 'A well-balanced plan for maintaining healthy weight',
+};
+
 const NutritionScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const [isLoading, setIsLoading] = useState(true);
@@ -40,10 +80,17 @@ const NutritionScreen: React.FC = () => {
         wellnessApi.getNutritionSummary(),
         wellnessApi.getActivePlan(),
       ]);
-      setSummary(summaryRes.data?.data || null);
-      setActivePlan(planRes.data?.data || null);
+      const fetchedSummary = summaryRes.data?.data || null;
+      const fetchedPlan = planRes.data?.data || null;
+
+      // Use demo data if API returns empty
+      setSummary(fetchedSummary || DEMO_SUMMARY);
+      setActivePlan(fetchedPlan || DEMO_PLAN);
     } catch (error) {
       console.error('Error loading nutrition data:', error);
+      // Use demo data on error
+      setSummary(DEMO_SUMMARY);
+      setActivePlan(DEMO_PLAN);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);

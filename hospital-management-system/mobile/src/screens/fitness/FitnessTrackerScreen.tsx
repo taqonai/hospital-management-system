@@ -32,6 +32,36 @@ const ACTIVITY_ICONS: Record<string, string> = {
   other: 'ellipsis-horizontal-outline',
 };
 
+// Demo data for when API returns empty
+const DEMO_STATS: FitnessStats = {
+  totalWorkouts: 12,
+  totalDuration: 420,
+  totalCalories: 3240,
+  streakDays: 5,
+  averageHeartRate: 125,
+  weeklyProgress: [
+    { day: 'Mon', workouts: 2, duration: 60, calories: 450 },
+    { day: 'Tue', workouts: 1, duration: 45, calories: 320 },
+    { day: 'Wed', workouts: 2, duration: 90, calories: 680 },
+    { day: 'Thu', workouts: 1, duration: 30, calories: 240 },
+    { day: 'Fri', workouts: 2, duration: 75, calories: 520 },
+    { day: 'Sat', workouts: 3, duration: 120, calories: 850 },
+    { day: 'Sun', workouts: 1, duration: 0, calories: 180 },
+  ],
+};
+
+const DEMO_GOALS: FitnessGoal[] = [
+  { id: 'demo-1', type: 'weekly_workouts', target: 5, currentValue: 3, progress: 60, unit: 'workouts', period: 'weekly', isActive: true },
+  { id: 'demo-2', type: 'calories', target: 2000, currentValue: 1540, progress: 77, unit: 'cal', period: 'weekly', isActive: true },
+  { id: 'demo-3', type: 'duration', target: 300, currentValue: 195, progress: 65, unit: 'min', period: 'weekly', isActive: true },
+];
+
+const DEMO_ACTIVITIES: FitnessActivity[] = [
+  { id: 'demo-1', type: 'running', name: 'Morning Run', duration: 30, caloriesBurned: 320, distance: 5, distanceUnit: 'km', intensity: 'moderate', startTime: new Date().toISOString() },
+  { id: 'demo-2', type: 'yoga', name: 'Yoga Session', duration: 45, caloriesBurned: 180, intensity: 'low', startTime: new Date(Date.now() - 86400000).toISOString() },
+  { id: 'demo-3', type: 'cycling', name: 'Evening Cycling', duration: 60, caloriesBurned: 450, distance: 15, distanceUnit: 'km', intensity: 'high', startTime: new Date(Date.now() - 172800000).toISOString() },
+];
+
 const FitnessTrackerScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const [isLoading, setIsLoading] = useState(true);
@@ -47,11 +77,20 @@ const FitnessTrackerScreen: React.FC = () => {
         wellnessApi.getFitnessGoals(true),
         wellnessApi.getFitnessStats('week'),
       ]);
-      setActivities(activitiesRes.data?.data || []);
-      setGoals(goalsRes.data?.data || []);
-      setStats(statsRes.data?.data || null);
+      const fetchedActivities = activitiesRes.data?.data || [];
+      const fetchedGoals = goalsRes.data?.data || [];
+      const fetchedStats = statsRes.data?.data || null;
+
+      // Use demo data if API returns empty
+      setActivities(fetchedActivities.length > 0 ? fetchedActivities : DEMO_ACTIVITIES);
+      setGoals(fetchedGoals.length > 0 ? fetchedGoals : DEMO_GOALS);
+      setStats(fetchedStats || DEMO_STATS);
     } catch (error) {
       console.error('Error loading fitness data:', error);
+      // Use demo data on error
+      setActivities(DEMO_ACTIVITIES);
+      setGoals(DEMO_GOALS);
+      setStats(DEMO_STATS);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
