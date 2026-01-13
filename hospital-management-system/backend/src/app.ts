@@ -17,7 +17,8 @@ app.use(helmet());
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3001',
-  'https://medint.taqon.ai',
+  'http://spetaar.ai',
+  'https://spetaar.ai',
   process.env.CORS_ORIGIN,
 ].filter(Boolean);
 

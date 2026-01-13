@@ -18,11 +18,11 @@ router.get(
   })
 );
 
-// Check in patient
+// Check in patient (Front Desk / Receptionist only - not Nurse)
 router.post(
   '/check-in/:appointmentId',
   authenticate,
-  authorize('RECEPTIONIST', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorize('RECEPTIONIST', 'HOSPITAL_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await opdService.checkInPatient(req.params.appointmentId, req.user!.hospitalId);
     sendSuccess(res, result, 'Patient checked in');
@@ -116,6 +116,7 @@ router.get(
 );
 
 // Record pre-consultation vitals for an appointment
+// Primary: NURSE records vitals | DOCTOR can override in emergencies (flagged for audit)
 router.post(
   '/appointments/:appointmentId/vitals',
   authenticate,
@@ -134,6 +135,7 @@ router.post(
       bloodSugar,
       painLevel,
       notes,
+      isEmergencyOverride, // Flag when doctor records vitals (bypassing normal nurse workflow)
     } = req.body;
 
     const result = await opdService.recordVitals(
@@ -152,7 +154,9 @@ router.post(
         painLevel,
         notes,
       },
-      req.user!.userId
+      req.user!.userId,
+      req.user!.role, // Pass role for tracking
+      isEmergencyOverride // Pass override flag
     );
 
     sendSuccess(res, result, 'Vitals recorded successfully');

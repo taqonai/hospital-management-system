@@ -285,7 +285,7 @@ PATIENT JOURNEY (Online Booking Path)
 
 ## Try It Now
 
-Visit **https://medint.taqon.ai** to experience AI-powered healthcare.
+Visit **https://spetaar.ai** to experience AI-powered healthcare.
 
 **Login:**
 - Email: admin@hospital.com

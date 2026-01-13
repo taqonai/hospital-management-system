@@ -115,7 +115,7 @@
     ],
     "extra": {
       "APP_ENV": "development",
-      "API_URL": "https://medint.taqon.ai/api/v1",
+      "API_URL": "http://spetaar.ai/api/v1",
       "SENTRY_DSN": "",
       "eas": {
         "projectId": "bcfea148-f3e9-4410-834b-bcc5b271bb45"

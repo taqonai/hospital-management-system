@@ -69,7 +69,7 @@ resource "aws_s3_bucket_cors_configuration" "medical_images" {
   cors_rule {
     allowed_headers = ["*"]
     allowed_methods = ["GET", "PUT", "POST", "DELETE", "HEAD"]
-    allowed_origins = ["https://medint.taqon.ai", "http://localhost:3000"]
+    allowed_origins = ["https://spetaar.ai", "http://spetaar.ai", "http://localhost:3000"]
     expose_headers  = ["ETag"]
     max_age_seconds = 3000
   }

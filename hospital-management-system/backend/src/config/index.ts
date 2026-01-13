@@ -34,7 +34,7 @@ export const config = {
       region: process.env.AWS_SES_REGION || process.env.AWS_REGION || 'us-east-1',
       accessKeyId: process.env.AWS_SES_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '',
       secretAccessKey: process.env.AWS_SES_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || '',
-      fromEmail: process.env.AWS_SES_FROM_EMAIL || 'noreply@medint.taqon.ai',
+      fromEmail: process.env.AWS_SES_FROM_EMAIL || 'noreply@spetaar.ai',
     },
   },
 

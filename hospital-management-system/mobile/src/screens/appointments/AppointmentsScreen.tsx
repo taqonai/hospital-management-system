@@ -211,6 +211,16 @@ const AppointmentsScreen: React.FC = () => {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary[600]} />
         </View>
+      ) : error ? (
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={64} color={colors.error[500]} />
+          <Text style={styles.errorTitle}>Failed to Load Appointments</Text>
+          <Text style={styles.errorSubtitle}>Please check your connection and try again</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+            <Ionicons name="refresh" size={20} color={colors.white} />
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <FlatList
           data={data || []}
@@ -229,6 +239,7 @@ const AppointmentsScreen: React.FC = () => {
       <TouchableOpacity
         style={styles.fab}
         onPress={() => navigation.navigate('BookAppointment')}
+        activeOpacity={0.8}
       >
         <Ionicons name="add" size={28} color={colors.white} />
       </TouchableOpacity>
@@ -245,6 +256,40 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing['4xl'],
+    paddingHorizontal: spacing.xl,
+  },
+  errorTitle: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.text.primary,
+    marginTop: spacing.lg,
+  },
+  errorSubtitle: {
+    fontSize: typography.fontSize.sm,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary[600],
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    marginTop: spacing.xl,
+    gap: spacing.sm,
+  },
+  retryButtonText: {
+    color: colors.white,
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
   },
   tabContainer: {
     flexDirection: 'row',
@@ -403,7 +448,7 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: 'absolute',
-    bottom: spacing.xl,
+    bottom: 100,
     right: spacing.xl,
     width: 56,
     height: 56,
@@ -411,7 +456,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary[600],
     justifyContent: 'center',
     alignItems: 'center',
-    ...shadows.lg,
+    zIndex: 999,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 8,
   },
 });
 

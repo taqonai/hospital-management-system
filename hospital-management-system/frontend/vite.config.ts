@@ -21,7 +21,7 @@ export default defineConfig({
     host: '0.0.0.0',
     allowedHosts: [
       'localhost',
-      'medint.taqon.ai',
+      'spetaar.ai',
       '.elb.amazonaws.com',
     ],
     proxy: {

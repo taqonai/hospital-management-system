@@ -147,7 +147,7 @@ const DashboardScreen: React.FC = () => {
         <View style={styles.statsContainer}>
           <TouchableOpacity
             style={styles.statCard}
-            onPress={() => navigation.navigate('AppointmentsTab')}
+            onPress={() => navigation.navigate('AppointmentsTab', { screen: 'AppointmentsList' })}
           >
             <View style={[styles.statIcon, { backgroundColor: colors.primary[100] }]}>
               <Ionicons name="calendar" size={24} color={colors.primary[600]} />
@@ -229,7 +229,7 @@ const DashboardScreen: React.FC = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Upcoming Appointments</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('AppointmentsTab')}>
+            <TouchableOpacity onPress={() => navigation.navigate('AppointmentsTab', { screen: 'AppointmentsList' })}>
               <Text style={styles.viewAllText}>View All</Text>
             </TouchableOpacity>
           </View>

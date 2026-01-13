@@ -47,7 +47,7 @@
       },
       "env": {
         "APP_ENV": "production",
-        "API_URL": "https://medint.taqon.ai/api/v1"
+        "API_URL": "http://spetaar.ai/api/v1"
       }
     }
   },

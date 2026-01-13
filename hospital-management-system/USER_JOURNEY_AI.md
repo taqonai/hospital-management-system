@@ -14,7 +14,7 @@ This document shows the complete end-to-end flow of how patients and staff use t
 ├──────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                      │
 │                              🏠 HOMEPAGE                                             │
-│                           medint.taqon.ai                                            │
+│                           spetaar.ai                                            │
 │                                  │                                                   │
 │                    ┌─────────────┼─────────────┐                                    │
 │                    │             │             │                                    │
@@ -66,7 +66,7 @@ Home → Visit Hospital → Kiosk Registration + Symptom Check → Queue
 
 **Location:** Home
 **User:** Mr. Ahmed
-**URL:** https://medint.taqon.ai
+**URL:** https://spetaar.ai
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -819,7 +819,7 @@ If Mr. Ahmed came directly to hospital without booking:
 
 ## TRY IT YOURSELF
 
-**Website:** https://medint.taqon.ai
+**Website:** https://spetaar.ai
 
 **Login:**
 - Email: admin@hospital.com
