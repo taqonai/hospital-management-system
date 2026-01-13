@@ -1,9 +1,9 @@
 /**
  * Currency formatting utility for UAE Dirhams (AED)
- * Symbol: د.إ (Dirham symbol - D with two horizontal lines)
+ * Symbol: Dhs (Dirham symbol)
  */
 
-export const CURRENCY_SYMBOL = 'د.إ';
+export const CURRENCY_SYMBOL = 'Dhs';
 export const CURRENCY_CODE = 'AED';
 
 /**
