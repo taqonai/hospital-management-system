@@ -18,6 +18,16 @@ interface VitalsData {
   notes?: string;
 }
 
+// Helper function to generate clinical response based on NEWS2 score
+function getClinicalResponseFromScore(score: number | undefined): string {
+  if (score === undefined || score === null) return 'Unable to calculate NEWS2 score';
+  if (score === 0) return 'Routine monitoring';
+  if (score >= 1 && score <= 4) return 'Ward-based response - increase monitoring frequency';
+  if (score >= 5 && score <= 6) return 'Urgent response - alert clinical team';
+  if (score >= 7) return 'Emergency response - immediate clinical review required';
+  return 'Monitor patient condition';
+}
+
 export class OPDService {
   // Queue Management
   async getTodayQueue(hospitalId: string, doctorId?: string) {
@@ -426,7 +436,15 @@ export class OPDService {
               predictionType: 'DETERIORATION',
               riskScore: new Decimal(riskAssessment.deteriorationProbability || 0),
               riskLevel,
-              factors: riskAssessment.recommendedActions || [],
+              factors: {
+                news2Score: riskAssessment.news2Score,
+                clinicalResponse: riskAssessment.clinicalResponse || getClinicalResponseFromScore(riskAssessment.news2Score),
+                breakdown: riskAssessment.breakdown || {},
+                sepsisRisk: riskAssessment.sepsisRisk,
+                fallRisk: riskAssessment.fallRisk,
+                escalationRequired: riskAssessment.escalationRequired,
+                recommendedActions: riskAssessment.recommendedActions || [],
+              },
               recommendations: riskAssessment.recommendedActions || [],
               modelVersion: riskAssessment.modelVersion || 'NEWS2-v1.0',
             },
@@ -712,7 +730,25 @@ export class OPDService {
         riskScore: riskPrediction.riskScore,
         riskLevel: riskPrediction.riskLevel,
         predictionType: riskPrediction.predictionType,
-        factors: riskPrediction.factors,
+        // Extract NEWS2 data from factors if available (new format)
+        news2Score: typeof riskPrediction.factors === 'object' && !Array.isArray(riskPrediction.factors)
+          ? (riskPrediction.factors as any).news2Score
+          : undefined,
+        clinicalResponse: typeof riskPrediction.factors === 'object' && !Array.isArray(riskPrediction.factors)
+          ? (riskPrediction.factors as any).clinicalResponse
+          : undefined,
+        breakdown: typeof riskPrediction.factors === 'object' && !Array.isArray(riskPrediction.factors)
+          ? (riskPrediction.factors as any).breakdown
+          : undefined,
+        sepsisRisk: typeof riskPrediction.factors === 'object' && !Array.isArray(riskPrediction.factors)
+          ? (riskPrediction.factors as any).sepsisRisk
+          : undefined,
+        fallRisk: typeof riskPrediction.factors === 'object' && !Array.isArray(riskPrediction.factors)
+          ? (riskPrediction.factors as any).fallRisk
+          : undefined,
+        escalationRequired: typeof riskPrediction.factors === 'object' && !Array.isArray(riskPrediction.factors)
+          ? (riskPrediction.factors as any).escalationRequired
+          : undefined,
         recommendations: riskPrediction.recommendations,
         createdAt: riskPrediction.createdAt,
       } : null,

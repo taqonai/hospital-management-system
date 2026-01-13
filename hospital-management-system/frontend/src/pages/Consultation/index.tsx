@@ -175,6 +175,17 @@ const getInteractionSeverityColor = (severity: string): string => {
   }
 };
 
+// Map backend risk level (LOW, MODERATE, HIGH, CRITICAL) to NEWS2 format
+const mapRiskLevelToNEWS2 = (level: string): 'LOW' | 'LOW_MEDIUM' | 'MEDIUM' | 'HIGH' => {
+  switch (level?.toUpperCase()) {
+    case 'LOW': return 'LOW';
+    case 'MODERATE': return 'LOW_MEDIUM';
+    case 'HIGH': return 'MEDIUM';
+    case 'CRITICAL': return 'HIGH';
+    default: return 'LOW';
+  }
+};
+
 // =============== Main Component ===============
 export default function Consultation() {
   const { appointmentId } = useParams<{ appointmentId: string }>();
@@ -293,6 +304,21 @@ export default function Consultation() {
       toast.success('Vitals pre-filled from nurse recording');
     }
   }, [bookingData, vitalsPrefilledByNurse]);
+
+  // Pre-populate NEWS2 result from nurse-recorded vitals risk assessment
+  useEffect(() => {
+    // If booking data has risk prediction with NEWS2 score, pre-fill the news2Result
+    if (bookingData?.riskPrediction?.news2Score !== undefined && !news2Result) {
+      const riskLevel = mapRiskLevelToNEWS2(bookingData.riskPrediction.riskLevel);
+      setNews2Result({
+        score: bookingData.riskPrediction.news2Score,
+        riskLevel: riskLevel,
+        clinicalResponse: bookingData.riskPrediction.clinicalResponse || 'Risk assessment from nurse vitals recording',
+        breakdown: bookingData.riskPrediction.breakdown || undefined,
+      });
+      console.log('Pre-filled NEWS2 result from nurse recording:', bookingData.riskPrediction);
+    }
+  }, [bookingData, news2Result]);
 
   // Fetch patient booking history for follow-up context
   const { data: patientHistoryData } = usePatientHistory(
@@ -908,9 +934,12 @@ export default function Consultation() {
           <div className="grid md:grid-cols-2 gap-4 text-sm">
             <div className="p-3 bg-white rounded-xl">
               <p className="text-gray-500 mb-1">Risk Level</p>
-              <p className={clsx('font-semibold px-2 py-1 rounded inline-block', getRiskLevelColor(patientContext.riskLevel || 'low'))}>
-                {patientContext.riskLevel || 'Low'}
+              <p className={clsx('font-semibold px-2 py-1 rounded inline-block', getRiskLevelColor(bookingData?.riskPrediction?.riskLevel || patientContext.riskLevel || 'low'))}>
+                {bookingData?.riskPrediction?.riskLevel || patientContext.riskLevel || 'Low'}
               </p>
+              {bookingData?.riskPrediction?.news2Score !== undefined && (
+                <p className="text-xs text-gray-500 mt-1">NEWS2 Score: {bookingData.riskPrediction.news2Score}</p>
+              )}
             </div>
             <div className="p-3 bg-white rounded-xl">
               <p className="text-gray-500 mb-1">Last Visit</p>
@@ -1878,22 +1907,30 @@ export default function Consultation() {
             <ShieldExclamationIcon className="h-5 w-5 text-blue-500" />
             Patient Risk Level
           </h4>
-          <div className={clsx(
-            'px-4 py-3 rounded-xl text-center',
-            news2Result && news2Result.score >= 5 ? 'bg-red-100' :
-            patientData.allergies && patientData.allergies.length > 0 ? 'bg-amber-100' :
-            'bg-green-100'
-          )}>
-            <p className={clsx(
-              'text-2xl font-bold',
-              news2Result && news2Result.score >= 5 ? 'text-red-700' :
-              patientData.allergies && patientData.allergies.length > 0 ? 'text-amber-700' :
-              'text-green-700'
-            )}>
-              {news2Result && news2Result.score >= 5 ? 'HIGH' :
-               patientData.allergies && patientData.allergies.length > 0 ? 'MODERATE' : 'LOW'}
-            </p>
-          </div>
+          {(() => {
+            // Determine risk level from NEWS2 result (pre-filled from booking data or calculated)
+            const riskLevel = news2Result?.riskLevel?.toUpperCase() ||
+                              bookingData?.riskPrediction?.riskLevel?.toUpperCase() ||
+                              (patientData.allergies && patientData.allergies.length > 0 ? 'MODERATE' : 'LOW');
+            const isHigh = riskLevel === 'HIGH' || riskLevel === 'CRITICAL' || (news2Result && news2Result.score >= 5);
+            const isModerate = riskLevel === 'MODERATE' || riskLevel === 'MEDIUM' || riskLevel === 'LOW_MEDIUM';
+            return (
+              <div className={clsx(
+                'px-4 py-3 rounded-xl text-center',
+                isHigh ? 'bg-red-100' : isModerate ? 'bg-amber-100' : 'bg-green-100'
+              )}>
+                <p className={clsx(
+                  'text-2xl font-bold',
+                  isHigh ? 'text-red-700' : isModerate ? 'text-amber-700' : 'text-green-700'
+                )}>
+                  {isHigh ? 'HIGH' : isModerate ? 'MODERATE' : 'LOW'}
+                </p>
+                {news2Result && (
+                  <p className="text-sm mt-1 opacity-75">NEWS2: {news2Result.score}</p>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 

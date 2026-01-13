@@ -73,7 +73,13 @@ export interface BookingTicketData {
     riskScore: number;
     riskLevel: string;
     predictionType: string;
-    factors: any;
+    // NEWS2 data extracted from factors (new format)
+    news2Score?: number;
+    clinicalResponse?: string;
+    breakdown?: Record<string, number>;
+    sepsisRisk?: number;
+    fallRisk?: number;
+    escalationRequired?: boolean;
     recommendations: string[];
     createdAt: string;
   } | null;
