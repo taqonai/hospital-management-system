@@ -1,1 +1,1 @@
-export { formatCurrency, formatCurrencyCompact, CURRENCY_SYMBOL, CURRENCY_CODE } from './currency';
+export { formatCurrency, formatCurrencyCompact, formatNumber, CURRENCY_CODE, CURRENCY_TEXT } from './currency';

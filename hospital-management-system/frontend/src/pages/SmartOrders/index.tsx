@@ -27,7 +27,7 @@ import {
   ChevronRightIcon,
 } from '@heroicons/react/24/outline';
 import { smartOrderApi } from '../../services/api';
-import { formatCurrency } from '../../utils/currency';
+import { CurrencyDisplay } from '../../components/common';
 import OrderSetRecommendation from '../../components/orders/OrderSetRecommendation';
 import OrderBundleCard from '../../components/orders/OrderBundleCard';
 import OrderCustomizer from '../../components/orders/OrderCustomizer';
@@ -551,7 +551,7 @@ export default function SmartOrders() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Estimated Cost</p>
-              <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalCost)}</p>
+              <p className="text-2xl font-bold text-gray-900"><CurrencyDisplay amount={totalCost} /></p>
             </div>
             <div className="p-3 rounded-xl bg-emerald-100 text-emerald-600">
               <BeakerIcon className="h-6 w-6" />
@@ -1193,7 +1193,7 @@ export default function SmartOrders() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <p className="text-sm font-medium text-gray-900">
-                              {formatCurrency(order.totalCost)}
+                              <CurrencyDisplay amount={order.totalCost} />
                             </p>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">

@@ -29,7 +29,7 @@ import {
   HeartIcon,
 } from '@heroicons/react/24/outline';
 import { patientPortalApi } from '../../services/api';
-import { formatCurrency } from '../../utils/currency';
+import { CurrencyDisplay } from '../../components/common';
 import toast from 'react-hot-toast';
 
 interface Appointment {
@@ -1198,7 +1198,7 @@ export default function Appointments() {
                                   <p className="font-medium text-gray-900">
                                     Dr. {doctor.user?.firstName} {doctor.user?.lastName}
                                   </p>
-                                  <p className="text-xs text-gray-500">{doctor.specialization} • {formatCurrency(doctor.consultationFee)}</p>
+                                  <p className="text-xs text-gray-500">{doctor.specialization} • <CurrencyDisplay amount={doctor.consultationFee} /></p>
                                 </div>
                               </div>
                               <div className="flex flex-wrap gap-1.5">
@@ -1357,7 +1357,7 @@ export default function Appointments() {
                                   <p className="text-sm text-gray-500">{doctor.specialization}</p>
                                   {doctor.consultationFee && (
                                     <p className="text-sm text-green-600 font-medium">
-                                      Fee: {formatCurrency(doctor.consultationFee)}
+                                      Fee: <CurrencyDisplay amount={doctor.consultationFee} />
                                     </p>
                                   )}
                                 </div>

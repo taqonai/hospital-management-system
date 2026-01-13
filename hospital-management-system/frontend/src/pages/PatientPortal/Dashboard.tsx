@@ -29,7 +29,7 @@ import {
   ShieldExclamationIcon,
 } from '@heroicons/react/24/outline';
 import { patientPortalApi } from '../../services/api';
-import { formatCurrency } from '../../utils/currency';
+import { CurrencyDisplay } from '../../components/common';
 
 // Types
 interface Appointment {
@@ -917,7 +917,7 @@ export default function PatientPortalDashboard() {
             {/* Total Due */}
             <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl mb-4">
               <p className="text-sm text-amber-700 font-medium">Total Amount Due</p>
-              <p className="text-3xl font-bold text-amber-800">{formatCurrency(data.totalAmountDue)}</p>
+              <p className="text-3xl font-bold text-amber-800"><CurrencyDisplay amount={data.totalAmountDue} /></p>
             </div>
 
             {/* Bill List */}
@@ -934,7 +934,7 @@ export default function PatientPortalDashboard() {
                       <span className="text-sm font-medium text-gray-900 truncate flex-1">
                         {bill.description}
                       </span>
-                      <span className="text-sm font-bold text-gray-900">{formatCurrency(bill.amount)}</span>
+                      <span className="text-sm font-bold text-gray-900"><CurrencyDisplay amount={bill.amount} /></span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-gray-500">Due: {formatDate(bill.dueDate)}</span>

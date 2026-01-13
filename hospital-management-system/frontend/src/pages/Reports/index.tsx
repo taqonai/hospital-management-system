@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { reportsApi } from '../../services/api';
-import { formatCurrency } from '../../utils/currency';
+import { CurrencyDisplay } from '../../components/common';
 import {
   ChartBarIcon,
   CurrencyDollarIcon,
@@ -180,7 +180,7 @@ const Reports: React.FC = () => {
                 <div>
                   <p className="text-sm text-gray-600">Total Revenue</p>
                   <p className="text-3xl font-bold text-gray-900">
-                    {formatCurrency(executiveSummary?.revenue.total || 0)}
+                    <CurrencyDisplay amount={executiveSummary?.revenue.total || 0} />
                   </p>
                 </div>
                 <div className="p-3 bg-green-100 rounded-lg">
@@ -281,7 +281,7 @@ const Reports: React.FC = () => {
                 {['Consultations', 'Laboratory', 'Pharmacy', 'Radiology', 'Surgery'].map((cat) => (
                   <div key={cat} className="flex justify-between items-center">
                     <span className="text-sm text-gray-600">{cat}</span>
-                    <span className="font-medium">{formatCurrency(Math.floor(Math.random() * 500000))}</span>
+                    <span className="font-medium"><CurrencyDisplay amount={Math.floor(Math.random() * 500000)} /></span>
                   </div>
                 ))}
               </div>
@@ -291,15 +291,15 @@ const Reports: React.FC = () => {
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Collected</span>
-                  <span className="font-medium text-green-600">{formatCurrency(Math.floor(Math.random() * 2000000))}</span>
+                  <span className="font-medium text-green-600"><CurrencyDisplay amount={Math.floor(Math.random() * 2000000)} /></span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Pending</span>
-                  <span className="font-medium text-yellow-600">{formatCurrency(Math.floor(Math.random() * 500000))}</span>
+                  <span className="font-medium text-yellow-600"><CurrencyDisplay amount={Math.floor(Math.random() * 500000)} /></span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Overdue</span>
-                  <span className="font-medium text-red-600">{formatCurrency(Math.floor(Math.random() * 100000))}</span>
+                  <span className="font-medium text-red-600"><CurrencyDisplay amount={Math.floor(Math.random() * 100000)} /></span>
                 </div>
               </div>
             </div>

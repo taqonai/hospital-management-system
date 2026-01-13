@@ -16,7 +16,7 @@ import {
 import { hrApi } from '../../services/api';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
-import { formatCurrency } from '../../utils/currency';
+import { CurrencyDisplay } from '../../components/common';
 
 interface Employee {
   id: string;
@@ -1124,16 +1124,16 @@ export default function HR() {
                             {new Date(payroll.year, payroll.month - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                            {formatCurrency(payroll.basicSalary)}
+                            <CurrencyDisplay amount={payroll.basicSalary} />
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 text-right font-medium">
-                            +{formatCurrency(payroll.totalEarnings)}
+                            +<CurrencyDisplay amount={payroll.totalEarnings} />
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 text-right font-medium">
-                            -{formatCurrency(payroll.totalDeductions)}
+                            -<CurrencyDisplay amount={payroll.totalDeductions} />
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 text-right">
-                            {formatCurrency(payroll.netSalary)}
+                            <CurrencyDisplay amount={payroll.netSalary} />
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <GlassStatusBadge status={payroll.status} />

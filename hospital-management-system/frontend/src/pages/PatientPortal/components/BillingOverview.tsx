@@ -20,7 +20,7 @@ import {
 import { patientPortalApi } from '../../../services/api';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
-import { formatCurrency } from '../../../utils/currency';
+import { CurrencyDisplay } from '../../../components/common';
 
 interface BillLineItem {
   id: string;
@@ -180,10 +180,10 @@ function BillDetailView({
                 <div className="flex-1">
                   <p className="font-medium text-gray-900">{item.description}</p>
                   <p className="text-sm text-gray-500">
-                    {item.category} - Qty: {item.quantity} x {formatCurrency(item.unitPrice)}
+                    {item.category} - Qty: {item.quantity} x <CurrencyDisplay amount={item.unitPrice} />
                   </p>
                 </div>
-                <span className="font-medium text-gray-900">{formatCurrency(item.totalPrice)}</span>
+                <span className="font-medium text-gray-900"><CurrencyDisplay amount={item.totalPrice} /></span>
               </div>
             ))}
           </div>
@@ -193,7 +193,7 @@ function BillDetailView({
         <div className="border-t border-gray-200/50 pt-4 space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-gray-600">Subtotal</span>
-            <span className="font-medium text-gray-900">{formatCurrency(bill.subtotal)}</span>
+            <span className="font-medium text-gray-900"><CurrencyDisplay amount={bill.subtotal} /></span>
           </div>
           {bill.insuranceApplied > 0 && (
             <div className="flex justify-between text-sm">
@@ -202,7 +202,7 @@ function BillDetailView({
                 Insurance Applied
               </span>
               <span className="font-medium text-green-600">
-                -{formatCurrency(bill.insuranceApplied)}
+                -<CurrencyDisplay amount={bill.insuranceApplied} />
               </span>
             </div>
           )}
@@ -216,26 +216,26 @@ function BillDetailView({
                 )}
               >
                 {bill.adjustments > 0 ? '+' : '-'}
-                {formatCurrency(Math.abs(bill.adjustments))}
+                <CurrencyDisplay amount={Math.abs(bill.adjustments)} />
               </span>
             </div>
           )}
           <div className="flex justify-between text-sm">
             <span className="text-gray-600">Total Amount</span>
-            <span className="font-medium text-gray-900">{formatCurrency(bill.totalAmount)}</span>
+            <span className="font-medium text-gray-900"><CurrencyDisplay amount={bill.totalAmount} /></span>
           </div>
           {bill.paidAmount > 0 && (
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Amount Paid</span>
               <span className="font-medium text-green-600">
-                -{formatCurrency(bill.paidAmount)}
+                -<CurrencyDisplay amount={bill.paidAmount} />
               </span>
             </div>
           )}
           <div className="flex justify-between pt-3 border-t border-gray-200/50">
             <span className="font-semibold text-gray-900">Balance Due</span>
             <span className="text-xl font-bold bg-gradient-to-r from-emerald-500 to-teal-600 bg-clip-text text-transparent">
-              {formatCurrency(bill.balanceDue)}
+              <CurrencyDisplay amount={bill.balanceDue} />
             </span>
           </div>
         </div>
@@ -390,7 +390,7 @@ function PaymentModal({
                 <div className="text-right">
                   <p className="text-sm text-gray-500">Balance Due</p>
                   <p className="text-xl font-bold text-gray-900">
-                    {formatCurrency(bill.balanceDue)}
+                    <CurrencyDisplay amount={bill.balanceDue} />
                   </p>
                 </div>
               </div>
@@ -509,7 +509,7 @@ function PaymentModal({
                 ) : (
                   <>
                     <CreditCardIcon className="h-5 w-5" />
-                    Pay {formatCurrency(paymentAmount)}
+                    Pay <CurrencyDisplay amount={paymentAmount} />
                   </>
                 )}
               </button>
@@ -625,7 +625,7 @@ export default function BillingOverview() {
                 {loadingSummary ? (
                   <ArrowPathIcon className="h-6 w-6 animate-spin text-gray-400" />
                 ) : (
-                  formatCurrency(summary?.totalBalance)
+                  <CurrencyDisplay amount={summary?.totalBalance} />
                 )}
               </p>
             </div>
@@ -792,7 +792,7 @@ export default function BillingOverview() {
                       </div>
                       <div className="text-right flex-shrink-0">
                         <p className="text-lg font-bold text-gray-900">
-                          {formatCurrency(bill.balanceDue)}
+                          <CurrencyDisplay amount={bill.balanceDue} />
                         </p>
                         <p className="text-sm text-gray-500">Due: {formatDate(bill.dueDate)}</p>
                       </div>
@@ -876,7 +876,7 @@ export default function BillingOverview() {
                     </div>
                     <div className="text-right flex-shrink-0">
                       <p className="text-lg font-bold text-green-600">
-                        {formatCurrency(payment.amount)}
+                        <CurrencyDisplay amount={payment.amount} />
                       </p>
                       <p className="text-sm text-gray-500">{formatDate(payment.date)}</p>
                     </div>

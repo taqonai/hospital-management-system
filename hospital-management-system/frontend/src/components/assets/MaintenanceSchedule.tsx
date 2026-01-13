@@ -25,7 +25,7 @@ import { assetApi } from '../../services/api';
 import { GlassCard, GlassCardHeader, GlassCardTitle } from '../ui/GlassCard';
 import LoadingSpinner from '../common/LoadingSpinner';
 import type { RootState } from '../../store';
-import { formatCurrency } from '../../utils/currency';
+import { CurrencyDisplay } from '../common';
 
 // Types
 type MaintenanceStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';

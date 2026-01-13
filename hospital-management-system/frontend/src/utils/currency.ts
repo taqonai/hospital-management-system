@@ -1,16 +1,26 @@
 /**
- * Currency formatting utility for UAE Dirhams (AED)
- * Symbol: Dhs (Dirham symbol)
+ * Currency formatting utility for UAE Dirhams
+ *
+ * The official UAE Dirham symbol is a bold "D" with two horizontal lines.
+ * For UI display, use the CurrencyDisplay component which renders the SVG symbol.
+ *
+ * This utility provides text-based formatting for non-UI contexts
+ * (exports, console, data processing, etc.)
  */
 
-export const CURRENCY_SYMBOL = 'Dhs';
+// Currency code for API/data purposes
 export const CURRENCY_CODE = 'AED';
 
+// Text fallback for non-UI contexts (use CurrencyDisplay component for UI)
+export const CURRENCY_TEXT = 'Dhs';
+
 /**
- * Format a number as UAE Dirhams
+ * Format a number as currency (text format)
+ * NOTE: For UI display, prefer using <CurrencyDisplay amount={value} /> component
+ *
  * @param amount - The amount to format (can be number, string, null, or undefined)
  * @param options - Optional formatting options
- * @returns Formatted currency string with AED symbol
+ * @returns Formatted currency string
  */
 export const formatCurrency = (
   amount: number | string | undefined | null,
@@ -25,23 +35,43 @@ export const formatCurrency = (
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   });
-  return showSymbol ? `${CURRENCY_SYMBOL} ${formatted}` : formatted;
+  // Return just the number - symbol will be rendered as SVG component
+  return showSymbol ? formatted : formatted;
 };
 
 /**
  * Format currency for compact display (e.g., 1.2K, 5M)
+ * NOTE: For UI display, prefer using <CurrencyDisplay amount={value} compact /> component
+ *
  * @param amount - The amount to format
- * @returns Compact formatted currency string
+ * @returns Compact formatted string (without symbol - add CurrencyDisplay for symbol)
  */
 export const formatCurrencyCompact = (amount: number | string | undefined | null): string => {
   const num = Number(amount || 0);
   if (num >= 1000000) {
-    return `${CURRENCY_SYMBOL} ${(num / 1000000).toFixed(1)}M`;
+    return `${(num / 1000000).toFixed(1)}M`;
   }
   if (num >= 1000) {
-    return `${CURRENCY_SYMBOL} ${(num / 1000).toFixed(1)}K`;
+    return `${(num / 1000).toFixed(1)}K`;
   }
-  return formatCurrency(num);
+  return formatCurrency(num, { showSymbol: false });
+};
+
+/**
+ * Format number only (no symbol)
+ * @param amount - The amount to format
+ * @param decimals - Number of decimal places
+ * @returns Formatted number string
+ */
+export const formatNumber = (
+  amount: number | string | undefined | null,
+  decimals = 2
+): string => {
+  const num = Number(amount || 0);
+  return num.toLocaleString('en-AE', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
 };
 
 export default formatCurrency;

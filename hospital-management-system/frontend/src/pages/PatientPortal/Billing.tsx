@@ -26,7 +26,8 @@ import {
 } from '@heroicons/react/24/outline';
 import { patientPortalApi } from '../../services/api';
 import toast from 'react-hot-toast';
-import { formatCurrency } from '../../utils/currency';
+import { CurrencyDisplay } from '../../components/common';
+import { formatNumber } from '../../utils/currency';
 
 interface BillLineItem {
   id: string;
@@ -457,10 +458,10 @@ export default function Billing() {
                     <div className="flex-1">
                       <p className="font-medium text-gray-900">{item.description}</p>
                       <p className="text-sm text-gray-500">
-                        {item.category} - Qty: {item.quantity} x {formatCurrency(item.unitPrice)}
+                        {item.category} - Qty: {item.quantity} x <CurrencyDisplay amount={item.unitPrice} />
                       </p>
                     </div>
-                    <span className="font-medium text-gray-900">{formatCurrency(item.totalPrice)}</span>
+                    <span className="font-medium text-gray-900"><CurrencyDisplay amount={item.totalPrice} /></span>
                   </div>
                 ))}
               </div>
@@ -470,7 +471,7 @@ export default function Billing() {
             <div className="p-6 space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Subtotal</span>
-                <span className="font-medium text-gray-900">{formatCurrency(bill.subtotal)}</span>
+                <span className="font-medium text-gray-900"><CurrencyDisplay amount={bill.subtotal} /></span>
               </div>
               {bill.insuranceApplied > 0 && (
                 <div className="flex justify-between text-sm">
@@ -478,31 +479,31 @@ export default function Billing() {
                     <ShieldCheckIcon className="h-4 w-4 text-green-600" />
                     Insurance Applied
                   </span>
-                  <span className="font-medium text-green-600">-{formatCurrency(bill.insuranceApplied)}</span>
+                  <span className="font-medium text-green-600">-<CurrencyDisplay amount={bill.insuranceApplied} /></span>
                 </div>
               )}
               {bill.adjustments !== 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Adjustments</span>
                   <span className={`font-medium ${bill.adjustments > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {bill.adjustments > 0 ? '+' : ''}{formatCurrency(bill.adjustments)}
+                    {bill.adjustments > 0 ? '+' : ''}<CurrencyDisplay amount={Math.abs(bill.adjustments)} />
                   </span>
                 </div>
               )}
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Total Amount</span>
-                <span className="font-medium text-gray-900">{formatCurrency(bill.totalAmount)}</span>
+                <span className="font-medium text-gray-900"><CurrencyDisplay amount={bill.totalAmount} /></span>
               </div>
               {bill.paidAmount > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Amount Paid</span>
-                  <span className="font-medium text-green-600">-{formatCurrency(bill.paidAmount)}</span>
+                  <span className="font-medium text-green-600">-<CurrencyDisplay amount={bill.paidAmount} /></span>
                 </div>
               )}
               <div className="flex justify-between pt-3 border-t border-gray-200">
                 <span className="font-semibold text-gray-900">Balance Due</span>
                 <span className="text-2xl font-bold bg-gradient-to-r from-emerald-500 to-teal-600 bg-clip-text text-transparent">
-                  {formatCurrency(bill.balanceDue)}
+                  <CurrencyDisplay amount={bill.balanceDue} />
                 </span>
               </div>
             </div>
@@ -591,7 +592,7 @@ export default function Billing() {
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-500">Total Balance</p>
-                <p className="text-2xl font-bold text-gray-900">{formatCurrency(summaryData?.totalBalance)}</p>
+                <p className="text-2xl font-bold text-gray-900"><CurrencyDisplay amount={summaryData?.totalBalance} /></p>
               </div>
             </div>
           </div>
@@ -752,7 +753,7 @@ export default function Billing() {
                           </div>
                         </div>
                         <div className="text-right flex-shrink-0">
-                          <p className="text-lg font-bold text-gray-900">{formatCurrency(bill.balanceDue)}</p>
+                          <p className="text-lg font-bold text-gray-900"><CurrencyDisplay amount={bill.balanceDue} /></p>
                           <p className="text-sm text-gray-500">Due: {formatDate(bill.dueDate)}</p>
                         </div>
                         <ChevronRightIcon className="h-5 w-5 text-gray-400 flex-shrink-0" />
@@ -808,7 +809,7 @@ export default function Billing() {
                           </div>
                         </div>
                         <div className="text-right flex-shrink-0">
-                          <p className="text-lg font-bold text-green-600">{formatCurrency(payment.amount)}</p>
+                          <p className="text-lg font-bold text-green-600"><CurrencyDisplay amount={payment.amount} /></p>
                           <p className="text-sm text-gray-500">{formatDate(payment.date)}</p>
                         </div>
                       </div>
@@ -865,9 +866,9 @@ export default function Billing() {
                           </div>
                         </div>
                         <div className="text-right flex-shrink-0">
-                          <p className="text-lg font-bold text-gray-900">{formatCurrency(claim.claimedAmount)}</p>
+                          <p className="text-lg font-bold text-gray-900"><CurrencyDisplay amount={claim.claimedAmount} /></p>
                           {claim.approvedAmount !== undefined && (
-                            <p className="text-sm text-green-600">Approved: {formatCurrency(claim.approvedAmount)}</p>
+                            <p className="text-sm text-green-600">Approved: <CurrencyDisplay amount={claim.approvedAmount} /></p>
                           )}
                           <p className="text-sm text-gray-500">Submitted: {formatDate(claim.submittedDate)}</p>
                         </div>
@@ -969,7 +970,7 @@ export default function Billing() {
                             </div>
                             <div className="text-right">
                               <p className="text-sm text-gray-500">Balance Due</p>
-                              <p className="text-xl font-bold text-gray-900">{formatCurrency(selectedBill.balanceDue)}</p>
+                              <p className="text-xl font-bold text-gray-900"><CurrencyDisplay amount={selectedBill.balanceDue} /></p>
                             </div>
                           </div>
                         </div>
@@ -1084,7 +1085,7 @@ export default function Billing() {
                           ) : (
                             <>
                               <CreditCardIcon className="h-5 w-5" />
-                              Pay {formatCurrency(paymentAmount)}
+                              Pay <CurrencyDisplay amount={paymentAmount} />
                             </>
                           )}
                         </button>
