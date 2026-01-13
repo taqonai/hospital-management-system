@@ -446,21 +446,45 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
       };
 
       const response = await opdApi.recordVitals(appointment.id, vitalsData);
-      const riskData = response.data?.data?.riskAssessment;
 
-      if (riskData) {
-        // Show risk assessment if available
-        setRiskAssessment(riskData);
+      // Safely extract and validate risk assessment data
+      const responseData = response?.data?.data;
+      const riskData = responseData?.riskAssessment;
+
+      // Validate that riskData has the required structure before displaying
+      const isValidRiskData = riskData &&
+        typeof riskData === 'object' &&
+        riskData.news2Score !== undefined &&
+        riskData.riskLevel !== undefined;
+
+      if (isValidRiskData) {
+        // Ensure recommendedActions is always an array
+        const sanitizedRiskData = {
+          ...riskData,
+          news2Score: Number(riskData.news2Score) || 0,
+          riskLevel: String(riskData.riskLevel || 'LOW').toUpperCase(),
+          deteriorationProbability: typeof riskData.deteriorationProbability === 'number'
+            ? riskData.deteriorationProbability
+            : undefined,
+          sepsisRisk: riskData.sepsisRisk,
+          fallRisk: riskData.fallRisk,
+          recommendedActions: Array.isArray(riskData.recommendedActions)
+            ? riskData.recommendedActions
+            : [],
+          escalationRequired: Boolean(riskData.escalationRequired),
+        };
+
+        setRiskAssessment(sanitizedRiskData);
         setShowRiskAssessment(true);
         toast.success('Vitals recorded - AI risk assessment generated');
       } else {
-        // No risk assessment, just close
+        // No valid risk assessment, just close
         toast.success('Vitals recorded successfully');
         onSuccess();
       }
     } catch (error: any) {
       console.error('Failed to record vitals:', error);
-      toast.error(error.response?.data?.message || 'Failed to record vitals');
+      toast.error(error?.response?.data?.message || 'Failed to record vitals');
     } finally {
       setLoading(false);
     }
