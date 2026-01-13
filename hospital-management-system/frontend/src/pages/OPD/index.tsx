@@ -856,7 +856,9 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
                       <p className="text-2xl font-bold text-gray-900">
                         {typeof riskAssessment.sepsisRisk === 'number'
                           ? `${(riskAssessment.sepsisRisk * 100).toFixed(1)}%`
-                          : riskAssessment.sepsisRisk}
+                          : typeof riskAssessment.sepsisRisk === 'object' && riskAssessment.sepsisRisk !== null
+                            ? riskAssessment.sepsisRisk.riskLevel || `${((riskAssessment.sepsisRisk.probability || 0) * 100).toFixed(1)}%`
+                            : String(riskAssessment.sepsisRisk || 'N/A')}
                       </p>
                     </div>
                   )}
@@ -866,7 +868,9 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
                       <p className="text-2xl font-bold text-gray-900">
                         {typeof riskAssessment.fallRisk === 'number'
                           ? `${(riskAssessment.fallRisk * 100).toFixed(1)}%`
-                          : riskAssessment.fallRisk}
+                          : typeof riskAssessment.fallRisk === 'object' && riskAssessment.fallRisk !== null
+                            ? riskAssessment.fallRisk.riskLevel || 'N/A'
+                            : String(riskAssessment.fallRisk || 'N/A')}
                       </p>
                     </div>
                   )}
