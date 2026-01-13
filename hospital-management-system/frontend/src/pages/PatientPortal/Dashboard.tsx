@@ -308,7 +308,8 @@ export default function PatientPortalDashboard() {
 
   // Fetch dashboard data
   const { data: dashboardData, isLoading, error, refetch } = useQuery<DashboardData>({
-    queryKey: ['patient-portal-dashboard'],
+    queryKey: ['patient-portal-dashboard', user?.id],
+    enabled: !!user?.id,
     queryFn: async () => {
       try {
         // Fetch summary from API
@@ -453,8 +454,8 @@ export default function PatientPortalDashboard() {
 
         return {
           patient: {
-            firstName: summary?.patient?.firstName || 'Patient',
-            lastName: summary?.patient?.lastName || '',
+            firstName: summary?.patient?.firstName || user?.firstName || 'Patient',
+            lastName: summary?.patient?.lastName || user?.lastName || '',
             dateOfBirth: summary?.patient?.dateOfBirth,
             bloodGroup: summary?.patient?.bloodGroup,
           },
@@ -469,11 +470,11 @@ export default function PatientPortalDashboard() {
         };
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
-        // Return mock data for demo
+        // Return fallback data with user's actual name
         return {
           patient: {
-            firstName: 'Patient',
-            lastName: '',
+            firstName: user?.firstName || 'Patient',
+            lastName: user?.lastName || '',
           },
           upcomingAppointments: [
             {
