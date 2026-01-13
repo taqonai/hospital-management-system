@@ -285,11 +285,14 @@ export default function PatientPortalDashboard() {
   const [healthTip, setHealthTip] = useState('');
   const [isFirstVisit, setIsFirstVisit] = useState(false);
 
-  // Check if this is the user's first visit
+  // Check if this is the user's first visit (use patientUser for patient portal)
   useEffect(() => {
-    const userId = user?.id;
-    if (userId) {
-      const visitKey = `user_visited_${userId}`;
+    const patientData = typeof window !== 'undefined'
+      ? JSON.parse(localStorage.getItem('patientUser') || 'null')
+      : null;
+    const visitorId = patientData?.id || user?.id;
+    if (visitorId) {
+      const visitKey = `user_visited_${visitorId}`;
       const hasVisited = localStorage.getItem(visitKey);
       if (!hasVisited) {
         setIsFirstVisit(true);
@@ -306,10 +309,14 @@ export default function PatientPortalDashboard() {
     setHealthTip(randomTip);
   }, []);
 
+  // Get patient user from localStorage (patient portal uses separate auth)
+  const patientUser = typeof window !== 'undefined'
+    ? JSON.parse(localStorage.getItem('patientUser') || 'null')
+    : null;
+
   // Fetch dashboard data
   const { data: dashboardData, isLoading, error, refetch } = useQuery<DashboardData>({
-    queryKey: ['patient-portal-dashboard', user?.id],
-    enabled: !!user?.id,
+    queryKey: ['patient-portal-dashboard'],
     queryFn: async () => {
       try {
         // Fetch summary from API
@@ -650,7 +657,7 @@ export default function PatientPortalDashboard() {
               Patient Portal
             </div>
             <h1 className="text-3xl lg:text-4xl font-bold text-white mb-2">
-              {isFirstVisit ? 'Welcome' : 'Welcome back'}, {user?.firstName || data.patient.firstName} {user?.lastName || data.patient.lastName}!
+              {isFirstVisit ? 'Welcome' : 'Welcome back'}, {patientUser?.firstName || data.patient.firstName} {patientUser?.lastName || data.patient.lastName}!
             </h1>
             <div className="flex items-start gap-3 bg-white/10 backdrop-blur-sm rounded-xl p-4 mt-4">
               <SunIcon className="h-6 w-6 text-amber-300 flex-shrink-0 mt-0.5" />
