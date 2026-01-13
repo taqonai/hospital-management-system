@@ -51,7 +51,7 @@ const AboutScreen: React.FC = () => {
         <View style={styles.logoContainer}>
           <Ionicons name="medical" size={48} color={colors.primary[600]} />
         </View>
-        <Text style={styles.appName}>HMS Patient Portal</Text>
+        <Text style={styles.appName}>Spetaar Patient Portal</Text>
         <Text style={styles.tagline}>Your Health, Our Priority</Text>
         <View style={styles.versionContainer}>
           <Text style={styles.versionText}>
@@ -92,7 +92,7 @@ const AboutScreen: React.FC = () => {
           Built with care for patients everywhere
         </Text>
         <Text style={styles.copyrightText}>
-          © {new Date().getFullYear()} Hospital Management System
+          © {new Date().getFullYear()} Spetaar Pro
         </Text>
         <Text style={styles.copyrightText}>All rights reserved</Text>
       </View>

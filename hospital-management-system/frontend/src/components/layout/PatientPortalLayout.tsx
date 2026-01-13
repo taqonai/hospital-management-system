@@ -614,7 +614,7 @@ export default function PatientPortalLayout() {
                   <HeartIcon className="h-4 w-4 text-white" />
                 </div>
                 <span className="text-sm text-gray-600">
-                  &copy; {new Date().getFullYear()} Hospital Management System. All rights reserved.
+                  &copy; {new Date().getFullYear()} Spetaar Pro. All rights reserved.
                 </span>
               </div>
 

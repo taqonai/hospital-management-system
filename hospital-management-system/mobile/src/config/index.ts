@@ -6,7 +6,7 @@ export type { Environment } from './env';
  */
 export const APP_CONFIG = {
   // App info
-  APP_NAME: 'HMS Patient Portal',
+  APP_NAME: 'Spetaar Patient Portal',
   APP_VERSION: '1.0.0',
 
   // API configuration

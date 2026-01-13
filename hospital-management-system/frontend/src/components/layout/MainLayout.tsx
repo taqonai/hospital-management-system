@@ -259,8 +259,8 @@ export default function MainLayout() {
                 <span className="text-white font-bold text-lg">H</span>
               </div>
               <div>
-                <span className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">HMS Pro</span>
-                <p className="text-xs text-gray-400">Hospital Management</p>
+                <span className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">Spetaar Pro</span>
+                <p className="text-xs text-gray-400">Healthcare Management</p>
               </div>
             </div>
           </div>

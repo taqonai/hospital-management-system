@@ -1526,7 +1526,7 @@ export default function Home() {
                 Excellence in Healthcare, Powered by Innovation
               </h2>
               <p className="text-lg text-gray-600 mb-10 leading-relaxed">
-                At MediCare Pro, we combine decades of medical expertise with cutting-edge AI technology to deliver healthcare that's faster, smarter, and more personalized than ever before.
+                At Spetaar Pro, we combine decades of medical expertise with cutting-edge AI technology to deliver healthcare that's faster, smarter, and more personalized than ever before.
               </p>
 
               <div className="grid sm:grid-cols-2 gap-6">
@@ -1744,7 +1744,7 @@ export default function Home() {
 
           {/* Bottom Bar */}
           <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
-            <p className="text-sm">&copy; 2025 MediCare Pro Hospital. All rights reserved.</p>
+            <p className="text-sm">&copy; 2025 Spetaar Pro. All rights reserved.</p>
             <div className="flex items-center gap-6 text-sm">
               <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
               <a href="#" className="hover:text-white transition-colors">Terms of Service</a>

@@ -13,15 +13,15 @@ const IS_PREVIEW = process.env.APP_ENV === 'preview';
 const IS_PROD = process.env.APP_ENV === 'production';
 
 const getAppName = () => {
-  if (IS_DEV) return 'HMS Patient (Dev)';
-  if (IS_PREVIEW) return 'HMS Patient (Preview)';
-  return 'HMS Patient Portal';
+  if (IS_DEV) return 'Spetaar (Dev)';
+  if (IS_PREVIEW) return 'Spetaar (Preview)';
+  return 'Spetaar Patient Portal';
 };
 
 const getBundleId = () => {
-  if (IS_DEV) return 'com.hms.patientportal.dev';
-  if (IS_PREVIEW) return 'com.hms.patientportal.preview';
-  return 'com.hms.patientportal';
+  if (IS_DEV) return 'com.spetaar.patientportal.dev';
+  if (IS_PREVIEW) return 'com.spetaar.patientportal.preview';
+  return 'com.spetaar.patientportal';
 };
 
 export default ({ config }) => {

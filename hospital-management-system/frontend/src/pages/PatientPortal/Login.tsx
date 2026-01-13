@@ -388,7 +388,7 @@ export default function PatientPortalLogin() {
               <HeartSolid className="w-8 h-8 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold">HealthCare Plus</h1>
+              <h1 className="text-2xl font-bold">Spetaar Pro</h1>
               <p className="text-white/70 text-sm">Patient Portal</p>
             </div>
           </div>
