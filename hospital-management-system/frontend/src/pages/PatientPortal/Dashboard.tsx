@@ -600,8 +600,8 @@ export default function PatientPortalDashboard() {
   const navigateToSymptomChecker = () => navigate('/patient-portal/symptom-checker');
   const navigateToMedicalHistory = () => navigate('/patient-portal/medical-history');
 
-  // Loading state
-  if (isLoading) {
+  // Loading state - also show loading when query is disabled (user not loaded yet) or data not available
+  if (isLoading || !dashboardData) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <div className="text-center">
