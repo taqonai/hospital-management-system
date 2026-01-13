@@ -362,7 +362,7 @@ function NewInvoiceModal({ onClose, onSuccess }: { onClose: () => void; onSucces
                         />
                       </div>
                       <div className="col-span-2">
-                        <label className="block text-xs text-gray-500 mb-1">Unit Price ($)</label>
+                        <label className="block text-xs text-gray-500 mb-1">Unit Price</label>
                         <input
                           type="number"
                           value={item.unitPrice || ''}
@@ -704,8 +704,8 @@ export default function Billing() {
       {/* Revenue Overview - Glass styled stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: "Today's Revenue", value: `$${stats.todayRevenue.toLocaleString()}`, gradient: 'from-green-500 to-emerald-600', bgColor: 'bg-green-50/70', borderColor: 'border-green-200/50', textColor: 'text-green-700', icon: BanknotesIcon },
-          { label: 'Pending Payments', value: `$${stats.pendingPayments.toLocaleString()}`, gradient: 'from-yellow-500 to-amber-600', bgColor: 'bg-yellow-50/70', borderColor: 'border-yellow-200/50', textColor: 'text-yellow-700', icon: ClockIcon },
+          { label: "Today's Revenue", value: <CurrencyDisplay amount={stats.todayRevenue} />, gradient: 'from-green-500 to-emerald-600', bgColor: 'bg-green-50/70', borderColor: 'border-green-200/50', textColor: 'text-green-700', icon: BanknotesIcon },
+          { label: 'Pending Payments', value: <CurrencyDisplay amount={stats.pendingPayments} />, gradient: 'from-yellow-500 to-amber-600', bgColor: 'bg-yellow-50/70', borderColor: 'border-yellow-200/50', textColor: 'text-yellow-700', icon: ClockIcon },
           { label: 'Claims Submitted', value: stats.claimsSubmitted, gradient: 'from-blue-500 to-indigo-600', bgColor: 'bg-blue-50/70', borderColor: 'border-blue-200/50', textColor: 'text-blue-700', icon: DocumentTextIcon },
           { label: 'Denied Claims', value: stats.deniedClaims, gradient: 'from-red-500 to-rose-600', bgColor: 'bg-red-50/70', borderColor: 'border-red-200/50', textColor: 'text-red-700', icon: ExclamationTriangleIcon },
         ].map((stat, index) => (
@@ -807,14 +807,14 @@ export default function Billing() {
                       </p>
                       <div className="mt-2 flex items-center gap-4 text-sm">
                         <span className="font-medium text-gray-900">
-                          Total: ${invoice.totalAmount?.toLocaleString()}
+                          Total: <CurrencyDisplay amount={invoice.totalAmount} />
                         </span>
                         <span className="text-green-600">
-                          Paid: ${invoice.paidAmount?.toLocaleString()}
+                          Paid: <CurrencyDisplay amount={invoice.paidAmount} />
                         </span>
                         {invoice.totalAmount - invoice.paidAmount > 0 && (
                           <span className="text-red-600">
-                            Due: ${(invoice.totalAmount - invoice.paidAmount).toLocaleString()}
+                            Due: <CurrencyDisplay amount={invoice.totalAmount - invoice.paidAmount} />
                           </span>
                         )}
                       </div>
@@ -877,7 +877,7 @@ export default function Billing() {
                         {claim.invoice?.patient?.firstName} {claim.invoice?.patient?.lastName}
                       </h3>
                       <p className="text-sm text-gray-500">
-                        Amount: ${claim.claimAmount?.toLocaleString()}
+                        Amount: <CurrencyDisplay amount={claim.claimAmount} />
                         {claim.submittedAt && ` | Submitted: ${new Date(claim.submittedAt).toLocaleDateString()}`}
                       </p>
                       {claim.denialReason && (
@@ -986,7 +986,7 @@ export default function Billing() {
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="font-medium text-gray-900">Captured Charges</h4>
                     <span className="text-lg font-bold text-green-600">
-                      ${chargeSubtotal.toLocaleString()}
+                      <CurrencyDisplay amount={chargeSubtotal} />
                     </span>
                   </div>
                   <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -1121,7 +1121,7 @@ export default function Billing() {
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="font-medium text-gray-900">Suggested Codes</h4>
                     <span className="text-lg font-bold text-blue-600">
-                      Est: ${codeEstimatedTotal.toLocaleString()}
+                      Est: <CurrencyDisplay amount={codeEstimatedTotal} />
                     </span>
                   </div>
                   <div className="space-y-2 max-h-48 overflow-y-auto">
