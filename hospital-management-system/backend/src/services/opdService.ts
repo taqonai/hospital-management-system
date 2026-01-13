@@ -314,12 +314,21 @@ export class OPDService {
   }
 
   // Pre-Consultation Vitals Recording
+  // Primary workflow: Nurse records vitals before doctor consultation
+  // Emergency override: Doctor can record vitals if nurse unavailable (flagged for audit)
   async recordVitals(
     appointmentId: string,
     hospitalId: string,
     vitalsData: VitalsData,
-    recordedBy: string
+    recordedBy: string,
+    recordedByRole?: string,
+    isEmergencyOverride?: boolean
   ) {
+    // Log if doctor is recording vitals (emergency override)
+    const isDoctorOverride = recordedByRole === 'DOCTOR';
+    if (isDoctorOverride) {
+      console.log(`[AUDIT] Doctor override: Vitals recorded by doctor (userId: ${recordedBy}) for appointment ${appointmentId}. Emergency override: ${isEmergencyOverride || false}`);
+    }
     // Verify appointment exists and belongs to hospital
     const appointment = await prisma.appointment.findFirst({
       where: { id: appointmentId, hospitalId },
@@ -683,7 +692,20 @@ export class OPDService {
         department: appointment.doctor.department,
       },
       vitals: appointment.vitals[0] ? {
-        ...appointment.vitals[0],
+        id: appointment.vitals[0].id,
+        temperature: appointment.vitals[0].temperature,
+        bloodPressureSys: appointment.vitals[0].bloodPressureSys,
+        bloodPressureDia: appointment.vitals[0].bloodPressureDia,
+        heartRate: appointment.vitals[0].heartRate,
+        respiratoryRate: appointment.vitals[0].respiratoryRate,
+        oxygenSaturation: appointment.vitals[0].oxygenSaturation,
+        weight: appointment.vitals[0].weight,
+        height: appointment.vitals[0].height,
+        bmi: appointment.vitals[0].bmi,
+        bloodSugar: appointment.vitals[0].bloodGlucose,
+        painLevel: appointment.vitals[0].painLevel,
+        notes: appointment.vitals[0].notes,
+        recordedAt: appointment.vitals[0].recordedAt,
         recordedBy: vitalsRecordedByUser,
       } : null,
       riskPrediction: riskPrediction ? {

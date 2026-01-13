@@ -131,9 +131,14 @@ export default function SymptomChecker() {
             });
           }
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Transcription error:', err);
-        setVoiceError('Failed to transcribe audio. Please try again.');
+        const errorMessage = err?.response?.data?.error || err?.message || 'Unknown error';
+        if (errorMessage.includes('503') || errorMessage.includes('unavailable')) {
+          setVoiceError('Voice transcription service is unavailable. Please type your symptoms instead.');
+        } else {
+          setVoiceError('Failed to transcribe audio. Please try again or type your symptoms.');
+        }
       } finally {
         setIsTranscribing(false);
         clearRecording();

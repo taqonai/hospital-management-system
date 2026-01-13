@@ -257,14 +257,27 @@ export default function Consultation() {
     !!appointmentId
   );
 
+  // Force refetch booking data on mount to ensure fresh data
+  useEffect(() => {
+    if (appointmentId) {
+      refetchBookingData();
+    }
+  }, [appointmentId, refetchBookingData]);
+
   // State to track if vitals were pre-filled by nurse
   const [vitalsPrefilledByNurse, setVitalsPrefilledByNurse] = useState(false);
   const [showPatientHistory, setShowPatientHistory] = useState(false);
 
+  // Doctor vitals override state (for emergencies when nurse vitals need modification)
+  const [vitalsEditOverride, setVitalsEditOverride] = useState(false);
+  const [showOverrideConfirm, setShowOverrideConfirm] = useState(false);
+
   // Pre-populate vitals from nurse-recorded data
   useEffect(() => {
-    if (bookingData?.vitals && !vitalsPrefilledByNurse && Object.keys(vitals).length === 0) {
+    // Check if booking data has actual vitals (has an id) and we haven't pre-filled yet
+    if (bookingData?.vitals?.id && !vitalsPrefilledByNurse) {
       const nurseVitals = bookingData.vitals;
+      console.log('Pre-filling vitals from nurse recording:', nurseVitals);
       setVitals({
         bloodPressureSys: nurseVitals.bloodPressureSys || undefined,
         bloodPressureDia: nurseVitals.bloodPressureDia || undefined,
@@ -279,7 +292,7 @@ export default function Consultation() {
       setVitalsPrefilledByNurse(true);
       toast.success('Vitals pre-filled from nurse recording');
     }
-  }, [bookingData, vitalsPrefilledByNurse, vitals]);
+  }, [bookingData, vitalsPrefilledByNurse]);
 
   // Fetch patient booking history for follow-up context
   const { data: patientHistoryData } = usePatientHistory(
@@ -909,18 +922,100 @@ export default function Consultation() {
     </div>
   );
 
+  // Vitals are read-only when nurse recorded them AND doctor hasn't overridden
+  const vitalsReadOnly = vitalsPrefilledByNurse && !vitalsEditOverride;
+
   const renderVitalsStep = () => (
     <div className="space-y-6">
-      {/* Nurse Recording Indicator */}
-      {vitalsPrefilledByNurse && bookingData?.vitals && (
-        <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-2xl p-4">
+      {/* Override Confirmation Modal */}
+      {showOverrideConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="bg-gradient-to-r from-amber-500 to-orange-500 p-4">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <ExclamationTriangleIcon className="h-6 w-6" />
+                Emergency Override
+              </h3>
+            </div>
+            <div className="p-6">
+              <p className="text-gray-700 mb-4">
+                Nurse-recorded vitals are typically final. Override should only be used in emergency situations
+                where vitals need immediate correction.
+              </p>
+              <p className="text-sm text-gray-500 mb-6">
+                This action will be logged for audit purposes.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowOverrideConfirm(false)}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setVitalsEditOverride(true);
+                    setShowOverrideConfirm(false);
+                    toast.success('Override enabled - you can now edit vitals');
+                  }}
+                  className="px-4 py-2 bg-amber-500 text-white font-medium rounded-lg hover:bg-amber-600 transition-colors"
+                >
+                  Confirm Override
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* No Vitals Warning - when patient has no nurse-recorded vitals */}
+      {!vitalsPrefilledByNurse && appointmentId && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
           <div className="flex items-center gap-3">
-            <div className="flex-shrink-0 w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
-              <CheckCircleIcon className="h-6 w-6 text-emerald-600" />
+            <div className="flex-shrink-0 w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
+              <ExclamationTriangleIcon className="h-6 w-6 text-amber-600" />
             </div>
             <div className="flex-1">
-              <h4 className="font-semibold text-emerald-800">Vitals Recorded by Nurse</h4>
-              <p className="text-sm text-emerald-600">
+              <h4 className="font-semibold text-amber-800">Vitals Not Yet Recorded</h4>
+              <p className="text-sm text-amber-600">
+                This patient has not had vitals recorded by nursing staff.
+                You may record vitals directly if this is an emergency.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Nurse Recording Indicator - Read Only mode */}
+      {vitalsPrefilledByNurse && bookingData?.vitals && (
+        <div className={clsx(
+          'border rounded-2xl p-4',
+          vitalsEditOverride
+            ? 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200'
+            : 'bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-200'
+        )}>
+          <div className="flex items-center gap-3">
+            <div className={clsx(
+              'flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center',
+              vitalsEditOverride ? 'bg-amber-100' : 'bg-emerald-100'
+            )}>
+              {vitalsEditOverride ? (
+                <ExclamationTriangleIcon className="h-6 w-6 text-amber-600" />
+              ) : (
+                <CheckCircleIcon className="h-6 w-6 text-emerald-600" />
+              )}
+            </div>
+            <div className="flex-1">
+              <h4 className={clsx(
+                'font-semibold',
+                vitalsEditOverride ? 'text-amber-800' : 'text-emerald-800'
+              )}>
+                {vitalsEditOverride ? 'Doctor Override Active' : 'Vitals Recorded by Nurse'}
+              </h4>
+              <p className={clsx(
+                'text-sm',
+                vitalsEditOverride ? 'text-amber-600' : 'text-emerald-600'
+              )}>
                 Recorded at {bookingData.vitals.recordedAt
                   ? new Date(bookingData.vitals.recordedAt).toLocaleString()
                   : 'earlier today'}
@@ -931,9 +1026,23 @@ export default function Consultation() {
                 )}
               </p>
             </div>
-            <span className="text-xs px-2 py-1 bg-emerald-200 text-emerald-700 rounded-full font-medium">
-              Pre-filled
-            </span>
+            {!vitalsEditOverride ? (
+              <>
+                <span className="text-xs px-2 py-1 bg-emerald-200 text-emerald-700 rounded-full font-medium">
+                  Read Only
+                </span>
+                <button
+                  onClick={() => setShowOverrideConfirm(true)}
+                  className="ml-2 text-xs px-3 py-1.5 bg-amber-100 text-amber-700 hover:bg-amber-200 rounded-lg font-medium transition-colors"
+                >
+                  Emergency Override
+                </button>
+              </>
+            ) : (
+              <span className="text-xs px-2 py-1 bg-amber-200 text-amber-700 rounded-full font-medium">
+                Override Active
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -941,7 +1050,11 @@ export default function Consultation() {
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
         <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2">
           <HeartIcon className="h-5 w-5 text-red-500" />
-          {vitalsPrefilledByNurse ? 'Review & Update Vital Signs' : 'Record Vital Signs'}
+          {vitalsReadOnly
+            ? 'Nurse-Recorded Vital Signs (Read Only)'
+            : vitalsPrefilledByNurse && vitalsEditOverride
+              ? 'Edit Vital Signs (Emergency Override)'
+              : 'Record Vital Signs'}
         </h3>
 
         <div className="grid md:grid-cols-3 gap-4">
@@ -953,16 +1066,30 @@ export default function Consultation() {
                 type="number"
                 placeholder="Sys"
                 value={vitals.bloodPressureSys || ''}
-                onChange={(e) => handleVitalsChange('bloodPressureSys', parseInt(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                onChange={(e) => !vitalsReadOnly && handleVitalsChange('bloodPressureSys', parseInt(e.target.value))}
+                readOnly={vitalsReadOnly}
+                disabled={vitalsReadOnly}
+                className={clsx(
+                  'w-full px-3 py-2 border rounded-lg',
+                  vitalsReadOnly
+                    ? 'bg-gray-100 border-gray-200 text-gray-600 cursor-not-allowed'
+                    : 'border-gray-300 focus:ring-2 focus:ring-blue-500'
+                )}
               />
               <span className="flex items-center text-gray-400">/</span>
               <input
                 type="number"
                 placeholder="Dia"
                 value={vitals.bloodPressureDia || ''}
-                onChange={(e) => handleVitalsChange('bloodPressureDia', parseInt(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                onChange={(e) => !vitalsReadOnly && handleVitalsChange('bloodPressureDia', parseInt(e.target.value))}
+                readOnly={vitalsReadOnly}
+                disabled={vitalsReadOnly}
+                className={clsx(
+                  'w-full px-3 py-2 border rounded-lg',
+                  vitalsReadOnly
+                    ? 'bg-gray-100 border-gray-200 text-gray-600 cursor-not-allowed'
+                    : 'border-gray-300 focus:ring-2 focus:ring-blue-500'
+                )}
               />
             </div>
           </div>
@@ -974,8 +1101,15 @@ export default function Consultation() {
               type="number"
               placeholder="60-100"
               value={vitals.heartRate || ''}
-              onChange={(e) => handleVitalsChange('heartRate', parseInt(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => !vitalsReadOnly && handleVitalsChange('heartRate', parseInt(e.target.value))}
+              readOnly={vitalsReadOnly}
+              disabled={vitalsReadOnly}
+              className={clsx(
+                'w-full px-3 py-2 border rounded-lg',
+                vitalsReadOnly
+                  ? 'bg-gray-100 border-gray-200 text-gray-600 cursor-not-allowed'
+                  : 'border-gray-300 focus:ring-2 focus:ring-blue-500'
+              )}
             />
           </div>
 
@@ -987,8 +1121,15 @@ export default function Consultation() {
               step="0.1"
               placeholder="36.5-37.5"
               value={vitals.temperature || ''}
-              onChange={(e) => handleVitalsChange('temperature', parseFloat(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => !vitalsReadOnly && handleVitalsChange('temperature', parseFloat(e.target.value))}
+              readOnly={vitalsReadOnly}
+              disabled={vitalsReadOnly}
+              className={clsx(
+                'w-full px-3 py-2 border rounded-lg',
+                vitalsReadOnly
+                  ? 'bg-gray-100 border-gray-200 text-gray-600 cursor-not-allowed'
+                  : 'border-gray-300 focus:ring-2 focus:ring-blue-500'
+              )}
             />
           </div>
 
@@ -999,8 +1140,15 @@ export default function Consultation() {
               type="number"
               placeholder="95-100"
               value={vitals.oxygenSaturation || ''}
-              onChange={(e) => handleVitalsChange('oxygenSaturation', parseInt(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => !vitalsReadOnly && handleVitalsChange('oxygenSaturation', parseInt(e.target.value))}
+              readOnly={vitalsReadOnly}
+              disabled={vitalsReadOnly}
+              className={clsx(
+                'w-full px-3 py-2 border rounded-lg',
+                vitalsReadOnly
+                  ? 'bg-gray-100 border-gray-200 text-gray-600 cursor-not-allowed'
+                  : 'border-gray-300 focus:ring-2 focus:ring-blue-500'
+              )}
             />
           </div>
 
@@ -1011,8 +1159,15 @@ export default function Consultation() {
               type="number"
               placeholder="12-20"
               value={vitals.respiratoryRate || ''}
-              onChange={(e) => handleVitalsChange('respiratoryRate', parseInt(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => !vitalsReadOnly && handleVitalsChange('respiratoryRate', parseInt(e.target.value))}
+              readOnly={vitalsReadOnly}
+              disabled={vitalsReadOnly}
+              className={clsx(
+                'w-full px-3 py-2 border rounded-lg',
+                vitalsReadOnly
+                  ? 'bg-gray-100 border-gray-200 text-gray-600 cursor-not-allowed'
+                  : 'border-gray-300 focus:ring-2 focus:ring-blue-500'
+              )}
             />
           </div>
 
@@ -1025,8 +1180,15 @@ export default function Consultation() {
               max="10"
               placeholder="0"
               value={vitals.painLevel || ''}
-              onChange={(e) => handleVitalsChange('painLevel', parseInt(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => !vitalsReadOnly && handleVitalsChange('painLevel', parseInt(e.target.value))}
+              readOnly={vitalsReadOnly}
+              disabled={vitalsReadOnly}
+              className={clsx(
+                'w-full px-3 py-2 border rounded-lg',
+                vitalsReadOnly
+                  ? 'bg-gray-100 border-gray-200 text-gray-600 cursor-not-allowed'
+                  : 'border-gray-300 focus:ring-2 focus:ring-blue-500'
+              )}
             />
           </div>
         </div>
@@ -1039,8 +1201,15 @@ export default function Consultation() {
               type="number"
               step="0.1"
               value={vitals.weight || ''}
-              onChange={(e) => handleVitalsChange('weight', parseFloat(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => !vitalsReadOnly && handleVitalsChange('weight', parseFloat(e.target.value))}
+              readOnly={vitalsReadOnly}
+              disabled={vitalsReadOnly}
+              className={clsx(
+                'w-full px-3 py-2 border rounded-lg',
+                vitalsReadOnly
+                  ? 'bg-gray-100 border-gray-200 text-gray-600 cursor-not-allowed'
+                  : 'border-gray-300 focus:ring-2 focus:ring-blue-500'
+              )}
             />
           </div>
           <div>
@@ -1048,8 +1217,15 @@ export default function Consultation() {
             <input
               type="number"
               value={vitals.height || ''}
-              onChange={(e) => handleVitalsChange('height', parseInt(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => !vitalsReadOnly && handleVitalsChange('height', parseInt(e.target.value))}
+              readOnly={vitalsReadOnly}
+              disabled={vitalsReadOnly}
+              className={clsx(
+                'w-full px-3 py-2 border rounded-lg',
+                vitalsReadOnly
+                  ? 'bg-gray-100 border-gray-200 text-gray-600 cursor-not-allowed'
+                  : 'border-gray-300 focus:ring-2 focus:ring-blue-500'
+              )}
             />
           </div>
         </div>
@@ -1087,10 +1263,10 @@ export default function Consultation() {
         </div>
       )}
 
-      {/* Previous Vitals */}
-      {vitalsHistory && vitalsHistory.length > 0 && (
+      {/* Previous Vitals - only show if not prefilled from nurse (to avoid confusion) */}
+      {vitalsHistory && vitalsHistory.length > 0 && !vitalsPrefilledByNurse && (
         <div className="bg-gray-50 rounded-2xl p-6">
-          <h4 className="font-medium text-gray-700 mb-3">Previous Vitals</h4>
+          <h4 className="font-medium text-gray-700 mb-3">Previous Vitals History</h4>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>

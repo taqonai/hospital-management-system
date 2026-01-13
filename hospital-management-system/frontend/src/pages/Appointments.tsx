@@ -45,6 +45,9 @@ export default function Appointments() {
   // Check if user can perform check-in actions (nurses, receptionists, admins - not doctors)
   const canCheckIn = hasRole(['NURSE', 'RECEPTIONIST', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']);
 
+  // Only doctors and admins can start consultations
+  const canStartConsultation = hasRole(['DOCTOR', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']);
+
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['appointments', { date: selectedDate, status: statusFilter }],
     queryFn: async () => {
@@ -316,7 +319,7 @@ export default function Appointments() {
                           </button>
                         </>
                       )}
-                      {appointment.status === 'CHECKED_IN' && (
+                      {appointment.status === 'CHECKED_IN' && canStartConsultation && (
                         <Link
                           to={`/consultation/${appointment.id}`}
                           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-purple-600 text-white hover:bg-purple-700 transition-colors"

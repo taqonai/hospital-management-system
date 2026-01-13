@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
   ClipboardDocumentListIcon,
   ClockIcon,
@@ -11,6 +12,9 @@ import {
   CheckCircleIcon,
   XMarkIcon,
   EyeIcon,
+  CheckIcon,
+  ExclamationCircleIcon,
+  PlayIcon,
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
 import { useAIHealth } from '../../hooks/useAI';
@@ -380,6 +384,10 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
     notes: '',
   });
 
+  // State for AI risk assessment display
+  const [riskAssessment, setRiskAssessment] = useState<any>(null);
+  const [showRiskAssessment, setShowRiskAssessment] = useState(false);
+
   // Fetch existing vitals to pre-populate the form when updating
   useEffect(() => {
     const fetchExistingVitals = async () => {
@@ -437,15 +445,31 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
         notes: vitals.notes || undefined,
       };
 
-      await opdApi.recordVitals(appointment.id, vitalsData);
-      toast.success('Vitals recorded successfully');
-      onSuccess();
+      const response = await opdApi.recordVitals(appointment.id, vitalsData);
+      const riskData = response.data?.data?.riskAssessment;
+
+      if (riskData) {
+        // Show risk assessment if available
+        setRiskAssessment(riskData);
+        setShowRiskAssessment(true);
+        toast.success('Vitals recorded - AI risk assessment generated');
+      } else {
+        // No risk assessment, just close
+        toast.success('Vitals recorded successfully');
+        onSuccess();
+      }
     } catch (error: any) {
       console.error('Failed to record vitals:', error);
       toast.error(error.response?.data?.message || 'Failed to record vitals');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Handle continuing after viewing risk assessment
+  const handleContinueAfterRiskAssessment = () => {
+    setShowRiskAssessment(false);
+    onSuccess();
   };
 
   return (
@@ -720,6 +744,141 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
               </button>
             </div>
           </form>
+
+          {/* AI Risk Assessment Display */}
+          {showRiskAssessment && riskAssessment && (
+            <div className="absolute inset-0 bg-white z-10 flex flex-col">
+              {/* Risk Assessment Header */}
+              <div className={clsx(
+                'px-6 py-4',
+                riskAssessment.riskLevel === 'CRITICAL' ? 'bg-gradient-to-r from-red-500 to-red-600' :
+                riskAssessment.riskLevel === 'HIGH' ? 'bg-gradient-to-r from-orange-500 to-orange-600' :
+                riskAssessment.riskLevel === 'MODERATE' ? 'bg-gradient-to-r from-amber-500 to-amber-600' :
+                'bg-gradient-to-r from-emerald-500 to-emerald-600'
+              )}>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <SparklesIcon className="h-6 w-6" />
+                  AI Risk Assessment
+                </h2>
+                <p className="text-white/90 text-sm mt-1">
+                  Early Warning Score Analysis for {appointment.patient?.firstName} {appointment.patient?.lastName}
+                </p>
+              </div>
+
+              {/* Risk Assessment Content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {/* Main Score Card */}
+                <div className={clsx(
+                  'rounded-2xl p-6 border-2',
+                  riskAssessment.riskLevel === 'CRITICAL' ? 'bg-red-50 border-red-200' :
+                  riskAssessment.riskLevel === 'HIGH' ? 'bg-orange-50 border-orange-200' :
+                  riskAssessment.riskLevel === 'MODERATE' ? 'bg-amber-50 border-amber-200' :
+                  'bg-emerald-50 border-emerald-200'
+                )}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">NEWS2 Score</h3>
+                      <p className="text-sm text-gray-600">National Early Warning Score</p>
+                    </div>
+                    <div className={clsx(
+                      'text-5xl font-bold',
+                      riskAssessment.riskLevel === 'CRITICAL' ? 'text-red-600' :
+                      riskAssessment.riskLevel === 'HIGH' ? 'text-orange-600' :
+                      riskAssessment.riskLevel === 'MODERATE' ? 'text-amber-600' :
+                      'text-emerald-600'
+                    )}>
+                      {riskAssessment.news2Score || 0}
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <span className={clsx(
+                      'inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold',
+                      riskAssessment.riskLevel === 'CRITICAL' ? 'bg-red-200 text-red-800' :
+                      riskAssessment.riskLevel === 'HIGH' ? 'bg-orange-200 text-orange-800' :
+                      riskAssessment.riskLevel === 'MODERATE' ? 'bg-amber-200 text-amber-800' :
+                      'bg-emerald-200 text-emerald-800'
+                    )}>
+                      {riskAssessment.riskLevel} Risk
+                    </span>
+                  </div>
+                </div>
+
+                {/* Escalation Warning */}
+                {riskAssessment.escalationRequired && (
+                  <div className="bg-red-100 border-2 border-red-300 rounded-xl p-4 flex items-start gap-3">
+                    <ExclamationCircleIcon className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="font-semibold text-red-800">Escalation Required</h4>
+                      <p className="text-sm text-red-700 mt-1">
+                        This patient requires immediate clinical escalation. Please notify the senior medical team.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Additional Scores Grid */}
+                <div className="grid grid-cols-2 gap-4">
+                  {riskAssessment.deteriorationProbability !== undefined && (
+                    <div className="bg-gray-50 rounded-xl p-4">
+                      <p className="text-sm text-gray-600">Deterioration Risk</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {(riskAssessment.deteriorationProbability * 100).toFixed(1)}%
+                      </p>
+                    </div>
+                  )}
+                  {riskAssessment.sepsisRisk !== undefined && (
+                    <div className="bg-gray-50 rounded-xl p-4">
+                      <p className="text-sm text-gray-600">Sepsis Risk (qSOFA)</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {typeof riskAssessment.sepsisRisk === 'number'
+                          ? `${(riskAssessment.sepsisRisk * 100).toFixed(1)}%`
+                          : riskAssessment.sepsisRisk}
+                      </p>
+                    </div>
+                  )}
+                  {riskAssessment.fallRisk !== undefined && (
+                    <div className="bg-gray-50 rounded-xl p-4">
+                      <p className="text-sm text-gray-600">Fall Risk</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {typeof riskAssessment.fallRisk === 'number'
+                          ? `${(riskAssessment.fallRisk * 100).toFixed(1)}%`
+                          : riskAssessment.fallRisk}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Recommendations */}
+                {riskAssessment.recommendedActions && riskAssessment.recommendedActions.length > 0 && (
+                  <div className="bg-blue-50 rounded-xl p-4">
+                    <h4 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                      <ClipboardDocumentListIcon className="h-5 w-5" />
+                      Recommended Actions
+                    </h4>
+                    <ul className="space-y-2">
+                      {riskAssessment.recommendedActions.map((action: string, index: number) => (
+                        <li key={index} className="flex items-start gap-2 text-sm text-blue-800">
+                          <CheckCircleIcon className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                          {action}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              {/* Continue Button */}
+              <div className="p-4 border-t border-gray-200">
+                <button
+                  onClick={handleContinueAfterRiskAssessment}
+                  className="w-full px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold hover:from-blue-600 hover:to-indigo-600 transition-all flex items-center justify-center gap-2"
+                >
+                  <CheckCircleIcon className="h-5 w-5" />
+                  Continue
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -750,11 +909,14 @@ export default function OPD() {
     !!selectedBookingId
   );
 
-  // Role-based permissions
-  // Nurses and receptionists can: add walk-ins, record vitals, manage queue
-  // Doctors can: view queue, call next patient
-  const canAddWalkIn = hasRole(['NURSE', 'RECEPTIONIST', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']);
+  // Role-based permissions - Updated workflow separation
+  // Receptionists (Front Desk): check-in patients, add walk-ins
+  // Nurses: record vitals (primary responsibility)
+  // Doctors: view queue, call next patient
+  const canAddWalkIn = hasRole(['RECEPTIONIST', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']);
+  const canCheckIn = hasRole(['RECEPTIONIST', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']);
   const canRecordVitals = hasRole(['NURSE', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']);
+  const isDoctor = hasRole(['DOCTOR', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']);
 
   // Fetch queue with polling (every 15 seconds)
   useEffect(() => {
@@ -820,6 +982,20 @@ export default function OPD() {
 
   const handleOptimizeQueue = () => {
     toast.success('AI is optimizing the queue...');
+  };
+
+  // Handle patient check-in (Front Desk / Receptionist only)
+  const handleCheckIn = async (appointmentId: string) => {
+    try {
+      await opdApi.checkIn(appointmentId);
+      toast.success('Patient checked in successfully');
+      // Refresh queue
+      const response = await opdApi.getQueue();
+      setQueue(response.data.data || []);
+    } catch (error: any) {
+      console.error('Failed to check in patient:', error);
+      toast.error(error.response?.data?.message || 'Failed to check in patient');
+    }
   };
 
   // Group queue by doctor
@@ -996,11 +1172,27 @@ export default function OPD() {
                             <h4 className="font-medium text-gray-900">
                               {patient.patient?.firstName} {patient.patient?.lastName}
                             </h4>
-                            <div className="flex items-center gap-2">
-                              {patient.status === 'IN_CONSULTATION' ? (
+                            {/* Enhanced Status Indicators based on workflow stage */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {patient.status === 'IN_PROGRESS' || patient.status === 'IN_CONSULTATION' ? (
                                 <span className="inline-flex items-center gap-1.5 text-sm text-emerald-600">
                                   <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
                                   In Consultation
+                                </span>
+                              ) : patient.status === 'SCHEDULED' || patient.status === 'CONFIRMED' ? (
+                                <span className="inline-flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                                  <ClockIcon className="h-3 w-3" />
+                                  Awaiting Check-in
+                                </span>
+                              ) : patient.status === 'CHECKED_IN' && !patient.vitalsRecordedAt ? (
+                                <span className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                                  <ExclamationCircleIcon className="h-3 w-3" />
+                                  Awaiting Vitals
+                                </span>
+                              ) : patient.status === 'CHECKED_IN' && patient.vitalsRecordedAt ? (
+                                <span className="inline-flex items-center gap-1 text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                                  <CheckCircleIcon className="h-3 w-3" />
+                                  Ready for Doctor
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 text-sm text-gray-500">
@@ -1008,7 +1200,7 @@ export default function OPD() {
                                   ~{patient.estimatedWaitTime || 15} min
                                 </span>
                               )}
-                              {/* Vitals Status Indicator */}
+                              {/* Vitals Recorded Badge */}
                               {patient.vitalsRecordedAt && (
                                 <span className="inline-flex items-center gap-1 text-xs text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">
                                   <HeartIconSolid className="h-3 w-3" />
@@ -1019,6 +1211,16 @@ export default function OPD() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
+                          {/* Check-in Button - only for Front Desk / Receptionists on SCHEDULED/CONFIRMED patients */}
+                          {(patient.status === 'SCHEDULED' || patient.status === 'CONFIRMED') && canCheckIn && (
+                            <button
+                              onClick={() => handleCheckIn(patient.id)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-md shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-105 transition-all duration-300"
+                            >
+                              <CheckIcon className="h-3.5 w-3.5" />
+                              Check In
+                            </button>
+                          )}
                           {/* View Booking Button */}
                           <button
                             onClick={() => setSelectedBookingId(patient.id)}
@@ -1027,8 +1229,8 @@ export default function OPD() {
                             <EyeIcon className="h-3.5 w-3.5" />
                             View
                           </button>
-                          {/* Record Vitals Button - only for nurses and admins (not doctors) */}
-                          {patient.status !== 'IN_CONSULTATION' && canRecordVitals && (
+                          {/* Record Vitals Button - only for nurses and admins on CHECKED_IN patients */}
+                          {patient.status === 'CHECKED_IN' && canRecordVitals && (
                             <button
                               onClick={() => setSelectedAppointmentForVitals(patient)}
                               className={clsx(
@@ -1041,6 +1243,16 @@ export default function OPD() {
                               <HeartIcon className="h-3.5 w-3.5" />
                               {patient.vitalsRecordedAt ? 'Update Vitals' : 'Record Vitals'}
                             </button>
+                          )}
+                          {/* Start Consultation Button - only for DOCTOR on CHECKED_IN patients with vitals */}
+                          {patient.status === 'CHECKED_IN' && patient.vitalsRecordedAt && isDoctor && (
+                            <Link
+                              to={`/consultation/${patient.id}`}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow-md shadow-purple-500/25 hover:shadow-purple-500/40 hover:scale-105 transition-all duration-300"
+                            >
+                              <PlayIcon className="h-3.5 w-3.5" />
+                              Start Consultation
+                            </Link>
                           )}
                         </div>
                       </div>

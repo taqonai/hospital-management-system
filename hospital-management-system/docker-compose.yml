@@ -107,6 +107,9 @@ services:
     container_name: hms-ai-services
     environment:
       PYTHONUNBUFFERED: 1
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    env_file:
+      - ./ai-services/.env
     ports:
       - "8000:8000"
     volumes:

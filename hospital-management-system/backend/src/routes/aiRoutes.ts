@@ -100,16 +100,28 @@ router.post(
       });
     }
 
-    const result = await aiScribeService.transcribeAudio(
-      req.file.buffer,
-      req.file.originalname || 'audio.webm'
-    );
+    try {
+      const result = await aiScribeService.transcribeAudio(
+        req.file.buffer,
+        req.file.originalname || 'audio.webm'
+      );
 
-    sendSuccess(res, {
-      transcript: result.transcript,
-      confidence: 0.95,
-      duration: result.duration,
-    }, 'Audio transcribed successfully');
+      sendSuccess(res, {
+        transcript: result.transcript,
+        confidence: 0.95,
+        duration: result.duration,
+      }, 'Audio transcribed successfully');
+    } catch (error: any) {
+      console.error('Transcription error:', error);
+      // Check if it's an AI service unavailability issue
+      if (error.message?.includes('unavailable') || error.code === 'ECONNREFUSED') {
+        return res.status(503).json({
+          success: false,
+          error: 'Voice transcription service is unavailable. Please ensure the AI service is running and OPENAI_API_KEY is configured.',
+        });
+      }
+      throw error;
+    }
   })
 );
 
