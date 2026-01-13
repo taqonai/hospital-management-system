@@ -6,6 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Hospital Management System (HMS) - A multi-tenant Cloud SaaS platform with AI-integrated modules for clinical decision support, predictive analytics, and medical imaging analysis.
 
+### Prerequisites
+- Node.js 20+
+- Python 3.11+
+- Docker & Docker Compose
+- PostgreSQL 15 (or use Docker)
+
 ## Development Commands
 
 ### Backend (Node.js/Express/TypeScript)
@@ -82,6 +88,8 @@ docker-compose restart [service]              # Restart service
 
 ## Architecture
 
+**Note:** Subdirectories contain `AGENT.md` files with detailed patterns and guidance specific to that area (e.g., `backend/src/routes/AGENT.md`, `ai-services/AGENT.md`). Consult these for implementation details when working in a specific module.
+
 ### Three-Tier Service Architecture
 
 1. **Frontend** (React 18 + TypeScript + TailwindCSS + Vite)
@@ -115,7 +123,9 @@ docker-compose restart [service]              # Restart service
 **Frontend** (`@/` resolves to `src/`):
 - `@components/*`, `@pages/*`, `@hooks/*`, `@store/*`, `@services/*`, `@types/*`, `@utils/*`
 
-Note: TypeScript strict mode is disabled in both projects (`"strict": false`).
+**Mobile**: Uses relative imports (no path aliases configured).
+
+Note: TypeScript strict mode is disabled in backend and frontend (`"strict": false`), but enabled in mobile via Expo's base config.
 
 ### AI Service Modules
 Located in `ai-services/`:
@@ -140,25 +150,16 @@ Located in `ai-services/`:
 
 ### AI Models in Use
 
-| Model | Type | Features |
-|-------|------|----------|
-| `whisper-1` | OpenAI | Voice transcription (Symptom Checker, AI Scribe) |
-| `gpt-4o-mini` | OpenAI | Clinical notes generation, SOAP notes, entity extraction, ICD-10/CPT suggestions |
+| Model | Provider | Purpose |
+|-------|----------|---------|
+| `gpt-4o` | OpenAI | Complex analysis (imaging, clinical notes) |
+| `gpt-4o-mini` | OpenAI | Simple tasks (chat, entity extraction, SOAP notes) |
 | `gpt-3.5-turbo` | OpenAI | Chat assistant, conversational booking |
-| `all-MiniLM-L6-v2` | SentenceTransformers | Symptom-to-diagnosis semantic matching |
-| `gpt-4o` | OpenAI (Vision) | Medical imaging analysis (X-ray, CT, MRI, Ultrasound) |
+| `whisper-1` | OpenAI | Voice transcription (Symptom Checker, AI Scribe) |
+| `all-MiniLM-L6-v2` | SentenceTransformers (local) | Symptom-to-diagnosis semantic matching |
 | Rule-based | Algorithmic | Risk prediction, queue estimation, drug interactions, medication safety |
 
-**OpenAI Models** (require `OPENAI_API_KEY`):
-- **Whisper**: Audio → text transcription optimized for medical terminology
-- **GPT-4o-mini**: Generates structured clinical documentation from transcripts
-- **GPT-3.5-turbo**: Handles conversational queries and navigation commands
-- **GPT-4o Vision**: Analyzes medical images as expert radiologist with structured reports
-
-**Local ML Models** (no API key required):
-- **SentenceTransformers**: Encodes symptoms as vectors for similarity matching against disease database
-
-**Rule-Based Systems**: Predictive analytics, queue prediction, pharmacy checks, and safety validations use algorithmic scoring without external AI calls.
+OpenAI models require `OPENAI_API_KEY`. SentenceTransformers and rule-based services run locally without API keys.
 
 ### Multi-Tenant Data Model
 
@@ -202,72 +203,44 @@ Key routes (`/api/v1/`):
 
 ### Unified Booking Workflow
 
-The system implements a unified "Booking Ticket" where the **Appointment** entity serves as the central record. All clinical data (vitals, consultation, lab orders, notes) links to this appointment and is accessible by authorized roles.
-
-**Data Flow:**
-```
-Receptionist (Check-in) → Nurse (Vitals) → Doctor (Consultation) → Lab (Results)
-     ↓                        ↓                   ↓                    ↓
-  All roles can view the unified booking ticket at any stage via polling
-```
+The **Appointment** entity is the central record linking all clinical data (vitals, consultation, lab orders, notes). Data flows through roles with automatic polling for updates.
 
 **Key Endpoints:**
-- `GET /api/v1/opd/booking-ticket/:appointmentId` - Unified booking data (patient, vitals, consultation, lab orders, timeline)
-- `GET /api/v1/opd/patient-history/:patientId` - Past completed appointments for follow-up context
+- `GET /api/v1/opd/booking-ticket/:appointmentId` - Unified booking data
+- `GET /api/v1/opd/patient-history/:patientId` - Past appointments for context
 
-**Frontend Components:**
-- `frontend/src/components/booking/BookingTicket.tsx` - Main unified view component
-- `frontend/src/components/booking/BookingStatusTimeline.tsx` - Visual progress (Scheduled → Checked-in → Vitals → Consultation → Completed)
-- `frontend/src/components/booking/VitalsSummaryCard.tsx` - Vitals with abnormal value highlighting
-- `frontend/src/components/booking/LabOrdersCard.tsx` - Lab orders with status badges and critical flags
-- `frontend/src/hooks/useBookingData.ts` - Polling hook (15-30s intervals)
-
-**Page Enhancements:**
-
-| Page | Feature |
-|------|---------|
-| OPD (Nurse) | Queue auto-refresh (15s), "View Booking" button on patient rows |
-| Consultation (Doctor) | Nurse vitals pre-populate, "Past Visits" for patient history |
-| Laboratory | Orders refresh (15s), "View Booking" links to consultation context |
+**Frontend Components:** `frontend/src/components/booking/` contains BookingTicket, BookingStatusTimeline, VitalsSummaryCard, and LabOrdersCard. Uses `useBookingData.ts` hook for polling (15-30s).
 
 **Data Chain:** Appointment → Consultation → LabOrder (linked via `consultationId` and `appointmentId`)
 
 ### Mobile App Architecture
 
 **Navigation Structure:**
-- `RootNavigator` - Handles auth state (shows AuthNavigator or MainNavigator)
-- `AuthNavigator` - Login, Register, OTP verification screens
-- `MainNavigator` - Bottom tab navigation for authenticated users
+```
+RootNavigator (auth state check)
+├─ AuthNavigator (Login, Register, OTP)
+└─ MainNavigator (Bottom Tabs)
+    ├─ HomeStack → Dashboard
+    ├─ AppointmentsStack → List, Book, Detail
+    ├─ HealthStack → 15+ screens (SymptomChecker, HealthAssistant, Records, Fitness, Wellness, Messages)
+    └─ SettingsStack → Profile, Notifications, Billing
+```
 
-**Key Services:**
-| Directory | Purpose |
-|-----------|---------|
-| `services/api/` | API client, auth, patient portal, symptom checker endpoints |
-| `services/offline/` | Cache manager, action queue for offline support |
-| `services/biometric/` | Face ID/Touch ID authentication |
-| `services/notifications/` | Push notification registration and handling |
-| `services/storage/` | Secure storage for tokens and sensitive data |
+**Key Services** (`mobile/src/services/`):
+| Service | Purpose |
+|---------|---------|
+| `api/client.ts` | Axios with auto token refresh on 401 |
+| `api/patientPortal.ts` | Dashboard, appointments, records, billing |
+| `api/symptomChecker.ts` | AI symptom assessment with Whisper |
+| `offline/cacheManager.ts` | TTL-based caching (5min-24hr) |
+| `offline/actionQueue.ts` | Queues mutations offline, syncs on reconnect |
+| `biometric/` | Face ID/Touch ID/Fingerprint auth |
+| `notifications/` | Push notifications with deep linking |
+| `storage/secureStorage.ts` | Encrypted token storage (expo-secure-store) |
 
-**Screen Organization:**
-- `screens/auth/` - Login, Register, OTP verification
-- `screens/dashboard/` - Patient dashboard
-- `screens/appointments/` - Booking, list, detail views
-- `screens/records/` - Medical records, prescriptions, lab results
-- `screens/health/` - Symptom checker, health insights, health assistant
-- `screens/billing/` - Bills and payment history
-- `screens/settings/` - Profile, notifications, security settings
+**Key Features:** Offline support with cache fallback, biometric login, 15min inactivity timeout, screenshot prevention on sensitive screens.
 
-**Offline Support:**
-- `CacheManager` stores critical data locally via AsyncStorage
-- `ActionQueue` queues mutations when offline, syncs when back online
-- `useOfflineData` hook provides cached data with network status
-- `OfflineBanner` component shows connectivity status
-
-**Security Features:**
-- Biometric authentication (Face ID, Touch ID, fingerprint)
-- Secure token storage via expo-secure-store
-- App lock with inactivity timer
-- Screen security (prevents screenshots on sensitive screens)
+See `mobile/src/*/AGENT.md` files for detailed implementation patterns.
 
 ## Configuration
 
