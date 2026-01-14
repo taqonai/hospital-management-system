@@ -55,7 +55,8 @@ export const patientPortalApi = {
         isRead: false,
       })) || [],
       quickStats: {
-        totalAppointments: raw?.upcomingAppointments?.length || 0,
+        // Use totalUpcomingAppointments from backend (accurate count), fallback to array length
+        totalAppointments: raw?.totalUpcomingAppointments ?? raw?.upcomingAppointments?.length ?? 0,
         activePrescriptions: raw?.activePrescriptions || 0,
         pendingLabs: typeof raw?.pendingLabResults === 'number' ? raw.pendingLabResults : (raw?.pendingLabResults?.length || 0),
         unreadMessages: raw?.unreadMessages || 0,

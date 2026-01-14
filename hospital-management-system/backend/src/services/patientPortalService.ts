@@ -28,37 +28,42 @@ export class PatientPortalService {
       throw new NotFoundError('Patient not found');
     }
 
-    // Get upcoming appointments count
-    const upcomingAppointments = await prisma.appointment.findMany({
-      where: {
-        patientId,
-        hospitalId,
-        status: { in: ['SCHEDULED', 'CONFIRMED'] },
-        appointmentDate: { gte: new Date() },
-      },
-      take: 5,
-      orderBy: { appointmentDate: 'asc' },
-      include: {
-        doctor: {
-          include: {
-            user: { select: { firstName: true, lastName: true } },
+    // Define the filter for upcoming appointments
+    const upcomingFilter = {
+      patientId,
+      hospitalId,
+      status: { in: ['SCHEDULED', 'CONFIRMED'] as const },
+      appointmentDate: { gte: new Date() },
+    };
+
+    // Get upcoming appointments (limited to 5 for display) AND total count
+    const [upcomingAppointments, totalUpcomingAppointments, activePrescriptions, pendingLabResults] = await Promise.all([
+      prisma.appointment.findMany({
+        where: upcomingFilter,
+        take: 5,
+        orderBy: { appointmentDate: 'asc' },
+        include: {
+          doctor: {
+            include: {
+              user: { select: { firstName: true, lastName: true } },
+            },
           },
         },
-      },
-    });
-
-    // Get active prescriptions count
-    const activePrescriptions = await prisma.prescription.count({
-      where: { patientId, status: 'ACTIVE' },
-    });
-
-    // Get pending lab orders
-    const pendingLabResults = await prisma.labOrder.count({
-      where: {
-        patientId,
-        status: { in: ['ORDERED', 'SAMPLE_COLLECTED', 'IN_PROGRESS'] },
-      },
-    });
+      }),
+      // Get TOTAL count of upcoming appointments (not limited to 5)
+      prisma.appointment.count({ where: upcomingFilter }),
+      // Get active prescriptions count
+      prisma.prescription.count({
+        where: { patientId, status: 'ACTIVE' },
+      }),
+      // Get pending lab orders
+      prisma.labOrder.count({
+        where: {
+          patientId,
+          status: { in: ['ORDERED', 'SAMPLE_COLLECTED', 'IN_PROGRESS'] },
+        },
+      }),
+    ]);
 
     // Get next appointment
     const nextAppointment = upcomingAppointments[0];
@@ -77,6 +82,8 @@ export class PatientPortalService {
         doctorName: apt.doctor ? `Dr. ${apt.doctor.user.firstName} ${apt.doctor.user.lastName}` : 'TBD',
         status: apt.status,
       })),
+      // Total count of ALL upcoming appointments (for accurate display)
+      totalUpcomingAppointments,
       nextAppointment: nextAppointment ? {
         date: nextAppointment.appointmentDate,
         time: nextAppointment.startTime,
@@ -126,7 +133,11 @@ export class PatientPortalService {
             },
           },
         },
-        orderBy: { appointmentDate: filters.type === 'past' ? 'desc' : 'asc' },
+        // Sort by createdAt DESC (newest bookings first), then by appointment date
+        orderBy: [
+          { createdAt: 'desc' },
+          { appointmentDate: filters.type === 'past' ? 'desc' : 'asc' },
+        ],
         skip,
         take: limit,
       }),
