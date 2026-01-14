@@ -2,7 +2,9 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { store } from '../store';
 import { updateTokens, logout } from '../store/authSlice';
 
-const API_BASE_URL = '/api/v1';
+// Use environment variable for API URL (allows bypassing Cloudflare proxy for AI endpoints)
+// In production, VITE_API_URL should be set to https://api.spetaar.ai/api/v1
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
