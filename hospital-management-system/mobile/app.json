@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Spetaar Patient Portal",
-    "slug": "spetaar-patient-portal",
+    "slug": "hms-patient-portal",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
