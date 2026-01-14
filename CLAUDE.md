@@ -12,6 +12,15 @@ Hospital Management System (HMS) - A multi-tenant Cloud SaaS platform with AI-in
 - Docker & Docker Compose
 - PostgreSQL 15 (or use Docker)
 
+### Quick Start (Docker)
+```bash
+cd hospital-management-system
+docker-compose up -d                # Start all services
+# Frontend: http://localhost:3000
+# Backend: http://localhost:3001/api/v1
+# AI Services: http://localhost:8000
+```
+
 ## Development Commands
 
 ### Backend (Node.js/Express/TypeScript)
@@ -75,6 +84,8 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
+pytest tests/                        # Run tests
+pytest tests/test_diagnostic.py      # Run single test file
 ```
 
 ### Docker (Full Stack)
@@ -301,7 +312,7 @@ terraform plan
 terraform apply
 ```
 
-Architecture: ALB → EC2 (t3.small) running Docker Compose with all services.
+Architecture: ALB → EC2 (t3.xlarge) running Docker Compose with all services.
 
 Key files:
 - `terraform/` - Terraform IaC (VPC, EC2, ALB, S3)
