@@ -7,7 +7,6 @@ Models: gpt-4o (complex tasks), gpt-4o-mini (simple tasks), whisper-1 (speech)
 """
 
 import os
-import logging
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -18,9 +17,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any, Union
 import uvicorn
-
-# Configure logging
-logger = logging.getLogger(__name__)
 
 # Import shared OpenAI client for health checks and LLM provider abstraction
 from shared.openai_client import openai_manager, Models
@@ -78,8 +74,9 @@ health_assistant_ai = HealthAssistantAI()
 
 
 # Request/Response Models
+
 class HospitalConfigModel(BaseModel):
-    """Hospital-specific AI provider configuration"""
+    """Hospital-specific AI provider configuration from backend"""
     provider: Optional[str] = "openai"
     ollamaEndpoint: Optional[str] = None
     ollamaModels: Optional[Dict[str, str]] = None
@@ -766,14 +763,12 @@ async def analyze_symptoms(request: DiagnosisRequest):
         # Convert hospital config to HospitalAIConfig for provider selection
         hospital_config = None
         if request.hospitalConfig:
-            from shared.llm_provider import HospitalAIConfig
             hospital_config = HospitalAIConfig(
                 provider=request.hospitalConfig.provider or "openai",
                 ollama_endpoint=request.hospitalConfig.ollamaEndpoint,
                 ollama_model_complex=request.hospitalConfig.ollamaModels.get("complex") if request.hospitalConfig.ollamaModels else None,
                 ollama_model_simple=request.hospitalConfig.ollamaModels.get("simple") if request.hospitalConfig.ollamaModels else None,
             )
-            logger.info(f"Diagnostic AI using provider: {hospital_config.provider}")
 
         result = diagnostic_ai.analyze(
             symptoms=request.symptoms,
@@ -1672,7 +1667,6 @@ class SymptomCheckerStartRequest(BaseModel):
     patientInfo: Optional[SymptomCheckerPatientInfo] = None
     initialSymptoms: Optional[List[str]] = []
     hospitalId: Optional[str] = None
-    hospitalConfig: Optional[HospitalConfigModel] = None
 
 
 class SymptomCheckerRespondRequest(BaseModel):
@@ -1682,15 +1676,11 @@ class SymptomCheckerRespondRequest(BaseModel):
 
 class SymptomCheckerCompleteRequest(BaseModel):
     sessionId: str
-    hospitalId: Optional[str] = None
-    hospitalConfig: Optional[HospitalConfigModel] = None
 
 
 class SymptomCheckerQuickCheckRequest(BaseModel):
     symptoms: List[str]
     patientAge: Optional[int] = None
-    hospitalId: Optional[str] = None
-    hospitalConfig: Optional[HospitalConfigModel] = None
 
 
 @app.post("/api/symptom-checker/start")
@@ -1711,7 +1701,6 @@ async def symptom_checker_start(request: SymptomCheckerStartRequest):
             "status": SessionStatus.ACTIVE.value,
             "patientInfo": request.patientInfo.dict() if request.patientInfo else {},
             "hospitalId": request.hospitalId,
-            "hospitalConfig": request.hospitalConfig.dict() if request.hospitalConfig else None,
             "currentQuestionIndex": 0,
             "answers": {},
             "collectedSymptoms": request.initialSymptoms or [],
@@ -1876,16 +1865,15 @@ async def symptom_checker_respond(request: SymptomCheckerRespondRequest):
 
 @app.post("/api/symptom-checker/complete")
 async def symptom_checker_complete(request: SymptomCheckerCompleteRequest):
-    """Complete the assessment and get full triage result - AI-enhanced when available"""
+    """Complete the assessment and get full triage result"""
     try:
         from symptom_checker.service import (
             sessions, calculate_urgency_score, determine_triage_level,
             get_recommended_department, get_possible_conditions,
             get_self_care_advice, get_when_to_seek_help,
             get_estimated_wait_time, get_follow_up_questions_for_provider,
-            get_recommended_action, SessionStatus, SymptomCheckerAI
+            get_recommended_action, SessionStatus
         )
-        from shared.llm_provider import HospitalAIConfig
         from datetime import datetime
 
         if request.sessionId not in sessions:
@@ -1895,20 +1883,6 @@ async def symptom_checker_complete(request: SymptomCheckerCompleteRequest):
         answers = session.get("answers", {})
         red_flags = session.get("redFlags", [])
         symptoms = session.get("collectedSymptoms", [])
-        patient_info = session.get("patientInfo", {})
-
-        # Get hospital AI config from request or session
-        hospital_config = None
-        config_data = request.hospitalConfig.dict() if request.hospitalConfig else session.get("hospitalConfig")
-        if config_data and config_data.get("provider") == "ollama":
-            ollama_models = config_data.get("ollamaModels", {})
-            hospital_config = HospitalAIConfig(
-                provider="ollama",
-                ollama_endpoint=config_data.get("ollamaEndpoint"),
-                ollama_model_complex=ollama_models.get("complex") if ollama_models else None,
-                ollama_model_simple=ollama_models.get("simple") if ollama_models else None,
-            )
-            logger.info(f"Using Ollama provider for symptom analysis: {hospital_config.ollama_endpoint}")
 
         main_symptoms = answers.get("main_symptoms", [])
         if isinstance(main_symptoms, str):
@@ -1917,74 +1891,29 @@ async def symptom_checker_complete(request: SymptomCheckerCompleteRequest):
             symptoms.extend(main_symptoms)
 
         symptoms = list(set(symptoms))
+
+        urgency_score = calculate_urgency_score(session)
+        triage_level = determine_triage_level(urgency_score, red_flags)
         body_location = answers.get("body_location", "general")
+        department = get_recommended_department(symptoms, body_location, answers)
 
-        # Try AI-powered analysis first
-        ai_result = None
-        if openai_manager.is_available() or (hospital_config and hospital_config.is_ollama()):
-            try:
-                ai_result = await SymptomCheckerAI._ai_analyze_symptoms(
-                    symptoms=symptoms,
-                    patient_age=patient_info.get("age"),
-                    patient_gender=patient_info.get("gender"),
-                    medical_history=patient_info.get("medicalHistory", []),
-                    body_location=body_location,
-                    severity=answers.get("severity"),
-                    duration=answers.get("duration"),
-                    associated_symptoms=answers.get("associated_symptoms", []),
-                    hospital_config=hospital_config
-                )
-            except Exception as e:
-                logger.error(f"AI analysis failed, using rule-based fallback: {e}")
+        if red_flags:
+            department = red_flags[0].get("department", department)
 
-        # Calculate rule-based urgency and triage (always as safety check)
-        rule_urgency_score = calculate_urgency_score(session)
-        rule_triage_level = determine_triage_level(rule_urgency_score, red_flags)
-
-        # Use AI results if available, with rule-based safety escalation
-        if ai_result:
-            from symptom_checker.service import TriageLevel
-            ai_triage_str = ai_result.get("triageLevel", "ROUTINE")
-            try:
-                triage_level = TriageLevel(ai_triage_str)
-            except ValueError:
-                triage_level = rule_triage_level
-
-            # Safety check: escalate if rule-based system detects emergency
-            if rule_triage_level.value == "EMERGENCY":
-                triage_level = rule_triage_level
-
-            urgency_score = ai_result.get("urgencyScore", rule_urgency_score)
-            department = ai_result.get("recommendedDepartment", "General Practice")
-            possible_conditions = ai_result.get("possibleConditions", [])
-            self_care = ai_result.get("selfCareAdvice", [])
-            when_to_seek = ai_result.get("whenToSeekHelp", [])
-            follow_up = ai_result.get("followUpQuestions", [])
-            recommended_action = ai_result.get("recommendedAction", "")
-            ai_red_flags = ai_result.get("redFlags", [])
-            red_flag_symptoms = list(set([rf.get("keyword", "") for rf in red_flags] + ai_red_flags))
-        else:
-            # Fallback to rule-based assessment
-            triage_level = rule_triage_level
-            urgency_score = rule_urgency_score
-            department = get_recommended_department(symptoms, body_location, answers)
-            if red_flags:
-                department = red_flags[0].get("department", department)
-            possible_conditions = get_possible_conditions(symptoms, answers)
-            self_care = get_self_care_advice(symptoms, triage_level)
-            when_to_seek = get_when_to_seek_help(triage_level, body_location)
-            follow_up = get_follow_up_questions_for_provider(symptoms, answers)
-            recommended_action = get_recommended_action(triage_level, department)
-            red_flag_symptoms = [rf.get("keyword", "") for rf in red_flags]
-
-        wait_time = get_estimated_wait_time(department, triage_level if not ai_result else rule_triage_level)
+        possible_conditions = get_possible_conditions(symptoms, answers)
+        self_care = get_self_care_advice(symptoms, triage_level)
+        when_to_seek = get_when_to_seek_help(triage_level, body_location)
+        wait_time = get_estimated_wait_time(department, triage_level)
+        follow_up = get_follow_up_questions_for_provider(symptoms, answers)
+        recommended_action = get_recommended_action(triage_level, department)
+        red_flag_symptoms = [rf.get("keyword", "") for rf in red_flags]
 
         session["status"] = SessionStatus.COMPLETED.value
         session["lastUpdatedAt"] = datetime.now().isoformat()
 
         return {
             "sessionId": request.sessionId,
-            "triageLevel": triage_level.value if hasattr(triage_level, 'value') else triage_level,
+            "triageLevel": triage_level.value,
             "recommendedDepartment": department,
             "urgencyScore": urgency_score,
             "redFlags": red_flag_symptoms,
@@ -1995,8 +1924,7 @@ async def symptom_checker_complete(request: SymptomCheckerCompleteRequest):
             "selfCareAdvice": self_care,
             "whenToSeekHelp": when_to_seek,
             "symptomsSummary": symptoms,
-            "disclaimer": "IMPORTANT: This symptom checker is for informational purposes only and is not a substitute for professional medical advice.",
-            "aiPowered": ai_result is not None
+            "disclaimer": "IMPORTANT: This symptom checker is for informational purposes only and is not a substitute for professional medical advice."
         }
     except HTTPException:
         raise
@@ -2036,23 +1964,9 @@ async def symptom_checker_get_session(session_id: str):
 async def symptom_checker_quick_check(request: SymptomCheckerQuickCheckRequest):
     """Quick symptom check without full conversation"""
     try:
-        from shared.llm_provider import HospitalAIConfig
-
-        # Build hospital config if provided
-        hospital_config = None
-        if request.hospitalConfig and request.hospitalConfig.provider == "ollama":
-            ollama_models = request.hospitalConfig.ollamaModels or {}
-            hospital_config = HospitalAIConfig(
-                provider="ollama",
-                ollama_endpoint=request.hospitalConfig.ollamaEndpoint,
-                ollama_model_complex=ollama_models.get("complex"),
-                ollama_model_simple=ollama_models.get("simple"),
-            )
-
         result = await symptom_checker_ai.quick_check(
             symptoms=request.symptoms,
-            patient_age=request.patientAge,
-            hospital_config=hospital_config
+            patient_age=request.patientAge
         )
         return result
     except Exception as e:

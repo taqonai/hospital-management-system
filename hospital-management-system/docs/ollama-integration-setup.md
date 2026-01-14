@@ -14,22 +14,22 @@ This document details the configuration changes made to connect the Hospital Man
 
 ```
 User Browser
-    ↓
-Cloudflare (spetaar.ai) ──→ For static frontend only
-    ↓
-AWS ALB (api.spetaar.ai) ──→ For API calls (bypasses Cloudflare)
-    ↓
+    |
+Cloudflare (spetaar.ai) --> For static frontend only
+    |
+AWS ALB (api.spetaar.ai) --> For API calls (bypasses Cloudflare)
+    |
 EC2 Instance (54.204.198.174)
-    ├── Frontend (port 3000) - nginx serving React app
-    ├── Backend (port 3001) - Node.js/Express
-    └── AI Services (port 8000) - Python/FastAPI
-            ↓
+    +-- Frontend (port 3000) - nginx serving React app
+    +-- Backend (port 3001) - Node.js/Express
+    +-- AI Services (port 8000) - Python/FastAPI
+            |
         Docker Gateway (172.18.0.1:11435)
-            ↓
-        socat forwarder (0.0.0.0:11435 → localhost:11434)
-            ↓
+            |
+        socat forwarder (0.0.0.0:11435 -> localhost:11434)
+            |
         SSH Reverse Tunnel (localhost:11434)
-            ↓
+            |
 Local Ollama Server (192.168.0.140:11434)
 ```
 
@@ -78,7 +78,7 @@ The SSH tunnel binds to `localhost:11434` which isn't accessible from Docker con
 # Install socat
 sudo yum install -y socat
 
-# Create forwarder (port 11435 → 11434)
+# Create forwarder (port 11435 -> 11434)
 sudo nohup socat TCP-LISTEN:11435,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:11434 > /tmp/socat.log 2>&1 &
 ```
 
@@ -164,21 +164,69 @@ self._client = OpenAI(
 
 **File: `backend/src/services/aiService.ts`**
 - Increased axios timeout from 120s to 300s (5 minutes)
+- Added `hospitalId` parameter to `directDiagnose()` method
+- Fetches hospital AI config and passes to AI services
 
 ```typescript
 private aiClient = axios.create({
   baseURL: config.ai.serviceUrl,
   timeout: 300000, // 5 minutes for Ollama AI operations
 });
+
+// directDiagnose now supports hospital-specific provider config
+async directDiagnose(data: {
+  symptoms: string[];
+  patientAge: number;
+  gender: string;
+  // ...other fields
+  hospitalId?: string;  // Added for hospital-aware provider selection
+}) {
+  // Fetch hospital AI config if hospitalId is provided
+  let hospitalAIConfig = null;
+  if (data.hospitalId) {
+    hospitalAIConfig = await this.getHospitalAIConfig(data.hospitalId);
+  }
+
+  const response = await this.aiClient.post('/api/diagnose', {
+    // ...other fields
+    hospitalConfig: hospitalAIConfig,  // Pass config to AI service
+  });
+}
+```
+
+**File: `backend/src/routes/aiRoutes.ts`**
+- Updated `/diagnose` route handler to pass `req.user?.hospitalId` to `directDiagnose()`
+
+```typescript
+// Pass hospitalId from authenticated user to enable Ollama support
+const result = await aiService.directDiagnose({
+  symptoms,
+  patientAge: Number(patientAge),
+  gender,
+  // ...other fields
+  hospitalId: req.user?.hospitalId,  // Added
+});
 ```
 
 ### 4.3 Frontend (React)
 
 **File: `frontend/src/services/api.ts`**
+- Changed API_BASE_URL to use environment variable
 - Increased AI diagnosis timeout from 60s to 300s
 
 ```typescript
+// Use environment variable for API URL (allows bypassing Cloudflare proxy)
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
+
 analyzeDiagnosis: (data) => api.post('/ai/diagnose', data, { timeout: 300000 }),
+```
+
+**File: `frontend/Dockerfile`**
+- Added build argument for VITE_API_URL
+
+```dockerfile
+ARG VITE_API_URL=http://localhost:3001/api/v1
+ENV VITE_API_URL=$VITE_API_URL
 ```
 
 ---
@@ -233,11 +281,14 @@ Cloudflare's proxy has a **100-second timeout** (non-configurable on free/pro pl
 
 **File: `docker-compose.yml`**
 
-### Frontend API URL
+### Frontend Build Args
 ```yaml
 frontend:
-  environment:
-    VITE_API_URL: https://api.spetaar.ai/api/v1
+  build:
+    context: ./frontend
+    dockerfile: Dockerfile
+    args:
+      VITE_API_URL: https://api.spetaar.ai/api/v1
 ```
 
 ### Backend Rate Limiting
@@ -297,6 +348,15 @@ cd /opt/hms/app/hospital-management-system
 sudo docker-compose logs --tail=50 ai-services | grep -i "diagnos\|ollama"
 ```
 
+### Timeout Issues with Large Models
+If using large models (70B+, 120B), the 5-minute timeout may not be sufficient. Options:
+1. Use a smaller, faster model (20B is recommended for real-time diagnosis)
+2. Increase timeouts further in these files:
+   - `frontend/src/services/api.ts` - axios timeout
+   - `backend/src/services/aiService.ts` - aiClient timeout
+   - `ai-services/shared/llm_provider.py` - OpenAI client timeout
+   - AWS ALB idle_timeout attribute
+
 ---
 
 ## 10. Key Information
@@ -323,9 +383,11 @@ sudo docker-compose logs --tail=50 ai-services | grep -i "diagnos\|ollama"
 | `ai-services/main.py` | Added hospitalConfig to DiagnosisRequest, updated /api/diagnose endpoint |
 | `ai-services/diagnostic/service.py` | Added hospital_config support to all GPT methods |
 | `ai-services/shared/llm_provider.py` | Added 5-minute timeout to Ollama client |
-| `backend/src/services/aiService.ts` | Increased timeout to 5 minutes |
-| `frontend/src/services/api.ts` | Increased AI diagnosis timeout to 5 minutes |
-| `docker-compose.yml` | Updated VITE_API_URL, added rate limit config |
+| `backend/src/services/aiService.ts` | Increased timeout to 5 minutes, added hospitalId to directDiagnose, fetch and pass hospitalConfig |
+| `backend/src/routes/aiRoutes.ts` | Pass req.user?.hospitalId to directDiagnose for hospital-aware provider selection |
+| `frontend/src/services/api.ts` | Use VITE_API_URL env var, increased AI timeout to 5 minutes |
+| `frontend/Dockerfile` | Added VITE_API_URL build argument |
+| `docker-compose.yml` | Added build args for frontend, added rate limit config |
 
 ---
 

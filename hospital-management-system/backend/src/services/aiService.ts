@@ -473,8 +473,8 @@ export class AIService {
   // ============= Direct AI Test Methods (No Database Required) =============
 
   /**
-   * Direct diagnosis test - calls AI service without database lookup
-   * Useful for testing AI integration
+   * Direct diagnosis - calls AI service without patient database lookup
+   * Supports hospital-specific AI provider configuration (Ollama/OpenAI)
    */
   async directDiagnose(data: {
     symptoms: string[];
@@ -487,16 +487,16 @@ export class AIService {
     hospitalId?: string;
   }) {
     try {
-      logger.info('Direct AI diagnosis call');
-
-      // Fetch hospital AI config if hospitalId provided
-      let hospitalConfig: HospitalAIConfig | null = null;
+      // Fetch hospital AI config if hospitalId is provided
+      let hospitalAIConfig = null;
       if (data.hospitalId) {
-        hospitalConfig = await this.getHospitalAIConfig(data.hospitalId);
-        if (hospitalConfig) {
-          logger.info(`Direct diagnosis using AI provider: ${hospitalConfig.provider}`);
+        hospitalAIConfig = await this.getHospitalAIConfig(data.hospitalId);
+        if (hospitalAIConfig) {
+          logger.info(`Direct diagnosis using AI provider: ${hospitalAIConfig.provider}`);
         }
       }
+
+      logger.info('Direct AI diagnosis call');
 
       const response = await this.aiClient.post<AIDiagnosisResponse>('/api/diagnose', {
         symptoms: data.symptoms,
@@ -506,7 +506,7 @@ export class AIService {
         currentMedications: data.currentMedications || [],
         allergies: data.allergies || [],
         vitalSigns: data.vitalSigns,
-        hospitalConfig,
+        hospitalConfig: hospitalAIConfig,
       });
 
       return {
@@ -532,26 +532,15 @@ export class AIService {
     predictionType: string;
     timeframe?: string;
     patientData: Record<string, any>;
-    hospitalId?: string;
   }) {
     try {
       logger.info(`Direct AI risk prediction: ${data.predictionType}`);
-
-      // Fetch hospital AI config if hospitalId provided
-      let hospitalConfig: HospitalAIConfig | null = null;
-      if (data.hospitalId) {
-        hospitalConfig = await this.getHospitalAIConfig(data.hospitalId);
-        if (hospitalConfig) {
-          logger.info(`Direct risk prediction using AI provider: ${hospitalConfig.provider}`);
-        }
-      }
 
       const response = await this.aiClient.post<AIRiskPredictionResponse>('/api/predict-risk', {
         patientId: 'test-patient',
         predictionType: data.predictionType,
         timeframe: data.timeframe || '30 days',
         patientData: data.patientData,
-        hospitalConfig,
       });
 
       return response.data;
@@ -577,19 +566,9 @@ export class AIService {
     patientAge: number;
     patientGender: string;
     clinicalHistory?: string;
-    hospitalId?: string;
   }) {
     try {
       logger.info(`Direct AI image analysis: ${data.modalityType} - ${data.bodyPart}`);
-
-      // Fetch hospital AI config if hospitalId provided
-      let hospitalConfig: HospitalAIConfig | null = null;
-      if (data.hospitalId) {
-        hospitalConfig = await this.getHospitalAIConfig(data.hospitalId);
-        if (hospitalConfig) {
-          logger.info(`Direct image analysis using AI provider: ${hospitalConfig.provider}`);
-        }
-      }
 
       const response = await this.aiClient.post<AIImageAnalysisResponse>('/api/analyze-image', {
         imageUrl: data.imageUrl,
@@ -598,7 +577,6 @@ export class AIService {
         patientAge: data.patientAge,
         patientGender: data.patientGender,
         clinicalHistory: data.clinicalHistory,
-        hospitalConfig,
       });
 
       return {
@@ -843,20 +821,7 @@ What would you like to do?`,
   }) {
     try {
       logger.info('Starting symptom checker session');
-
-      // Fetch hospital AI config if hospitalId provided
-      let hospitalConfig: HospitalAIConfig | null = null;
-      if (data.hospitalId) {
-        hospitalConfig = await this.getHospitalAIConfig(data.hospitalId);
-        if (hospitalConfig) {
-          logger.info(`Symptom checker using AI provider: ${hospitalConfig.provider}`);
-        }
-      }
-
-      const response = await this.aiClient.post('/api/symptom-checker/start', {
-        ...data,
-        hospitalConfig,
-      });
+      const response = await this.aiClient.post('/api/symptom-checker/start', data);
       return response.data;
     } catch (error) {
       logger.error('Symptom checker start error:', error);
@@ -876,24 +841,10 @@ What would you like to do?`,
   async respondToSymptomChecker(data: {
     sessionId: string;
     responses: Array<{ questionId: string; answer: any }>;
-    hospitalId?: string;
   }) {
     try {
       logger.info(`Symptom checker response for session ${data.sessionId}`);
-
-      // Fetch hospital AI config if hospitalId provided
-      let hospitalConfig: HospitalAIConfig | null = null;
-      if (data.hospitalId) {
-        hospitalConfig = await this.getHospitalAIConfig(data.hospitalId);
-        if (hospitalConfig) {
-          logger.info(`Symptom checker respond using AI provider: ${hospitalConfig.provider}`);
-        }
-      }
-
-      const response = await this.aiClient.post('/api/symptom-checker/respond', {
-        ...data,
-        hospitalConfig,
-      });
+      const response = await this.aiClient.post('/api/symptom-checker/respond', data);
       return response.data;
     } catch (error) {
       logger.error('Symptom checker respond error:', error);
@@ -910,23 +861,10 @@ What would you like to do?`,
   /**
    * Complete symptom checker assessment
    */
-  async completeSymptomChecker(data: { sessionId: string; hospitalId?: string }) {
+  async completeSymptomChecker(data: { sessionId: string }) {
     try {
       logger.info(`Completing symptom checker session ${data.sessionId}`);
-
-      // Fetch hospital AI config if hospitalId provided
-      let hospitalConfig: HospitalAIConfig | null = null;
-      if (data.hospitalId) {
-        hospitalConfig = await this.getHospitalAIConfig(data.hospitalId);
-        if (hospitalConfig) {
-          logger.info(`Symptom checker complete using AI provider: ${hospitalConfig.provider}`);
-        }
-      }
-
-      const response = await this.aiClient.post('/api/symptom-checker/complete', {
-        ...data,
-        hospitalConfig,
-      });
+      const response = await this.aiClient.post('/api/symptom-checker/complete', data);
       return response.data;
     } catch (error) {
       logger.error('Symptom checker complete error:', error);
@@ -963,23 +901,10 @@ What would you like to do?`,
   /**
    * Quick symptom check without full conversation
    */
-  async quickSymptomCheck(data: { symptoms: string[]; patientAge?: number; hospitalId?: string }) {
+  async quickSymptomCheck(data: { symptoms: string[]; patientAge?: number }) {
     try {
       logger.info('Quick symptom check');
-
-      // Fetch hospital AI config if hospitalId provided
-      let hospitalConfig: HospitalAIConfig | null = null;
-      if (data.hospitalId) {
-        hospitalConfig = await this.getHospitalAIConfig(data.hospitalId);
-        if (hospitalConfig) {
-          logger.info(`Quick symptom check using AI provider: ${hospitalConfig.provider}`);
-        }
-      }
-
-      const response = await this.aiClient.post('/api/symptom-checker/quick-check', {
-        ...data,
-        hospitalConfig,
-      });
+      const response = await this.aiClient.post('/api/symptom-checker/quick-check', data);
       return response.data;
     } catch (error) {
       logger.error('Quick symptom check error:', error);
