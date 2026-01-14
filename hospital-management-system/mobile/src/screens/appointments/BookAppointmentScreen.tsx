@@ -22,7 +22,7 @@ import { AppointmentsStackParamList } from '../../navigation/types';
 
 type BookAppointmentRouteProp = RouteProp<AppointmentsStackParamList, 'BookAppointment'>;
 
-type BookingMode = 'emergency' | 'quick' | 'ai-guided' | 'standard';
+type BookingMode = 'emergency' | 'ai-guided' | 'standard';
 type BookingStep = 'mode' | 'department' | 'doctor' | 'date' | 'time' | 'confirm';
 
 type AppointmentType = 'CONSULTATION' | 'FOLLOW_UP' | 'EMERGENCY' | 'TELEMEDICINE' | 'PROCEDURE';
@@ -306,16 +306,6 @@ const BookAppointmentScreen: React.FC = () => {
         setBookingData(prev => ({ ...prev, bookingMode: mode, type: 'EMERGENCY' }));
         goToStep('department');
       }
-    } else if (mode === 'quick') {
-      // Quick Book: Same flow as standard (dept → doctor → date → time → confirm)
-      // Explicitly set type to CONSULTATION to avoid any stale state
-      setBookingData(prev => ({
-        ...prev,
-        bookingMode: mode,
-        type: 'CONSULTATION',
-        department: null,  // Clear any previously selected department
-      }));
-      goToStep('department');
     } else if (mode === 'ai-guided') {
       // AI-Guided: Navigate to Symptom Checker with return param
       navigation.navigate('HealthTab', {
@@ -384,34 +374,6 @@ const BookAppointmentScreen: React.FC = () => {
         </LinearGradient>
       </TouchableOpacity>
 
-      {/* Quick Book */}
-      <TouchableOpacity
-        style={styles.modeCard}
-        onPress={() => handleBookingModeSelect('quick')}
-        activeOpacity={0.8}
-      >
-        <LinearGradient
-          colors={['#4A90D9', '#357ABD']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.modeCardGradient}
-        >
-          <View style={styles.modeCardIcon}>
-            <Ionicons name="time" size={28} color={colors.white} />
-          </View>
-          <View style={styles.modeCardContent}>
-            <View style={styles.modeCardHeader}>
-              <Text style={styles.modeCardTitle}>Quick Book</Text>
-              <View style={styles.modeBadge}>
-                <Text style={styles.modeBadgeText}>2 STEPS</Text>
-              </View>
-            </View>
-            <Text style={styles.modeCardDesc}>Select department → Pick doctor & time</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={24} color={colors.white} />
-        </LinearGradient>
-      </TouchableOpacity>
-
       {/* AI-Guided */}
       <TouchableOpacity
         style={[styles.modeCard, styles.modeCardLight]}
@@ -437,22 +399,34 @@ const BookAppointmentScreen: React.FC = () => {
 
       {/* Standard Booking */}
       <TouchableOpacity
-        style={[styles.modeCard, styles.modeCardOutline]}
+        style={styles.modeCard}
         onPress={() => handleBookingModeSelect('standard')}
         activeOpacity={0.8}
       >
-        <View style={[styles.modeCardIcon, styles.modeCardIconOutline]}>
-          <Ionicons name="calendar" size={24} color={colors.gray[600]} />
-        </View>
-        <Text style={styles.modeCardStandardText}>Standard Booking (4 steps)</Text>
-        <Ionicons name="chevron-forward" size={20} color={colors.gray[400]} />
+        <LinearGradient
+          colors={['#6B7280', '#4B5563']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.modeCardGradient}
+        >
+          <View style={styles.modeCardIcon}>
+            <Ionicons name="calendar" size={28} color={colors.white} />
+          </View>
+          <View style={styles.modeCardContent}>
+            <View style={styles.modeCardHeader}>
+              <Text style={styles.modeCardTitle}>Standard Booking</Text>
+            </View>
+            <Text style={styles.modeCardDesc}>Choose department, doctor, date & time</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color={colors.white} />
+        </LinearGradient>
       </TouchableOpacity>
 
       {/* Info box */}
       <View style={styles.infoBox}>
         <Ionicons name="information-circle" size={20} color={colors.info[600]} />
         <Text style={styles.infoText}>
-          Not sure which option to choose? The AI-Guided Booking helps identify the best specialist for your needs based on your symptoms.
+          Not sure which specialist you need? Try AI-Guided Booking to get recommendations based on your symptoms.
         </Text>
       </View>
     </View>
