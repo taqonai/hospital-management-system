@@ -41,7 +41,7 @@ export class PatientPortalService {
     };
 
     // Run all queries in parallel for performance
-    const [upcomingAppointments, totalUpcomingCount, activePrescriptions, pendingLabResults] = await Promise.all([
+    const [upcomingAppointments, totalUpcomingAppointments, activePrescriptions, pendingLabResults] = await Promise.all([
       // Get upcoming appointments (limited to 5 for display)
       prisma.appointment.findMany({
         where: upcomingFilter,
@@ -56,9 +56,7 @@ export class PatientPortalService {
         },
       }),
       // Get TOTAL count of upcoming appointments (not limited)
-      prisma.appointment.count({
-        where: upcomingFilter,
-      }),
+      prisma.appointment.count({ where: upcomingFilter }),
       // Get active prescriptions count
       prisma.prescription.count({
         where: { patientId, status: 'ACTIVE' },
@@ -99,7 +97,7 @@ export class PatientPortalService {
         } : null,
       })),
       // Include total count for accurate display on dashboard
-      totalUpcomingAppointments: totalUpcomingCount,
+      totalUpcomingAppointments,
       nextAppointment: nextAppointment ? {
         date: nextAppointment.appointmentDate,
         time: nextAppointment.startTime,
