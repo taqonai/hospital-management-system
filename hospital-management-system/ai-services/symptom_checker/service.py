@@ -23,6 +23,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.openai_client import openai_manager, TaskComplexity
+from shared.llm_provider import HospitalAIConfig
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -75,10 +76,18 @@ class PatientInfo(BaseModel):
     allergies: Optional[List[str]] = []
 
 
+class HospitalConfigModel(BaseModel):
+    """Hospital-specific AI provider configuration from backend"""
+    provider: Optional[str] = "openai"
+    ollamaEndpoint: Optional[str] = None
+    ollamaModels: Optional[Dict[str, str]] = None
+
+
 class StartSessionRequest(BaseModel):
     patientInfo: Optional[PatientInfo] = None
     initialSymptoms: Optional[List[str]] = []
     hospitalId: Optional[str] = None
+    hospitalConfig: Optional[HospitalConfigModel] = None
 
 
 class StartSessionResponse(BaseModel):
@@ -130,6 +139,8 @@ class PossibleCondition(BaseModel):
 
 class CompleteRequest(BaseModel):
     sessionId: str
+    hospitalId: Optional[str] = None
+    hospitalConfig: Optional[HospitalConfigModel] = None
 
 
 class CompleteResponse(BaseModel):
@@ -1329,6 +1340,7 @@ async def start_session(request: StartSessionRequest):
         "status": SessionStatus.ACTIVE.value,
         "patientInfo": request.patientInfo.dict() if request.patientInfo else {},
         "hospitalId": request.hospitalId,
+        "hospitalConfig": request.hospitalConfig.dict() if request.hospitalConfig else None,
         "currentQuestionIndex": 0,
         "answers": {},
         "collectedSymptoms": request.initialSymptoms or [],
@@ -1550,6 +1562,19 @@ async def complete_assessment(request: CompleteRequest):
     symptoms = session.get("collectedSymptoms", [])
     patient_info = session.get("patientInfo", {})
 
+    # Get hospital AI config from request or session
+    hospital_config = None
+    config_data = request.hospitalConfig.dict() if request.hospitalConfig else session.get("hospitalConfig")
+    if config_data and config_data.get("provider") == "ollama":
+        ollama_models = config_data.get("ollamaModels", {})
+        hospital_config = HospitalAIConfig(
+            provider="ollama",
+            ollama_endpoint=config_data.get("ollamaEndpoint"),
+            ollama_model_complex=ollama_models.get("complex") if ollama_models else None,
+            ollama_model_simple=ollama_models.get("simple") if ollama_models else None,
+        )
+        logger.info(f"Using Ollama provider: {hospital_config.ollama_endpoint}")
+
     # Extract main symptom info
     main_symptoms = answers.get("main_symptoms", [])
     if isinstance(main_symptoms, str):
@@ -1564,7 +1589,7 @@ async def complete_assessment(request: CompleteRequest):
 
     # Try AI-powered analysis first
     ai_result = None
-    if openai_manager.is_available():
+    if openai_manager.is_available() or (hospital_config and hospital_config.is_ollama()):
         try:
             ai_result = await SymptomCheckerAI._ai_analyze_symptoms(
                 symptoms=symptoms,
@@ -1574,7 +1599,8 @@ async def complete_assessment(request: CompleteRequest):
                 body_location=body_location,
                 severity=answers.get("severity"),
                 duration=answers.get("duration"),
-                associated_symptoms=answers.get("associated_symptoms", [])
+                associated_symptoms=answers.get("associated_symptoms", []),
+                hospital_config=hospital_config
             )
         except Exception as e:
             logger.error(f"AI analysis failed, using rule-based fallback: {e}")
@@ -1751,14 +1777,20 @@ class SymptomCheckerAI:
         body_location: Optional[str] = None,
         severity: Optional[int] = None,
         duration: Optional[str] = None,
-        associated_symptoms: Optional[List[str]] = None
+        associated_symptoms: Optional[List[str]] = None,
+        hospital_config: Optional[HospitalAIConfig] = None
     ) -> Optional[Dict[str, Any]]:
         """
-        Use GPT-4o to perform intelligent symptom analysis and triage.
+        Use GPT-4o or Ollama to perform intelligent symptom analysis and triage.
         Returns structured triage assessment with possible conditions.
         """
-        if not openai_manager.is_available():
+        # Check if any AI provider is available
+        has_ollama = hospital_config and hospital_config.is_ollama()
+        if not openai_manager.is_available() and not has_ollama:
             return None
+
+        if has_ollama:
+            logger.info(f"Using Ollama for symptom analysis: {hospital_config.ollama_endpoint}")
 
         # Build patient context
         patient_context = []
@@ -1824,18 +1856,21 @@ SYMPTOM DETAILS:
 Provide your triage assessment as JSON."""
 
         try:
-            result = openai_manager.chat_completion_json(
+            # Use hospital-specific provider if configured (Ollama or OpenAI)
+            result = openai_manager.chat_completion_json_with_config(
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_content}
                 ],
-                task_complexity=TaskComplexity.COMPLEX,  # Uses gpt-4o for medical reasoning
+                hospital_config=hospital_config,
+                task_complexity=TaskComplexity.COMPLEX,  # Uses gpt-4o or Ollama complex model
                 temperature=0.2,  # Lower temperature for consistent medical assessments
                 max_tokens=2000
             )
 
             if result and result.get("success") and result.get("data"):
-                logger.info(f"AI triage completed successfully using {result.get('model')}")
+                provider = result.get("provider", "unknown")
+                logger.info(f"AI triage completed successfully using {result.get('model')} ({provider})")
                 return result["data"]
             else:
                 logger.warning(f"AI triage failed: {result.get('error') if result else 'No result'}")
@@ -1898,7 +1933,11 @@ Respond with JSON:
             return None
 
     @staticmethod
-    async def quick_check(symptoms: List[str], patient_age: Optional[int] = None) -> Dict[str, Any]:
+    async def quick_check(
+        symptoms: List[str],
+        patient_age: Optional[int] = None,
+        hospital_config: Optional[HospitalAIConfig] = None
+    ) -> Dict[str, Any]:
         """Quick symptom check - uses AI when available, falls back to rules"""
         # Always check for red flags with rule-based system first (safety-critical)
         all_symptoms_text = " ".join(symptoms)
@@ -1911,11 +1950,15 @@ Respond with JSON:
             "collectedSymptoms": symptoms
         }
 
+        # Check if any AI provider is available
+        has_ollama = hospital_config and hospital_config.is_ollama()
+
         # Try AI-powered analysis
-        if SymptomCheckerAI.is_available():
+        if SymptomCheckerAI.is_available() or has_ollama:
             ai_result = await SymptomCheckerAI._ai_analyze_symptoms(
                 symptoms=symptoms,
-                patient_age=patient_age
+                patient_age=patient_age,
+                hospital_config=hospital_config
             )
 
             if ai_result:

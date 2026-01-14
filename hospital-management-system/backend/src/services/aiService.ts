@@ -810,7 +810,20 @@ What would you like to do?`,
   }) {
     try {
       logger.info('Starting symptom checker session');
-      const response = await this.aiClient.post('/api/symptom-checker/start', data);
+
+      // Fetch hospital AI config if hospitalId provided
+      let hospitalConfig: HospitalAIConfig | null = null;
+      if (data.hospitalId) {
+        hospitalConfig = await this.getHospitalAIConfig(data.hospitalId);
+        if (hospitalConfig) {
+          logger.info(`Symptom checker using AI provider: ${hospitalConfig.provider}`);
+        }
+      }
+
+      const response = await this.aiClient.post('/api/symptom-checker/start', {
+        ...data,
+        hospitalConfig,
+      });
       return response.data;
     } catch (error) {
       logger.error('Symptom checker start error:', error);
@@ -850,10 +863,23 @@ What would you like to do?`,
   /**
    * Complete symptom checker assessment
    */
-  async completeSymptomChecker(data: { sessionId: string }) {
+  async completeSymptomChecker(data: { sessionId: string; hospitalId?: string }) {
     try {
       logger.info(`Completing symptom checker session ${data.sessionId}`);
-      const response = await this.aiClient.post('/api/symptom-checker/complete', data);
+
+      // Fetch hospital AI config if hospitalId provided
+      let hospitalConfig: HospitalAIConfig | null = null;
+      if (data.hospitalId) {
+        hospitalConfig = await this.getHospitalAIConfig(data.hospitalId);
+        if (hospitalConfig) {
+          logger.info(`Symptom checker complete using AI provider: ${hospitalConfig.provider}`);
+        }
+      }
+
+      const response = await this.aiClient.post('/api/symptom-checker/complete', {
+        ...data,
+        hospitalConfig,
+      });
       return response.data;
     } catch (error) {
       logger.error('Symptom checker complete error:', error);
@@ -890,10 +916,23 @@ What would you like to do?`,
   /**
    * Quick symptom check without full conversation
    */
-  async quickSymptomCheck(data: { symptoms: string[]; patientAge?: number }) {
+  async quickSymptomCheck(data: { symptoms: string[]; patientAge?: number; hospitalId?: string }) {
     try {
       logger.info('Quick symptom check');
-      const response = await this.aiClient.post('/api/symptom-checker/quick-check', data);
+
+      // Fetch hospital AI config if hospitalId provided
+      let hospitalConfig: HospitalAIConfig | null = null;
+      if (data.hospitalId) {
+        hospitalConfig = await this.getHospitalAIConfig(data.hospitalId);
+        if (hospitalConfig) {
+          logger.info(`Quick symptom check using AI provider: ${hospitalConfig.provider}`);
+        }
+      }
+
+      const response = await this.aiClient.post('/api/symptom-checker/quick-check', {
+        ...data,
+        hospitalConfig,
+      });
       return response.data;
     } catch (error) {
       logger.error('Quick symptom check error:', error);
