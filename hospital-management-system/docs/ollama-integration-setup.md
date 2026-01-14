@@ -164,11 +164,47 @@ self._client = OpenAI(
 
 **File: `backend/src/services/aiService.ts`**
 - Increased axios timeout from 120s to 300s (5 minutes)
+- Added `hospitalId` parameter to `directDiagnose()` method
+- Fetches hospital AI config and passes to AI services
 
 ```typescript
 private aiClient = axios.create({
   baseURL: config.ai.serviceUrl,
   timeout: 300000, // 5 minutes for Ollama AI operations
+});
+
+// directDiagnose now supports hospital-specific provider config
+async directDiagnose(data: {
+  symptoms: string[];
+  patientAge: number;
+  gender: string;
+  // ...other fields
+  hospitalId?: string;  // Added for hospital-aware provider selection
+}) {
+  // Fetch hospital AI config if hospitalId is provided
+  let hospitalAIConfig = null;
+  if (data.hospitalId) {
+    hospitalAIConfig = await this.getHospitalAIConfig(data.hospitalId);
+  }
+
+  const response = await this.aiClient.post('/api/diagnose', {
+    // ...other fields
+    hospitalConfig: hospitalAIConfig,  // Pass config to AI service
+  });
+}
+```
+
+**File: `backend/src/routes/aiRoutes.ts`**
+- Updated `/diagnose` route handler to pass `req.user?.hospitalId` to `directDiagnose()`
+
+```typescript
+// Pass hospitalId from authenticated user to enable Ollama support
+const result = await aiService.directDiagnose({
+  symptoms,
+  patientAge: Number(patientAge),
+  gender,
+  // ...other fields
+  hospitalId: req.user?.hospitalId,  // Added
 });
 ```
 
@@ -312,6 +348,15 @@ cd /opt/hms/app/hospital-management-system
 sudo docker-compose logs --tail=50 ai-services | grep -i "diagnos\|ollama"
 ```
 
+### Timeout Issues with Large Models
+If using large models (70B+, 120B), the 5-minute timeout may not be sufficient. Options:
+1. Use a smaller, faster model (20B is recommended for real-time diagnosis)
+2. Increase timeouts further in these files:
+   - `frontend/src/services/api.ts` - axios timeout
+   - `backend/src/services/aiService.ts` - aiClient timeout
+   - `ai-services/shared/llm_provider.py` - OpenAI client timeout
+   - AWS ALB idle_timeout attribute
+
 ---
 
 ## 10. Key Information
@@ -338,7 +383,8 @@ sudo docker-compose logs --tail=50 ai-services | grep -i "diagnos\|ollama"
 | `ai-services/main.py` | Added hospitalConfig to DiagnosisRequest, updated /api/diagnose endpoint |
 | `ai-services/diagnostic/service.py` | Added hospital_config support to all GPT methods |
 | `ai-services/shared/llm_provider.py` | Added 5-minute timeout to Ollama client |
-| `backend/src/services/aiService.ts` | Increased timeout to 5 minutes |
+| `backend/src/services/aiService.ts` | Increased timeout to 5 minutes, added hospitalId to directDiagnose, fetch and pass hospitalConfig |
+| `backend/src/routes/aiRoutes.ts` | Pass req.user?.hospitalId to directDiagnose for hospital-aware provider selection |
 | `frontend/src/services/api.ts` | Use VITE_API_URL env var, increased AI timeout to 5 minutes |
 | `frontend/Dockerfile` | Added VITE_API_URL build argument |
 | `docker-compose.yml` | Added build args for frontend, added rate limit config |

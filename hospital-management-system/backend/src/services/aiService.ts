@@ -25,7 +25,7 @@ interface HospitalAIConfig {
 export class AIService {
   private aiClient = axios.create({
     baseURL: config.ai.serviceUrl,
-    timeout: 120000, // 2 minutes for GPT-4 multi-call operations
+    timeout: 300000, // 5 minutes for Ollama AI operations
     headers: {
       'Authorization': `Bearer ${config.ai.apiKey}`,
       'Content-Type': 'application/json',
