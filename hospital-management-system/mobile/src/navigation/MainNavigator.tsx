@@ -92,7 +92,9 @@ const HomeStackNavigator = () => (
   </HomeStack.Navigator>
 );
 
-const AppointmentsStackNavigator = () => (
+const AppointmentsStackNavigator = () => {
+  const insets = useSafeAreaInsets();
+  return (
   <AppointmentsStack.Navigator
     screenOptions={{
       headerStyle: { backgroundColor: colors.white },
@@ -103,6 +105,10 @@ const AppointmentsStackNavigator = () => (
         fontWeight: '600',
       },
       headerTitleAlign: 'center',
+      // Ensure content doesn't overlap with status bar
+      contentStyle: { paddingTop: 0 },
+      // Add extra space for status bar on Android if needed
+      headerStatusBarHeight: Platform.OS === 'android' ? insets.top : undefined,
     }}
   >
     <AppointmentsStack.Screen
@@ -121,9 +127,12 @@ const AppointmentsStackNavigator = () => (
       options={{ title: 'Appointment Details' }}
     />
   </AppointmentsStack.Navigator>
-);
+  );
+};
 
-const HealthStackNavigator = () => (
+const HealthStackNavigator = () => {
+  const insets = useSafeAreaInsets();
+  return (
   <HealthStack.Navigator
     screenOptions={{
       headerStyle: { backgroundColor: colors.white },
@@ -134,6 +143,8 @@ const HealthStackNavigator = () => (
         fontWeight: '600',
       },
       headerTitleAlign: 'center',
+      contentStyle: { paddingTop: 0 },
+      headerStatusBarHeight: Platform.OS === 'android' ? insets.top : undefined,
     }}
   >
     <HealthStack.Screen
@@ -283,9 +294,12 @@ const HealthStackNavigator = () => (
       options={{ title: 'New Message' }}
     />
   </HealthStack.Navigator>
-);
+  );
+};
 
-const SettingsStackNavigator = () => (
+const SettingsStackNavigator = () => {
+  const insets = useSafeAreaInsets();
+  return (
   <SettingsStack.Navigator
     screenOptions={{
       headerStyle: { backgroundColor: colors.white },
@@ -296,6 +310,8 @@ const SettingsStackNavigator = () => (
         fontWeight: '600',
       },
       headerTitleAlign: 'center',
+      contentStyle: { paddingTop: 0 },
+      headerStatusBarHeight: Platform.OS === 'android' ? insets.top : undefined,
     }}
   >
     <SettingsStack.Screen
@@ -339,7 +355,8 @@ const SettingsStackNavigator = () => (
       options={{ title: 'Bill Details' }}
     />
   </SettingsStack.Navigator>
-);
+  );
+};
 
 // Main tab navigator
 const MainNavigator: React.FC = () => {

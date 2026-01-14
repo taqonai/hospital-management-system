@@ -12,7 +12,8 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp, useFocusEffect, CommonActions } from '@react-navigation/native';
+import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, spacing, borderRadius, typography, shadows, keyboardConfig } from '../../theme';
@@ -40,6 +41,7 @@ interface BookingData {
 const BookAppointmentScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<BookAppointmentRouteProp>();
+  const queryClient = useQueryClient();
   const [currentStep, setCurrentStep] = useState<BookingStep>('mode');
   const [bookingData, setBookingData] = useState<BookingData>({
     bookingMode: null,
@@ -291,6 +293,12 @@ const BookAppointmentScreen: React.FC = () => {
         type: bookingData.type,
         reason: bookingData.reason,
       });
+
+      // Invalidate all appointment-related queries to trigger immediate refresh
+      // This ensures the appointments list and dashboard counts update immediately
+      await queryClient.invalidateQueries({ queryKey: ['patient-appointments'] });
+      await queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
+      await queryClient.invalidateQueries({ queryKey: ['patient-portal-summary'] });
 
       // Reset form state before navigating back
       resetBookingForm();

@@ -28,37 +28,49 @@ export class PatientPortalService {
       throw new NotFoundError('Patient not found');
     }
 
-    // Get upcoming appointments count
-    const upcomingAppointments = await prisma.appointment.findMany({
-      where: {
-        patientId,
-        hospitalId,
-        status: { in: ['SCHEDULED', 'CONFIRMED'] },
-        appointmentDate: { gte: new Date() },
-      },
-      take: 5,
-      orderBy: { appointmentDate: 'asc' },
-      include: {
-        doctor: {
-          include: {
-            user: { select: { firstName: true, lastName: true } },
+    // Normalize to start of day for date comparisons (matches getAppointments logic)
+    const startOfToday = new Date();
+    startOfToday.setUTCHours(0, 0, 0, 0);
+
+    // Define upcoming appointments filter
+    const upcomingFilter = {
+      patientId,
+      hospitalId,
+      status: { in: ['SCHEDULED', 'CONFIRMED'] as const },
+      appointmentDate: { gte: startOfToday },
+    };
+
+    // Run all queries in parallel for performance
+    const [upcomingAppointments, totalUpcomingCount, activePrescriptions, pendingLabResults] = await Promise.all([
+      // Get upcoming appointments (limited to 5 for display)
+      prisma.appointment.findMany({
+        where: upcomingFilter,
+        take: 5,
+        orderBy: { appointmentDate: 'asc' },
+        include: {
+          doctor: {
+            include: {
+              user: { select: { firstName: true, lastName: true } },
+            },
           },
         },
-      },
-    });
-
-    // Get active prescriptions count
-    const activePrescriptions = await prisma.prescription.count({
-      where: { patientId, status: 'ACTIVE' },
-    });
-
-    // Get pending lab orders
-    const pendingLabResults = await prisma.labOrder.count({
-      where: {
-        patientId,
-        status: { in: ['ORDERED', 'SAMPLE_COLLECTED', 'IN_PROGRESS'] },
-      },
-    });
+      }),
+      // Get TOTAL count of upcoming appointments (not limited)
+      prisma.appointment.count({
+        where: upcomingFilter,
+      }),
+      // Get active prescriptions count
+      prisma.prescription.count({
+        where: { patientId, status: 'ACTIVE' },
+      }),
+      // Get pending lab orders
+      prisma.labOrder.count({
+        where: {
+          patientId,
+          status: { in: ['ORDERED', 'SAMPLE_COLLECTED', 'IN_PROGRESS'] },
+        },
+      }),
+    ]);
 
     // Get next appointment
     const nextAppointment = upcomingAppointments[0];
@@ -73,10 +85,21 @@ export class PatientPortalService {
       upcomingAppointments: upcomingAppointments.map(apt => ({
         id: apt.id,
         date: apt.appointmentDate,
+        appointmentDate: apt.appointmentDate,
+        startTime: apt.startTime,
         time: apt.startTime,
         doctorName: apt.doctor ? `Dr. ${apt.doctor.user.firstName} ${apt.doctor.user.lastName}` : 'TBD',
         status: apt.status,
+        doctor: apt.doctor ? {
+          user: {
+            firstName: apt.doctor.user.firstName,
+            lastName: apt.doctor.user.lastName,
+          },
+          specialization: apt.doctor.specialization || '',
+        } : null,
       })),
+      // Include total count for accurate display on dashboard
+      totalUpcomingAppointments: totalUpcomingCount,
       nextAppointment: nextAppointment ? {
         date: nextAppointment.appointmentDate,
         time: nextAppointment.startTime,
@@ -133,7 +156,12 @@ export class PatientPortalService {
             },
           },
         },
-        orderBy: { appointmentDate: filters.type === 'past' ? 'desc' : 'asc' },
+        // Sort by createdAt DESC so latest bookings appear first
+        // Then by appointmentDate for consistent ordering within same creation time
+        orderBy: [
+          { createdAt: 'desc' },
+          { appointmentDate: filters.type === 'past' ? 'desc' : 'asc' },
+        ],
         skip,
         take: limit,
       }),
@@ -143,7 +171,9 @@ export class PatientPortalService {
     return {
       data: appointments.map(apt => ({
         id: apt.id,
+        appointmentDate: apt.appointmentDate,
         date: apt.appointmentDate,
+        startTime: apt.startTime,
         time: apt.startTime,
         endTime: apt.endTime,
         doctorId: apt.doctorId,
@@ -156,6 +186,7 @@ export class PatientPortalService {
         status: apt.status,
         notes: apt.notes,
         tokenNumber: apt.tokenNumber,
+        createdAt: apt.createdAt,
       })),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };

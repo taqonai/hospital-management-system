@@ -548,13 +548,6 @@ const SymptomCheckerScreen: React.FC = () => {
           console.log('[SymptomChecker] Extracted complete result:', JSON.stringify(result, null, 2));
 
           if (result) {
-            // DEBUG: Show Alert with API response for debugging
-            Alert.alert(
-              'DEBUG: API Response',
-              `urgencyScore: ${result.urgencyScore}\ntriageLevel: ${result.triageLevel}\nrecommendedDepartment: ${result.recommendedDepartment}\nKeys: ${Object.keys(result).join(', ')}`,
-              [{ text: 'OK' }]
-            );
-
             // Map the API result to our local TriageResult type
             // Backend returns recommendedDepartment, also support suggestedDepartment for compatibility
             // Map conditions with likelihood percentage (like web does)
@@ -660,12 +653,44 @@ const SymptomCheckerScreen: React.FC = () => {
           }
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to process response:', error);
+
+      // Determine error type for better user feedback
+      let errorMessage = "I'm having trouble processing your response.";
+      let showRetryOption = true;
+
+      if (error?.code === 'ECONNABORTED' || error?.message?.includes('timeout')) {
+        // Timeout error
+        errorMessage = "The analysis is taking longer than expected. This can happen with complex symptoms.";
+        console.warn('[SymptomChecker] Request timeout - AI analysis took too long');
+      } else if (error?.response?.status === 503 || error?.response?.status === 502) {
+        // Service unavailable
+        errorMessage = "The health analysis service is temporarily busy. Please wait a moment and try again.";
+        console.warn('[SymptomChecker] Service unavailable (503/502)');
+      } else if (error?.response?.status === 500) {
+        // Server error
+        errorMessage = "There was an issue with the analysis service. Your session has been saved.";
+        console.error('[SymptomChecker] Server error 500:', error?.response?.data);
+      } else if (!error?.response && error?.message?.includes('Network')) {
+        // Network error
+        errorMessage = "Please check your internet connection and try again.";
+        console.warn('[SymptomChecker] Network connectivity issue');
+      } else {
+        // Log unexpected errors for debugging
+        console.error('[SymptomChecker] Unexpected error:', {
+          status: error?.response?.status,
+          data: error?.response?.data,
+          message: error?.message,
+        });
+      }
+
       addMessage({
         id: Date.now().toString(),
         type: 'bot',
-        content: "I'm having trouble processing your response. Please try again, or book an appointment with a healthcare provider for assistance.",
+        content: showRetryOption
+          ? `${errorMessage} Please try again, or you can book an appointment directly for assistance.`
+          : errorMessage,
       });
     } finally {
       setIsLoading(false);

@@ -1,4 +1,4 @@
-import api from './client';
+import api, { aiApi } from './client';
 import {
   ApiResponse,
   SymptomCheckerSession,
@@ -35,6 +35,7 @@ export interface RespondData {
 
 export const symptomCheckerApi = {
   // Transcribe audio to text using Whisper AI service
+  // Uses regular api (30s timeout) since Whisper is fast
   transcribeAudio: async (audioUri: string) => {
     const formData = new FormData();
     const audioFile = {
@@ -54,34 +55,38 @@ export const symptomCheckerApi = {
   },
 
   // Start a new symptom checker session
+  // Uses aiApi (90s timeout) for GPT-4 analysis
   startSession: (data?: StartSessionData) =>
-    api.post<ApiResponse<SessionResponse>>('/ai/symptom-checker/start', data || {}),
+    aiApi.post<ApiResponse<SessionResponse>>('/ai/symptom-checker/start', data || {}),
 
   // Submit responses to get next questions
+  // Uses aiApi (90s timeout) for GPT-4 analysis
   respond: (data: RespondData) =>
-    api.post<ApiResponse<{
+    aiApi.post<ApiResponse<{
       questions?: SymptomQuestion[];
       progress: number;
       isComplete: boolean;
     }>>('/ai/symptom-checker/respond', data),
 
   // Complete assessment and get triage result
+  // Uses aiApi (90s timeout) for GPT-4 triage analysis
   complete: (sessionId: string, hospitalId?: string) =>
-    api.post<ApiResponse<SymptomCheckerResult>>('/ai/symptom-checker/complete', { sessionId, hospitalId }),
+    aiApi.post<ApiResponse<SymptomCheckerResult>>('/ai/symptom-checker/complete', { sessionId, hospitalId }),
 
-  // Get session details
+  // Get session details - no AI, uses regular api
   getSession: (sessionId: string) =>
     api.get<ApiResponse<SymptomCheckerSession>>(`/ai/symptom-checker/session/${sessionId}`),
 
   // Quick symptom check (simplified)
+  // Uses aiApi (90s timeout) for AI analysis
   quickCheck: (symptoms: string[], patientAge?: number) =>
-    api.post<ApiResponse<{
+    aiApi.post<ApiResponse<{
       urgency: string;
       recommendations: string[];
       suggestedDepartment?: string;
     }>>('/ai/symptom-checker/quick-check', { symptoms, patientAge }),
 
-  // Get available departments for booking
+  // Get available departments for booking - no AI, uses regular api
   getDepartments: () =>
     api.get<ApiResponse<Array<{ id: string; name: string; keywords: string[] }>>>('/ai/symptom-checker/departments'),
 };

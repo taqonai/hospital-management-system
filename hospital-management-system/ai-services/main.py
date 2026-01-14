@@ -78,6 +78,13 @@ health_assistant_ai = HealthAssistantAI()
 
 
 # Request/Response Models
+class HospitalConfigModel(BaseModel):
+    """Hospital-specific AI provider configuration"""
+    provider: Optional[str] = "openai"
+    ollamaEndpoint: Optional[str] = None
+    ollamaModels: Optional[Dict[str, str]] = None
+
+
 class DiagnosisRequest(BaseModel):
     symptoms: List[str]
     patientAge: int
@@ -86,6 +93,7 @@ class DiagnosisRequest(BaseModel):
     currentMedications: Optional[List[str]] = []
     allergies: Optional[List[str]] = []
     vitalSigns: Optional[Dict[str, Any]] = None
+    hospitalConfig: Optional[HospitalConfigModel] = None
 
 
 class DrugInteraction(BaseModel):
@@ -755,6 +763,18 @@ async def get_provider_status(
 @app.post("/api/diagnose", response_model=DiagnosisResponse)
 async def analyze_symptoms(request: DiagnosisRequest):
     try:
+        # Convert hospital config to HospitalAIConfig for provider selection
+        hospital_config = None
+        if request.hospitalConfig:
+            from shared.llm_provider import HospitalAIConfig
+            hospital_config = HospitalAIConfig(
+                provider=request.hospitalConfig.provider or "openai",
+                ollama_endpoint=request.hospitalConfig.ollamaEndpoint,
+                ollama_model_complex=request.hospitalConfig.ollamaModels.get("complex") if request.hospitalConfig.ollamaModels else None,
+                ollama_model_simple=request.hospitalConfig.ollamaModels.get("simple") if request.hospitalConfig.ollamaModels else None,
+            )
+            logger.info(f"Diagnostic AI using provider: {hospital_config.provider}")
+
         result = diagnostic_ai.analyze(
             symptoms=request.symptoms,
             patient_age=request.patientAge,
@@ -763,6 +783,7 @@ async def analyze_symptoms(request: DiagnosisRequest):
             current_medications=request.currentMedications,
             allergies=request.allergies,
             vital_signs=request.vitalSigns,
+            hospital_config=hospital_config,
         )
         return result
     except Exception as e:
@@ -1645,13 +1666,6 @@ class SymptomCheckerPatientInfo(BaseModel):
     medicalHistory: Optional[List[str]] = []
     currentMedications: Optional[List[str]] = []
     allergies: Optional[List[str]] = []
-
-
-class HospitalConfigModel(BaseModel):
-    """Hospital-specific AI provider configuration"""
-    provider: Optional[str] = "openai"
-    ollamaEndpoint: Optional[str] = None
-    ollamaModels: Optional[Dict[str, str]] = None
 
 
 class SymptomCheckerStartRequest(BaseModel):

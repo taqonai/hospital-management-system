@@ -1,4 +1,4 @@
-export { default as api, extractData, setApiBaseUrl } from './client';
+export { default as api, aiApi, extractData, setApiBaseUrl } from './client';
 export { authApi } from './auth';
 export { patientPortalApi } from './patientPortal';
 export { symptomCheckerApi } from './symptomChecker';

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme';
@@ -37,6 +37,22 @@ const DashboardScreen: React.FC = () => {
   const onRefresh = useCallback(() => {
     refresh();
   }, [refresh]);
+
+  // Track if this is the initial mount to avoid double-fetching
+  const isFirstFocus = useRef(true);
+
+  // Refresh dashboard data when screen gains focus (e.g., after booking)
+  // Skip the first focus since useOfflineData already fetches on mount
+  useFocusEffect(
+    useCallback(() => {
+      if (isFirstFocus.current) {
+        isFirstFocus.current = false;
+        return;
+      }
+      // Only refresh on subsequent focuses (after navigating away and back)
+      refresh();
+    }, [refresh])
+  );
 
   const getGreeting = () => {
     const hour = new Date().getHours();

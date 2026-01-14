@@ -33,8 +33,8 @@ async function cachedGet<T>(
   const { cacheKey, cacheTTL, forceRefresh } = options;
   const online = await isOnline();
 
-  // If online and not forcing cache, try to fetch fresh data
-  if (online && !forceRefresh) {
+  // If online, try to fetch fresh data (especially if forceRefresh is true)
+  if (online) {
     try {
       const response = await fetcher();
       const data = response.data?.data as T;
@@ -46,35 +46,25 @@ async function cachedGet<T>(
 
       return { data, isFromCache: false, isStale: false };
     } catch (error) {
-      // If fetch fails, try to get from cache
-      const cached = await cacheManager.getStale<T>(cacheKey);
-      if (cached) {
-        return { data: cached.data, isFromCache: true, isStale: cached.isStale };
+      // If fetch fails and not forcing refresh, try to get from cache
+      if (!forceRefresh) {
+        const cached = await cacheManager.getStale<T>(cacheKey);
+        if (cached) {
+          return { data: cached.data, isFromCache: true, isStale: cached.isStale };
+        }
       }
       throw error;
     }
   }
 
-  // Offline or force cache - get from cache
+  // Offline - get from cache
   const cached = await cacheManager.getStale<T>(cacheKey);
   if (cached) {
     return { data: cached.data, isFromCache: true, isStale: cached.isStale };
   }
 
-  // No cached data available
-  if (!online) {
-    throw new Error('No internet connection and no cached data available');
-  }
-
-  // Online but cache miss - fetch from server
-  const response = await fetcher();
-  const data = response.data?.data as T;
-
-  if (data) {
-    await cacheManager.set(cacheKey, data, cacheTTL);
-  }
-
-  return { data, isFromCache: false, isStale: false };
+  // No cached data available and offline
+  throw new Error('No internet connection and no cached data available');
 }
 
 /**

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,9 @@ import {
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme';
 import { patientPortalApi } from '../../services/api';
@@ -20,6 +20,7 @@ type TabType = 'upcoming' | 'past';
 
 const AppointmentsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<TabType>('upcoming');
 
   const { data, isLoading, refetch, isRefetching, error } = useQuery({
@@ -35,8 +36,8 @@ const AppointmentsScreen: React.FC = () => {
       const appointments = Array.isArray(rawData) ? rawData : [];
 
       // Transform backend format to expected Appointment format
-      // Backend: { date, time, doctorName, doctorSpecialty, departmentName }
-      // Expected: { appointmentDate, startTime, doctor: { user: {}, specialization, department: {} } }
+      // Backend now returns: { appointmentDate, startTime, doctorName, doctorSpecialty, departmentName, createdAt }
+      // Backend already sorts by createdAt DESC (latest bookings first)
       return appointments.map((apt: any) => ({
         id: apt.id,
         appointmentDate: apt.appointmentDate || apt.date,
@@ -47,6 +48,7 @@ const AppointmentsScreen: React.FC = () => {
         status: apt.status,
         notes: apt.notes,
         tokenNumber: apt.tokenNumber,
+        createdAt: apt.createdAt,
         // Handle both nested doctor object and flat doctorName format
         doctor: apt.doctor || {
           user: {
@@ -63,6 +65,15 @@ const AppointmentsScreen: React.FC = () => {
     },
     retry: 1,
   });
+
+  // Refetch when screen gains focus (e.g., after booking)
+  useFocusEffect(
+    useCallback(() => {
+      // Invalidate and refetch appointments data when screen is focused
+      queryClient.invalidateQueries({ queryKey: ['patient-appointments'] });
+      refetch();
+    }, [queryClient, refetch])
+  );
 
   // Log error for debugging
   React.useEffect(() => {

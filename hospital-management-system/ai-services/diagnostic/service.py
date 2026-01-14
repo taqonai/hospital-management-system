@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 # Import shared OpenAI client
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.openai_client import openai_manager, TaskComplexity, OPENAI_AVAILABLE
+from shared.llm_provider import HospitalAIConfig
 
 # Lazy load sentence transformers to speed up initial startup
 _model = None
@@ -174,11 +175,12 @@ class GPTDiagnosticAnalyzer:
         patient_age: int,
         gender: str,
         medical_history: Optional[List[str]] = None,
-        vital_signs: Optional[Dict[str, Any]] = None
+        vital_signs: Optional[Dict[str, Any]] = None,
+        hospital_config: Optional[HospitalAIConfig] = None
     ) -> Optional[List[Dict[str, Any]]]:
         """Generate differential diagnoses using GPT-4 clinical reasoning"""
 
-        if not self.is_available():
+        if not self.is_available() and not (hospital_config and hospital_config.is_ollama()):
             return None
 
         history_text = ', '.join(medical_history) if medical_history else 'Not provided'
@@ -219,8 +221,8 @@ Guidelines:
 6. Confidence values should reflect clinical certainty"""
 
         try:
-            # Use shared OpenAI client with gpt-4o for complex diagnosis
-            result = openai_manager.chat_completion_json(
+            # Use hospital-aware chat completion (OpenAI or Ollama)
+            result = openai_manager.chat_completion_json_with_config(
                 messages=[
                     {
                         "role": "system",
@@ -228,7 +230,8 @@ Guidelines:
                     },
                     {"role": "user", "content": prompt}
                 ],
-                task_complexity=TaskComplexity.COMPLEX,  # Uses gpt-4o
+                hospital_config=hospital_config,
+                task_complexity=TaskComplexity.COMPLEX,  # Uses gpt-4o or Ollama complex model
                 temperature=0.3,
                 max_tokens=2000
             )
@@ -272,11 +275,14 @@ Guidelines:
         symptoms: List[str],
         diagnoses: List[Dict[str, Any]],
         patient_age: int,
-        vital_signs: Optional[Dict[str, Any]] = None
+        vital_signs: Optional[Dict[str, Any]] = None,
+        hospital_config: Optional[HospitalAIConfig] = None
     ) -> Optional[List[str]]:
         """Generate evidence-based test recommendations using GPT-4"""
 
-        if not self.is_available() or not diagnoses:
+        if not self.is_available() and not (hospital_config and hospital_config.is_ollama()):
+            return None
+        if not diagnoses:
             return None
 
         diagnoses_text = "\n".join([
@@ -315,7 +321,7 @@ Guidelines:
 5. Consider patient age - more aggressive workup for elderly with concerning symptoms"""
 
         try:
-            result = openai_manager.chat_completion_json(
+            result = openai_manager.chat_completion_json_with_config(
                 messages=[
                     {
                         "role": "system",
@@ -323,7 +329,8 @@ Guidelines:
                     },
                     {"role": "user", "content": prompt}
                 ],
-                task_complexity=TaskComplexity.SIMPLE,  # Uses gpt-4o-mini
+                hospital_config=hospital_config,
+                task_complexity=TaskComplexity.SIMPLE,  # Uses gpt-4o-mini or Ollama simple model
                 temperature=0.3,
                 max_tokens=1500
             )
@@ -348,11 +355,14 @@ Guidelines:
         patient_age: int,
         medical_history: Optional[List[str]] = None,
         current_medications: Optional[List[str]] = None,
-        allergies: Optional[List[str]] = None
+        allergies: Optional[List[str]] = None,
+        hospital_config: Optional[HospitalAIConfig] = None
     ) -> Optional[List[str]]:
         """Generate treatment suggestions using GPT-4 clinical reasoning"""
 
-        if not self.is_available() or not diagnoses:
+        if not self.is_available() and not (hospital_config and hospital_config.is_ollama()):
+            return None
+        if not diagnoses:
             return None
 
         diagnoses_text = "\n".join([
@@ -394,7 +404,7 @@ Guidelines:
 6. Consider patient's current medications to avoid interactions"""
 
         try:
-            result = openai_manager.chat_completion_json(
+            result = openai_manager.chat_completion_json_with_config(
                 messages=[
                     {
                         "role": "system",
@@ -402,7 +412,8 @@ Guidelines:
                     },
                     {"role": "user", "content": prompt}
                 ],
-                task_complexity=TaskComplexity.SIMPLE,  # Uses gpt-4o-mini
+                hospital_config=hospital_config,
+                task_complexity=TaskComplexity.SIMPLE,  # Uses gpt-4o-mini or Ollama simple model
                 temperature=0.3,
                 max_tokens=1500
             )
@@ -427,11 +438,12 @@ Guidelines:
         symptoms: List[str],
         patient_age: int,
         vital_signs: Optional[Dict[str, Any]] = None,
-        diagnoses: Optional[List[Dict[str, Any]]] = None
+        diagnoses: Optional[List[Dict[str, Any]]] = None,
+        hospital_config: Optional[HospitalAIConfig] = None
     ) -> Optional[Dict[str, Any]]:
         """Comprehensive age-adjusted urgency assessment using GPT-4"""
 
-        if not self.is_available():
+        if not self.is_available() and not (hospital_config and hospital_config.is_ollama()):
             return None
 
         age_category = "pediatric" if patient_age < 18 else "geriatric" if patient_age > 65 else "adult"
@@ -471,7 +483,7 @@ Age-specific considerations:
 Consider vital sign ranges appropriate for age group."""
 
         try:
-            result = openai_manager.chat_completion_json(
+            result = openai_manager.chat_completion_json_with_config(
                 messages=[
                     {
                         "role": "system",
@@ -479,7 +491,8 @@ Consider vital sign ranges appropriate for age group."""
                     },
                     {"role": "user", "content": prompt}
                 ],
-                task_complexity=TaskComplexity.COMPLEX,  # Uses gpt-4o for safety-critical
+                hospital_config=hospital_config,
+                task_complexity=TaskComplexity.COMPLEX,  # Uses gpt-4o or Ollama complex model for safety-critical
                 temperature=0.3,
                 max_tokens=1000
             )
@@ -535,10 +548,11 @@ class DiagnosticAI:
         current_medications: Optional[List[str]] = None,
         allergies: Optional[List[str]] = None,
         vital_signs: Optional[Dict[str, Any]] = None,
+        hospital_config: Optional[HospitalAIConfig] = None,
     ) -> Dict[str, Any]:
         """
-        Analyze symptoms using GPT-4 clinical reasoning with ML/rule-based fallback.
-        Three-tier fallback: GPT-4 → SentenceTransformers → Rule-based
+        Analyze symptoms using GPT-4/Ollama clinical reasoning with ML/rule-based fallback.
+        Three-tier fallback: LLM (GPT-4/Ollama) → SentenceTransformers → Rule-based
         """
         # Normalize input symptoms
         normalized_symptoms = self._normalize_symptoms(symptoms)
@@ -547,32 +561,40 @@ class DiagnosticAI:
         analysis_source = "rule-based"
         gpt_insights = {}
 
-        # Tier 1: Try GPT-4 first
-        if self.gpt_analyzer.is_available():
-            logger.info("Attempting GPT-4 diagnosis generation...")
+        # Check if LLM is available (either OpenAI or Ollama)
+        llm_available = self.gpt_analyzer.is_available() or (hospital_config and hospital_config.is_ollama())
+
+        # Tier 1: Try LLM first (GPT-4 or Ollama)
+        if llm_available:
+            provider = hospital_config.provider if hospital_config else "openai"
+            logger.info(f"Attempting LLM diagnosis generation using {provider}...")
             diagnoses = self.gpt_analyzer.generate_diagnoses(
-                normalized_symptoms, patient_age, gender, medical_history, vital_signs
+                normalized_symptoms, patient_age, gender, medical_history, vital_signs,
+                hospital_config=hospital_config
             )
 
             if diagnoses:
-                analysis_source = "gpt-4"
+                analysis_source = "ollama" if hospital_config and hospital_config.is_ollama() else "gpt-4"
                 gpt_insights = self.gpt_analyzer.get_last_insights()
 
-                # Use GPT-4 for all components
+                # Use LLM for all components
                 recommended_tests = self.gpt_analyzer.recommend_tests(
-                    normalized_symptoms, diagnoses, patient_age, vital_signs
+                    normalized_symptoms, diagnoses, patient_age, vital_signs,
+                    hospital_config=hospital_config
                 )
                 if not recommended_tests:
                     recommended_tests = self._recommend_tests(normalized_symptoms, diagnoses)
 
                 treatment_suggestions = self.gpt_analyzer.suggest_treatments(
-                    diagnoses, patient_age, medical_history, current_medications, allergies
+                    diagnoses, patient_age, medical_history, current_medications, allergies,
+                    hospital_config=hospital_config
                 )
                 if not treatment_suggestions:
                     treatment_suggestions = self._suggest_treatments(diagnoses, patient_age, medical_history)
 
                 age_adjusted_urgency = self.gpt_analyzer.assess_urgency(
-                    normalized_symptoms, patient_age, vital_signs, diagnoses
+                    normalized_symptoms, patient_age, vital_signs, diagnoses,
+                    hospital_config=hospital_config
                 )
                 if not age_adjusted_urgency:
                     base_severity = diagnoses[0].get("severity", "unknown") if diagnoses else "unknown"
@@ -580,10 +602,10 @@ class DiagnosticAI:
                         normalized_symptoms, patient_age, base_severity
                     )
 
-                # Get age-adjusted warnings (GPT-4 provides this in urgency assessment)
+                # Get age-adjusted warnings (LLM provides this in urgency assessment)
                 age_adjusted_warnings = []
-                if age_adjusted_urgency and age_adjusted_urgency.get("source") == "gpt-4":
-                    # Convert GPT-4 age considerations to warning format
+                if age_adjusted_urgency and age_adjusted_urgency.get("source") in ["gpt-4o", "gpt-4", "ollama"]:
+                    # Convert LLM age considerations to warning format
                     for consideration in age_adjusted_urgency.get("ageConsiderations", []):
                         age_adjusted_warnings.append({
                             "symptom": "Age-Related",
@@ -595,13 +617,13 @@ class DiagnosticAI:
                 else:
                     age_adjusted_warnings = self._get_age_adjusted_warnings(normalized_symptoms, patient_age)
 
-                logger.info(f"GPT-4 analysis successful: {len(diagnoses)} diagnoses")
+                logger.info(f"LLM analysis successful ({analysis_source}): {len(diagnoses)} diagnoses")
             else:
-                logger.warning("GPT-4 diagnosis failed, falling back to SentenceTransformers")
+                logger.warning("LLM diagnosis failed, falling back to SentenceTransformers")
                 diagnoses = None
 
-        # Tier 2 & 3: Fallback to ML/rule-based if GPT-4 unavailable or failed
-        if not self.gpt_analyzer.is_available() or analysis_source != "gpt-4":
+        # Tier 2 & 3: Fallback to ML/rule-based if LLM unavailable or failed
+        if not llm_available or analysis_source == "rule-based":
             diagnoses = self._generate_diagnoses_ml(
                 normalized_symptoms, patient_age, gender, medical_history
             )
