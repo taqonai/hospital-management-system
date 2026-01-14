@@ -3,6 +3,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Accept build argument for API URL (allows bypassing Cloudflare proxy for AI endpoints)
+ARG VITE_API_URL=http://localhost:3001/api/v1
+ENV VITE_API_URL=$VITE_API_URL
+
 # Install dependencies
 COPY package*.json ./
 RUN npm install
@@ -10,7 +14,7 @@ RUN npm install
 # Copy source code
 COPY . .
 
-# Build for production
+# Build for production (VITE_API_URL will be baked into the bundle)
 RUN npm run build
 
 # Production stage with nginx
