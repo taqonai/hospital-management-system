@@ -8,6 +8,10 @@ WORKDIR /app
 ARG VITE_API_URL=/api/v1
 ENV VITE_API_URL=$VITE_API_URL
 
+# Direct API URL for long AI requests (bypasses Cloudflare 100s timeout)
+ARG VITE_AI_API_URL=https://api.spetaar.ai/api/v1
+ENV VITE_AI_API_URL=$VITE_AI_API_URL
+
 # Install dependencies
 COPY package*.json ./
 RUN npm install

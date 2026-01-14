@@ -2,15 +2,26 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { store } from '../store';
 import { updateTokens, logout } from '../store/authSlice';
 
-// Use environment variable for API URL (allows bypassing Cloudflare proxy for AI endpoints)
-// In production, VITE_API_URL should be set to https://api.spetaar.ai/api/v1
+// Use environment variable for API URL
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
+
+// Direct API URL for long-running AI requests (bypasses Cloudflare's 100s timeout)
+const AI_API_BASE_URL = import.meta.env.VITE_AI_API_URL || API_BASE_URL;
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
+});
+
+// Separate axios instance for AI requests that may take longer than Cloudflare's 100s timeout
+export const aiApi = axios.create({
+  baseURL: AI_API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 300000, // 5 minutes for Ollama
 });
 
 // Request interceptor
@@ -136,6 +147,19 @@ api.interceptors.response.use(
   }
 );
 
+// Add auth interceptor to aiApi (for staff token)
+aiApi.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    const state = store.getState();
+    const token = state.auth.accessToken;
+    if (token && config.headers) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
 // Auth APIs
 export const authApi = {
   login: (email: string, password: string) =>
@@ -244,7 +268,7 @@ export const aiApi = {
     medicalHistory?: string[];
     currentMedications?: string[];
     allergies?: string[];
-  }) => api.post('/ai/diagnose', data, { timeout: 300000 }), // 5 minute timeout for Ollama AI
+  }) => aiApi.post('/ai/diagnose', data), // Uses aiApi to bypass Cloudflare timeout
   predictRisk: (data: {
     patientId?: string;
     predictionType: string;
