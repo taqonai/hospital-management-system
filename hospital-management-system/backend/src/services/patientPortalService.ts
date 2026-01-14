@@ -105,10 +105,17 @@ export class PatientPortalService {
 
     const where: any = { patientId, hospitalId };
 
+    // Normalize to start of day for date comparisons
+    // Appointments are stored with date at 00:00:00 UTC
+    const startOfToday = new Date();
+    startOfToday.setUTCHours(0, 0, 0, 0);
+
     if (filters.type === 'upcoming') {
-      where.appointmentDate = { gte: new Date() };
+      // Include today and future appointments
+      where.appointmentDate = { gte: startOfToday };
     } else if (filters.type === 'past') {
-      where.appointmentDate = { lt: new Date() };
+      // Only appointments before today
+      where.appointmentDate = { lt: startOfToday };
     }
 
     if (filters.status) {
