@@ -1,10 +1,13 @@
-import api, { aiApi } from './client';
+import api from './client';
 import {
   ApiResponse,
   SymptomCheckerSession,
   SymptomQuestion,
   SymptomCheckerResult,
 } from '../../types';
+
+// Extended timeout for AI operations (90 seconds instead of default 30)
+const AI_TIMEOUT = 90000;
 
 export interface StartSessionData {
   patientInfo?: {
@@ -35,7 +38,6 @@ export interface RespondData {
 
 export const symptomCheckerApi = {
   // Transcribe audio to text using Whisper AI service
-  // Uses regular api (30s timeout) since Whisper is fast
   transcribeAudio: async (audioUri: string) => {
     const formData = new FormData();
     const audioFile = {
@@ -55,38 +57,38 @@ export const symptomCheckerApi = {
   },
 
   // Start a new symptom checker session
-  // Uses aiApi (90s timeout) for GPT-4 analysis
+  // Uses extended timeout for GPT-4 analysis
   startSession: (data?: StartSessionData) =>
-    aiApi.post<ApiResponse<SessionResponse>>('/ai/symptom-checker/start', data || {}),
+    api.post<ApiResponse<SessionResponse>>('/ai/symptom-checker/start', data || {}, { timeout: AI_TIMEOUT }),
 
   // Submit responses to get next questions
-  // Uses aiApi (90s timeout) for GPT-4 analysis
+  // Uses extended timeout for GPT-4 analysis
   respond: (data: RespondData) =>
-    aiApi.post<ApiResponse<{
+    api.post<ApiResponse<{
       questions?: SymptomQuestion[];
       progress: number;
       isComplete: boolean;
-    }>>('/ai/symptom-checker/respond', data),
+    }>>('/ai/symptom-checker/respond', data, { timeout: AI_TIMEOUT }),
 
   // Complete assessment and get triage result
-  // Uses aiApi (90s timeout) for GPT-4 triage analysis
+  // Uses extended timeout for GPT-4 triage analysis
   complete: (sessionId: string, hospitalId?: string) =>
-    aiApi.post<ApiResponse<SymptomCheckerResult>>('/ai/symptom-checker/complete', { sessionId, hospitalId }),
+    api.post<ApiResponse<SymptomCheckerResult>>('/ai/symptom-checker/complete', { sessionId, hospitalId }, { timeout: AI_TIMEOUT }),
 
-  // Get session details - no AI, uses regular api
+  // Get session details
   getSession: (sessionId: string) =>
     api.get<ApiResponse<SymptomCheckerSession>>(`/ai/symptom-checker/session/${sessionId}`),
 
   // Quick symptom check (simplified)
-  // Uses aiApi (90s timeout) for AI analysis
+  // Uses extended timeout for AI analysis
   quickCheck: (symptoms: string[], patientAge?: number) =>
-    aiApi.post<ApiResponse<{
+    api.post<ApiResponse<{
       urgency: string;
       recommendations: string[];
       suggestedDepartment?: string;
-    }>>('/ai/symptom-checker/quick-check', { symptoms, patientAge }),
+    }>>('/ai/symptom-checker/quick-check', { symptoms, patientAge }, { timeout: AI_TIMEOUT }),
 
-  // Get available departments for booking - no AI, uses regular api
+  // Get available departments for booking
   getDepartments: () =>
     api.get<ApiResponse<Array<{ id: string; name: string; keywords: string[] }>>>('/ai/symptom-checker/departments'),
 };

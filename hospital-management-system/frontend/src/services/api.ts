@@ -242,7 +242,7 @@ export const aiApi = {
     medicalHistory?: string[];
     currentMedications?: string[];
     allergies?: string[];
-  }) => api.post('/ai/diagnose', data, { timeout: 60000 }), // 60 second timeout for AI
+  }) => api.post('/ai/diagnose', data, { timeout: 300000 }), // 5 minute timeout for Ollama AI
   predictRisk: (data: {
     patientId?: string;
     predictionType: string;

@@ -122,9 +122,10 @@ class OllamaClient(BaseLLMClient):
             from openai import OpenAI
             self._client = OpenAI(
                 base_url=f"{self.base_url}/v1",
-                api_key="ollama"  # Ollama doesn't require a real API key
+                api_key="ollama",  # Ollama doesn't require a real API key
+                timeout=300.0,  # 5 minutes timeout for large model inference
             )
-            logger.info(f"Ollama client initialized with endpoint: {self.base_url}")
+            logger.info(f"Ollama client initialized with endpoint: {self.base_url} (5min timeout)")
         except ImportError:
             logger.error("OpenAI package not installed - required for Ollama client")
             self._client = None
