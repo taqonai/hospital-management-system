@@ -750,6 +750,49 @@ BODY_LOCATION_KEYWORDS = {
     "skin", "rash", "dermal"
 }
 
+# Keywords that indicate whole body / general symptoms (should map to "general" body location)
+WHOLE_BODY_KEYWORDS = [
+    "whole body", "entire body", "all over", "everywhere", "full body",
+    "generalized", "general body", "body ache", "body pain", "all body",
+    "throughout body", "overall body", "systemic"
+]
+
+def detect_implied_body_location(symptom_text: str) -> Optional[str]:
+    """
+    Detect if the symptom text implies a specific body location.
+    Returns the body_location value to pre-fill, or None if not detected.
+
+    This prevents redundant questions like asking "which body part?" when user
+    already said "whole body pain" or "headache".
+    """
+    text_lower = symptom_text.lower()
+
+    # Check for whole body / general patterns first (before specific body parts)
+    for keyword in WHOLE_BODY_KEYWORDS:
+        if keyword in text_lower:
+            return "general"
+
+    # Check for specific body locations and map to body_location values
+    location_mappings = {
+        "head_neck": ["head", "headache", "migraine", "temple", "forehead", "scalp",
+                      "throat", "neck", "cervical", "ear", "hearing", "tinnitus"],
+        "chest": ["chest", "heart", "cardiac", "thoracic", "breast", "lung", "breathing"],
+        "abdomen": ["stomach", "abdomen", "belly", "abdominal", "tummy", "gastric",
+                    "intestine", "bowel", "digestive"],
+        "back_spine": ["back", "spine", "lumbar", "lower back", "upper back", "spinal"],
+        "arms_hands": ["arm", "elbow", "wrist", "hand", "finger", "shoulder"],
+        "legs_feet": ["leg", "knee", "ankle", "foot", "toe", "hip", "thigh", "calf"],
+        "skin": ["skin", "rash", "dermal", "itching", "hives", "eczema"],
+        "mental": ["anxiety", "depression", "mental", "emotional", "stress", "mood", "panic"]
+    }
+
+    for location_value, keywords in location_mappings.items():
+        for keyword in keywords:
+            if keyword in text_lower:
+                return location_value
+
+    return None
+
 
 def get_contextual_questions(
     symptoms: List[str],
@@ -771,8 +814,10 @@ def get_contextual_questions(
     symptom_text = " ".join(str(s).lower() for s in symptoms)
     answered_keys = set(answered_questions.keys())
 
-    # Check if body location is already implied by symptoms
-    skip_body_location = any(
+    # Check if body location is already implied by symptoms using enhanced detection
+    # This now properly handles "whole body", "entire body", "body pain" etc.
+    implied_location = detect_implied_body_location(symptom_text)
+    skip_body_location = implied_location is not None or any(
         keyword in symptom_text
         for keyword in BODY_LOCATION_KEYWORDS
     )
@@ -886,7 +931,10 @@ async def get_ai_contextual_questions(
 
 RULES:
 1. Questions must be DIRECTLY relevant to the symptoms mentioned
-2. DO NOT ask about body location if the symptom already specifies it (e.g., "headache" already implies head)
+2. DO NOT ask about body location if the symptom already specifies it:
+   - "headache" already implies head location
+   - "whole body pain", "body ache", "all over", "everywhere" already implies general/whole body
+   - "stomach pain", "chest pain", "back pain" already implies the location
 3. DO NOT repeat information the patient has already provided
 4. Ask about things that would help with triage: severity, timing, triggers, associated symptoms
 5. Keep questions simple and clear for patients to understand
@@ -1377,6 +1425,14 @@ async def start_session(request: StartSessionRequest):
         session["answers"]["main_symptoms"] = request.initialSymptoms
         session["currentQuestionIndex"] = 1
 
+        # Auto-detect and pre-fill body_location if implied by symptoms
+        # e.g., "whole body pain" -> "general", "headache" -> "head_neck"
+        symptom_text = " ".join(str(s).lower() for s in request.initialSymptoms)
+        implied_location = detect_implied_body_location(symptom_text)
+        if implied_location:
+            session["answers"]["body_location"] = implied_location
+            logger.info(f"Auto-detected body_location '{implied_location}' from symptoms: {symptom_text}")
+
         # Use contextual question generation to skip irrelevant questions
         # e.g., if user said "headache", don't ask "which body part?"
         first_questions = get_contextual_questions(
@@ -1437,6 +1493,15 @@ async def submit_response(request: RespondRequest):
                     # Parse comma-separated symptoms
                     symptoms = [s.strip() for s in answer.split(',')]
                     session["collectedSymptoms"].extend(symptoms)
+
+                # Auto-detect body_location from symptoms if not already answered
+                # This prevents redundant "which body part?" questions
+                if "body_location" not in session["answers"]:
+                    symptom_text = answer if isinstance(answer, str) else " ".join(str(s) for s in answer)
+                    implied_location = detect_implied_body_location(symptom_text)
+                    if implied_location:
+                        session["answers"]["body_location"] = implied_location
+                        logger.info(f"Auto-detected body_location '{implied_location}' from main_symptoms: {symptom_text}")
 
     session["lastUpdatedAt"] = datetime.now().isoformat()
 
