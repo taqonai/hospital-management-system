@@ -12,17 +12,23 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { colors, spacing, borderRadius, typography, shadows, keyboardConfig } from '../../theme';
 import { patientPortalApi } from '../../services/api';
 import { Department, Doctor, TimeSlot } from '../../types';
+import { AppointmentsStackParamList } from '../../navigation/types';
 
-type BookingStep = 'department' | 'doctor' | 'date' | 'time' | 'confirm';
+type BookAppointmentRouteProp = RouteProp<AppointmentsStackParamList, 'BookAppointment'>;
+
+type BookingMode = 'emergency' | 'quick' | 'ai-guided' | 'standard';
+type BookingStep = 'mode' | 'department' | 'doctor' | 'date' | 'time' | 'confirm';
 
 type AppointmentType = 'CONSULTATION' | 'FOLLOW_UP' | 'EMERGENCY' | 'TELEMEDICINE' | 'PROCEDURE';
 
 interface BookingData {
+  bookingMode: BookingMode | null;
   department: Department | null;
   doctor: Doctor | null;
   date: string;
@@ -32,9 +38,11 @@ interface BookingData {
 }
 
 const BookAppointmentScreen: React.FC = () => {
-  const navigation = useNavigation();
-  const [currentStep, setCurrentStep] = useState<BookingStep>('department');
+  const navigation = useNavigation<any>();
+  const route = useRoute<BookAppointmentRouteProp>();
+  const [currentStep, setCurrentStep] = useState<BookingStep>('mode');
   const [bookingData, setBookingData] = useState<BookingData>({
+    bookingMode: null,
     department: null,
     doctor: null,
     date: '',
@@ -53,10 +61,66 @@ const BookAppointmentScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Check for AI-guided return params
+  const routeParams = route.params;
+
   // Load departments on mount
   useEffect(() => {
     loadDepartments();
   }, []);
+
+  // Handle AI-guided return - auto-select department or go to department selection
+  useEffect(() => {
+    if (routeParams?.fromSymptomChecker && departments.length > 0) {
+      // Determine appointment type based on urgency from symptom checker
+      // Only set EMERGENCY for explicit emergency/urgent_care levels
+      const urgency = routeParams.urgency?.toLowerCase();
+      const appointmentType: AppointmentType =
+        urgency === 'emergency' ? 'EMERGENCY' :
+        urgency === 'urgent_care' ? 'EMERGENCY' : 'CONSULTATION';
+
+      // Find department by NAME first (from symptom checker), then by ID
+      let dept: Department | undefined;
+
+      if (routeParams?.departmentName) {
+        // Find department by name (case-insensitive partial match)
+        const deptNameLower = routeParams.departmentName.toLowerCase();
+        dept = departments.find(d =>
+          d.name.toLowerCase() === deptNameLower ||
+          d.name.toLowerCase().includes(deptNameLower) ||
+          deptNameLower.includes(d.name.toLowerCase())
+        );
+        console.log('Finding department by name:', routeParams.departmentName, '-> Found:', dept?.name);
+      }
+
+      if (!dept && routeParams?.departmentId) {
+        // Fallback to finding by ID
+        dept = departments.find(d => d.id === routeParams.departmentId);
+      }
+
+      if (dept) {
+        // AI suggested a specific department - auto-select it
+        setBookingData(prev => ({
+          ...prev,
+          bookingMode: 'ai-guided',
+          department: dept,
+          reason: routeParams.symptoms || '',
+          type: appointmentType,
+        }));
+        setCurrentStep('doctor');
+        return;
+      }
+
+      // No matching department found - go to department selection with symptoms pre-filled
+      setBookingData(prev => ({
+        ...prev,
+        bookingMode: 'ai-guided',
+        reason: routeParams.symptoms || '',
+        type: appointmentType,
+      }));
+      setCurrentStep('department');
+    }
+  }, [routeParams, departments]);
 
   // Load doctors when department changes
   useEffect(() => {
@@ -209,12 +273,65 @@ const BookAppointmentScreen: React.FC = () => {
   };
 
   const goBack = () => {
-    const steps: BookingStep[] = ['department', 'doctor', 'date', 'time', 'confirm'];
+    const steps: BookingStep[] = ['mode', 'department', 'doctor', 'date', 'time', 'confirm'];
     const currentIndex = steps.indexOf(currentStep);
     if (currentIndex > 0) {
       setCurrentStep(steps[currentIndex - 1]);
     } else {
       navigation.goBack();
+    }
+  };
+
+  const handleBookingModeSelect = (mode: BookingMode) => {
+    if (mode === 'emergency') {
+      // Emergency: Auto-select Emergency department + today's date
+      const emergencyDept = departments.find(d =>
+        d.name.toLowerCase().includes('emergency') ||
+        d.name.toLowerCase().includes('urgent')
+      );
+      const today = new Date().toISOString().split('T')[0];
+
+      if (emergencyDept) {
+        setBookingData(prev => ({
+          ...prev,
+          bookingMode: mode,
+          type: 'EMERGENCY',
+          department: emergencyDept,
+          date: today,
+          reason: 'Emergency consultation',
+        }));
+        goToStep('doctor');
+      } else {
+        // If no emergency dept found, go to department selection
+        setBookingData(prev => ({ ...prev, bookingMode: mode, type: 'EMERGENCY' }));
+        goToStep('department');
+      }
+    } else if (mode === 'quick') {
+      // Quick Book: Same flow as standard (dept → doctor → date → time → confirm)
+      // Explicitly set type to CONSULTATION to avoid any stale state
+      setBookingData(prev => ({
+        ...prev,
+        bookingMode: mode,
+        type: 'CONSULTATION',
+        department: null,  // Clear any previously selected department
+      }));
+      goToStep('department');
+    } else if (mode === 'ai-guided') {
+      // AI-Guided: Navigate to Symptom Checker with return param
+      navigation.navigate('HealthTab', {
+        screen: 'SymptomChecker',
+        params: { fromBooking: true }
+      });
+    } else {
+      // Standard: Go to department selection
+      // Explicitly set type to CONSULTATION and clear any stale state
+      setBookingData(prev => ({
+        ...prev,
+        bookingMode: mode,
+        type: 'CONSULTATION',
+        department: null,
+      }));
+      goToStep('department');
     }
   };
 
@@ -235,7 +352,116 @@ const BookAppointmentScreen: React.FC = () => {
     return `${hour12}:${minutes} ${ampm}`;
   };
 
+  const renderBookingModeStep = () => (
+    <View style={styles.modeStepContent}>
+      <Text style={styles.modeSubtitle}>Choose how you'd like to proceed</Text>
+
+      {/* Emergency */}
+      <TouchableOpacity
+        style={styles.modeCard}
+        onPress={() => handleBookingModeSelect('emergency')}
+        activeOpacity={0.8}
+      >
+        <LinearGradient
+          colors={['#FF6B6B', '#EE5A5A']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.modeCardGradient}
+        >
+          <View style={styles.modeCardIcon}>
+            <Ionicons name="alert-circle" size={28} color={colors.white} />
+          </View>
+          <View style={styles.modeCardContent}>
+            <View style={styles.modeCardHeader}>
+              <Text style={styles.modeCardTitle}>Emergency</Text>
+              <View style={styles.modeBadge}>
+                <Text style={styles.modeBadgeText}>INSTANT</Text>
+              </View>
+            </View>
+            <Text style={styles.modeCardDesc}>One-click booking for urgent care today</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color={colors.white} />
+        </LinearGradient>
+      </TouchableOpacity>
+
+      {/* Quick Book */}
+      <TouchableOpacity
+        style={styles.modeCard}
+        onPress={() => handleBookingModeSelect('quick')}
+        activeOpacity={0.8}
+      >
+        <LinearGradient
+          colors={['#4A90D9', '#357ABD']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.modeCardGradient}
+        >
+          <View style={styles.modeCardIcon}>
+            <Ionicons name="time" size={28} color={colors.white} />
+          </View>
+          <View style={styles.modeCardContent}>
+            <View style={styles.modeCardHeader}>
+              <Text style={styles.modeCardTitle}>Quick Book</Text>
+              <View style={styles.modeBadge}>
+                <Text style={styles.modeBadgeText}>2 STEPS</Text>
+              </View>
+            </View>
+            <Text style={styles.modeCardDesc}>Select department → Pick doctor & time</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color={colors.white} />
+        </LinearGradient>
+      </TouchableOpacity>
+
+      {/* AI-Guided */}
+      <TouchableOpacity
+        style={[styles.modeCard, styles.modeCardLight]}
+        onPress={() => handleBookingModeSelect('ai-guided')}
+        activeOpacity={0.8}
+      >
+        <View style={[styles.modeCardIcon, styles.modeCardIconLight]}>
+          <Ionicons name="sparkles" size={28} color={colors.secondary[600]} />
+        </View>
+        <View style={styles.modeCardContent}>
+          <View style={styles.modeCardHeader}>
+            <Text style={[styles.modeCardTitle, styles.modeCardTitleLight]}>AI-Guided</Text>
+            <View style={[styles.modeBadge, styles.modeBadgeLight]}>
+              <Text style={[styles.modeBadgeText, styles.modeBadgeTextLight]}>Smart</Text>
+            </View>
+          </View>
+          <Text style={[styles.modeCardDesc, styles.modeCardDescLight]}>
+            Unsure which doctor? AI recommends based on symptoms
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={24} color={colors.gray[400]} />
+      </TouchableOpacity>
+
+      {/* Standard Booking */}
+      <TouchableOpacity
+        style={[styles.modeCard, styles.modeCardOutline]}
+        onPress={() => handleBookingModeSelect('standard')}
+        activeOpacity={0.8}
+      >
+        <View style={[styles.modeCardIcon, styles.modeCardIconOutline]}>
+          <Ionicons name="calendar" size={24} color={colors.gray[600]} />
+        </View>
+        <Text style={styles.modeCardStandardText}>Standard Booking (4 steps)</Text>
+        <Ionicons name="chevron-forward" size={20} color={colors.gray[400]} />
+      </TouchableOpacity>
+
+      {/* Info box */}
+      <View style={styles.infoBox}>
+        <Ionicons name="information-circle" size={20} color={colors.info[600]} />
+        <Text style={styles.infoText}>
+          Not sure which option to choose? The AI-Guided Booking helps identify the best specialist for your needs based on your symptoms.
+        </Text>
+      </View>
+    </View>
+  );
+
   const renderStepIndicator = () => {
+    // Don't show step indicator on mode selection
+    if (currentStep === 'mode') return null;
+
     const steps = [
       { key: 'department', label: 'Dept' },
       { key: 'doctor', label: 'Doctor' },
@@ -371,7 +597,7 @@ const BookAppointmentScreen: React.FC = () => {
                 <Text style={styles.optionSubtitle}>{doctor.specialization}</Text>
                 {doctor.consultationFee && (
                   <Text style={styles.feeText}>
-                    Consultation: ${Number(doctor.consultationFee).toFixed(2)}
+                    Consultation: AED {Number(doctor.consultationFee).toFixed(2)}
                   </Text>
                 )}
               </View>
@@ -550,7 +776,7 @@ const BookAppointmentScreen: React.FC = () => {
                 <View style={styles.summaryInfo}>
                   <Text style={styles.summaryLabel}>Consultation Fee</Text>
                   <Text style={styles.summaryValue}>
-                    ${Number(bookingData.doctor.consultationFee).toFixed(2)}
+                    AED {Number(bookingData.doctor.consultationFee).toFixed(2)}
                   </Text>
                 </View>
               </View>
@@ -707,6 +933,8 @@ const BookAppointmentScreen: React.FC = () => {
 
   const renderCurrentStep = () => {
     switch (currentStep) {
+      case 'mode':
+        return renderBookingModeStep();
       case 'department':
         return renderDepartmentStep();
       case 'doctor':
@@ -1111,6 +1339,130 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.base,
     fontWeight: typography.fontWeight.semibold,
     color: colors.white,
+  },
+  // Booking Mode Selection Styles
+  modeStepContent: {
+    flex: 1,
+    padding: spacing.lg,
+  },
+  modeTitle: {
+    fontSize: typography.fontSize['2xl'],
+    fontWeight: typography.fontWeight.bold,
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+  },
+  modeSubtitle: {
+    fontSize: typography.fontSize.base,
+    color: colors.text.secondary,
+    marginBottom: spacing.xl,
+  },
+  modeCard: {
+    marginBottom: spacing.md,
+    borderRadius: borderRadius.xl,
+    overflow: 'hidden',
+    ...shadows.md,
+  },
+  modeCardGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  modeCardIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.md,
+  },
+  modeCardIconLight: {
+    backgroundColor: colors.secondary[50],
+  },
+  modeCardIconOutline: {
+    backgroundColor: colors.gray[100],
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  modeCardContent: {
+    flex: 1,
+  },
+  modeCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  modeCardTitle: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.white,
+    marginRight: spacing.sm,
+  },
+  modeCardTitleLight: {
+    color: colors.text.primary,
+  },
+  modeCardDesc: {
+    fontSize: typography.fontSize.sm,
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  modeCardDescLight: {
+    color: colors.text.secondary,
+  },
+  modeBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: borderRadius.full,
+  },
+  modeBadgeLight: {
+    backgroundColor: colors.secondary[100],
+  },
+  modeBadgeText: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.white,
+  },
+  modeBadgeTextLight: {
+    color: colors.secondary[700],
+  },
+  modeCardLight: {
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  modeCardOutline: {
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.gray[200],
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    borderRadius: borderRadius.lg,
+  },
+  modeCardStandardText: {
+    flex: 1,
+    fontSize: typography.fontSize.base,
+    color: colors.text.secondary,
+    marginLeft: spacing.sm,
+  },
+  infoBox: {
+    flexDirection: 'row',
+    backgroundColor: colors.info[50],
+    padding: spacing.md,
+    borderRadius: borderRadius.lg,
+    marginTop: spacing.xl,
+    alignItems: 'flex-start',
+  },
+  infoText: {
+    flex: 1,
+    fontSize: typography.fontSize.sm,
+    color: colors.info[700],
+    marginLeft: spacing.sm,
+    lineHeight: 20,
   },
 });
 

@@ -38,14 +38,42 @@ const QUICK_LOG_OPTIONS: Array<{ type: MetricType; label: string; icon: string; 
 
 // Demo data for when API returns empty
 const DEMO_DEVICES: DeviceConnection[] = [
-  { id: 'demo-1', provider: 'google_fit', name: 'Google Fit', isConnected: true, lastSync: new Date().toISOString() },
+  { id: 'demo-1', provider: 'google_fit', status: 'connected', lastSync: new Date().toISOString() },
 ];
 
 const DEMO_SUMMARY: MetricsSummary = {
-  steps: { value: 8542, unit: 'steps', goal: 10000, lastUpdated: new Date().toISOString() },
-  calories: { value: 1850, unit: 'kcal', goal: 2000, lastUpdated: new Date().toISOString() },
-  water: { value: 1600, unit: 'ml', goal: 2500, lastUpdated: new Date().toISOString() },
-  sleep: { value: 7.5, unit: 'hours', goal: 8, lastUpdated: new Date().toISOString() },
+  latestMetrics: {
+    weight: null,
+    height: null,
+    blood_pressure: null,
+    heart_rate: null,
+    blood_glucose: null,
+    oxygen_saturation: null,
+    temperature: null,
+    steps: { id: 'demo-steps', type: 'steps', value: 8542, unit: 'steps', timestamp: new Date().toISOString(), source: 'device' },
+    sleep: { id: 'demo-sleep', type: 'sleep', value: 7.5, unit: 'hours', timestamp: new Date().toISOString(), source: 'device' },
+    water_intake: { id: 'demo-water', type: 'water_intake', value: 1600, unit: 'ml', timestamp: new Date().toISOString(), source: 'manual' },
+    calories_burned: { id: 'demo-calories', type: 'calories_burned', value: 1850, unit: 'kcal', timestamp: new Date().toISOString(), source: 'device' },
+  },
+  todayStats: {
+    steps: 8542,
+    calories: 1850,
+    waterIntake: 1600,
+    sleepHours: 7.5,
+  },
+  weeklyTrends: {
+    weight: { value: 70, change: -0.5 },
+    height: { value: 175, change: 0 },
+    blood_pressure: { value: 120, change: 2 },
+    heart_rate: { value: 72, change: -3 },
+    blood_glucose: { value: 95, change: 0 },
+    oxygen_saturation: { value: 98, change: 0 },
+    temperature: { value: 36.6, change: 0 },
+    steps: { value: 8500, change: 500 },
+    sleep: { value: 7.2, change: 0.3 },
+    water_intake: { value: 1800, change: 200 },
+    calories_burned: { value: 1900, change: 100 },
+  },
 };
 
 const HealthSyncScreen: React.FC = () => {

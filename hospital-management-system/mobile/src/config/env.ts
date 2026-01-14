@@ -66,7 +66,7 @@ const configs: Record<Environment, EnvironmentConfig> = {
   },
   production: {
     APP_ENV: 'production',
-    API_URL: getEnvVar('API_URL', 'https://api.hms.example.com/api/v1'),
+    API_URL: getEnvVar('API_URL', 'https://spetaar.ai/api/v1'),
     ENABLE_DEBUG: false,
     SENTRY_DSN: getEnvVar('SENTRY_DSN', ''),
     ANALYTICS_ENABLED: true,

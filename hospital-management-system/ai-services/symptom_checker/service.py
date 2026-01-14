@@ -885,14 +885,21 @@ Respond with JSON:
 {
     "questions": [
         {
-            "id": "ai_q1",
+            "id": "<MUST be one of: severity, duration, pattern, associated_symptoms, onset, medical_history>",
             "question": "<your question>",
-            "type": "text",
+            "type": "text" | "scale" | "select",
             "placeholder": "<input hint>",
             "rationale": "<why this question helps>"
         }
     ]
-}"""
+}
+
+IMPORTANT: Use these specific IDs based on what you're asking about:
+- "severity" - for questions about how severe/painful symptoms are (use type: "scale")
+- "duration" - for questions about how long symptoms have lasted (use type: "select")
+- "pattern" - for questions about symptom patterns (constant, comes and goes, etc.)
+- "associated_symptoms" - for questions about other symptoms
+- "onset" - for questions about how symptoms started"""
 
         user_content = f"""Patient symptoms: {symptom_text}
 
@@ -919,8 +926,26 @@ Generate 2 relevant follow-up questions. Do not ask about things already answere
                 # Format AI questions for frontend
                 formatted = []
                 for q in ai_questions[:2]:
+                    # Ensure the ID is one of the expected keys for urgency calculation
+                    q_id = q.get("id", "").lower()
+                    question_text = q.get("question", "").lower()
+
+                    # Map common question patterns to expected IDs
+                    if q_id not in ["severity", "duration", "pattern", "associated_symptoms", "onset", "medical_history"]:
+                        # Try to infer the correct ID from the question content
+                        if "severe" in question_text or "pain" in question_text or "scale" in question_text or "1-10" in question_text or "rate" in question_text:
+                            q_id = "severity"
+                        elif "long" in question_text or "when" in question_text or "start" in question_text or "duration" in question_text:
+                            q_id = "duration"
+                        elif "pattern" in question_text or "constant" in question_text or "comes and goes" in question_text:
+                            q_id = "pattern"
+                        elif "other symptom" in question_text or "additional" in question_text or "also" in question_text:
+                            q_id = "associated_symptoms"
+                        else:
+                            q_id = f"ai_{uuid.uuid4().hex[:8]}"
+
                     formatted.append({
-                        "id": q.get("id", f"ai_{uuid.uuid4().hex[:8]}"),
+                        "id": q_id,
                         "type": q.get("type", "text"),
                         "question": q.get("question", ""),
                         "placeholder": q.get("placeholder", "Please describe..."),
@@ -929,7 +954,7 @@ Generate 2 relevant follow-up questions. Do not ask about things already answere
                         "priority": 10,
                         "isAIGenerated": True
                     })
-                logger.info(f"AI generated {len(formatted)} contextual questions")
+                logger.info(f"AI generated {len(formatted)} contextual questions with IDs: {[q['id'] for q in formatted]}")
                 return formatted
 
         # Fall back to rule-based if AI fails
@@ -989,6 +1014,9 @@ def calculate_urgency_score(session_data: Dict[str, Any]) -> int:
     answers = session_data.get("answers", {})
     red_flags = session_data.get("redFlags", [])
 
+    logger.info(f"Calculating urgency score. Answers keys: {list(answers.keys())}")
+    logger.info(f"Answers: {answers}")
+
     score = 3  # Base score
 
     # Red flags have highest impact
@@ -996,15 +1024,30 @@ def calculate_urgency_score(session_data: Dict[str, Any]) -> int:
         max_severity = max(rf.get("severity", 5) for rf in red_flags)
         score = max(score, max_severity)
 
-    # Severity from patient rating
-    severity = answers.get("severity", 5)
-    if isinstance(severity, (int, float)):
-        if severity >= 9:
-            score = max(score, 9)
-        elif severity >= 7:
-            score = max(score, 7)
-        elif severity >= 5:
-            score = max(score, 5)
+    # Severity from patient rating - handle both int and string values
+    severity_raw = answers.get("severity", 5)
+    severity = 5  # default
+    if isinstance(severity_raw, (int, float)):
+        severity = severity_raw
+    elif isinstance(severity_raw, str):
+        # Try to extract number from string like "8" or "severe (8)" or "8/10"
+        try:
+            # Extract first number found
+            import re
+            numbers = re.findall(r'\d+', severity_raw)
+            if numbers:
+                severity = int(numbers[0])
+        except:
+            pass
+
+    logger.info(f"Severity value: {severity} (raw: {severity_raw})")
+
+    if severity >= 9:
+        score = max(score, 9)
+    elif severity >= 7:
+        score = max(score, 7)
+    elif severity >= 5:
+        score = max(score, 5)
 
     # Duration adjustments
     duration = answers.get("duration", "")

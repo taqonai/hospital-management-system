@@ -6,6 +6,7 @@ Provides a singleton OpenAI client with:
 - Model selection based on task complexity
 - Unified error handling
 - Support for chat completions, vision, and speech-to-text
+- Hospital-aware provider selection (OpenAI or Ollama)
 """
 import os
 import logging
@@ -19,6 +20,9 @@ try:
 except ImportError:
     OPENAI_AVAILABLE = False
     OpenAI = None
+
+# Import LLM provider abstraction for Ollama support
+from .llm_provider import OllamaClient, HospitalAIConfig, LLMProvider
 
 logger = logging.getLogger(__name__)
 
@@ -388,6 +392,156 @@ class OpenAIClientManager:
                 "speech": Models.WHISPER,
                 "vision": Models.GPT_4O
             }
+        }
+
+    # =========================================================================
+    # Hospital-Aware Provider Selection (OpenAI or Ollama)
+    # =========================================================================
+
+    _ollama_clients: Dict[str, OllamaClient] = {}  # Cache by endpoint+models
+
+    def get_provider_client(self, config: HospitalAIConfig) -> Union["OpenAIClientManager", OllamaClient]:
+        """
+        Get the appropriate LLM client based on hospital configuration.
+
+        Args:
+            config: Hospital AI configuration
+
+        Returns:
+            OllamaClient if Ollama is configured, otherwise self (OpenAI)
+        """
+        if config.is_ollama():
+            cache_key = f"{config.ollama_endpoint}|{config.ollama_model_complex}|{config.ollama_model_simple}"
+
+            if cache_key not in self._ollama_clients:
+                self._ollama_clients[cache_key] = OllamaClient(
+                    base_url=config.ollama_endpoint,
+                    model_complex=config.ollama_model_complex or "llama3:70b",
+                    model_simple=config.ollama_model_simple or "llama3:8b",
+                )
+                logger.info(f"Created new Ollama client for {config.ollama_endpoint}")
+
+            return self._ollama_clients[cache_key]
+
+        return self  # Default to OpenAI
+
+    def chat_completion_with_config(
+        self,
+        messages: List[Dict[str, str]],
+        hospital_config: Optional[HospitalAIConfig] = None,
+        task_complexity: str = TaskComplexity.SIMPLE,
+        max_tokens: int = 2000,
+        temperature: float = 0.3,
+        response_format: Optional[Dict] = None,
+        max_retries: int = 3,
+        **kwargs
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Chat completion with hospital-specific provider selection.
+
+        If hospital_config specifies Ollama, uses Ollama client.
+        Otherwise, uses OpenAI (default).
+
+        Args:
+            messages: List of message dicts
+            hospital_config: Optional hospital AI configuration
+            task_complexity: COMPLEX or SIMPLE
+            max_tokens: Maximum tokens in response
+            temperature: Sampling temperature
+            response_format: Optional JSON response format (OpenAI only)
+            max_retries: Number of retry attempts
+            **kwargs: Additional parameters
+
+        Returns:
+            Dict with 'success', 'content', 'model', 'provider', 'usage' or 'error'
+        """
+        # Use Ollama if configured
+        if hospital_config and hospital_config.is_ollama():
+            client = self.get_provider_client(hospital_config)
+            return client.chat_completion(
+                messages=messages,
+                task_complexity=task_complexity,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                max_retries=max_retries,
+                **kwargs
+            )
+
+        # Default to OpenAI
+        result = self.chat_completion(
+            messages=messages,
+            task_complexity=task_complexity,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            response_format=response_format,
+            max_retries=max_retries,
+            **kwargs
+        )
+
+        # Add provider info to result
+        if result:
+            result["provider"] = "openai"
+
+        return result
+
+    def chat_completion_json_with_config(
+        self,
+        messages: List[Dict[str, str]],
+        hospital_config: Optional[HospitalAIConfig] = None,
+        task_complexity: str = TaskComplexity.SIMPLE,
+        **kwargs
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Chat completion with JSON response and hospital-specific provider.
+
+        Args:
+            messages: List of message dicts
+            hospital_config: Optional hospital AI configuration
+            task_complexity: COMPLEX or SIMPLE
+            **kwargs: Additional parameters
+
+        Returns:
+            Dict with 'success', 'data', 'model', 'provider', 'usage' or 'error'
+        """
+        # Use Ollama if configured
+        if hospital_config and hospital_config.is_ollama():
+            client = self.get_provider_client(hospital_config)
+            return client.chat_completion_json(
+                messages=messages,
+                task_complexity=task_complexity,
+                **kwargs
+            )
+
+        # Default to OpenAI
+        result = self.chat_completion_json(
+            messages=messages,
+            task_complexity=task_complexity,
+            **kwargs
+        )
+
+        # Add provider info to result
+        if result:
+            result["provider"] = "openai"
+
+        return result
+
+    def get_provider_status(self, hospital_config: Optional[HospitalAIConfig] = None) -> Dict[str, Any]:
+        """
+        Get status for the configured provider.
+
+        Args:
+            hospital_config: Optional hospital AI configuration
+
+        Returns:
+            Status dict for the appropriate provider
+        """
+        if hospital_config and hospital_config.is_ollama():
+            client = self.get_provider_client(hospital_config)
+            return client.get_status()
+
+        return {
+            **self.get_status(),
+            "provider": "openai"
         }
 
 

@@ -43,6 +43,7 @@ import rbacRoutes from './rbacRoutes';
 import patientAuthRoutes from './patientAuthRoutes';
 import notificationRoutes from './notificationRoutes';
 import wellnessRoutes from './wellnessRoutes';
+import aiSettingsRoutes from './aiSettingsRoutes';
 
 const router = Router();
 
@@ -111,5 +112,8 @@ router.use('/notifications', notificationRoutes);
 
 // Wellness & Health Sync routes (Patient Portal)
 router.use('/wellness', wellnessRoutes);
+
+// AI Settings routes (Admin only)
+router.use('/ai-settings', aiSettingsRoutes);
 
 export default router;

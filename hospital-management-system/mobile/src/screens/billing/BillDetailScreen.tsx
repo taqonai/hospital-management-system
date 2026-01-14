@@ -64,7 +64,7 @@ const BillDetailScreen: React.FC = () => {
     try {
       await Share.share({
         title: `Bill #${bill.billNumber || bill.id}`,
-        message: `Bill #${bill.billNumber || bill.id}\nAmount Due: $${formatAmount(bill.balanceAmount || bill.totalAmount || bill.amount)}\nDue Date: ${bill.dueDate ? format(new Date(bill.dueDate), 'MMM dd, yyyy') : 'N/A'}`,
+        message: `Bill #${bill.billNumber || bill.id}\nAmount Due: {formatAmount(bill.balanceAmount || bill.totalAmount || bill.amount)}\nDue Date: ${bill.dueDate ? format(new Date(bill.dueDate), 'MMM dd, yyyy') : 'N/A'}`,
       });
     } catch (error) {
       console.error('Share error:', error);
@@ -90,7 +90,7 @@ const BillDetailScreen: React.FC = () => {
 
   const formatAmount = (amount: number | string | undefined): string => {
     const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return (num || 0).toFixed(2);
+    return `AED ${(num || 0).toFixed(2)}`;
   };
 
   if (isLoading) {
@@ -153,19 +153,19 @@ const BillDetailScreen: React.FC = () => {
           <View style={styles.amountSection}>
             <View style={styles.amountRow}>
               <Text style={styles.amountLabel}>Total Amount</Text>
-              <Text style={styles.totalAmount}>${formatAmount(totalAmount)}</Text>
+              <Text style={styles.totalAmount}>{formatAmount(totalAmount)}</Text>
             </View>
             {amountPaid > 0 && (
               <View style={styles.amountRow}>
                 <Text style={styles.amountLabel}>Amount Paid</Text>
-                <Text style={styles.paidAmount}>-${formatAmount(amountPaid)}</Text>
+                <Text style={styles.paidAmount}>-{formatAmount(amountPaid)}</Text>
               </View>
             )}
             <View style={styles.divider} />
             <View style={styles.amountRow}>
               <Text style={styles.balanceLabel}>Balance Due</Text>
               <Text style={[styles.balanceAmount, isPaid && styles.paidText]}>
-                ${formatAmount(balanceDue)}
+                {formatAmount(balanceDue)}
               </Text>
             </View>
           </View>
@@ -252,7 +252,7 @@ const BillDetailScreen: React.FC = () => {
                     )}
                   </View>
                   <Text style={styles.itemAmount}>
-                    ${formatAmount(item.amount || (item.unitPrice || 0) * (item.quantity || 1))}
+                    {formatAmount(item.amount || (item.unitPrice || 0) * (item.quantity || 1))}
                   </Text>
                 </View>
               ))}
@@ -260,14 +260,14 @@ const BillDetailScreen: React.FC = () => {
               <View style={styles.subtotalSection}>
                 <View style={styles.subtotalRow}>
                   <Text style={styles.subtotalLabel}>Subtotal</Text>
-                  <Text style={styles.subtotalValue}>${formatAmount(bill.subtotal || totalAmount)}</Text>
+                  <Text style={styles.subtotalValue}>{formatAmount(bill.subtotal || totalAmount)}</Text>
                 </View>
 
                 {bill.discount && bill.discount > 0 && (
                   <View style={styles.subtotalRow}>
                     <Text style={styles.subtotalLabel}>Discount</Text>
                     <Text style={[styles.subtotalValue, { color: colors.success[600] }]}>
-                      -${formatAmount(bill.discount)}
+                      -{formatAmount(bill.discount)}
                     </Text>
                   </View>
                 )}
@@ -275,7 +275,7 @@ const BillDetailScreen: React.FC = () => {
                 {bill.tax && bill.tax > 0 && (
                   <View style={styles.subtotalRow}>
                     <Text style={styles.subtotalLabel}>Tax</Text>
-                    <Text style={styles.subtotalValue}>${formatAmount(bill.tax)}</Text>
+                    <Text style={styles.subtotalValue}>{formatAmount(bill.tax)}</Text>
                   </View>
                 )}
 
@@ -283,7 +283,7 @@ const BillDetailScreen: React.FC = () => {
                   <View style={styles.subtotalRow}>
                     <Text style={styles.subtotalLabel}>Insurance Coverage</Text>
                     <Text style={[styles.subtotalValue, { color: colors.success[600] }]}>
-                      -${formatAmount(bill.insuranceCoverage)}
+                      -{formatAmount(bill.insuranceCoverage)}
                     </Text>
                   </View>
                 )}
@@ -317,7 +317,7 @@ const BillDetailScreen: React.FC = () => {
                     </Text>
                   </View>
                   <Text style={styles.paymentAmount}>
-                    ${formatAmount(payment.amount)}
+                    {formatAmount(payment.amount)}
                   </Text>
                 </View>
               ))}
@@ -352,7 +352,7 @@ const BillDetailScreen: React.FC = () => {
         <View style={styles.bottomActions}>
           <TouchableOpacity style={styles.payButton} onPress={handlePayNow}>
             <Ionicons name="card-outline" size={20} color={colors.white} />
-            <Text style={styles.payButtonText}>Pay ${formatAmount(balanceDue)}</Text>
+            <Text style={styles.payButtonText}>Pay {formatAmount(balanceDue)}</Text>
           </TouchableOpacity>
         </View>
       )}

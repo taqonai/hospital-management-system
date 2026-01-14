@@ -18,8 +18,9 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any, Union
 import uvicorn
 
-# Import shared OpenAI client for health checks
+# Import shared OpenAI client for health checks and LLM provider abstraction
 from shared.openai_client import openai_manager, Models
+from shared.llm_provider import OllamaClient, HospitalAIConfig
 
 from diagnostic.service import DiagnosticAI
 from predictive.service import PredictiveAnalytics
@@ -645,6 +646,105 @@ async def health_check():
             "pdf_analysis": "gpt-4o-vision" if openai_available else "text-only",
         }
     }
+
+
+# =========================================================================
+# Ollama Provider Endpoints (for admin configuration)
+# =========================================================================
+
+class OllamaModelsRequest(BaseModel):
+    endpoint: str
+
+
+class OllamaTestRequest(BaseModel):
+    endpoint: str
+    model: str
+
+
+@app.get("/api/ollama/models")
+async def get_ollama_models(endpoint: str):
+    """
+    Fetch available models from an Ollama endpoint.
+
+    Args:
+        endpoint: Ollama server URL (e.g., http://localhost:11434)
+
+    Returns:
+        List of available model names
+    """
+    try:
+        models = OllamaClient.fetch_available_models(endpoint)
+        return {
+            "success": len(models) > 0,
+            "models": models,
+            "endpoint": endpoint
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/ollama/health")
+async def check_ollama_health(endpoint: str):
+    """
+    Check if an Ollama endpoint is reachable.
+
+    Args:
+        endpoint: Ollama server URL
+
+    Returns:
+        Health status of the Ollama endpoint
+    """
+    result = OllamaClient.check_health(endpoint)
+    return {
+        "success": result.get("available", False),
+        **result
+    }
+
+
+@app.post("/api/ollama/test")
+async def test_ollama_completion(request: OllamaTestRequest):
+    """
+    Test a chat completion with a specific Ollama model.
+
+    Args:
+        endpoint: Ollama server URL
+        model: Model name to test
+
+    Returns:
+        Test completion result
+    """
+    result = OllamaClient.test_completion(request.endpoint, request.model)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Test failed"))
+    return result
+
+
+@app.get("/api/provider/status")
+async def get_provider_status(
+    provider: str = "openai",
+    ollama_endpoint: Optional[str] = None,
+    ollama_model_complex: Optional[str] = None,
+    ollama_model_simple: Optional[str] = None
+):
+    """
+    Get status for a specific LLM provider configuration.
+
+    Args:
+        provider: Provider type (openai or ollama)
+        ollama_endpoint: Ollama server URL (required if provider is ollama)
+        ollama_model_complex: Complex task model
+        ollama_model_simple: Simple task model
+
+    Returns:
+        Provider status information
+    """
+    config = HospitalAIConfig(
+        provider=provider,
+        ollama_endpoint=ollama_endpoint,
+        ollama_model_complex=ollama_model_complex,
+        ollama_model_simple=ollama_model_simple
+    )
+    return openai_manager.get_provider_status(config)
 
 
 # Diagnosis endpoint

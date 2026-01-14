@@ -158,7 +158,7 @@ const LoginScreen: React.FC = () => {
 
             {/* Form Card */}
             <View style={styles.formCard}>
-              <Text style={styles.title}>Welcome Back</Text>
+              <Text style={styles.title}>Welcome to Spetaar</Text>
               <Text style={styles.subtitle}>Sign in to access your patient portal</Text>
 
           {/* Login Method Tabs */}

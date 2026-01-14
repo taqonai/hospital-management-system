@@ -147,19 +147,21 @@ Located in `ai-services/`:
 | `ai_scribe/` | AIScribeService | Medical transcription |
 | `entity_extraction/` | EntityExtractionAI | Medical entity extraction from text |
 | `pdf_analysis/` | PDFAnalysisService | Medical PDF extraction and analysis |
+| `health_assistant/` | HealthAssistantAI | Patient-facing health chat assistant |
 
 ### AI Models in Use
 
 | Model | Provider | Purpose |
 |-------|----------|---------|
-| `gpt-4o` | OpenAI | Complex analysis (imaging, clinical notes) |
+| `gpt-4o` | OpenAI | Complex analysis (imaging, clinical notes, diagnosis, triage) |
 | `gpt-4o-mini` | OpenAI | Simple tasks (chat, entity extraction, SOAP notes) |
-| `gpt-3.5-turbo` | OpenAI | Chat assistant, conversational booking |
 | `whisper-1` | OpenAI | Voice transcription (Symptom Checker, AI Scribe) |
 | `all-MiniLM-L6-v2` | SentenceTransformers (local) | Symptom-to-diagnosis semantic matching |
 | Rule-based | Algorithmic | Risk prediction, queue estimation, drug interactions, medication safety |
 
 OpenAI models require `OPENAI_API_KEY`. SentenceTransformers and rule-based services run locally without API keys.
+
+**Ollama Support**: AI services support hospital-specific Ollama configuration as an OpenAI alternative. See `ai-services/shared/llm_provider.py` for the `HospitalAIConfig` abstraction.
 
 ### Multi-Tenant Data Model
 
@@ -325,6 +327,8 @@ sudo docker exec hms-postgres pg_dump -U postgres hospital_db > backup.sql
 React crashes (white screen) are usually JavaScript runtime errors. Common causes:
 - API returns string but code calls number methods (e.g., `price.toFixed()` on a string)
 - Always wrap API numeric values with `Number()`: `Number(value || 0).toFixed(2)`
+- Accessing properties on `undefined` (e.g., `user.name` before user loads) - add null checks or loading states
+- API response structure mismatch - always validate response shape before destructuring
 
 ### Permission Denied Errors
 Check route authorization in `backend/src/routes/{module}Routes.ts`. Ensure the user's role is included in the `authorize()` middleware call.
@@ -361,3 +365,15 @@ npx prisma migrate dev
 - **Android emulator**: Requires Android Studio with an AVD configured
 - **Push notifications**: Requires physical device (simulators don't support push)
 - **Biometric auth**: Test on physical device; simulators have limited support
+
+### Type Safety with API Responses
+When working with API responses in frontend/mobile code:
+```typescript
+// Always validate and coerce numeric values from API
+const total = Number(response.amount || 0).toFixed(2);  // Safe
+// NOT: response.amount.toFixed(2)  // May crash if string
+
+// Always null-check before accessing properties
+const name = user?.name ?? 'Unknown';  // Safe
+// NOT: user.name  // May crash if undefined
+```

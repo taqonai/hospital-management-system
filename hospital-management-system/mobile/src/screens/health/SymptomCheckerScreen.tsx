@@ -31,8 +31,9 @@ interface Message {
 interface TriageResult {
   urgency: 'SELF_CARE' | 'SCHEDULE_APPOINTMENT' | 'URGENT_CARE' | 'EMERGENCY';
   recommendation: string;
-  possibleConditions: { name: string; probability: number; severity: string }[];
-  suggestedDepartment?: string;
+  possibleConditions: { name: string; confidence?: number; likelihood?: string; severity?: string }[];
+  recommendedDepartment?: string;  // Department name from AI (e.g., "Neurology", "General Medicine")
+  urgencyScore?: number;  // Urgency score (1-10) for display
   nextSteps: string[];
   recommendations: string[];
 }
@@ -87,28 +88,38 @@ const calculateFallbackTriage = (responses: string[]): TriageResult => {
   // Analyze emergency signs (index 4) - highest weight
   if (responses[4] && !responses[4].includes('None')) urgencyScore += 4;
 
-  // Determine urgency level
+  // Determine urgency level and recommended department
   let urgency: TriageResult['urgency'];
   let recommendation: string;
+  let recommendedDepartment = 'General Medicine';  // Default department
 
   if (urgencyScore >= 6) {
     urgency = 'EMERGENCY';
+    recommendedDepartment = 'Emergency';
     recommendation = 'Based on your symptoms, you should seek immediate emergency care. Please call 911 or go to the nearest emergency room.';
   } else if (urgencyScore >= 4) {
     urgency = 'URGENT_CARE';
+    recommendedDepartment = 'General Medicine';
     recommendation = 'Your symptoms suggest you should see a doctor within 24 hours. Please visit an urgent care center or schedule a same-day appointment.';
   } else if (urgencyScore >= 2) {
     urgency = 'SCHEDULE_APPOINTMENT';
+    recommendedDepartment = 'General Medicine';
     recommendation = 'Based on your symptoms, we recommend scheduling an appointment with a healthcare provider within the next few days.';
   } else {
     urgency = 'SELF_CARE';
+    recommendedDepartment = 'General Medicine';
     recommendation = 'Your symptoms appear mild. Rest, stay hydrated, and monitor your condition. If symptoms worsen, consult a healthcare provider.';
   }
+
+  // Calculate urgency score for display (scale 1-10)
+  const displayUrgencyScore = Math.min(10, Math.max(1, (urgencyScore / 13) * 10 + 3));
 
   return {
     urgency,
     recommendation,
     possibleConditions: [],
+    recommendedDepartment,  // Always include a department recommendation
+    urgencyScore: displayUrgencyScore,
     nextSteps: urgency === 'EMERGENCY'
       ? ['Call 911 or go to emergency room immediately', 'Do not drive yourself if symptoms are severe']
       : ['Book an appointment with your doctor', 'Note down all your symptoms', 'Prepare a list of any medications you are taking'],
@@ -308,15 +319,21 @@ const SymptomCheckerScreen: React.FC = () => {
   const startSession = async () => {
     setIsLoading(true);
     try {
+      console.log('[SymptomChecker] Starting session...');
       const response = await symptomCheckerApi.startSession();
+      console.log('[SymptomChecker] Raw API response:', JSON.stringify(response.data, null, 2));
+
       const data = response.data?.data || response.data;
+      console.log('[SymptomChecker] Extracted data:', JSON.stringify(data, null, 2));
 
       if (data && data.sessionId) {
+        console.log('[SymptomChecker] Got sessionId:', data.sessionId);
         setSessionId(data.sessionId);
 
         // Backend returns nextQuestions (like web), support both field names
         const questions = data.nextQuestions || data.questions || [];
         const firstQuestion = questions[0];
+        console.log('[SymptomChecker] First question:', JSON.stringify(firstQuestion, null, 2));
 
         // Store the current question ID for responses
         if (firstQuestion?.id) {
@@ -343,28 +360,31 @@ const SymptomCheckerScreen: React.FC = () => {
           });
         }
       } else {
-        // Fallback to structured questions mode
-        startFallbackMode();
+        // Log why we're falling back
+        console.warn('[SymptomChecker] No sessionId in response, falling back. Data:', JSON.stringify(data, null, 2));
+        startFallbackMode(`No sessionId in API response. Keys: ${data ? Object.keys(data).join(', ') : 'null'}`);
       }
     } catch (error: any) {
-      console.error('Failed to start session:', error);
+      console.error('[SymptomChecker] Failed to start session:', error?.message || error);
+      console.error('[SymptomChecker] Error response:', error?.response?.data);
       // Start in fallback mode instead of showing error
-      startFallbackMode();
+      startFallbackMode(`API error: ${error?.message || 'unknown'}`);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const startFallbackMode = () => {
+  const startFallbackMode = (reason?: string) => {
+    console.warn('[SymptomChecker] ENTERING FALLBACK MODE. Reason:', reason || 'unknown');
     setSessionId('fallback-' + Date.now());
     setFallbackQuestionIndex(0);
     setFallbackResponses([]);
 
-    // Welcome message
+    // Welcome message - include reason for debugging
     addMessage({
       id: Date.now().toString(),
       type: 'bot',
-      content: "Hello! I'm your health assistant. The AI service is currently limited, but I can still help assess your symptoms with a few questions. Please describe your main symptoms or concern first.",
+      content: `Hello! I'm your health assistant. ${reason ? `[Debug: ${reason}]` : ''} The AI service is currently limited, but I can still help assess your symptoms with a few questions. Please describe your main symptoms or concern first.`,
     });
 
     // After user describes symptoms, we'll show the first structured question
@@ -501,7 +521,7 @@ const SymptomCheckerScreen: React.FC = () => {
     try {
       // Use the stored currentQuestionId or fallback to provided questionId or 'main'
       const effectiveQuestionId = currentQuestionId || questionId || 'main';
-      console.log('Sending response:', { sessionId, questionId: effectiveQuestionId, answer: responseText });
+      console.log('[SymptomChecker] Sending response:', { sessionId, questionId: effectiveQuestionId, answer: responseText });
 
       const apiResponse = await symptomCheckerApi.respond({
         sessionId: sessionId!,
@@ -510,25 +530,59 @@ const SymptomCheckerScreen: React.FC = () => {
           answer: responseText,
         }],
       });
+      console.log('[SymptomChecker] Raw respond API response:', JSON.stringify(apiResponse.data, null, 2));
       const data = apiResponse.data?.data || apiResponse.data;
-      console.log('API response:', data);
+      console.log('[SymptomChecker] Extracted respond data:', JSON.stringify(data, null, 2));
 
       if (data) {
         if (data.isComplete) {
           // Get final result
+          console.log('[SymptomChecker] Assessment complete, fetching result...');
           const completeResponse = await symptomCheckerApi.complete(sessionId!);
+          console.log('[SymptomChecker] Raw complete API response:', JSON.stringify(completeResponse.data, null, 2));
           const result = completeResponse.data?.data || completeResponse.data;
+          console.log('[SymptomChecker] Extracted complete result:', JSON.stringify(result, null, 2));
 
           if (result) {
+            // DEBUG: Show Alert with API response for debugging
+            Alert.alert(
+              'DEBUG: API Response',
+              `urgencyScore: ${result.urgencyScore}\ntriageLevel: ${result.triageLevel}\nrecommendedDepartment: ${result.recommendedDepartment}\nKeys: ${Object.keys(result).join(', ')}`,
+              [{ text: 'OK' }]
+            );
+
             // Map the API result to our local TriageResult type
-            const triageData: TriageResult = {
-              urgency: result.urgency || 'SCHEDULE_APPOINTMENT',
-              recommendation: result.recommendation || result.recommendations?.[0] || 'Please consult a healthcare professional.',
-              possibleConditions: result.possibleConditions || [],
-              suggestedDepartment: result.suggestedDepartment,
-              nextSteps: result.nextSteps || [],
-              recommendations: result.recommendations || [],
+            // Backend returns recommendedDepartment, also support suggestedDepartment for compatibility
+            // Map conditions with likelihood percentage (like web does)
+            const mappedConditions = (result.possibleConditions || []).map((c: any) => ({
+              name: c.name || c,
+              confidence: c.confidence,
+              likelihood: c.likelihood || (c.confidence ? `${Math.round((c.confidence) * 100)}%` : 'Possible'),
+              severity: c.severity,
+            }));
+
+            // Map triageLevel to urgency format
+            const urgencyMap: Record<string, TriageResult['urgency']> = {
+              'EMERGENCY': 'EMERGENCY',
+              'URGENT': 'URGENT_CARE',
+              'URGENT_CARE': 'URGENT_CARE',
+              'ROUTINE': 'SCHEDULE_APPOINTMENT',
+              'SCHEDULE_APPOINTMENT': 'SCHEDULE_APPOINTMENT',
+              'SELF_CARE': 'SELF_CARE',
             };
+
+            const triageData: TriageResult = {
+              urgency: urgencyMap[result.triageLevel] || result.urgency || 'SCHEDULE_APPOINTMENT',
+              recommendation: result.recommendedAction || result.recommendation || result.recommendations?.[0] || 'Please consult a healthcare professional.',
+              possibleConditions: mappedConditions,
+              recommendedDepartment: result.recommendedDepartment || result.suggestedDepartment || 'General Medicine',
+              urgencyScore: result.urgencyScore,
+              nextSteps: result.nextSteps || result.whenToSeekHelp || [],
+              recommendations: result.selfCareAdvice || result.recommendations || [],
+            };
+            console.log('[SymptomChecker] API result urgencyScore:', result.urgencyScore);
+            console.log('[SymptomChecker] API result triageLevel:', result.triageLevel);
+            console.log('[SymptomChecker] Mapped triage result:', JSON.stringify(triageData, null, 2));
             setTriageResult(triageData);
             setIsComplete(true);
             addMessage({
@@ -555,7 +609,7 @@ const SymptomCheckerScreen: React.FC = () => {
             // Store the new question ID for the next response
             if (nextQuestion.id) {
               setCurrentQuestionId(nextQuestion.id);
-              console.log('Set currentQuestionId to:', nextQuestion.id);
+              console.log('[SymptomChecker] Set currentQuestionId to:', nextQuestion.id);
             }
 
             // Show the question if not already in message
@@ -579,37 +633,26 @@ const SymptomCheckerScreen: React.FC = () => {
               });
             }
           } else {
-            // No questions returned - switch to fallback mode with structured questions
-            console.log('AI returned no questions, switching to fallback mode');
-            setSessionId('fallback-' + Date.now());
-            setFallbackQuestionIndex(0);
-            setFallbackResponses([responseText]);
+            // No questions returned - this might mean the AI wants more info via free text
+            // Don't switch to fallback, just wait for user to continue typing
+            console.log('[SymptomChecker] AI returned no questions. Message:', data.message);
+            console.log('[SymptomChecker] Progress:', data.progress, 'isComplete:', data.isComplete);
 
-            addMessage({
-              id: Date.now().toString(),
-              type: 'bot',
-              content: "Let me ask you a few questions to better understand your condition.",
-            });
-
-            // Show first structured question
-            setTimeout(() => {
-              const firstQuestion = FALLBACK_QUESTIONS[0];
+            // If there's a message, show it - the AI might want more info
+            if (data.message) {
               addMessage({
                 id: Date.now().toString(),
                 type: 'bot',
-                content: firstQuestion.question,
+                content: data.message,
               });
-
+            } else {
+              // If no message and no questions, prompt user to continue
               addMessage({
-                id: (Date.now() + 1).toString(),
-                type: 'options',
-                content: '',
-                options: firstQuestion.options.map((opt, idx) => ({
-                  id: `fallback_${firstQuestion.id}_${idx}`,
-                  text: opt,
-                })),
+                id: Date.now().toString(),
+                type: 'bot',
+                content: "Please continue describing your symptoms or provide more details.",
               });
-            }, 300);
+            }
           }
         }
       }
@@ -656,11 +699,25 @@ const SymptomCheckerScreen: React.FC = () => {
   };
 
   const handleBookAppointment = () => {
+    // Collect symptom summary from user messages
+    const userMessages = messages
+      .filter(m => m.type === 'user')
+      .map(m => m.content)
+      .join('; ');
+
+    // Use fallback responses first entry if available (initial symptom description)
+    const symptomsSummary = fallbackResponses[0] || userMessages || 'Symptoms described in symptom checker';
+
+    // Pass department NAME (not ID) - booking screen will find matching department
+    // Use recommendedDepartment from API response (e.g., "Neurology", "General Medicine")
     navigation.navigate('AppointmentsTab', {
       screen: 'BookAppointment',
-      params: triageResult?.suggestedDepartment
-        ? { departmentId: triageResult.suggestedDepartment }
-        : undefined,
+      params: {
+        fromSymptomChecker: true,
+        departmentName: triageResult?.recommendedDepartment,  // Pass department NAME
+        symptoms: symptomsSummary,
+        urgency: triageResult?.urgency?.toLowerCase(),
+      },
     });
   };
 
@@ -726,16 +783,34 @@ const SymptomCheckerScreen: React.FC = () => {
 
     return (
       <View style={styles.resultContainer}>
-        <View style={[styles.urgencyBadge, { backgroundColor: `${getUrgencyColor(triageResult.urgency)}15` }]}>
-          <Ionicons
-            name={triageResult.urgency.toUpperCase() === 'EMERGENCY' ? 'warning' : 'information-circle'}
-            size={24}
-            color={getUrgencyColor(triageResult.urgency)}
-          />
-          <Text style={[styles.urgencyText, { color: getUrgencyColor(triageResult.urgency) }]}>
-            {getUrgencyLabel(triageResult.urgency)}
-          </Text>
+        {/* Urgency Badge with Score */}
+        <View style={styles.urgencyRow}>
+          <View style={[styles.urgencyBadge, { backgroundColor: `${getUrgencyColor(triageResult.urgency)}15` }]}>
+            <Ionicons
+              name={triageResult.urgency.toUpperCase() === 'EMERGENCY' ? 'warning' : 'information-circle'}
+              size={24}
+              color={getUrgencyColor(triageResult.urgency)}
+            />
+            <Text style={[styles.urgencyText, { color: getUrgencyColor(triageResult.urgency) }]}>
+              {getUrgencyLabel(triageResult.urgency)}
+            </Text>
+          </View>
+          {triageResult.urgencyScore && (
+            <View style={styles.urgencyScoreContainer}>
+              <Text style={styles.urgencyScoreValue}>{triageResult.urgencyScore.toFixed(1)}</Text>
+              <Text style={styles.urgencyScoreMax}>/10</Text>
+              <Text style={styles.urgencyScoreLabel}>Urgency</Text>
+            </View>
+          )}
         </View>
+
+        {/* Recommended Department - Key section matching web */}
+        {triageResult.recommendedDepartment && (
+          <View style={styles.departmentSection}>
+            <Text style={styles.departmentLabel}>Recommended Department</Text>
+            <Text style={styles.departmentValue}>{triageResult.recommendedDepartment}</Text>
+          </View>
+        )}
 
         <View style={styles.resultSection}>
           <Text style={styles.resultLabel}>Recommendation</Text>
@@ -745,10 +820,15 @@ const SymptomCheckerScreen: React.FC = () => {
         {triageResult.possibleConditions.length > 0 && (
           <View style={styles.resultSection}>
             <Text style={styles.resultLabel}>Possible Conditions</Text>
-            {triageResult.possibleConditions.map((condition, index) => (
-              <View key={index} style={styles.conditionItem}>
-                <Ionicons name="ellipse" size={6} color={colors.gray[400]} />
-                <Text style={styles.conditionText}>{condition.name}</Text>
+            {triageResult.possibleConditions.slice(0, 5).map((condition, index) => (
+              <View key={index} style={styles.conditionItemRow}>
+                <View style={styles.conditionItem}>
+                  <Ionicons name="ellipse" size={6} color={colors.gray[400]} />
+                  <Text style={styles.conditionText}>{condition.name}</Text>
+                </View>
+                {condition.likelihood && (
+                  <Text style={styles.conditionLikelihood}>{condition.likelihood}</Text>
+                )}
               </View>
             ))}
           </View>
@@ -769,6 +849,7 @@ const SymptomCheckerScreen: React.FC = () => {
         )}
 
         <View style={styles.resultActions}>
+          {/* Hide Book Appointment for SELF_CARE (like web) */}
           {triageResult.urgency.toUpperCase() !== 'SELF_CARE' && (
             <TouchableOpacity style={styles.bookButton} onPress={handleBookAppointment}>
               <Ionicons name="calendar" size={20} color={colors.white} />
@@ -976,17 +1057,61 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     ...shadows.md,
   },
+  urgencyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.lg,
+  },
   urgencyBadge: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     padding: spacing.md,
     borderRadius: borderRadius.md,
-    marginBottom: spacing.lg,
     gap: spacing.sm,
   },
   urgencyText: {
     fontSize: typography.fontSize.base,
     fontWeight: typography.fontWeight.semibold,
+  },
+  urgencyScoreContainer: {
+    alignItems: 'center',
+    paddingLeft: spacing.md,
+  },
+  urgencyScoreValue: {
+    fontSize: typography.fontSize['2xl'],
+    fontWeight: typography.fontWeight.bold,
+    color: colors.warning[600],
+  },
+  urgencyScoreMax: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[400],
+    marginTop: -4,
+  },
+  urgencyScoreLabel: {
+    fontSize: typography.fontSize.xs,
+    color: colors.text.secondary,
+    marginTop: 2,
+  },
+  departmentSection: {
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.gray[200],
+  },
+  departmentLabel: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.gray[800],
+    marginBottom: spacing.xs,
+  },
+  departmentValue: {
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.primary[600],
   },
   resultSection: {
     marginBottom: spacing.lg,
@@ -1003,15 +1128,29 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     lineHeight: 22,
   },
+  conditionItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+    backgroundColor: colors.gray[50],
+    padding: spacing.sm,
+    borderRadius: borderRadius.md,
+  },
   conditionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.xs,
+    flex: 1,
     gap: spacing.sm,
   },
   conditionText: {
     fontSize: typography.fontSize.base,
     color: colors.text.primary,
+  },
+  conditionLikelihood: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
+    fontWeight: typography.fontWeight.medium,
   },
   stepItem: {
     flexDirection: 'row',

@@ -49,8 +49,14 @@ export const authApi = {
     api.post<ApiResponse<AuthResponse>>('/patient-auth/login', credentials),
 
   // Patient registration
-  register: (data: RegisterData) =>
-    api.post<ApiResponse<AuthResponse>>('/patient-auth/register', data),
+  register: (data: RegisterData) => {
+    // Backend expects 'mobile' instead of 'phone'
+    const { phone, ...rest } = data;
+    return api.post<ApiResponse<AuthResponse>>('/patient-auth/register', {
+      ...rest,
+      mobile: phone,
+    });
+  },
 
   // Request SMS OTP
   sendOTP: (data: OTPRequest) =>

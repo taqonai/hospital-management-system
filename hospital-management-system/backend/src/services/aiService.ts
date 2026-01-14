@@ -12,6 +12,16 @@ import {
 import { NotFoundError, AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
 
+// Interface for hospital AI provider configuration
+interface HospitalAIConfig {
+  provider: 'openai' | 'ollama';
+  ollamaEndpoint?: string;
+  ollamaModels?: {
+    complex?: string;
+    simple?: string;
+  };
+}
+
 export class AIService {
   private aiClient = axios.create({
     baseURL: config.ai.serviceUrl,
@@ -21,6 +31,39 @@ export class AIService {
       'Content-Type': 'application/json',
     },
   });
+
+  /**
+   * Fetch AI provider configuration for a hospital.
+   * Returns the configured provider (OpenAI or Ollama) settings.
+   */
+  private async getHospitalAIConfig(hospitalId: string): Promise<HospitalAIConfig | null> {
+    try {
+      const hospital = await prisma.hospital.findUnique({
+        where: { id: hospitalId },
+        select: { settings: true },
+      });
+
+      if (!hospital?.settings) {
+        return null;
+      }
+
+      const settings = hospital.settings as Record<string, any>;
+      const aiProvider = settings.aiProvider;
+
+      if (!aiProvider) {
+        return null;
+      }
+
+      return {
+        provider: aiProvider.provider || 'openai',
+        ollamaEndpoint: aiProvider.ollamaEndpoint,
+        ollamaModels: aiProvider.ollamaModels,
+      };
+    } catch (error) {
+      logger.warn('Failed to fetch hospital AI config, using default OpenAI:', error);
+      return null;
+    }
+  }
 
   async analyzeSymptomsForDiagnosis(data: AISymptomAnalysisRequest) {
     const patient = await prisma.patient.findUnique({
@@ -42,7 +85,13 @@ export class AIService {
     try {
       logger.info(`Calling AI diagnosis service for patient ${data.patientId}`);
 
-      // Call AI microservice
+      // Fetch hospital AI provider configuration
+      const hospitalAIConfig = await this.getHospitalAIConfig(patient.hospitalId);
+      if (hospitalAIConfig) {
+        logger.info(`Using AI provider: ${hospitalAIConfig.provider} for hospital ${patient.hospitalId}`);
+      }
+
+      // Call AI microservice with hospital config
       const response = await this.aiClient.post<AIDiagnosisResponse>('/api/diagnose', {
         symptoms: data.symptoms,
         patientAge: this.calculateAge(patient.dateOfBirth),
@@ -57,6 +106,8 @@ export class AIService {
           respiratoryRate: patient.vitals[0].respiratoryRate,
           oxygenSaturation: patient.vitals[0].oxygenSaturation,
         } : undefined),
+        // Include hospital AI provider config for provider selection
+        hospitalConfig: hospitalAIConfig,
       });
 
       const aiResult = response.data;

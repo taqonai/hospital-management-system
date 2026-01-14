@@ -38,6 +38,7 @@ const WELLNESS_CATEGORIES: Array<{
 // Demo data for when API returns empty
 const DEMO_ASSESSMENT: WellnessAssessment = {
   id: 'demo-assessment',
+  completedAt: new Date().toISOString(),
   overallScore: 72,
   categoryScores: {
     physical: 75,
@@ -49,18 +50,22 @@ const DEMO_ASSESSMENT: WellnessAssessment = {
     purpose: 72,
     environment: 82,
   },
-  lastUpdated: new Date().toISOString(),
+  insights: [
+    'Your physical activity has improved this week',
+    'Sleep quality could use some attention',
+    'Great job maintaining social connections',
+  ],
   recommendations: [
-    'Try to get at least 7-8 hours of sleep each night',
-    'Practice mindfulness meditation for 10 minutes daily',
-    'Stay hydrated - aim for 8 glasses of water',
+    { category: 'sleep', title: 'Improve Sleep Schedule', description: 'Try to get at least 7-8 hours of sleep each night', priority: 'high' },
+    { category: 'mental', title: 'Daily Mindfulness', description: 'Practice mindfulness meditation for 10 minutes daily', priority: 'medium' },
+    { category: 'nutrition', title: 'Stay Hydrated', description: 'Stay hydrated - aim for 8 glasses of water', priority: 'low' },
   ],
 };
 
 const DEMO_GOALS: WellnessGoal[] = [
-  { id: 'demo-1', category: 'physical', title: 'Exercise 30 min daily', description: 'Get moving every day', target: 30, currentValue: 20, progress: 67, unit: 'minutes', isActive: true },
-  { id: 'demo-2', category: 'sleep', title: 'Sleep 8 hours', description: 'Improve sleep quality', target: 8, currentValue: 6.5, progress: 81, unit: 'hours', isActive: true },
-  { id: 'demo-3', category: 'mental', title: 'Meditate daily', description: 'Practice mindfulness', target: 10, currentValue: 7, progress: 70, unit: 'minutes', isActive: true },
+  { id: 'demo-1', category: 'physical', title: 'Exercise 30 min daily', description: 'Get moving every day', target: 30, currentValue: 20, progress: 67, unit: 'minutes', frequency: 'daily', startDate: '2026-01-01', isActive: true },
+  { id: 'demo-2', category: 'sleep', title: 'Sleep 8 hours', description: 'Improve sleep quality', target: 8, currentValue: 6.5, progress: 81, unit: 'hours', frequency: 'daily', startDate: '2026-01-01', isActive: true },
+  { id: 'demo-3', category: 'mental', title: 'Meditate daily', description: 'Practice mindfulness', target: 10, currentValue: 7, progress: 70, unit: 'minutes', frequency: 'daily', startDate: '2026-01-01', isActive: true },
 ];
 
 const WellnessHubScreen: React.FC = () => {

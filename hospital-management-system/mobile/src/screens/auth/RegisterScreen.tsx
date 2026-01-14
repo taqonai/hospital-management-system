@@ -101,8 +101,23 @@ const RegisterScreen: React.FC = () => {
           {/* Error Message */}
           {error && (
             <View style={styles.errorContainer}>
-              <Ionicons name="alert-circle" size={20} color={colors.error[600]} />
-              <Text style={styles.errorText}>{error}</Text>
+              <Ionicons name="alert-circle" size={20} color={colors.error[600]} style={styles.errorIcon} />
+              <View style={styles.errorTextContainer}>
+                {error.split('\n').map((line, index) => {
+                  // Make field names more readable
+                  const formattedLine = line
+                    .replace('firstName:', 'First Name:')
+                    .replace('lastName:', 'Last Name:')
+                    .replace('mobile:', 'Phone:')
+                    .replace('email:', 'Email:')
+                    .replace('password:', 'Password:')
+                    .replace('dateOfBirth:', 'Date of Birth:')
+                    .replace('gender:', 'Gender:');
+                  return (
+                    <Text key={index} style={styles.errorText}>{formattedLine}</Text>
+                  );
+                })}
+              </View>
             </View>
           )}
 
@@ -356,17 +371,26 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: colors.error[50],
     padding: spacing.md,
     borderRadius: borderRadius.md,
     marginBottom: spacing.lg,
-    gap: spacing.sm,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.error[500],
+  },
+  errorIcon: {
+    marginRight: spacing.sm,
+    marginTop: 2,
+  },
+  errorTextContainer: {
+    flex: 1,
   },
   errorText: {
-    flex: 1,
     color: colors.error[700],
     fontSize: typography.fontSize.sm,
+    marginBottom: spacing.xs,
+    lineHeight: 20,
   },
   form: {
     gap: spacing.lg,

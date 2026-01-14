@@ -34,32 +34,35 @@ const ACTIVITY_ICONS: Record<string, string> = {
 
 // Demo data for when API returns empty
 const DEMO_STATS: FitnessStats = {
+  period: 'week',
   totalWorkouts: 12,
   totalDuration: 420,
   totalCalories: 3240,
+  totalDistance: 35,
+  avgWorkoutsPerWeek: 4,
+  favoriteActivity: 'running',
   streakDays: 5,
-  averageHeartRate: 125,
-  weeklyProgress: [
-    { day: 'Mon', workouts: 2, duration: 60, calories: 450 },
-    { day: 'Tue', workouts: 1, duration: 45, calories: 320 },
-    { day: 'Wed', workouts: 2, duration: 90, calories: 680 },
-    { day: 'Thu', workouts: 1, duration: 30, calories: 240 },
-    { day: 'Fri', workouts: 2, duration: 75, calories: 520 },
-    { day: 'Sat', workouts: 3, duration: 120, calories: 850 },
-    { day: 'Sun', workouts: 1, duration: 0, calories: 180 },
+  dailyStats: [
+    { date: '2026-01-07', workouts: 2, duration: 60, calories: 450, steps: 8500 },
+    { date: '2026-01-08', workouts: 1, duration: 45, calories: 320, steps: 7200 },
+    { date: '2026-01-09', workouts: 2, duration: 90, calories: 680, steps: 10500 },
+    { date: '2026-01-10', workouts: 1, duration: 30, calories: 240, steps: 6800 },
+    { date: '2026-01-11', workouts: 2, duration: 75, calories: 520, steps: 9200 },
+    { date: '2026-01-12', workouts: 3, duration: 120, calories: 850, steps: 12000 },
+    { date: '2026-01-13', workouts: 1, duration: 0, calories: 180, steps: 5500 },
   ],
 };
 
 const DEMO_GOALS: FitnessGoal[] = [
-  { id: 'demo-1', type: 'weekly_workouts', target: 5, currentValue: 3, progress: 60, unit: 'workouts', period: 'weekly', isActive: true },
-  { id: 'demo-2', type: 'calories', target: 2000, currentValue: 1540, progress: 77, unit: 'cal', period: 'weekly', isActive: true },
-  { id: 'demo-3', type: 'duration', target: 300, currentValue: 195, progress: 65, unit: 'min', period: 'weekly', isActive: true },
+  { id: 'demo-1', type: 'workouts', target: 5, currentValue: 3, progress: 60, unit: 'workouts', period: 'weekly', isActive: true, startDate: '2026-01-06' },
+  { id: 'demo-2', type: 'calories', target: 2000, currentValue: 1540, progress: 77, unit: 'cal', period: 'weekly', isActive: true, startDate: '2026-01-06' },
+  { id: 'demo-3', type: 'duration', target: 300, currentValue: 195, progress: 65, unit: 'min', period: 'weekly', isActive: true, startDate: '2026-01-06' },
 ];
 
 const DEMO_ACTIVITIES: FitnessActivity[] = [
-  { id: 'demo-1', type: 'running', name: 'Morning Run', duration: 30, caloriesBurned: 320, distance: 5, distanceUnit: 'km', intensity: 'moderate', startTime: new Date().toISOString() },
-  { id: 'demo-2', type: 'yoga', name: 'Yoga Session', duration: 45, caloriesBurned: 180, intensity: 'low', startTime: new Date(Date.now() - 86400000).toISOString() },
-  { id: 'demo-3', type: 'cycling', name: 'Evening Cycling', duration: 60, caloriesBurned: 450, distance: 15, distanceUnit: 'km', intensity: 'high', startTime: new Date(Date.now() - 172800000).toISOString() },
+  { id: 'demo-1', type: 'running', name: 'Morning Run', duration: 30, caloriesBurned: 320, distance: 5, distanceUnit: 'km', intensity: 'moderate', startTime: new Date().toISOString(), source: 'manual' },
+  { id: 'demo-2', type: 'yoga', name: 'Yoga Session', duration: 45, caloriesBurned: 180, intensity: 'low', startTime: new Date(Date.now() - 86400000).toISOString(), source: 'manual' },
+  { id: 'demo-3', type: 'cycling', name: 'Evening Cycling', duration: 60, caloriesBurned: 450, distance: 15, distanceUnit: 'km', intensity: 'high', startTime: new Date(Date.now() - 172800000).toISOString(), source: 'manual' },
 ];
 
 const FitnessTrackerScreen: React.FC = () => {

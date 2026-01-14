@@ -123,13 +123,11 @@ const DashboardScreen: React.FC = () => {
           <OfflineIndicator isFromCache={isFromCache} isStale={isStale} />
         )}
 
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>{getGreeting()},</Text>
-            <Text style={styles.userName}>
-              {user?.firstName} {user?.lastName}
-            </Text>
+        {/* Branding Header */}
+        <View style={styles.brandingHeader}>
+          <View style={styles.brandingContainer}>
+            <Ionicons name="heart" size={24} color={colors.error[500]} />
+            <Text style={styles.brandingText}>Spetaar Pro</Text>
           </View>
           <TouchableOpacity style={styles.notificationButton}>
             <Ionicons name="notifications-outline" size={24} color={colors.text.primary} />
@@ -141,6 +139,16 @@ const DashboardScreen: React.FC = () => {
               </View>
             )}
           </TouchableOpacity>
+        </View>
+
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.greeting}>{getGreeting()},</Text>
+            <Text style={styles.userName}>
+              {user?.firstName} {user?.lastName}
+            </Text>
+          </View>
         </View>
 
         {/* Quick Stats */}
@@ -306,6 +314,22 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: spacing.lg,
     paddingBottom: spacing['3xl'],
+  },
+  brandingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  brandingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  brandingText: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.text.primary,
   },
   header: {
     flexDirection: 'row',

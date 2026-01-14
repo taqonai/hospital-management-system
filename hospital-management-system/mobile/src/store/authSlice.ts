@@ -97,7 +97,24 @@ export const register = createAsyncThunk(
 
       return result.patient;
     } catch (error: any) {
-      const message = error.response?.data?.message || 'Registration failed';
+      // Extract validation errors from backend response
+      const responseData = error.response?.data;
+
+      // Check for field-specific validation errors
+      if (responseData?.errors && Array.isArray(responseData.errors)) {
+        // Format: [{ field: "body.mobile", message: "..." }]
+        const errorMessages = responseData.errors
+          .map((err: { field: string; message: string }) => {
+            // Remove "body." prefix from field name for cleaner display
+            const fieldName = err.field.replace('body.', '');
+            return `${fieldName}: ${err.message}`;
+          })
+          .join('\n');
+        return rejectWithValue(errorMessages || 'Validation failed');
+      }
+
+      // Fallback to general error message
+      const message = responseData?.error || responseData?.message || 'Registration failed';
       return rejectWithValue(message);
     }
   }

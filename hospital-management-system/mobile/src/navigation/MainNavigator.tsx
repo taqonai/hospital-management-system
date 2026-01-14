@@ -77,6 +77,11 @@ const HomeStackNavigator = () => (
       headerStyle: { backgroundColor: colors.white },
       headerTintColor: colors.text.primary,
       headerShadowVisible: false,
+      headerTitleStyle: {
+        fontSize: 18,
+        fontWeight: '600',
+      },
+      headerTitleAlign: 'center',
     }}
   >
     <HomeStack.Screen
@@ -93,6 +98,11 @@ const AppointmentsStackNavigator = () => (
       headerStyle: { backgroundColor: colors.white },
       headerTintColor: colors.text.primary,
       headerShadowVisible: false,
+      headerTitleStyle: {
+        fontSize: 18,
+        fontWeight: '600',
+      },
+      headerTitleAlign: 'center',
     }}
   >
     <AppointmentsStack.Screen
@@ -103,7 +113,7 @@ const AppointmentsStackNavigator = () => (
     <AppointmentsStack.Screen
       name="BookAppointment"
       component={BookAppointmentScreen}
-      options={{ title: 'Book Appointment' }}
+      options={{ headerShown: false }}
     />
     <AppointmentsStack.Screen
       name="AppointmentDetail"
@@ -119,6 +129,11 @@ const HealthStackNavigator = () => (
       headerStyle: { backgroundColor: colors.white },
       headerTintColor: colors.text.primary,
       headerShadowVisible: false,
+      headerTitleStyle: {
+        fontSize: 18,
+        fontWeight: '600',
+      },
+      headerTitleAlign: 'center',
     }}
   >
     <HealthStack.Screen
@@ -276,6 +291,11 @@ const SettingsStackNavigator = () => (
       headerStyle: { backgroundColor: colors.white },
       headerTintColor: colors.text.primary,
       headerShadowVisible: false,
+      headerTitleStyle: {
+        fontSize: 18,
+        fontWeight: '600',
+      },
+      headerTitleAlign: 'center',
     }}
   >
     <SettingsStack.Screen

@@ -17,6 +17,7 @@ import Appointments from './pages/Appointments';
 import AppointmentForm from './pages/AppointmentForm';
 import Doctors from './pages/Doctors';
 import DoctorForm from './pages/DoctorForm';
+import DoctorDetail from './pages/DoctorDetail';
 import Departments from './pages/Departments';
 import DepartmentForm from './pages/Departments/DepartmentForm';
 import AIAssistant from './pages/AIAssistant';
@@ -114,6 +115,9 @@ import Assets from './pages/Assets';
 // RBAC (Role-Based Access Control)
 import RBAC from './pages/RBAC';
 
+// AI Settings (Admin only)
+import AISettings from './pages/AISettings';
+
 // Protected Route Component
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -167,6 +171,7 @@ function App() {
         <Route path="/appointments/:id/edit" element={<AppointmentForm />} />
         <Route path="/doctors" element={<Doctors />} />
         <Route path="/doctors/new" element={<DoctorForm />} />
+        <Route path="/doctors/:id" element={<DoctorDetail />} />
         <Route path="/doctors/:id/edit" element={<DoctorForm />} />
         <Route path="/departments" element={<Departments />} />
         <Route path="/departments/new" element={<DepartmentForm />} />
@@ -209,6 +214,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'SUPER_ADMIN']}>
               <RBAC />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/ai-settings"
+          element={
+            <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'SUPER_ADMIN']}>
+              <AISettings />
             </ProtectedRoute>
           }
         />

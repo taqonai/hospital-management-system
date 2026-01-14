@@ -29,6 +29,7 @@ const MEAL_ORDER = ['breakfast', 'lunch', 'dinner', 'snack'];
 
 // Demo data for when API returns empty
 const DEMO_SUMMARY: NutritionSummary = {
+  date: new Date().toISOString().split('T')[0],
   totalCalories: 1650,
   calorieGoal: 2000,
   totalProtein: 85,
@@ -37,6 +38,7 @@ const DEMO_SUMMARY: NutritionSummary = {
   carbsGoal: 250,
   totalFat: 55,
   fatGoal: 65,
+  totalFiber: 28,
   macroPercentages: {
     protein: 25,
     carbs: 50,
@@ -44,17 +46,17 @@ const DEMO_SUMMARY: NutritionSummary = {
   },
   meals: {
     breakfast: [
-      { id: 'demo-1', name: 'Oatmeal with Berries', calories: 320, protein: 12, carbs: 45, fat: 8 },
+      { id: 'demo-1', name: 'Oatmeal with Berries', calories: 320, protein: 12, carbs: 45, fat: 8, mealType: 'breakfast', timestamp: new Date().toISOString() },
     ],
     lunch: [
-      { id: 'demo-2', name: 'Grilled Chicken Salad', calories: 450, protein: 35, carbs: 25, fat: 18 },
+      { id: 'demo-2', name: 'Grilled Chicken Salad', calories: 450, protein: 35, carbs: 25, fat: 18, mealType: 'lunch', timestamp: new Date().toISOString() },
     ],
     dinner: [
-      { id: 'demo-3', name: 'Salmon with Vegetables', calories: 580, protein: 38, carbs: 30, fat: 25 },
+      { id: 'demo-3', name: 'Salmon with Vegetables', calories: 580, protein: 38, carbs: 30, fat: 25, mealType: 'dinner', timestamp: new Date().toISOString() },
     ],
     snack: [
-      { id: 'demo-4', name: 'Greek Yogurt', calories: 150, protein: 15, carbs: 12, fat: 4 },
-      { id: 'demo-5', name: 'Almonds', calories: 150, protein: 5, carbs: 8, fat: 12 },
+      { id: 'demo-4', name: 'Greek Yogurt', calories: 150, protein: 15, carbs: 12, fat: 4, mealType: 'snack', timestamp: new Date().toISOString() },
+      { id: 'demo-5', name: 'Almonds', calories: 150, protein: 5, carbs: 8, fat: 12, mealType: 'snack', timestamp: new Date().toISOString() },
     ],
   },
 };
@@ -62,9 +64,13 @@ const DEMO_SUMMARY: NutritionSummary = {
 const DEMO_PLAN: NutritionPlan = {
   id: 'demo-plan',
   name: 'Balanced Nutrition Plan',
-  type: 'balanced',
+  type: 'maintenance',
   calorieTarget: 2000,
   description: 'A well-balanced plan for maintaining healthy weight',
+  macros: { protein: 30, carbs: 45, fat: 25 },
+  startDate: '2026-01-01',
+  isActive: true,
+  createdBy: 'ai',
 };
 
 const NutritionScreen: React.FC = () => {

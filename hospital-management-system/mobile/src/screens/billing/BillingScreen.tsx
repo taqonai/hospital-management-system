@@ -83,7 +83,7 @@ const BillingScreen: React.FC = () => {
 
   const formatCurrency = (amount: number | string) => {
     const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return `$${numAmount.toFixed(2)}`;
+    return `AED ${numAmount.toFixed(2)}`;
   };
 
   const getStatusColor = (status: string) => {

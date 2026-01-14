@@ -64,7 +64,7 @@ export class DoctorService {
         data: {
           userId: user.id,
           departmentId: data.departmentId,
-          specializationId: data.specializationId,
+          specializationId: data.specializationId || undefined, // Convert empty string to undefined to avoid FK constraint error
           specialization: data.specialization,
           qualification: data.qualification,
           experience: data.experience,
@@ -220,6 +220,11 @@ export class DoctorService {
     }
 
     const { email, password, firstName, lastName, phone, ...doctorData } = data;
+
+    // Convert empty specializationId to undefined to avoid FK constraint error
+    if (doctorData.specializationId === '') {
+      doctorData.specializationId = undefined;
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       // Update user if needed

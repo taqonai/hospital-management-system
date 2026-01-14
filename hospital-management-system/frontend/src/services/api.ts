@@ -1517,6 +1517,37 @@ export const rbacApi = {
   }) => api.get('/rbac/audit-logs', { params }),
 };
 
+// AI Settings APIs (Admin only)
+export const aiSettingsApi = {
+  // Get current AI provider settings
+  getSettings: () => api.get('/ai-settings/settings'),
+
+  // Update AI provider settings
+  updateSettings: (data: {
+    provider: 'openai' | 'ollama';
+    ollamaEndpoint?: string;
+    ollamaModels?: {
+      complex?: string;
+      simple?: string;
+    };
+  }) => api.put('/ai-settings/settings', data),
+
+  // Fetch available models from Ollama endpoint
+  getOllamaModels: (endpoint: string) =>
+    api.get('/ai-settings/ollama/models', { params: { endpoint } }),
+
+  // Check Ollama endpoint health
+  checkOllamaHealth: (endpoint: string) =>
+    api.get('/ai-settings/ollama/health', { params: { endpoint } }),
+
+  // Test Ollama connection with a specific model
+  testOllama: (endpoint: string, model: string) =>
+    api.post('/ai-settings/ollama/test', { endpoint, model }),
+
+  // Get current provider status
+  getProviderStatus: () => api.get('/ai-settings/provider/status'),
+};
+
 // Smart Order APIs
 export const smartOrderApi = {
   // Get order recommendations

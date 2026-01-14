@@ -34,7 +34,14 @@ export type HomeStackParamList = {
 // Appointments stack
 export type AppointmentsStackParamList = {
   AppointmentsList: undefined;
-  BookAppointment: { doctorId?: string; departmentId?: string } | undefined;
+  BookAppointment: {
+    doctorId?: string;
+    departmentId?: string;
+    departmentName?: string;
+    fromSymptomChecker?: boolean;
+    symptoms?: string;
+    urgency?: string;
+  } | undefined;
   AppointmentDetail: { appointmentId: string };
   SelectDoctor: { departmentId: string };
   SelectSlot: { doctorId: string; date: string };
@@ -44,7 +51,7 @@ export type AppointmentsStackParamList = {
 export type HealthStackParamList = {
   HealthHub: undefined;
   HealthInsights: undefined;
-  SymptomChecker: undefined;
+  SymptomChecker: { fromBooking?: boolean } | undefined;
   HealthAssistant: undefined;
   MedicalRecords: undefined;
   RecordDetail: { recordId: string };

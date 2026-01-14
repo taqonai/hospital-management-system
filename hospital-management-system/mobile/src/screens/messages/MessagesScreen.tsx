@@ -19,6 +19,121 @@ import { MessagesStackParamList } from '../../types';
 
 type NavigationProp = NativeStackNavigationProp<MessagesStackParamList>;
 
+// Demo data for when API returns empty
+const DEMO_MESSAGE_THREADS: MessageThread[] = [
+  {
+    id: 'demo-1',
+    subject: 'Follow-up on blood test results',
+    participants: [
+      { id: 'patient-1', name: 'You', role: 'patient' },
+      { id: 'doctor-1', name: 'Dr. Sarah Johnson', role: 'doctor' },
+    ],
+    messages: [
+      {
+        id: 'msg-1',
+        threadId: 'demo-1',
+        senderId: 'doctor-1',
+        senderName: 'Dr. Sarah Johnson',
+        senderRole: 'doctor',
+        recipientId: 'patient-1',
+        recipientName: 'You',
+        body: 'Your blood test results look good. Keep up with your current medication regimen.',
+        isRead: false,
+        createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      },
+    ],
+    lastMessage: {
+      id: 'msg-1',
+      threadId: 'demo-1',
+      senderId: 'doctor-1',
+      senderName: 'Dr. Sarah Johnson',
+      senderRole: 'doctor',
+      recipientId: 'patient-1',
+      recipientName: 'You',
+      body: 'Your blood test results look good. Keep up with your current medication regimen.',
+      isRead: false,
+      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    },
+    unreadCount: 1,
+    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 'demo-2',
+    subject: 'Appointment confirmation',
+    participants: [
+      { id: 'patient-1', name: 'You', role: 'patient' },
+      { id: 'staff-1', name: 'Hospital Reception', role: 'staff' },
+    ],
+    messages: [
+      {
+        id: 'msg-2',
+        threadId: 'demo-2',
+        senderId: 'staff-1',
+        senderName: 'Hospital Reception',
+        senderRole: 'staff',
+        recipientId: 'patient-1',
+        recipientName: 'You',
+        body: 'Your appointment with Dr. Chen has been confirmed for next Monday at 10:00 AM.',
+        isRead: true,
+        createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+      },
+    ],
+    lastMessage: {
+      id: 'msg-2',
+      threadId: 'demo-2',
+      senderId: 'staff-1',
+      senderName: 'Hospital Reception',
+      senderRole: 'staff',
+      recipientId: 'patient-1',
+      recipientName: 'You',
+      body: 'Your appointment with Dr. Chen has been confirmed for next Monday at 10:00 AM.',
+      isRead: true,
+      createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    },
+    unreadCount: 0,
+    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 'demo-3',
+    subject: 'Prescription refill request',
+    participants: [
+      { id: 'patient-1', name: 'You', role: 'patient' },
+      { id: 'nurse-1', name: 'Nurse Miller', role: 'nurse' },
+    ],
+    messages: [
+      {
+        id: 'msg-3',
+        threadId: 'demo-3',
+        senderId: 'patient-1',
+        senderName: 'You',
+        senderRole: 'patient',
+        recipientId: 'nurse-1',
+        recipientName: 'Nurse Miller',
+        body: 'Thank you for processing my refill request.',
+        isRead: true,
+        createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+    ],
+    lastMessage: {
+      id: 'msg-3',
+      threadId: 'demo-3',
+      senderId: 'patient-1',
+      senderName: 'You',
+      senderRole: 'patient',
+      recipientId: 'nurse-1',
+      recipientName: 'Nurse Miller',
+      body: 'Thank you for processing my refill request.',
+      isRead: true,
+      createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    unreadCount: 0,
+    createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+];
+
 const MessagesScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const [isLoading, setIsLoading] = useState(true);
@@ -32,9 +147,13 @@ const MessagesScreen: React.FC = () => {
       const response = await patientPortalApi.getMessages({
         status: filter === 'unread' ? 'unread' : 'all',
       });
-      setThreads(response.data?.data || []);
+      const messageThreads = response.data?.data || [];
+      // Use demo data if API returns empty
+      setThreads(messageThreads.length > 0 ? messageThreads : DEMO_MESSAGE_THREADS);
     } catch (error) {
       console.error('Error loading messages:', error);
+      // Use demo data on error
+      setThreads(DEMO_MESSAGE_THREADS);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
