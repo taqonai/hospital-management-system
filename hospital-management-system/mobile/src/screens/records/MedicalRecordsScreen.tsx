@@ -37,9 +37,28 @@ const MedicalRecordsScreen: React.FC = () => {
   const loadRecords = async () => {
     try {
       const response = await patientPortalApi.getMedicalRecords();
-      setRecords(response.data?.data || []);
-    } catch (error) {
-      console.error('Failed to load medical records:', error);
+      const rawData = response.data?.data || response.data || [];
+      // Ensure we have a valid array and sanitize each record
+      const sanitizedRecords: MedicalRecord[] = Array.isArray(rawData)
+        ? rawData.map((record: any) => ({
+            id: String(record?.id || Date.now()),
+            type: record?.type || 'CONSULTATION',
+            title: record?.title || '',
+            description: record?.description || '',
+            date: record?.date || record?.createdAt || '',
+            createdAt: record?.createdAt || '',
+            diagnosis: record?.diagnosis || '',
+            doctorName: record?.doctorName || record?.doctor?.firstName ? `${record.doctor.firstName} ${record.doctor.lastName || ''}`.trim() : '',
+            departmentName: record?.departmentName || record?.department?.name || '',
+            notes: record?.notes || '',
+            treatment: record?.treatment || '',
+            followUp: record?.followUp || '',
+            attachments: Array.isArray(record?.attachments) ? record.attachments : [],
+          }))
+        : [];
+      setRecords(sanitizedRecords);
+    } catch (error: any) {
+      console.error('Failed to load medical records:', error?.message || error);
       Alert.alert('Error', 'Failed to load medical records');
     } finally {
       setIsLoading(false);

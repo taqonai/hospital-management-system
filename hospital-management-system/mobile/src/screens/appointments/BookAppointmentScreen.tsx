@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, spacing, borderRadius, typography, shadows, keyboardConfig } from '../../theme';
@@ -63,6 +63,29 @@ const BookAppointmentScreen: React.FC = () => {
 
   // Check for AI-guided return params
   const routeParams = route.params;
+
+  // Reset form when screen loses focus (user navigates away)
+  // This ensures fresh state when returning to book another appointment
+  useFocusEffect(
+    useCallback(() => {
+      // Only reset if NOT coming from symptom checker (which has special params)
+      if (!routeParams?.fromSymptomChecker) {
+        // Reset to initial state when screen is focused without special params
+        setBookingData({
+          bookingMode: null,
+          department: null,
+          doctor: null,
+          date: '',
+          timeSlot: null,
+          reason: '',
+          type: 'CONSULTATION',
+        });
+        setCurrentStep('mode');
+        setDoctors([]);
+        setTimeSlots([]);
+      }
+    }, [routeParams?.fromSymptomChecker])
+  );
 
   // Load departments on mount
   useEffect(() => {
@@ -240,6 +263,22 @@ const BookAppointmentScreen: React.FC = () => {
     return slots;
   };
 
+  // Reset form to initial state
+  const resetBookingForm = () => {
+    setBookingData({
+      bookingMode: null,
+      department: null,
+      doctor: null,
+      date: '',
+      timeSlot: null,
+      reason: '',
+      type: 'CONSULTATION',
+    });
+    setCurrentStep('mode');
+    setDoctors([]);
+    setTimeSlots([]);
+  };
+
   const handleBookAppointment = async () => {
     if (!bookingData.doctor || !bookingData.timeSlot) return;
 
@@ -252,6 +291,9 @@ const BookAppointmentScreen: React.FC = () => {
         type: bookingData.type,
         reason: bookingData.reason,
       });
+
+      // Reset form state before navigating back
+      resetBookingForm();
 
       Alert.alert(
         'Success',

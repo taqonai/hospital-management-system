@@ -149,12 +149,12 @@ const HealthStackNavigator = () => (
     <HealthStack.Screen
       name="SymptomChecker"
       component={SymptomCheckerScreen}
-      options={{ title: 'Symptom Checker' }}
+      options={{ headerShown: false }}
     />
     <HealthStack.Screen
       name="HealthAssistant"
       component={HealthAssistantScreen}
-      options={{ title: 'AI Health Assistant' }}
+      options={{ headerShown: false }}
     />
     <HealthStack.Screen
       name="MedicalRecords"
