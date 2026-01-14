@@ -484,9 +484,19 @@ export class AIService {
     currentMedications?: string[];
     allergies?: string[];
     vitalSigns?: Record<string, any>;
+    hospitalId?: string;
   }) {
     try {
       logger.info('Direct AI diagnosis call');
+
+      // Fetch hospital AI config if hospitalId provided
+      let hospitalConfig: HospitalAIConfig | null = null;
+      if (data.hospitalId) {
+        hospitalConfig = await this.getHospitalAIConfig(data.hospitalId);
+        if (hospitalConfig) {
+          logger.info(`Direct diagnosis using AI provider: ${hospitalConfig.provider}`);
+        }
+      }
 
       const response = await this.aiClient.post<AIDiagnosisResponse>('/api/diagnose', {
         symptoms: data.symptoms,
@@ -496,6 +506,7 @@ export class AIService {
         currentMedications: data.currentMedications || [],
         allergies: data.allergies || [],
         vitalSigns: data.vitalSigns,
+        hospitalConfig,
       });
 
       return {
@@ -521,15 +532,26 @@ export class AIService {
     predictionType: string;
     timeframe?: string;
     patientData: Record<string, any>;
+    hospitalId?: string;
   }) {
     try {
       logger.info(`Direct AI risk prediction: ${data.predictionType}`);
+
+      // Fetch hospital AI config if hospitalId provided
+      let hospitalConfig: HospitalAIConfig | null = null;
+      if (data.hospitalId) {
+        hospitalConfig = await this.getHospitalAIConfig(data.hospitalId);
+        if (hospitalConfig) {
+          logger.info(`Direct risk prediction using AI provider: ${hospitalConfig.provider}`);
+        }
+      }
 
       const response = await this.aiClient.post<AIRiskPredictionResponse>('/api/predict-risk', {
         patientId: 'test-patient',
         predictionType: data.predictionType,
         timeframe: data.timeframe || '30 days',
         patientData: data.patientData,
+        hospitalConfig,
       });
 
       return response.data;
@@ -555,9 +577,19 @@ export class AIService {
     patientAge: number;
     patientGender: string;
     clinicalHistory?: string;
+    hospitalId?: string;
   }) {
     try {
       logger.info(`Direct AI image analysis: ${data.modalityType} - ${data.bodyPart}`);
+
+      // Fetch hospital AI config if hospitalId provided
+      let hospitalConfig: HospitalAIConfig | null = null;
+      if (data.hospitalId) {
+        hospitalConfig = await this.getHospitalAIConfig(data.hospitalId);
+        if (hospitalConfig) {
+          logger.info(`Direct image analysis using AI provider: ${hospitalConfig.provider}`);
+        }
+      }
 
       const response = await this.aiClient.post<AIImageAnalysisResponse>('/api/analyze-image', {
         imageUrl: data.imageUrl,
@@ -566,6 +598,7 @@ export class AIService {
         patientAge: data.patientAge,
         patientGender: data.patientGender,
         clinicalHistory: data.clinicalHistory,
+        hospitalConfig,
       });
 
       return {
@@ -843,10 +876,24 @@ What would you like to do?`,
   async respondToSymptomChecker(data: {
     sessionId: string;
     responses: Array<{ questionId: string; answer: any }>;
+    hospitalId?: string;
   }) {
     try {
       logger.info(`Symptom checker response for session ${data.sessionId}`);
-      const response = await this.aiClient.post('/api/symptom-checker/respond', data);
+
+      // Fetch hospital AI config if hospitalId provided
+      let hospitalConfig: HospitalAIConfig | null = null;
+      if (data.hospitalId) {
+        hospitalConfig = await this.getHospitalAIConfig(data.hospitalId);
+        if (hospitalConfig) {
+          logger.info(`Symptom checker respond using AI provider: ${hospitalConfig.provider}`);
+        }
+      }
+
+      const response = await this.aiClient.post('/api/symptom-checker/respond', {
+        ...data,
+        hospitalConfig,
+      });
       return response.data;
     } catch (error) {
       logger.error('Symptom checker respond error:', error);

@@ -3,7 +3,7 @@ import multer from 'multer';
 import { aiService } from '../services/aiService';
 import { aiScribeService } from '../services/aiScribeService';
 import { storageService } from '../services/storageService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, optionalAuth } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -144,6 +144,9 @@ router.post(
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const hasValidPatientId = patientId && uuidRegex.test(patientId);
 
+    // Get hospitalId from authenticated user for AI provider selection
+    const hospitalId = req.user?.hospitalId;
+
     // If valid patientId is provided, use database-backed diagnosis
     if (hasValidPatientId) {
       const result = await aiService.analyzeSymptomsForDiagnosis({
@@ -152,6 +155,7 @@ router.post(
         medicalHistory,
         currentMedications,
         vitalSigns,
+        hospitalId,
       });
       return sendSuccess(res, result, 'Diagnosis analysis complete');
     }
@@ -166,6 +170,7 @@ router.post(
         currentMedications: currentMedications || [],
         allergies: allergies || [],
         vitalSigns: vitalSigns || undefined,
+        hospitalId,
       });
       return sendSuccess(res, result, 'Diagnosis analysis complete');
     }
@@ -195,12 +200,16 @@ router.post(
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const hasValidPatientId = patientId && uuidRegex.test(patientId);
 
+    // Get hospitalId from authenticated user for AI provider selection
+    const hospitalId = req.user?.hospitalId;
+
     // If valid patientId is provided, use database-backed prediction
     if (hasValidPatientId) {
       const result = await aiService.predictRisk({
         patientId,
         predictionType: predictionType.toUpperCase(),
         timeframe,
+        hospitalId,
       });
       return sendSuccess(res, result, 'Risk prediction complete');
     }
@@ -211,6 +220,7 @@ router.post(
         predictionType: predictionType.toLowerCase(),
         timeframe: timeframe || '30 days',
         patientData,
+        hospitalId,
       });
       return sendSuccess(res, result, 'Risk prediction complete');
     }
@@ -272,6 +282,9 @@ router.post(
       return res.status(400).json({ error: 'Please provide an image file or URL' });
     }
 
+    // Get hospitalId from authenticated user for AI provider selection
+    const hospitalId = req.user?.hospitalId;
+
     // If imagingOrderId is provided, use the database-backed method
     if (imagingOrderId) {
       const result = await aiService.analyzeImage({
@@ -279,6 +292,7 @@ router.post(
         imageUrl: finalImageUrl,
         modalityType,
         bodyPart,
+        hospitalId,
       });
       return sendSuccess(res, { ...result, uploadedToS3, s3Key }, 'Image analysis complete');
     }
@@ -291,6 +305,7 @@ router.post(
       patientAge: parseInt(patientAge) || 45,
       patientGender: patientGender || 'male',
       clinicalHistory: clinicalHistory || undefined,
+      hospitalId,
     });
     sendSuccess(res, { ...result, uploadedToS3, s3Key, imageUrl: finalImageUrl }, 'Image analysis complete');
   })
@@ -368,10 +383,17 @@ router.post(
 // ============= Symptom Checker Endpoints =============
 
 // Start a new symptom checker session (public - for patients)
+// Uses optionalAuth to get hospitalId from authenticated user if available
 router.post(
   '/symptom-checker/start',
-  asyncHandler(async (req: Request, res: Response) => {
-    const result = await aiService.startSymptomCheckerSession(req.body);
+  optionalAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    // Get hospitalId from authenticated user or request body
+    const hospitalId = req.user?.hospitalId || req.body.hospitalId;
+    const result = await aiService.startSymptomCheckerSession({
+      ...req.body,
+      hospitalId,
+    });
     sendSuccess(res, result, 'Symptom checker session started');
   })
 );
@@ -379,8 +401,13 @@ router.post(
 // Submit responses to symptom checker
 router.post(
   '/symptom-checker/respond',
-  asyncHandler(async (req: Request, res: Response) => {
-    const result = await aiService.respondToSymptomChecker(req.body);
+  optionalAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const hospitalId = req.user?.hospitalId || req.body.hospitalId;
+    const result = await aiService.respondToSymptomChecker({
+      ...req.body,
+      hospitalId,
+    });
     sendSuccess(res, result, 'Response recorded');
   })
 );
@@ -388,8 +415,13 @@ router.post(
 // Complete symptom checker assessment
 router.post(
   '/symptom-checker/complete',
-  asyncHandler(async (req: Request, res: Response) => {
-    const result = await aiService.completeSymptomChecker(req.body);
+  optionalAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const hospitalId = req.user?.hospitalId || req.body.hospitalId;
+    const result = await aiService.completeSymptomChecker({
+      ...req.body,
+      hospitalId,
+    });
     sendSuccess(res, result, 'Assessment complete');
   })
 );
@@ -406,8 +438,13 @@ router.get(
 // Quick symptom check
 router.post(
   '/symptom-checker/quick-check',
-  asyncHandler(async (req: Request, res: Response) => {
-    const result = await aiService.quickSymptomCheck(req.body);
+  optionalAuth,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const hospitalId = req.user?.hospitalId || req.body.hospitalId;
+    const result = await aiService.quickSymptomCheck({
+      ...req.body,
+      hospitalId,
+    });
     sendSuccess(res, result, 'Quick check complete');
   })
 );
