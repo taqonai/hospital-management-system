@@ -166,6 +166,7 @@ router.post(
         currentMedications: currentMedications || [],
         allergies: allergies || [],
         vitalSigns: vitalSigns || undefined,
+        hospitalId: req.user?.hospitalId,
       });
       return sendSuccess(res, result, 'Diagnosis analysis complete');
     }

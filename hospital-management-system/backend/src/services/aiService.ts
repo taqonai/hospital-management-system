@@ -473,8 +473,8 @@ export class AIService {
   // ============= Direct AI Test Methods (No Database Required) =============
 
   /**
-   * Direct diagnosis test - calls AI service without database lookup
-   * Useful for testing AI integration
+   * Direct diagnosis - calls AI service without patient database lookup
+   * Supports hospital-specific AI provider configuration (Ollama/OpenAI)
    */
   async directDiagnose(data: {
     symptoms: string[];
@@ -484,8 +484,18 @@ export class AIService {
     currentMedications?: string[];
     allergies?: string[];
     vitalSigns?: Record<string, any>;
+    hospitalId?: string;
   }) {
     try {
+      // Fetch hospital AI config if hospitalId is provided
+      let hospitalAIConfig = null;
+      if (data.hospitalId) {
+        hospitalAIConfig = await this.getHospitalAIConfig(data.hospitalId);
+        if (hospitalAIConfig) {
+          logger.info(`Direct diagnosis using AI provider: ${hospitalAIConfig.provider}`);
+        }
+      }
+
       logger.info('Direct AI diagnosis call');
 
       const response = await this.aiClient.post<AIDiagnosisResponse>('/api/diagnose', {
@@ -496,6 +506,7 @@ export class AIService {
         currentMedications: data.currentMedications || [],
         allergies: data.allergies || [],
         vitalSigns: data.vitalSigns,
+        hospitalConfig: hospitalAIConfig,
       });
 
       return {
