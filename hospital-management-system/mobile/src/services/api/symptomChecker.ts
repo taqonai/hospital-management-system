@@ -66,8 +66,8 @@ export const symptomCheckerApi = {
     }>>('/ai/symptom-checker/respond', data),
 
   // Complete assessment and get triage result
-  complete: (sessionId: string) =>
-    api.post<ApiResponse<SymptomCheckerResult>>('/ai/symptom-checker/complete', { sessionId }),
+  complete: (sessionId: string, hospitalId?: string) =>
+    api.post<ApiResponse<SymptomCheckerResult>>('/ai/symptom-checker/complete', { sessionId, hospitalId }),
 
   // Get session details
   getSession: (sessionId: string) =>

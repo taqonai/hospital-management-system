@@ -20,6 +20,7 @@ import { Audio } from 'expo-av';
 import { colors, spacing, borderRadius, typography, shadows, keyboardConfig } from '../../theme';
 import { symptomCheckerApi } from '../../services/api';
 import { SymptomCheckerResult, SymptomQuestion } from '../../types';
+import { useAppSelector } from '../../store';
 
 interface Message {
   id: string;
@@ -131,6 +132,7 @@ const calculateFallbackTriage = (responses: string[]): TriageResult => {
 
 const SymptomCheckerScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const { user } = useAppSelector((state) => state.auth);
   const scrollViewRef = useRef<ScrollView>(null);
   const recordingRef = useRef<Audio.Recording | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -319,8 +321,10 @@ const SymptomCheckerScreen: React.FC = () => {
   const startSession = async () => {
     setIsLoading(true);
     try {
-      console.log('[SymptomChecker] Starting session...');
-      const response = await symptomCheckerApi.startSession();
+      console.log('[SymptomChecker] Starting session with hospitalId:', user?.hospitalId);
+      const response = await symptomCheckerApi.startSession({
+        hospitalId: user?.hospitalId,
+      });
       console.log('[SymptomChecker] Raw API response:', JSON.stringify(response.data, null, 2));
 
       const data = response.data?.data || response.data;
@@ -537,8 +541,8 @@ const SymptomCheckerScreen: React.FC = () => {
       if (data) {
         if (data.isComplete) {
           // Get final result
-          console.log('[SymptomChecker] Assessment complete, fetching result...');
-          const completeResponse = await symptomCheckerApi.complete(sessionId!);
+          console.log('[SymptomChecker] Assessment complete, fetching result with hospitalId:', user?.hospitalId);
+          const completeResponse = await symptomCheckerApi.complete(sessionId!, user?.hospitalId);
           console.log('[SymptomChecker] Raw complete API response:', JSON.stringify(completeResponse.data, null, 2));
           const result = completeResponse.data?.data || completeResponse.data;
           console.log('[SymptomChecker] Extracted complete result:', JSON.stringify(result, null, 2));
