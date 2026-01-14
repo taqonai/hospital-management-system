@@ -7,6 +7,7 @@ Models: gpt-4o (complex tasks), gpt-4o-mini (simple tasks), whisper-1 (speech)
 """
 
 import os
+import logging
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -17,6 +18,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any, Union
 import uvicorn
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Import shared OpenAI client for health checks and LLM provider abstraction
 from shared.openai_client import openai_manager, Models
