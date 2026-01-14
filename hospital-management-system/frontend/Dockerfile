@@ -3,8 +3,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Accept build argument for API URL (allows bypassing Cloudflare proxy for AI endpoints)
-ARG VITE_API_URL=http://localhost:3001/api/v1
+# Accept build argument for API URL
+# Default to /api/v1 which nginx proxies to backend
+ARG VITE_API_URL=/api/v1
 ENV VITE_API_URL=$VITE_API_URL
 
 # Install dependencies
