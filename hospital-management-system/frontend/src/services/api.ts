@@ -16,7 +16,7 @@ export const api = axios.create({
 });
 
 // Separate axios instance for AI requests that may take longer than Cloudflare's 100s timeout
-export const aiApi = axios.create({
+const aiAxiosClient = axios.create({
   baseURL: AI_API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
@@ -147,8 +147,8 @@ api.interceptors.response.use(
   }
 );
 
-// Add auth interceptor to aiApi (for staff token)
-aiApi.interceptors.request.use(
+// Add auth interceptor to aiAxiosClient (for staff token)
+aiAxiosClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const state = store.getState();
     const token = state.auth.accessToken;
@@ -268,7 +268,7 @@ export const aiApi = {
     medicalHistory?: string[];
     currentMedications?: string[];
     allergies?: string[];
-  }) => aiApi.post('/ai/diagnose', data), // Uses aiApi to bypass Cloudflare timeout
+  }) => aiAxiosClient.post('/ai/diagnose', data), // Uses aiAxiosClient to bypass Cloudflare timeout
   predictRisk: (data: {
     patientId?: string;
     predictionType: string;
