@@ -416,8 +416,8 @@ class OpenAIClientManager:
             if cache_key not in self._ollama_clients:
                 self._ollama_clients[cache_key] = OllamaClient(
                     base_url=config.ollama_endpoint,
-                    model_complex=config.ollama_model_complex or "llama3:70b",
-                    model_simple=config.ollama_model_simple or "llama3:8b",
+                    model_complex=config.ollama_model_complex or "gpt-oss:120b",
+                    model_simple=config.ollama_model_simple or "gpt-oss:20b",
                 )
                 logger.info(f"Created new Ollama client for {config.ollama_endpoint}")
 

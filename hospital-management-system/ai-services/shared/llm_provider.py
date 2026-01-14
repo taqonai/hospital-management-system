@@ -48,8 +48,8 @@ class HospitalAIConfig:
         return cls(
             provider=ai_settings.get("provider", "openai"),
             ollama_endpoint=ai_settings.get("ollamaEndpoint"),
-            ollama_model_complex=ollama_models.get("complex", "llama3:70b"),
-            ollama_model_simple=ollama_models.get("simple", "llama3:8b"),
+            ollama_model_complex=ollama_models.get("complex", "gpt-oss:120b"),
+            ollama_model_simple=ollama_models.get("simple", "gpt-oss:20b"),
         )
 
     def is_ollama(self) -> bool:
@@ -104,8 +104,8 @@ class OllamaClient(BaseLLMClient):
     def __init__(
         self,
         base_url: str,
-        model_complex: str = "llama3:70b",
-        model_simple: str = "llama3:8b"
+        model_complex: str = "gpt-oss:120b",
+        model_simple: str = "gpt-oss:20b"
     ):
         self.base_url = base_url.rstrip('/')
         self.model_complex = model_complex
