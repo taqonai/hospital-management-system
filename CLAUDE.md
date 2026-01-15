@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Hospital Management System (HMS) - A multi-tenant Cloud SaaS platform with AI-integrated modules for clinical decision support, predictive analytics, and medical imaging analysis.
 
+**Repository Structure:** All application code is in the `hospital-management-system/` subdirectory. Commands below assume you're in that directory.
+
 ### Prerequisites
 - Node.js 20+
 - Python 3.11+
@@ -30,6 +32,7 @@ npm install
 npx prisma generate          # Required after schema changes
 npx prisma migrate dev       # Run migrations
 npm run db:seed              # Seed test data
+npm run db:seed:wellness     # Seed wellness/fitness test data
 npm run dev                  # Start dev server (port 3001)
 npm run build                # TypeScript compile
 npm run build:strict         # TypeScript compile with strict mode
@@ -75,6 +78,11 @@ npm run build:prod           # Production build
 # OTA Updates
 npm run update:preview       # Push update to preview channel
 npm run update:prod          # Push update to production channel
+
+# App Store Submission
+npm run submit:ios           # Submit latest iOS build to App Store
+npm run submit:android       # Submit latest Android build to Play Store
+npm run submit:all           # Submit to both stores
 ```
 
 ### AI Services (Python/FastAPI)
