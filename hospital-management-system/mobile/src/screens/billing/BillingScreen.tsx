@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Alert,
+  SafeAreaView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -206,14 +206,14 @@ const BillingScreen: React.FC = () => {
 
   if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
+      <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary[600]} />
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <FlatList
         data={filteredBills}
         keyExtractor={(item) => item.id}
@@ -245,7 +245,10 @@ const BillingScreen: React.FC = () => {
             </View>
           </>
         }
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          filteredBills.length === 0 && styles.emptyListContent,
+        ]}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={renderEmptyState}
         refreshControl={
@@ -256,7 +259,7 @@ const BillingScreen: React.FC = () => {
           />
         }
       />
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -273,6 +276,9 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: spacing.lg,
+  },
+  emptyListContent: {
+    flexGrow: 1,
   },
   summaryCard: {
     backgroundColor: colors.primary[600],
