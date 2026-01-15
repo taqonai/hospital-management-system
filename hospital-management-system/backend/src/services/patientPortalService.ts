@@ -666,13 +666,50 @@ export class PatientPortalService {
    * Get billing summary
    */
   async getBillingSummary(hospitalId: string, patientId: string) {
-    // Simplified billing summary - returns placeholder data
+    // Get all invoices for the patient
+    const invoices = await prisma.invoice.findMany({
+      where: { hospitalId, patientId },
+      include: {
+        payments: {
+          orderBy: { paymentDate: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    // Calculate summary
+    let totalDue = 0;
+    let totalPaid = 0;
+    let pendingBills = 0;
+    let lastPaymentDate: Date | null = null;
+    let lastPaymentAmount = 0;
+
+    for (const invoice of invoices) {
+      const balance = Number(invoice.balanceAmount);
+      const paid = Number(invoice.paidAmount);
+
+      if (invoice.status === 'PENDING' || invoice.status === 'PARTIALLY_PAID') {
+        totalDue += balance;
+        pendingBills++;
+      }
+      totalPaid += paid;
+
+      // Track last payment
+      if (invoice.payments.length > 0) {
+        const payment = invoice.payments[0];
+        if (!lastPaymentDate || payment.paymentDate > lastPaymentDate) {
+          lastPaymentDate = payment.paymentDate;
+          lastPaymentAmount = Number(payment.amount);
+        }
+      }
+    }
+
     return {
-      outstandingBalance: 0,
-      totalPaid: 0,
-      pendingBills: 0,
-      lastPaymentDate: null,
-      lastPaymentAmount: 0,
+      totalDue,
+      totalPaid,
+      pendingBills,
+      lastPaymentDate: lastPaymentDate?.toISOString() || null,
+      lastPaymentAmount,
     };
   }
 
@@ -684,10 +721,81 @@ export class PatientPortalService {
     page?: number;
     limit?: number;
   }) {
-    // Simplified - returns empty array pending billing model implementation
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 20;
+    const skip = (page - 1) * limit;
+
+    // Build where clause based on filter type
+    const where: any = { hospitalId, patientId };
+
+    if (filters?.type === 'pending') {
+      where.status = { in: ['PENDING', 'PARTIALLY_PAID'] };
+    } else if (filters?.type === 'paid') {
+      where.status = 'PAID';
+    }
+
+    // Get total count
+    const total = await prisma.invoice.count({ where });
+
+    // Get invoices with items
+    const invoices = await prisma.invoice.findMany({
+      where,
+      include: {
+        items: true,
+        payments: {
+          orderBy: { paymentDate: 'desc' },
+        },
+      },
+      orderBy: { invoiceDate: 'desc' },
+      skip,
+      take: limit,
+    });
+
+    // Format response
+    const data = invoices.map(invoice => ({
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      billNumber: invoice.invoiceNumber,
+      type: invoice.items[0]?.category || 'GENERAL',
+      description: invoice.items.length > 0
+        ? invoice.items.map(i => i.description).join(', ').substring(0, 100)
+        : `Invoice #${invoice.invoiceNumber}`,
+      amount: Number(invoice.totalAmount),
+      totalAmount: Number(invoice.totalAmount),
+      paidAmount: Number(invoice.paidAmount),
+      balanceDue: Number(invoice.balanceAmount),
+      balanceAmount: Number(invoice.balanceAmount),
+      status: invoice.status,
+      dueDate: invoice.dueDate?.toISOString() || invoice.invoiceDate.toISOString(),
+      billDate: invoice.invoiceDate.toISOString(),
+      createdAt: invoice.createdAt.toISOString(),
+      items: invoice.items.map(item => ({
+        id: item.id,
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: Number(item.unitPrice),
+        total: Number(item.totalPrice),
+      })),
+      subtotal: Number(invoice.subtotal),
+      discount: Number(invoice.discount),
+      tax: Number(invoice.tax),
+      payments: invoice.payments.map(p => ({
+        id: p.id,
+        amount: Number(p.amount),
+        method: p.paymentMethod,
+        date: p.paymentDate.toISOString(),
+        reference: p.referenceNumber,
+      })),
+    }));
+
     return {
-      data: [],
-      pagination: { page: 1, limit: 10, total: 0, totalPages: 0 },
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
     };
   }
 

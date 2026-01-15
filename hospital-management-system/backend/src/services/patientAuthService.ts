@@ -50,13 +50,23 @@ interface PatientTokenPair {
 interface PatientAuthResponse {
   patient: {
     id: string;
+    patientId: string; // Alias for id for mobile compatibility
     mrn: string;
     firstName: string;
     lastName: string;
     email: string | null;
+    mobile: string; // Alias for phone for mobile compatibility
     phone: string;
     hospitalId: string;
     photo: string | null;
+    dateOfBirth: string | null;
+    gender: string | null;
+    address: string | null;
+    city: string | null;
+    state: string | null;
+    zipCode: string | null;
+    emergencyContact: string | null;
+    emergencyPhone: string | null;
   };
   tokens: PatientTokenPair;
   claimed?: boolean; // True if an existing patient record was claimed
@@ -114,6 +124,30 @@ const ACCESS_TOKEN_EXPIRY = '1h';
 const REFRESH_TOKEN_EXPIRY = '30d';
 const ACCESS_TOKEN_EXPIRY_SECONDS = 3600; // 1 hour
 const SALT_ROUNDS = 12;
+
+// Helper function to format patient data for API response
+function formatPatientResponse(patient: any): PatientAuthResponse['patient'] {
+  return {
+    id: patient.id,
+    patientId: patient.id, // Alias for mobile compatibility
+    mrn: patient.mrn,
+    firstName: patient.firstName,
+    lastName: patient.lastName,
+    email: patient.email || null,
+    mobile: patient.phone, // Alias for mobile compatibility
+    phone: patient.phone,
+    hospitalId: patient.hospitalId,
+    photo: patient.photo || null,
+    dateOfBirth: patient.dateOfBirth ? patient.dateOfBirth.toISOString() : null,
+    gender: patient.gender || null,
+    address: patient.address || null,
+    city: patient.city || null,
+    state: patient.state || null,
+    zipCode: patient.zipCode || null,
+    emergencyContact: patient.emergencyContact || null,
+    emergencyPhone: patient.emergencyPhone || null,
+  };
+}
 
 // ==================== Service Class ====================
 
@@ -327,16 +361,7 @@ export class PatientAuthService {
       const tokens = this.generateTokens(tokenPayload);
 
       return {
-        patient: {
-          id: existingPatient.id,
-          mrn: existingPatient.mrn,
-          firstName: existingPatient.firstName,
-          lastName: existingPatient.lastName,
-          email: existingPatient.email,
-          phone: existingPatient.phone,
-          hospitalId: existingPatient.hospitalId,
-          photo: existingPatient.photo || null,
-        },
+        patient: formatPatientResponse(existingPatient),
         tokens,
         claimed: true,
       };
@@ -416,16 +441,7 @@ export class PatientAuthService {
     const tokens = this.generateTokens(tokenPayload);
 
     return {
-      patient: {
-        id: patient.id,
-        mrn: patient.mrn,
-        firstName: patient.firstName,
-        lastName: patient.lastName,
-        email: patient.email,
-        phone: patient.phone,
-        hospitalId: patient.hospitalId,
-        photo: patient.photo,
-      },
+      patient: formatPatientResponse(patient),
       tokens,
     };
   }
@@ -525,16 +541,7 @@ export class PatientAuthService {
     const tokens = this.generateTokens(tokenPayload);
 
     return {
-      patient: {
-        id: patient.id,
-        mrn: patient.mrn,
-        firstName: patient.firstName,
-        lastName: patient.lastName,
-        email: normalizedEmail,
-        phone: patient.phone,
-        hospitalId: patient.hospitalId,
-        photo: patient.photo,
-      },
+      patient: formatPatientResponse({ ...patient, email: normalizedEmail }),
       tokens,
       claimed: true,
     };
@@ -613,16 +620,7 @@ export class PatientAuthService {
     const tokens = this.generateTokens(tokenPayload);
 
     return {
-      patient: {
-        id: patient.id,
-        mrn: patient.mrn,
-        firstName: patient.firstName,
-        lastName: patient.lastName,
-        email: patient.email,
-        phone: patient.phone,
-        hospitalId: patient.hospitalId,
-        photo: patient.photo,
-      },
+      patient: formatPatientResponse(patient),
       tokens,
     };
   }
@@ -762,16 +760,7 @@ export class PatientAuthService {
     const tokens = this.generateTokens(tokenPayload);
 
     return {
-      patient: {
-        id: patient.id,
-        mrn: patient.mrn,
-        firstName: patient.firstName,
-        lastName: patient.lastName,
-        email: patient.email,
-        phone: patient.phone,
-        hospitalId: patient.hospitalId,
-        photo: patient.photo,
-      },
+      patient: formatPatientResponse(patient),
       tokens,
     };
   }
@@ -911,16 +900,7 @@ export class PatientAuthService {
     const tokens = this.generateTokens(tokenPayload);
 
     return {
-      patient: {
-        id: patient.id,
-        mrn: patient.mrn,
-        firstName: patient.firstName,
-        lastName: patient.lastName,
-        email: patient.email,
-        phone: patient.phone,
-        hospitalId: patient.hospitalId,
-        photo: patient.photo,
-      },
+      patient: formatPatientResponse(patient),
       tokens,
     };
   }
