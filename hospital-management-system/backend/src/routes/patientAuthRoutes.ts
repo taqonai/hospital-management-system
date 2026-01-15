@@ -367,21 +367,15 @@ router.post(
       return res.status(400).json({ success: false, message: 'No photo file provided' });
     }
 
-    // Check if storage is configured
+    // S3 storage is required for profile photos
     if (!storageService.isStorageConfigured()) {
-      // Store as base64 data URL for environments without S3/MinIO
-      const base64 = req.file.buffer.toString('base64');
-      const dataUrl = `data:${req.file.mimetype};base64,${base64}`;
-
-      // Update patient profile with base64 photo
-      const profile = await patientAuthService.updatePatientProfile(req.patient!.patientId, {
-        photo: dataUrl,
+      return res.status(503).json({
+        success: false,
+        message: 'Storage service is not configured. Please contact support.'
       });
-
-      return sendSuccess(res, { photoUrl: dataUrl }, 'Profile photo updated successfully');
     }
 
-    // Upload to S3/MinIO
+    // Upload to S3
     const result = await storageService.uploadFile(req.file.buffer, {
       filename: req.file.originalname,
       contentType: req.file.mimetype,
@@ -391,7 +385,7 @@ router.post(
       },
     });
 
-    // Update patient profile with photo URL
+    // Update patient profile with S3 photo URL
     await patientAuthService.updatePatientProfile(req.patient!.patientId, {
       photo: result.url,
     });
