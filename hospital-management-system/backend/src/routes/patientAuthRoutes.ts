@@ -375,14 +375,11 @@ router.post(
       });
     }
 
-    // Upload to S3
-    const result = await storageService.uploadFile(req.file.buffer, {
+    // Upload to S3 with public access for profile photos
+    const result = await storageService.uploadProfilePhoto(req.file.buffer, {
       filename: req.file.originalname,
       contentType: req.file.mimetype,
-      folder: 'patient-photos',
-      metadata: {
-        'patient-id': req.patient!.patientId,
-      },
+      patientId: req.patient!.patientId,
     });
 
     // Update patient profile with S3 photo URL

@@ -72,6 +72,7 @@ export const storageService = {
       contentType?: string;
       folder?: string;
       metadata?: Record<string, string>;
+      isPublic?: boolean;
     } = {}
   ): Promise<UploadResult> {
     const {
@@ -79,6 +80,7 @@ export const storageService = {
       contentType = 'application/octet-stream',
       folder = 'medical-images',
       metadata = {},
+      isPublic = false,
     } = options;
 
     // Generate unique key
@@ -88,16 +90,24 @@ export const storageService = {
     try {
       const bucketName = getBucketName();
 
+      // Build upload params
+      const uploadParams: any = {
+        Bucket: bucketName,
+        Key: key,
+        Body: file,
+        ContentType: contentType,
+        Metadata: metadata,
+      };
+
+      // Add public-read ACL if file should be publicly accessible
+      if (isPublic) {
+        uploadParams.ACL = 'public-read';
+      }
+
       // Use Upload for larger files (multipart)
       const upload = new Upload({
         client: getS3Client(),
-        params: {
-          Bucket: bucketName,
-          Key: key,
-          Body: file,
-          ContentType: contentType,
-          Metadata: metadata,
-        },
+        params: uploadParams,
       });
 
       await upload.done();
@@ -116,6 +126,29 @@ export const storageService = {
       console.error('S3 upload error:', error);
       throw new Error(`Failed to upload file: ${error.message}`);
     }
+  },
+
+  /**
+   * Upload profile photo (publicly accessible)
+   */
+  async uploadProfilePhoto(
+    file: Buffer,
+    options: {
+      filename?: string;
+      contentType?: string;
+      patientId?: string;
+    } = {}
+  ): Promise<UploadResult> {
+    const metadata: Record<string, string> = {};
+    if (options.patientId) metadata['patient-id'] = options.patientId;
+
+    return this.uploadFile(file, {
+      filename: options.filename,
+      contentType: options.contentType,
+      folder: 'patient-photos',
+      metadata,
+      isPublic: true, // Profile photos need to be publicly accessible
+    });
   },
 
   /**
