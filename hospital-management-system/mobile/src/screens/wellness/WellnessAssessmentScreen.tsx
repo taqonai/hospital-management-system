@@ -142,19 +142,19 @@ const WellnessAssessmentScreen: React.FC = () => {
         {/* Overall Score */}
         <View style={styles.overallCard}>
           <Text style={styles.assessmentDate}>
-            Last assessed: {formatDate(assessment.completedAt)}
+            Last assessed: {assessment.completedAt ? formatDate(assessment.completedAt) : 'Recently'}
           </Text>
           <View style={styles.scoreSection}>
-            <Text style={[styles.overallScore, { color: getScoreColor(assessment.overallScore) }]}>
-              {assessment.overallScore}
+            <Text style={[styles.overallScore, { color: getScoreColor(assessment.overallScore ?? 0) }]}>
+              {assessment.overallScore ?? 0}
             </Text>
             <Text style={styles.scoreMax}>/100</Text>
           </View>
-          <Text style={[styles.scoreLabel, { color: getScoreColor(assessment.overallScore) }]}>
-            {getScoreLabel(assessment.overallScore)}
+          <Text style={[styles.scoreLabel, { color: getScoreColor(assessment.overallScore ?? 0) }]}>
+            {getScoreLabel(assessment.overallScore ?? 0)}
           </Text>
 
-          {assessment.compareToPrevious && (
+          {assessment.compareToPrevious && typeof assessment.compareToPrevious.overallChange === 'number' && (
             <View style={styles.changeContainer}>
               <Ionicons
                 name={assessment.compareToPrevious.overallChange >= 0 ? 'trending-up' : 'trending-down'}
@@ -179,7 +179,7 @@ const WellnessAssessmentScreen: React.FC = () => {
           <Text style={styles.sectionTitle}>Category Scores</Text>
           <View style={styles.categoryList}>
             {WELLNESS_CATEGORIES.map((category) => {
-              const score = assessment.categoryScores[category.key] || 0;
+              const score = assessment.categoryScores?.[category.key] ?? 0;
               const change = assessment.compareToPrevious?.categoryChanges?.[category.key];
               return (
                 <View key={category.key} style={styles.categoryRow}>
@@ -221,7 +221,7 @@ const WellnessAssessmentScreen: React.FC = () => {
         </View>
 
         {/* Insights */}
-        {assessment.insights.length > 0 && (
+        {Array.isArray(assessment.insights) && assessment.insights.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Key Insights</Text>
             <View style={styles.insightsList}>
@@ -236,7 +236,7 @@ const WellnessAssessmentScreen: React.FC = () => {
         )}
 
         {/* Recommendations */}
-        {assessment.recommendations.length > 0 && (
+        {Array.isArray(assessment.recommendations) && assessment.recommendations.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Recommendations</Text>
             <View style={styles.recommendationsList}>
@@ -245,24 +245,24 @@ const WellnessAssessmentScreen: React.FC = () => {
                   <View style={[
                     styles.priorityBadge,
                     {
-                      backgroundColor: rec.priority === 'high' ? colors.error[100] :
-                        rec.priority === 'medium' ? colors.warning[100] : colors.success[100],
+                      backgroundColor: rec?.priority === 'high' ? colors.error[100] :
+                        rec?.priority === 'medium' ? colors.warning[100] : colors.success[100],
                     },
                   ]}>
                     <Text style={[
                       styles.priorityText,
                       {
-                        color: rec.priority === 'high' ? colors.error[700] :
-                          rec.priority === 'medium' ? colors.warning[700] : colors.success[700],
+                        color: rec?.priority === 'high' ? colors.error[700] :
+                          rec?.priority === 'medium' ? colors.warning[700] : colors.success[700],
                       },
                     ]}>
-                      {rec.priority} priority
+                      {rec?.priority ?? 'low'} priority
                     </Text>
                   </View>
-                  <Text style={styles.recommendationTitle}>{rec.title}</Text>
-                  <Text style={styles.recommendationDesc}>{rec.description}</Text>
+                  <Text style={styles.recommendationTitle}>{rec?.title ?? 'Recommendation'}</Text>
+                  <Text style={styles.recommendationDesc}>{rec?.description ?? ''}</Text>
                   <Text style={styles.recommendationCategory}>
-                    Category: {WELLNESS_CATEGORIES.find(c => c.key === rec.category)?.label || rec.category}
+                    Category: {WELLNESS_CATEGORIES.find(c => c.key === rec?.category)?.label || rec?.category || 'General'}
                   </Text>
                 </View>
               ))}

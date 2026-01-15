@@ -15,10 +15,19 @@ export const api = axios.create({
   },
 });
 
-// Request interceptor - add auth token
+// Helper to add timeout to any promise
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
+// Request interceptor - add auth token (with timeout to prevent hanging)
 api.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
-    const token = await secureStorage.getAccessToken();
+    // 3 second timeout for getting token - if it hangs, proceed without token
+    const token = await withTimeout(secureStorage.getAccessToken(), 3000);
 
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -42,24 +51,25 @@ api.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        const refreshToken = await secureStorage.getRefreshToken();
+        // 3 second timeout for getting refresh token
+        const refreshToken = await withTimeout(secureStorage.getRefreshToken(), 3000);
 
         if (!refreshToken) {
           // No refresh token, clear session
-          await secureStorage.clearAll();
+          await withTimeout(secureStorage.clearAll(), 3000);
           // Navigation to login will be handled by the auth state listener
           return Promise.reject(error);
         }
 
-        // Attempt to refresh token
+        // Attempt to refresh token (with its own timeout via axios)
         const response = await axios.post(`${API_BASE_URL}/patient-auth/refresh-token`, {
           refreshToken,
-        });
+        }, { timeout: 10000 });
 
         const { accessToken, refreshToken: newRefreshToken } = response.data.data;
 
-        // Save new tokens
-        await secureStorage.setTokens(accessToken, newRefreshToken || refreshToken);
+        // Save new tokens (with timeout)
+        await withTimeout(secureStorage.setTokens(accessToken, newRefreshToken || refreshToken), 3000);
 
         // Retry original request with new token
         if (originalRequest.headers) {
@@ -69,7 +79,7 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch (refreshError) {
         // Refresh failed, clear session
-        await secureStorage.clearAll();
+        await withTimeout(secureStorage.clearAll(), 3000);
         return Promise.reject(refreshError);
       }
     }

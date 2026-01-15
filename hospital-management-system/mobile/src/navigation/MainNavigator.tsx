@@ -4,6 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CommonActions } from '@react-navigation/native';
 import { colors } from '../theme';
 import {
   MainTabParamList,
@@ -427,6 +428,17 @@ const MainNavigator: React.FC = () => {
         name="HealthTab"
         component={HealthStackNavigator}
         options={{ tabBarLabel: 'Health' }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            // Reset Health stack to HealthHub when tab is pressed
+            navigation.dispatch(
+              CommonActions.reset({
+                index: 0,
+                routes: [{ name: 'HealthTab', state: { routes: [{ name: 'HealthHub' }] } }],
+              })
+            );
+          },
+        })}
       />
       <Tab.Screen
         name="SettingsTab"

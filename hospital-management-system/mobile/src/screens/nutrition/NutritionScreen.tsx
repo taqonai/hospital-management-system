@@ -13,7 +13,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme';
-import { wellnessApi, NutritionSummary, NutritionLog, NutritionPlan } from '../../services/api';
+import { wellnessApi, NutritionSummary, NutritionPlan } from '../../services/api';
 import { NutritionStackParamList } from '../../types';
 
 type NavigationProp = NativeStackNavigationProp<NutritionStackParamList>;
@@ -27,76 +27,97 @@ const MEAL_ICONS: Record<string, string> = {
 
 const MEAL_ORDER = ['breakfast', 'lunch', 'dinner', 'snack'];
 
-// Demo data for when API returns empty
-const DEMO_SUMMARY: NutritionSummary = {
+// Default empty summary - used as initial state
+const DEFAULT_SUMMARY: NutritionSummary = {
   date: new Date().toISOString().split('T')[0],
-  totalCalories: 1650,
+  totalCalories: 0,
   calorieGoal: 2000,
-  totalProtein: 85,
+  totalProtein: 0,
   proteinGoal: 120,
-  totalCarbs: 180,
+  totalCarbs: 0,
   carbsGoal: 250,
-  totalFat: 55,
+  totalFat: 0,
   fatGoal: 65,
-  totalFiber: 28,
-  macroPercentages: {
-    protein: 25,
-    carbs: 50,
-    fat: 25,
-  },
-  meals: {
-    breakfast: [
-      { id: 'demo-1', name: 'Oatmeal with Berries', calories: 320, protein: 12, carbs: 45, fat: 8, mealType: 'breakfast', timestamp: new Date().toISOString() },
-    ],
-    lunch: [
-      { id: 'demo-2', name: 'Grilled Chicken Salad', calories: 450, protein: 35, carbs: 25, fat: 18, mealType: 'lunch', timestamp: new Date().toISOString() },
-    ],
-    dinner: [
-      { id: 'demo-3', name: 'Salmon with Vegetables', calories: 580, protein: 38, carbs: 30, fat: 25, mealType: 'dinner', timestamp: new Date().toISOString() },
-    ],
-    snack: [
-      { id: 'demo-4', name: 'Greek Yogurt', calories: 150, protein: 15, carbs: 12, fat: 4, mealType: 'snack', timestamp: new Date().toISOString() },
-      { id: 'demo-5', name: 'Almonds', calories: 150, protein: 5, carbs: 8, fat: 12, mealType: 'snack', timestamp: new Date().toISOString() },
-    ],
-  },
-};
-
-const DEMO_PLAN: NutritionPlan = {
-  id: 'demo-plan',
-  name: 'Balanced Nutrition Plan',
-  type: 'maintenance',
-  calorieTarget: 2000,
-  description: 'A well-balanced plan for maintaining healthy weight',
-  macros: { protein: 30, carbs: 45, fat: 25 },
-  startDate: '2026-01-01',
-  isActive: true,
-  createdBy: 'ai',
+  totalFiber: 0,
+  macroPercentages: { protein: 0, carbs: 0, fat: 0 },
+  meals: { breakfast: [], lunch: [], dinner: [], snack: [] },
 };
 
 const NutritionScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [summary, setSummary] = useState<NutritionSummary | null>(null);
+  // Initialize with default summary - NEVER null
+  const [summary, setSummary] = useState<NutritionSummary>(DEFAULT_SUMMARY);
   const [activePlan, setActivePlan] = useState<NutritionPlan | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
+    setError(null);
     try {
       const [summaryRes, planRes] = await Promise.all([
-        wellnessApi.getNutritionSummary(),
-        wellnessApi.getActivePlan(),
+        wellnessApi.getNutritionSummary().catch(() => ({ data: { data: null } })),
+        wellnessApi.getActivePlan().catch(() => ({ data: { data: null } })),
       ]);
-      const fetchedSummary = summaryRes.data?.data || null;
-      const fetchedPlan = planRes.data?.data || null;
 
-      // Use demo data if API returns empty
-      setSummary(fetchedSummary || DEMO_SUMMARY);
-      setActivePlan(fetchedPlan || DEMO_PLAN);
-    } catch (error) {
-      console.error('Error loading nutrition data:', error);
-      // Use demo data on error
-      setSummary(DEMO_SUMMARY);
-      setActivePlan(DEMO_PLAN);
+      // Transform backend response to match mobile expected format
+      const rawSummary = summaryRes?.data?.data;
+
+      if (rawSummary && typeof rawSummary === 'object') {
+        // Backend returns byMealType with uppercase keys, we need meals with lowercase
+        const byMealType = rawSummary.byMealType || {};
+
+        // Safely transform meals
+        const safeMealTransform = (mealData: any, mealType: string) => {
+          if (!mealData?.meals || !Array.isArray(mealData.meals)) return [];
+          return mealData.meals.map((name: any, i: number) => ({
+            id: `${mealType}-${i}`,
+            name: String(name || 'Unnamed meal'),
+            calories: Math.round((Number(mealData?.calories) || 0) / Math.max(mealData?.meals?.length || 1, 1)),
+            protein: 0,
+            carbs: 0,
+            fat: 0,
+            mealType,
+            timestamp: new Date().toISOString(),
+          }));
+        };
+
+        const transformedSummary: NutritionSummary = {
+          date: rawSummary.date || new Date().toISOString().split('T')[0],
+          totalCalories: Number(rawSummary.totalCalories) || 0,
+          calorieGoal: Number(rawSummary.calorieGoal) || 2000,
+          totalProtein: Number(rawSummary.totalProtein) || 0,
+          proteinGoal: Number(rawSummary.proteinGoal) || 120,
+          totalCarbs: Number(rawSummary.totalCarbs) || 0,
+          carbsGoal: Number(rawSummary.carbsGoal) || 250,
+          totalFat: Number(rawSummary.totalFat) || 0,
+          fatGoal: Number(rawSummary.fatGoal) || 65,
+          totalFiber: Number(rawSummary.totalFiber) || 0,
+          macroPercentages: {
+            protein: Number(rawSummary.macroPercentages?.protein) || 0,
+            carbs: Number(rawSummary.macroPercentages?.carbs) || 0,
+            fat: Number(rawSummary.macroPercentages?.fat) || 0,
+          },
+          meals: {
+            breakfast: safeMealTransform(byMealType.BREAKFAST, 'breakfast'),
+            lunch: safeMealTransform(byMealType.LUNCH, 'lunch'),
+            dinner: safeMealTransform(byMealType.DINNER, 'dinner'),
+            snack: [
+              ...safeMealTransform(byMealType.MORNING_SNACK, 'snack'),
+              ...safeMealTransform(byMealType.AFTERNOON_SNACK, 'snack'),
+              ...safeMealTransform(byMealType.EVENING_SNACK, 'snack'),
+            ],
+          },
+        };
+        setSummary(transformedSummary);
+      }
+      // If no rawSummary, keep the default summary (already set as initial state)
+
+      setActivePlan(planRes?.data?.data || null);
+    } catch (err) {
+      console.error('Error loading nutrition data:', err);
+      setError('Unable to load nutrition data');
+      // Keep default summary on error
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -113,6 +134,7 @@ const NutritionScreen: React.FC = () => {
   };
 
   const getProgressColor = (current: number, goal: number) => {
+    if (goal === 0) return colors.gray[400];
     const ratio = current / goal;
     if (ratio < 0.7) return colors.success[500];
     if (ratio < 0.9) return colors.warning[500];
@@ -129,16 +151,30 @@ const NutritionScreen: React.FC = () => {
     }
   };
 
+  // Show loading spinner only on initial load
   if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary[600]} />
-      </View>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary[600]} />
+          <Text style={styles.loadingText}>Loading nutrition data...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
-  const calorieProgress = summary ? (summary.totalCalories / summary.calorieGoal) * 100 : 0;
-  const calorieRemaining = summary ? Math.max(0, summary.calorieGoal - summary.totalCalories) : 0;
+  // Calculate values safely
+  const totalCalories = summary.totalCalories || 0;
+  const calorieGoal = summary.calorieGoal || 2000;
+  const calorieProgress = calorieGoal > 0 ? (totalCalories / calorieGoal) * 100 : 0;
+  const calorieRemaining = Math.max(0, calorieGoal - totalCalories);
+
+  // Check if user has any data
+  const hasNoData = totalCalories === 0 &&
+    (!summary.meals?.breakfast?.length) &&
+    (!summary.meals?.lunch?.length) &&
+    (!summary.meals?.dinner?.length) &&
+    (!summary.meals?.snack?.length);
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -148,7 +184,15 @@ const NutritionScreen: React.FC = () => {
           <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
         }
       >
-        {/* Calorie Summary */}
+        {/* Error Message */}
+        {error && (
+          <View style={styles.errorBanner}>
+            <Ionicons name="warning-outline" size={20} color={colors.warning[700]} />
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
+
+        {/* Calorie Summary Card - Always show */}
         <View style={styles.calorieCard}>
           <View style={styles.calorieHeader}>
             <Text style={styles.calorieTitle}>Today's Calories</Text>
@@ -160,7 +204,7 @@ const NutritionScreen: React.FC = () => {
           <View style={styles.calorieCircle}>
             <View style={styles.calorieContent}>
               <Text style={styles.calorieValue}>
-                {summary?.totalCalories.toLocaleString() || 0}
+                {totalCalories.toLocaleString()}
               </Text>
               <Text style={styles.calorieUnit}>cal consumed</Text>
             </View>
@@ -169,8 +213,8 @@ const NutritionScreen: React.FC = () => {
                 style={[
                   styles.circleProgressFill,
                   {
-                    width: `${Math.min(calorieProgress, 100)}%`,
-                    backgroundColor: getProgressColor(summary?.totalCalories || 0, summary?.calorieGoal || 2000),
+                    width: `${Math.min(Math.max(calorieProgress, 0), 100)}%`,
+                    backgroundColor: getProgressColor(totalCalories, calorieGoal),
                   },
                 ]}
               />
@@ -180,79 +224,77 @@ const NutritionScreen: React.FC = () => {
           <View style={styles.calorieStats}>
             <View style={styles.calorieStat}>
               <Ionicons name="flame-outline" size={20} color={colors.success[500]} />
-              <Text style={styles.calorieStatValue}>{calorieRemaining}</Text>
+              <Text style={styles.calorieStatValue}>{calorieRemaining.toLocaleString()}</Text>
               <Text style={styles.calorieStatLabel}>Remaining</Text>
             </View>
             <View style={styles.calorieStat}>
               <Ionicons name="restaurant-outline" size={20} color={colors.primary[500]} />
-              <Text style={styles.calorieStatValue}>{summary?.calorieGoal || 2000}</Text>
+              <Text style={styles.calorieStatValue}>{calorieGoal.toLocaleString()}</Text>
               <Text style={styles.calorieStatLabel}>Goal</Text>
             </View>
           </View>
         </View>
 
-        {/* Macros */}
-        {summary && (
-          <View style={styles.macrosCard}>
-            <Text style={styles.sectionTitle}>Macronutrients</Text>
-            <View style={styles.macrosGrid}>
-              {[
-                { key: 'protein', value: summary.totalProtein, goal: summary.proteinGoal },
-                { key: 'carbs', value: summary.totalCarbs, goal: summary.carbsGoal },
-                { key: 'fat', value: summary.totalFat, goal: summary.fatGoal },
-              ].map((macro) => (
-                <View key={macro.key} style={styles.macroItem}>
-                  <View style={styles.macroHeader}>
-                    <View
-                      style={[
-                        styles.macroIndicator,
-                        { backgroundColor: getMacroColor(macro.key) },
-                      ]}
-                    />
-                    <Text style={styles.macroLabel}>{macro.key}</Text>
-                  </View>
-                  <Text style={styles.macroValue}>
-                    {macro.value}g
-                    <Text style={styles.macroGoal}> / {macro.goal}g</Text>
-                  </Text>
-                  <View style={styles.macroBar}>
-                    <View
-                      style={[
-                        styles.macroBarFill,
-                        {
-                          width: `${Math.min((macro.value / macro.goal) * 100, 100)}%`,
-                          backgroundColor: getMacroColor(macro.key),
-                        },
-                      ]}
-                    />
-                  </View>
+        {/* Macros Card - Always show */}
+        <View style={styles.macrosCard}>
+          <Text style={styles.sectionTitle}>Macronutrients</Text>
+          <View style={styles.macrosGrid}>
+            {[
+              { key: 'protein', value: summary.totalProtein || 0, goal: summary.proteinGoal || 120 },
+              { key: 'carbs', value: summary.totalCarbs || 0, goal: summary.carbsGoal || 250 },
+              { key: 'fat', value: summary.totalFat || 0, goal: summary.fatGoal || 65 },
+            ].map((macro) => (
+              <View key={macro.key} style={styles.macroItem}>
+                <View style={styles.macroHeader}>
+                  <View
+                    style={[
+                      styles.macroIndicator,
+                      { backgroundColor: getMacroColor(macro.key) },
+                    ]}
+                  />
+                  <Text style={styles.macroLabel}>{macro.key}</Text>
                 </View>
-              ))}
-            </View>
+                <Text style={styles.macroValue}>
+                  {macro.value}g
+                  <Text style={styles.macroGoal}> / {macro.goal}g</Text>
+                </Text>
+                <View style={styles.macroBar}>
+                  <View
+                    style={[
+                      styles.macroBarFill,
+                      {
+                        width: `${Math.min(Math.max((macro.value / macro.goal) * 100, 0), 100)}%`,
+                        backgroundColor: getMacroColor(macro.key),
+                      },
+                    ]}
+                  />
+                </View>
+              </View>
+            ))}
+          </View>
 
-            {/* Macro Pie */}
-            <View style={styles.macroPie}>
-              <View style={styles.macroPieSegments}>
-                <View style={[styles.pieSegment, { flex: summary.macroPercentages.protein, backgroundColor: colors.error[500] }]} />
-                <View style={[styles.pieSegment, { flex: summary.macroPercentages.carbs, backgroundColor: colors.warning[500] }]} />
-                <View style={[styles.pieSegment, { flex: summary.macroPercentages.fat, backgroundColor: colors.primary[500] }]} />
-              </View>
-              <View style={styles.pieLabels}>
-                <Text style={styles.pieLabel}>
-                  <Text style={{ color: colors.error[500] }}>{summary.macroPercentages.protein}%</Text> Protein
-                </Text>
-                <Text style={styles.pieLabel}>
-                  <Text style={{ color: colors.warning[500] }}>{summary.macroPercentages.carbs}%</Text> Carbs
-                </Text>
-                <Text style={styles.pieLabel}>
-                  <Text style={{ color: colors.primary[500] }}>{summary.macroPercentages.fat}%</Text> Fat
-                </Text>
-              </View>
+          {/* Macro Distribution */}
+          <View style={styles.macroPie}>
+            <View style={styles.macroPieSegments}>
+              <View style={[styles.pieSegment, { flex: Math.max(summary.macroPercentages?.protein || 1, 1), backgroundColor: colors.error[500] }]} />
+              <View style={[styles.pieSegment, { flex: Math.max(summary.macroPercentages?.carbs || 1, 1), backgroundColor: colors.warning[500] }]} />
+              <View style={[styles.pieSegment, { flex: Math.max(summary.macroPercentages?.fat || 1, 1), backgroundColor: colors.primary[500] }]} />
+            </View>
+            <View style={styles.pieLabels}>
+              <Text style={styles.pieLabel}>
+                <Text style={{ color: colors.error[500] }}>{summary.macroPercentages?.protein || 0}%</Text> Protein
+              </Text>
+              <Text style={styles.pieLabel}>
+                <Text style={{ color: colors.warning[500] }}>{summary.macroPercentages?.carbs || 0}%</Text> Carbs
+              </Text>
+              <Text style={styles.pieLabel}>
+                <Text style={{ color: colors.primary[500] }}>{summary.macroPercentages?.fat || 0}%</Text> Fat
+              </Text>
             </View>
           </View>
-        )}
+        </View>
 
-        {/* Active Plan */}
+        {/* Active Plan - Only show if exists */}
         {activePlan && (
           <TouchableOpacity
             style={styles.planCard}
@@ -262,16 +304,16 @@ const NutritionScreen: React.FC = () => {
               <Ionicons name="clipboard-outline" size={24} color={colors.primary[600]} />
             </View>
             <View style={styles.planInfo}>
-              <Text style={styles.planName}>{activePlan.name}</Text>
+              <Text style={styles.planName}>{activePlan.name || 'Nutrition Plan'}</Text>
               <Text style={styles.planDetails}>
-                {activePlan.calorieTarget} cal/day - {activePlan.type.replace('_', ' ')}
+                {activePlan.calorieTarget || 2000} cal/day - {(activePlan.type || 'custom').replace('_', ' ')}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={colors.gray[400]} />
           </TouchableOpacity>
         )}
 
-        {/* Today's Meals */}
+        {/* Today's Meals - Always show */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Today's Meals</Text>
@@ -280,10 +322,19 @@ const NutritionScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
+          {hasNoData && (
+            <View style={styles.noDataHint}>
+              <Ionicons name="information-circle-outline" size={18} color={colors.info[600]} />
+              <Text style={styles.noDataHintText}>Tap on a meal to start logging your food</Text>
+            </View>
+          )}
+
           <View style={styles.mealsList}>
             {MEAL_ORDER.map((mealType) => {
-              const meals = summary?.meals?.[mealType as keyof typeof summary.meals] || [];
-              const totalCals = meals.reduce((sum, m) => sum + m.calories, 0);
+              const meals = summary.meals?.[mealType as keyof typeof summary.meals] || [];
+              const totalCals = Array.isArray(meals)
+                ? meals.reduce((sum, m) => sum + (Number(m?.calories) || 0), 0)
+                : 0;
 
               return (
                 <TouchableOpacity
@@ -351,9 +402,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.background,
   },
+  loadingText: {
+    marginTop: spacing.md,
+    fontSize: typography.fontSize.base,
+    color: colors.text.secondary,
+  },
   content: {
     padding: spacing.lg,
     paddingBottom: spacing['5xl'],
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.warning[50],
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: typography.fontSize.sm,
+    color: colors.warning[700],
   },
   calorieCard: {
     backgroundColor: colors.white,
@@ -544,6 +614,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.md,
+  },
+  noDataHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.info[50],
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  noDataHintText: {
+    flex: 1,
+    fontSize: typography.fontSize.sm,
+    color: colors.info[700],
   },
   mealsList: {
     gap: spacing.md,

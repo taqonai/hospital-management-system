@@ -84,6 +84,26 @@ export const authApi = {
   updateProfile: (data: Partial<PatientUser>) =>
     api.put<ApiResponse<PatientUser>>('/patient-auth/profile', data),
 
+  // Upload profile photo
+  uploadProfilePhoto: (photoUri: string) => {
+    const formData = new FormData();
+    const filename = photoUri.split('/').pop() || 'photo.jpg';
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+    formData.append('photo', {
+      uri: photoUri,
+      name: filename,
+      type,
+    } as any);
+
+    return api.post<ApiResponse<{ photoUrl: string }>>('/patient-auth/profile/photo', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+
   // Change password
   changePassword: (currentPassword: string, newPassword: string) =>
     api.post<ApiResponse<{ message: string }>>('/patient-auth/change-password', {

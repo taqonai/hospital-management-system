@@ -24,6 +24,9 @@ interface UseOfflineDataResult<T> {
   refresh: () => Promise<void>;
 }
 
+// Maximum time to wait for refresh before auto-resetting (safety mechanism)
+const MAX_REFRESH_TIMEOUT = 10000; // 10 seconds
+
 /**
  * Hook for fetching data with offline support
  * Automatically handles caching and stale data display
@@ -42,6 +45,19 @@ export function useOfflineData<T>({
   const [isFromCache, setIsFromCache] = useState(false);
   const [isStale, setIsStale] = useState(false);
   const [wasOffline, setWasOffline] = useState(false);
+
+  // Refs to track ongoing operations and prevent race conditions
+  const isRefreshingRef = useRef(false);
+  const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const fetchData = useCallback(
     async (forceRefresh = false) => {
@@ -66,8 +82,12 @@ export function useOfflineData<T>({
     const load = async () => {
       hasFetched.current = true;
       setIsLoading(true);
-      await fetchData(false);
-      setIsLoading(false);
+      try {
+        await fetchData(false);
+      } finally {
+        // Always stop loading, even if there's an error
+        setIsLoading(false);
+      }
     };
 
     if (refetchOnMount) {
@@ -75,7 +95,7 @@ export function useOfflineData<T>({
     }
   }, [enabled, refetchOnMount]); // Removed fetchData from deps to prevent re-fetching
 
-  // Refetch when coming back online
+  // Refetch when coming back online (silent refresh without UI indicator)
   useEffect(() => {
     if (!enabled || !refetchOnReconnect) return;
 
@@ -83,20 +103,55 @@ export function useOfflineData<T>({
       setWasOffline(true);
     } else if (wasOffline && isOnline) {
       setWasOffline(false);
-      fetchData(true);
+      // Silent refresh - don't show refreshing indicator for background reconnection
+      fetchData(true).catch(() => {
+        // Silently handle errors for background refresh
+      });
     }
   }, [isOnline, wasOffline, enabled, refetchOnReconnect, fetchData]);
 
   const refetch = useCallback(async () => {
     setIsLoading(true);
-    await fetchData(true);
-    setIsLoading(false);
+    try {
+      await fetchData(true);
+    } finally {
+      // Always stop loading, even if there's an error
+      setIsLoading(false);
+    }
   }, [fetchData]);
 
   const refresh = useCallback(async () => {
+    // Prevent multiple simultaneous refresh calls
+    if (isRefreshingRef.current) {
+      return;
+    }
+
+    isRefreshingRef.current = true;
     setIsRefreshing(true);
-    await fetchData(true);
-    setIsRefreshing(false);
+
+    // Safety timeout to prevent infinite refresh state
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current);
+    }
+    refreshTimeoutRef.current = setTimeout(() => {
+      if (isRefreshingRef.current) {
+        isRefreshingRef.current = false;
+        setIsRefreshing(false);
+      }
+    }, MAX_REFRESH_TIMEOUT);
+
+    try {
+      await fetchData(true);
+    } finally {
+      // Clear the safety timeout since we completed normally
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = null;
+      }
+      // Always stop refreshing, even if there's an error
+      isRefreshingRef.current = false;
+      setIsRefreshing(false);
+    }
   }, [fetchData]);
 
   return {

@@ -975,7 +975,7 @@ const BookAppointmentScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={keyboardConfig.behavior as 'padding' | 'height'}

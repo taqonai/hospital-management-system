@@ -16,11 +16,33 @@ interface OfflineResult<T> {
 }
 
 /**
- * Check if the device is online
+ * Check if the device is online (with timeout to prevent hanging)
  */
 async function isOnline(): Promise<boolean> {
-  const netInfo = await NetInfo.fetch();
-  return netInfo.isConnected === true && netInfo.isInternetReachable !== false;
+  try {
+    const netInfo = await Promise.race([
+      NetInfo.fetch(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Network check timeout')), 5000)
+      ),
+    ]);
+    return netInfo.isConnected === true && netInfo.isInternetReachable !== false;
+  } catch {
+    // If network check fails or times out, assume offline
+    return false;
+  }
+}
+
+/**
+ * Timeout wrapper to prevent hanging API calls
+ */
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 15000): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
+    ),
+  ]);
 }
 
 /**
@@ -36,19 +58,21 @@ async function cachedGet<T>(
   // If online, try to fetch fresh data (especially if forceRefresh is true)
   if (online) {
     try {
-      const response = await fetcher();
+      const response = await withTimeout(fetcher(), 15000);
       const data = response.data?.data as T;
 
-      // Cache the response
+      // Cache the response (with timeout to prevent hanging)
       if (data) {
-        await cacheManager.set(cacheKey, data, cacheTTL);
+        await withTimeout(cacheManager.set(cacheKey, data, cacheTTL), 5000).catch(() => {
+          // Ignore cache write errors - data was still fetched successfully
+        });
       }
 
       return { data, isFromCache: false, isStale: false };
     } catch (error) {
       // If fetch fails and not forcing refresh, try to get from cache
       if (!forceRefresh) {
-        const cached = await cacheManager.getStale<T>(cacheKey);
+        const cached = await withTimeout(cacheManager.getStale<T>(cacheKey), 5000).catch(() => null);
         if (cached) {
           return { data: cached.data, isFromCache: true, isStale: cached.isStale };
         }
@@ -57,8 +81,8 @@ async function cachedGet<T>(
     }
   }
 
-  // Offline - get from cache
-  const cached = await cacheManager.getStale<T>(cacheKey);
+  // Offline - get from cache (with timeout to prevent hanging)
+  const cached = await withTimeout(cacheManager.getStale<T>(cacheKey), 5000).catch(() => null);
   if (cached) {
     return { data: cached.data, isFromCache: true, isStale: cached.isStale };
   }

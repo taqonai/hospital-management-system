@@ -50,6 +50,15 @@ const MedicalHistoryScreen: React.FC = () => {
   const [editValue, setEditValue] = useState('');
   const [analysisResult, setAnalysisResult] = useState<{ insights: string[]; recommendations: string[] } | null>(null);
 
+  // Lifestyle edit state
+  const [showLifestyleModal, setShowLifestyleModal] = useState(false);
+  const [lifestyleForm, setLifestyleForm] = useState({
+    smoking: '',
+    alcohol: '',
+    exercise: '',
+    diet: '',
+  });
+
   const loadHistory = useCallback(async () => {
     try {
       const response = await patientPortalApi.getMedicalHistory();
@@ -107,23 +116,70 @@ const MedicalHistoryScreen: React.FC = () => {
     }
   };
 
+  const handleEditLifestyle = () => {
+    const lifestyle = history?.lifestyle || {};
+    setLifestyleForm({
+      smoking: lifestyle.smoking || '',
+      alcohol: lifestyle.alcohol || '',
+      exercise: lifestyle.exercise || '',
+      diet: lifestyle.diet || '',
+    });
+    setShowLifestyleModal(true);
+  };
+
+  const handleSaveLifestyle = async () => {
+    if (!history) return;
+
+    setIsSaving(true);
+    try {
+      const updatedHistory = {
+        ...history,
+        lifestyle: lifestyleForm,
+      };
+
+      await patientPortalApi.updateMedicalHistory(updatedHistory);
+      setHistory(updatedHistory);
+      setShowLifestyleModal(false);
+      Alert.alert('Success', 'Lifestyle information updated');
+    } catch (error: any) {
+      const message = error?.response?.data?.message || 'Failed to update. Please try again.';
+      Alert.alert('Error', message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
     setAnalysisResult(null);
     try {
       const response = await patientPortalApi.analyzeMedicalHistory();
       const data = response.data?.data;
-      if (data) {
-        setAnalysisResult(data);
+      if (data && typeof data === 'object') {
+        // Ensure arrays are properly formatted even if API returns unexpected structure
+        const insights = Array.isArray(data.insights)
+          ? data.insights.filter((i: any) => typeof i === 'string' && i.trim().length > 0)
+          : [];
+        const recommendations = Array.isArray(data.recommendations)
+          ? data.recommendations.filter((r: any) => typeof r === 'string' && r.trim().length > 0)
+          : [];
+
+        if (insights.length > 0 || recommendations.length > 0) {
+          setAnalysisResult({ insights, recommendations });
+        } else {
+          // Show empty results message instead of alert
+          setAnalysisResult({ insights: [], recommendations: [] });
+        }
       } else {
-        Alert.alert('Analysis Complete', 'No specific insights at this time.');
+        // No data returned - show empty state
+        setAnalysisResult({ insights: [], recommendations: [] });
       }
     } catch (error: any) {
       const status = error?.response?.status;
       if (status === 404 || status === 503) {
         Alert.alert('Service Unavailable', 'AI analysis is currently unavailable. Please try again later.');
       } else {
-        Alert.alert('Error', 'Failed to analyze medical history.');
+        Alert.alert('Error', 'Failed to analyze medical history. Please try again.');
       }
     } finally {
       setIsAnalyzing(false);
@@ -170,6 +226,12 @@ const MedicalHistoryScreen: React.FC = () => {
             <Ionicons name="fitness-outline" size={20} color={colors.success[500]} />
           </View>
           <Text style={styles.sectionTitle}>Lifestyle</Text>
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={handleEditLifestyle}
+          >
+            <Ionicons name="pencil" size={16} color={colors.primary[600]} />
+          </TouchableOpacity>
         </View>
         <View style={styles.lifestyleGrid}>
           <View style={styles.lifestyleItem}>
@@ -267,28 +329,34 @@ const MedicalHistoryScreen: React.FC = () => {
           <View style={styles.analysisCard}>
             <Text style={styles.analysisTitle}>AI Health Insights</Text>
 
-            {analysisResult.insights.length > 0 && (
+            {Array.isArray(analysisResult.insights) && analysisResult.insights.length > 0 && (
               <View style={styles.analysisSection}>
                 <Text style={styles.analysisSubtitle}>Insights</Text>
                 {analysisResult.insights.map((insight, index) => (
                   <View key={index} style={styles.insightItem}>
                     <Ionicons name="bulb-outline" size={16} color={colors.warning[500]} />
-                    <Text style={styles.insightText}>{insight}</Text>
+                    <Text style={styles.insightText}>{insight ?? ''}</Text>
                   </View>
                 ))}
               </View>
             )}
 
-            {analysisResult.recommendations.length > 0 && (
+            {Array.isArray(analysisResult.recommendations) && analysisResult.recommendations.length > 0 && (
               <View style={styles.analysisSection}>
                 <Text style={styles.analysisSubtitle}>Recommendations</Text>
                 {analysisResult.recommendations.map((rec, index) => (
                   <View key={index} style={styles.recommendationItem}>
                     <Ionicons name="checkmark-circle-outline" size={16} color={colors.success[500]} />
-                    <Text style={styles.recommendationText}>{rec}</Text>
+                    <Text style={styles.recommendationText}>{rec ?? ''}</Text>
                   </View>
                 ))}
               </View>
+            )}
+
+            {/* Show empty state if no insights or recommendations */}
+            {(!Array.isArray(analysisResult.insights) || analysisResult.insights.length === 0) &&
+             (!Array.isArray(analysisResult.recommendations) || analysisResult.recommendations.length === 0) && (
+              <Text style={styles.emptyAnalysis}>No specific insights available at this time.</Text>
             )}
           </View>
         )}
@@ -328,6 +396,129 @@ const MedicalHistoryScreen: React.FC = () => {
             <TouchableOpacity
               style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
               onPress={handleSaveSection}
+              disabled={isSaving}
+            >
+              <Text style={styles.saveButtonText}>
+                {isSaving ? 'Saving...' : 'Save Changes'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Lifestyle Edit Modal */}
+      <Modal
+        visible={showLifestyleModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowLifestyleModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Lifestyle</Text>
+              <TouchableOpacity onPress={() => setShowLifestyleModal(false)}>
+                <Ionicons name="close" size={24} color={colors.gray[500]} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              <Text style={styles.lifestyleFieldLabel}>Smoking Status</Text>
+              <View style={styles.lifestyleOptions}>
+                {['Never', 'Former', 'Current', 'Occasional'].map((option) => (
+                  <TouchableOpacity
+                    key={option}
+                    style={[
+                      styles.lifestyleOption,
+                      lifestyleForm.smoking === option && styles.lifestyleOptionSelected,
+                    ]}
+                    onPress={() => setLifestyleForm({ ...lifestyleForm, smoking: option })}
+                  >
+                    <Text
+                      style={[
+                        styles.lifestyleOptionText,
+                        lifestyleForm.smoking === option && styles.lifestyleOptionTextSelected,
+                      ]}
+                    >
+                      {option}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.lifestyleFieldLabel}>Alcohol Consumption</Text>
+              <View style={styles.lifestyleOptions}>
+                {['Never', 'Rarely', 'Occasionally', 'Regularly'].map((option) => (
+                  <TouchableOpacity
+                    key={option}
+                    style={[
+                      styles.lifestyleOption,
+                      lifestyleForm.alcohol === option && styles.lifestyleOptionSelected,
+                    ]}
+                    onPress={() => setLifestyleForm({ ...lifestyleForm, alcohol: option })}
+                  >
+                    <Text
+                      style={[
+                        styles.lifestyleOptionText,
+                        lifestyleForm.alcohol === option && styles.lifestyleOptionTextSelected,
+                      ]}
+                    >
+                      {option}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.lifestyleFieldLabel}>Exercise Frequency</Text>
+              <View style={styles.lifestyleOptions}>
+                {['Never', 'Rarely', '1-2x/week', '3-4x/week', 'Daily'].map((option) => (
+                  <TouchableOpacity
+                    key={option}
+                    style={[
+                      styles.lifestyleOption,
+                      lifestyleForm.exercise === option && styles.lifestyleOptionSelected,
+                    ]}
+                    onPress={() => setLifestyleForm({ ...lifestyleForm, exercise: option })}
+                  >
+                    <Text
+                      style={[
+                        styles.lifestyleOptionText,
+                        lifestyleForm.exercise === option && styles.lifestyleOptionTextSelected,
+                      ]}
+                    >
+                      {option}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.lifestyleFieldLabel}>Diet Type</Text>
+              <View style={styles.lifestyleOptions}>
+                {['Regular', 'Vegetarian', 'Vegan', 'Keto', 'Low-carb', 'Other'].map((option) => (
+                  <TouchableOpacity
+                    key={option}
+                    style={[
+                      styles.lifestyleOption,
+                      lifestyleForm.diet === option && styles.lifestyleOptionSelected,
+                    ]}
+                    onPress={() => setLifestyleForm({ ...lifestyleForm, diet: option })}
+                  >
+                    <Text
+                      style={[
+                        styles.lifestyleOptionText,
+                        lifestyleForm.diet === option && styles.lifestyleOptionTextSelected,
+                      ]}
+                    >
+                      {option}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+              onPress={handleSaveLifestyle}
               disabled={isSaving}
             >
               <Text style={styles.saveButtonText}>
@@ -570,6 +761,45 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: typography.fontSize.base,
     fontWeight: typography.fontWeight.semibold,
+  },
+  lifestyleFieldLabel: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
+    marginTop: spacing.md,
+  },
+  lifestyleOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  lifestyleOption: {
+    backgroundColor: colors.gray[100],
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  lifestyleOptionSelected: {
+    backgroundColor: colors.primary[50],
+    borderColor: colors.primary[500],
+  },
+  lifestyleOptionText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.text.secondary,
+  },
+  lifestyleOptionTextSelected: {
+    color: colors.primary[600],
+    fontWeight: typography.fontWeight.medium,
+  },
+  emptyAnalysis: {
+    fontSize: typography.fontSize.sm,
+    color: colors.text.secondary,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: spacing.md,
   },
 });
 

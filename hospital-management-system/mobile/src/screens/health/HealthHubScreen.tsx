@@ -138,7 +138,7 @@ const HealthHubScreen: React.FC = () => {
           <TouchableOpacity
             key={item.id}
             style={styles.menuItem}
-            onPress={() => navigation.navigate(item.screen)}
+            onPress={() => navigation.navigate(item.screen, { source: 'healthHub' })}
           >
             <View style={[styles.iconContainer, { backgroundColor: item.bgColor }]}>
               <Ionicons name={item.icon} size={28} color={item.color} />

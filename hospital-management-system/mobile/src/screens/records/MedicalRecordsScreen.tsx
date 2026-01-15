@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react';
 import {
   View,
   Text,
@@ -10,14 +10,50 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useRoute, RouteProp, CommonActions } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme';
 import { patientPortalApi } from '../../services/api';
-import { MedicalRecord } from '../../types';
+import { MedicalRecord, HealthStackParamList } from '../../types';
 
 type FilterType = 'all' | 'consultation' | 'lab' | 'imaging' | 'procedure';
+type MedicalRecordsRouteProp = RouteProp<HealthStackParamList, 'MedicalRecords'>;
 
 const MedicalRecordsScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
+  const route = useRoute<MedicalRecordsRouteProp>();
+  const source = route.params?.source;
+
+  // Custom back handler when accessed from home dashboard
+  // Reset entire navigation state to ensure Health tab opens HealthHub next time
+  useLayoutEffect(() => {
+    if (source === 'home') {
+      navigation.setOptions({
+        headerLeft: () => (
+          <TouchableOpacity
+            onPress={() => {
+              // Reset entire tab navigator state with HomeTab active and HealthTab reset to HealthHub
+              navigation.dispatch(
+                CommonActions.reset({
+                  index: 0,
+                  routes: [
+                    { name: 'HomeTab', state: { routes: [{ name: 'Dashboard' }] } },
+                    { name: 'AppointmentsTab', state: { routes: [{ name: 'AppointmentsList' }] } },
+                    { name: 'HealthTab', state: { routes: [{ name: 'HealthHub' }] } },
+                    { name: 'SettingsTab', state: { routes: [{ name: 'SettingsHome' }] } },
+                  ],
+                })
+              );
+            }}
+            style={{ marginLeft: 8, padding: 8 }}
+          >
+            <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
+          </TouchableOpacity>
+        ),
+      });
+    }
+  }, [navigation, source]);
   const [records, setRecords] = useState<MedicalRecord[]>([]);
   const [filteredRecords, setFilteredRecords] = useState<MedicalRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -263,7 +299,7 @@ const MedicalRecordsScreen: React.FC = () => {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color={colors.gray[400]} />
@@ -333,7 +369,7 @@ const MedicalRecordsScreen: React.FC = () => {
           />
         }
       />
-    </View>
+    </SafeAreaView>
   );
 };
 

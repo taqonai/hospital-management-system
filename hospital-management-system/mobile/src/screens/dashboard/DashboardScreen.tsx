@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,12 @@ const DashboardScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { user } = useAppSelector((state) => state.auth);
 
+  // Memoize the fetcher to prevent unnecessary re-renders and refresh cycles
+  const fetcher = useCallback(
+    (forceRefresh?: boolean) => offlinePatientApi.getSummary(forceRefresh),
+    []
+  );
+
   const {
     data: summary,
     isLoading,
@@ -31,7 +37,7 @@ const DashboardScreen: React.FC = () => {
     isStale,
     refresh,
   } = useOfflineData<DashboardSummary>({
-    fetcher: (forceRefresh) => offlinePatientApi.getSummary(forceRefresh),
+    fetcher,
   });
 
   const onRefresh = useCallback(() => {
@@ -40,6 +46,7 @@ const DashboardScreen: React.FC = () => {
 
   // Track if this is the initial mount to avoid double-fetching
   const isFirstFocus = useRef(true);
+  const isRefreshingOnFocus = useRef(false);
 
   // Refresh dashboard data when screen gains focus (e.g., after booking)
   // Skip the first focus since useOfflineData already fetches on mount
@@ -49,8 +56,15 @@ const DashboardScreen: React.FC = () => {
         isFirstFocus.current = false;
         return;
       }
+      // Prevent multiple simultaneous refreshes from focus events
+      if (isRefreshingOnFocus.current) {
+        return;
+      }
+      isRefreshingOnFocus.current = true;
       // Only refresh on subsequent focuses (after navigating away and back)
-      refresh();
+      refresh().finally(() => {
+        isRefreshingOnFocus.current = false;
+      });
     }, [refresh])
   );
 
@@ -130,7 +144,7 @@ const DashboardScreen: React.FC = () => {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={isRefreshing === true} onRefresh={onRefresh} />
         }
         showsVerticalScrollIndicator={false}
       >
@@ -219,7 +233,7 @@ const DashboardScreen: React.FC = () => {
 
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => navigation.navigate('HealthTab', { screen: 'SymptomChecker' })}
+              onPress={() => navigation.navigate('HealthTab', { screen: 'SymptomChecker', params: { source: 'home' } })}
             >
               <View style={[styles.actionIcon, { backgroundColor: colors.error[50] }]}>
                 <Ionicons name="fitness-outline" size={28} color={colors.error[600]} />
@@ -229,7 +243,7 @@ const DashboardScreen: React.FC = () => {
 
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => navigation.navigate('HealthTab', { screen: 'HealthAssistant' })}
+              onPress={() => navigation.navigate('HealthTab', { screen: 'HealthAssistant', params: { source: 'home' } })}
             >
               <View style={[styles.actionIcon, { backgroundColor: colors.success[50] }]}>
                 <Ionicons name="chatbubbles-outline" size={28} color={colors.success[600]} />
@@ -239,7 +253,7 @@ const DashboardScreen: React.FC = () => {
 
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => navigation.navigate('HealthTab', { screen: 'MedicalRecords' })}
+              onPress={() => navigation.navigate('HealthTab', { screen: 'MedicalRecords', params: { source: 'home' } })}
             >
               <View style={[styles.actionIcon, { backgroundColor: colors.gray[100] }]}>
                 <Ionicons name="document-text-outline" size={28} color={colors.gray[600]} />

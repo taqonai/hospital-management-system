@@ -46,6 +46,7 @@ export interface PatientUser {
   lastName: string;
   hospitalId: string;
   avatar?: string;
+  photo?: string;
   phone?: string;
   dateOfBirth?: string;
   gender?: 'MALE' | 'FEMALE' | 'OTHER';

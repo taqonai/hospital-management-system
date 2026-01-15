@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import multer from 'multer';
 import { validate } from '../middleware/validation';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated } from '../utils/response';
@@ -7,6 +8,23 @@ import { patientAuthService } from '../services/patientAuthService';
 import { patientAuthenticate, PatientAuthenticatedRequest } from '../middleware/patientAuth';
 import { Gender } from '@prisma/client';
 import prisma from '../config/database';
+import { storageService } from '../services/storageService';
+
+// Configure multer for memory storage (files stored in buffer)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB max
+  },
+  fileFilter: (_req, file, cb) => {
+    // Only allow images
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  },
+});
 
 const router = Router();
 
@@ -330,6 +348,55 @@ router.put(
   asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
     const profile = await patientAuthService.updatePatientProfile(req.patient!.patientId, req.body);
     sendSuccess(res, profile, 'Profile updated successfully');
+  })
+);
+
+/**
+ * Upload profile photo
+ * POST /api/v1/patient-auth/profile/photo
+ * Headers: Authorization: Bearer <accessToken>
+ * Body: multipart/form-data with 'photo' field
+ * Returns: { photoUrl }
+ */
+router.post(
+  '/profile/photo',
+  patientAuthenticate,
+  upload.single('photo'),
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No photo file provided' });
+    }
+
+    // Check if storage is configured
+    if (!storageService.isStorageConfigured()) {
+      // Store as base64 data URL for environments without S3/MinIO
+      const base64 = req.file.buffer.toString('base64');
+      const dataUrl = `data:${req.file.mimetype};base64,${base64}`;
+
+      // Update patient profile with base64 photo
+      const profile = await patientAuthService.updatePatientProfile(req.patient!.patientId, {
+        photo: dataUrl,
+      });
+
+      return sendSuccess(res, { photoUrl: dataUrl }, 'Profile photo updated successfully');
+    }
+
+    // Upload to S3/MinIO
+    const result = await storageService.uploadFile(req.file.buffer, {
+      filename: req.file.originalname,
+      contentType: req.file.mimetype,
+      folder: 'patient-photos',
+      metadata: {
+        'patient-id': req.patient!.patientId,
+      },
+    });
+
+    // Update patient profile with photo URL
+    await patientAuthService.updatePatientProfile(req.patient!.patientId, {
+      photo: result.url,
+    });
+
+    sendSuccess(res, { photoUrl: result.url }, 'Profile photo uploaded successfully');
   })
 );
 

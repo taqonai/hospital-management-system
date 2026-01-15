@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme';
@@ -35,38 +35,7 @@ const WELLNESS_CATEGORIES: Array<{
   { key: 'environment', label: 'Environment', icon: 'leaf-outline', color: colors.success[700], description: 'Living space' },
 ];
 
-// Demo data for when API returns empty
-const DEMO_ASSESSMENT: WellnessAssessment = {
-  id: 'demo-assessment',
-  completedAt: new Date().toISOString(),
-  overallScore: 72,
-  categoryScores: {
-    physical: 75,
-    mental: 68,
-    nutrition: 80,
-    sleep: 65,
-    stress: 70,
-    social: 78,
-    purpose: 72,
-    environment: 82,
-  },
-  insights: [
-    'Your physical activity has improved this week',
-    'Sleep quality could use some attention',
-    'Great job maintaining social connections',
-  ],
-  recommendations: [
-    { category: 'sleep', title: 'Improve Sleep Schedule', description: 'Try to get at least 7-8 hours of sleep each night', priority: 'high' },
-    { category: 'mental', title: 'Daily Mindfulness', description: 'Practice mindfulness meditation for 10 minutes daily', priority: 'medium' },
-    { category: 'nutrition', title: 'Stay Hydrated', description: 'Stay hydrated - aim for 8 glasses of water', priority: 'low' },
-  ],
-};
-
-const DEMO_GOALS: WellnessGoal[] = [
-  { id: 'demo-1', category: 'physical', title: 'Exercise 30 min daily', description: 'Get moving every day', target: 30, currentValue: 20, progress: 67, unit: 'minutes', frequency: 'daily', startDate: '2026-01-01', isActive: true },
-  { id: 'demo-2', category: 'sleep', title: 'Sleep 8 hours', description: 'Improve sleep quality', target: 8, currentValue: 6.5, progress: 81, unit: 'hours', frequency: 'daily', startDate: '2026-01-01', isActive: true },
-  { id: 'demo-3', category: 'mental', title: 'Meditate daily', description: 'Practice mindfulness', target: 10, currentValue: 7, progress: 70, unit: 'minutes', frequency: 'daily', startDate: '2026-01-01', isActive: true },
-];
+// Demo data removed - using real API data only
 
 const WellnessHubScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
@@ -75,23 +44,80 @@ const WellnessHubScreen: React.FC = () => {
   const [assessment, setAssessment] = useState<WellnessAssessment | null>(null);
   const [goals, setGoals] = useState<WellnessGoal[]>([]);
 
+  // Map backend category to mobile category
+  const mapCategory = (backendCategory: string): WellnessCategory => {
+    const mapping: Record<string, WellnessCategory> = {
+      'PHYSICAL_FITNESS': 'physical',
+      'MENTAL_HEALTH': 'mental',
+      'NUTRITION': 'nutrition',
+      'SLEEP': 'sleep',
+      'STRESS_MANAGEMENT': 'stress',
+      'SOCIAL_WELLNESS': 'social',
+      'MINDFULNESS': 'purpose',
+      'HABIT_BUILDING': 'environment',
+      'HYDRATION': 'nutrition',
+      'WEIGHT_MANAGEMENT': 'physical',
+    };
+    return mapping[backendCategory] || 'physical';
+  };
+
   const loadData = useCallback(async () => {
     try {
       const [assessmentRes, goalsRes] = await Promise.all([
-        wellnessApi.getWellnessAssessment(),
-        wellnessApi.getWellnessGoals({ active: true }),
+        wellnessApi.getWellnessAssessment().catch(() => ({ data: { data: null } })),
+        wellnessApi.getWellnessGoals({ active: true }).catch(() => ({ data: { data: [] } })),
       ]);
-      const fetchedAssessment = assessmentRes.data?.data || null;
-      const fetchedGoals = goalsRes.data?.data || [];
 
-      // Use demo data if API returns empty
-      setAssessment(fetchedAssessment || DEMO_ASSESSMENT);
-      setGoals(fetchedGoals.length > 0 ? fetchedGoals : DEMO_GOALS);
+      // Transform assessment if exists
+      const rawAssessment = assessmentRes.data?.data;
+      if (rawAssessment && typeof rawAssessment.overallScore === 'number') {
+        // Transform category scores from backend format (PHYSICAL_FITNESS: 75) to mobile (physical: 75)
+        const categoryScores: Record<WellnessCategory, number> = {
+          physical: 0, mental: 0, nutrition: 0, sleep: 0,
+          stress: 0, social: 0, purpose: 0, environment: 0,
+        };
+
+        if (rawAssessment.categoryScores) {
+          Object.entries(rawAssessment.categoryScores).forEach(([key, value]) => {
+            const mobileKey = mapCategory(key);
+            categoryScores[mobileKey] = Number(value) || 0;
+          });
+        }
+
+        setAssessment({
+          ...rawAssessment,
+          categoryScores,
+          overallScore: Number(rawAssessment.overallScore) || 0,
+          insights: Array.isArray(rawAssessment.insights) ? rawAssessment.insights : [],
+          recommendations: Array.isArray(rawAssessment.recommendations) ? rawAssessment.recommendations : [],
+        });
+      } else {
+        setAssessment(null);
+      }
+
+      // Transform goals from backend format to mobile format
+      const rawGoals = goalsRes.data?.data || [];
+      const transformedGoals: WellnessGoal[] = Array.isArray(rawGoals) ? rawGoals.map((g: any) => ({
+        id: g.id,
+        category: mapCategory(g.category || ''),
+        title: g.title || 'Untitled Goal',
+        description: g.description || '',
+        target: Number(g.targetValue) || 100,
+        currentValue: Number(g.currentValue) || 0,
+        unit: g.unit || '',
+        frequency: (g.frequency || 'daily').toLowerCase() as 'daily' | 'weekly' | 'monthly',
+        startDate: g.startDate || g.createdAt || new Date().toISOString(),
+        endDate: g.targetDate || undefined,
+        isActive: g.status !== 'COMPLETED' && g.status !== 'CANCELLED',
+        progress: g.targetValue > 0 ? Math.round((Number(g.currentValue) || 0) / Number(g.targetValue) * 100) : 0,
+      })) : [];
+
+      setGoals(transformedGoals.filter(g => g.isActive));
     } catch (error) {
       console.error('Error loading wellness data:', error);
-      // Use demo data on error
-      setAssessment(DEMO_ASSESSMENT);
-      setGoals(DEMO_GOALS);
+      // On error, show empty state (no demo data)
+      setAssessment(null);
+      setGoals([]);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -101,6 +127,13 @@ const WellnessHubScreen: React.FC = () => {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   const handleRefresh = () => {
     setIsRefreshing(true);
@@ -138,17 +171,17 @@ const WellnessHubScreen: React.FC = () => {
       >
         {/* Overall Score */}
         <View style={styles.scoreCard}>
-          {assessment ? (
+          {assessment && typeof assessment.overallScore === 'number' ? (
             <>
               <Text style={styles.scoreLabel}>Your Wellness Score</Text>
               <View style={styles.scoreCircle}>
-                <Text style={[styles.scoreValue, { color: getScoreColor(assessment.overallScore) }]}>
-                  {assessment.overallScore}
+                <Text style={[styles.scoreValue, { color: getScoreColor(assessment.overallScore ?? 0) }]}>
+                  {assessment.overallScore ?? 0}
                 </Text>
                 <Text style={styles.scoreMax}>/100</Text>
               </View>
-              <Text style={[styles.scoreStatus, { color: getScoreColor(assessment.overallScore) }]}>
-                {getScoreLabel(assessment.overallScore)}
+              <Text style={[styles.scoreStatus, { color: getScoreColor(assessment.overallScore ?? 0) }]}>
+                {getScoreLabel(assessment.overallScore ?? 0)}
               </Text>
               <TouchableOpacity
                 style={styles.viewDetailsButton}
@@ -176,12 +209,12 @@ const WellnessHubScreen: React.FC = () => {
         </View>
 
         {/* Category Scores */}
-        {assessment && (
+        {assessment && typeof assessment.overallScore === 'number' && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Category Breakdown</Text>
             <View style={styles.categoryGrid}>
               {WELLNESS_CATEGORIES.map((category) => {
-                const score = assessment.categoryScores[category.key] || 0;
+                const score = assessment.categoryScores?.[category.key] ?? 0;
                 return (
                   <View key={category.key} style={styles.categoryCard}>
                     <View style={[styles.categoryIcon, { backgroundColor: `${category.color}15` }]}>
@@ -196,7 +229,7 @@ const WellnessHubScreen: React.FC = () => {
                         <View
                           style={[
                             styles.categoryBarFill,
-                            { width: `${score}%`, backgroundColor: getScoreColor(score) },
+                            { width: `${Math.min(Math.max(score, 0), 100)}%`, backgroundColor: getScoreColor(score) },
                           ]}
                         />
                       </View>
@@ -256,7 +289,7 @@ const WellnessHubScreen: React.FC = () => {
         </View>
 
         {/* Recommendations */}
-        {assessment && assessment.recommendations.length > 0 && (
+        {assessment && Array.isArray(assessment.recommendations) && assessment.recommendations.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Recommendations</Text>
             <View style={styles.recommendationsList}>
@@ -264,14 +297,14 @@ const WellnessHubScreen: React.FC = () => {
                 <View key={index} style={styles.recommendationCard}>
                   <View style={[
                     styles.priorityIndicator,
-                    { backgroundColor: rec.priority === 'high' ? colors.error[500] :
-                      rec.priority === 'medium' ? colors.warning[500] : colors.success[500] }
+                    { backgroundColor: rec?.priority === 'high' ? colors.error[500] :
+                      rec?.priority === 'medium' ? colors.warning[500] : colors.success[500] }
                   ]} />
                   <View style={styles.recommendationContent}>
-                    <Text style={styles.recommendationTitle}>{rec.title}</Text>
-                    <Text style={styles.recommendationDesc}>{rec.description}</Text>
+                    <Text style={styles.recommendationTitle}>{rec?.title ?? 'Recommendation'}</Text>
+                    <Text style={styles.recommendationDesc}>{rec?.description ?? ''}</Text>
                     <Text style={styles.recommendationCategory}>
-                      {WELLNESS_CATEGORIES.find(c => c.key === rec.category)?.label || rec.category}
+                      {WELLNESS_CATEGORIES.find(c => c.key === rec?.category)?.label || rec?.category || 'General'}
                     </Text>
                   </View>
                 </View>

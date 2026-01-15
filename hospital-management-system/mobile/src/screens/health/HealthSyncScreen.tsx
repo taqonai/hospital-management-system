@@ -10,7 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme';
@@ -36,45 +36,7 @@ const QUICK_LOG_OPTIONS: Array<{ type: MetricType; label: string; icon: string; 
   { type: 'steps', label: 'Steps', icon: 'footsteps-outline', unit: 'steps' },
 ];
 
-// Demo data for when API returns empty
-const DEMO_DEVICES: DeviceConnection[] = [
-  { id: 'demo-1', provider: 'google_fit', status: 'connected', lastSync: new Date().toISOString() },
-];
-
-const DEMO_SUMMARY: MetricsSummary = {
-  latestMetrics: {
-    weight: null,
-    height: null,
-    blood_pressure: null,
-    heart_rate: null,
-    blood_glucose: null,
-    oxygen_saturation: null,
-    temperature: null,
-    steps: { id: 'demo-steps', type: 'steps', value: 8542, unit: 'steps', timestamp: new Date().toISOString(), source: 'device' },
-    sleep: { id: 'demo-sleep', type: 'sleep', value: 7.5, unit: 'hours', timestamp: new Date().toISOString(), source: 'device' },
-    water_intake: { id: 'demo-water', type: 'water_intake', value: 1600, unit: 'ml', timestamp: new Date().toISOString(), source: 'manual' },
-    calories_burned: { id: 'demo-calories', type: 'calories_burned', value: 1850, unit: 'kcal', timestamp: new Date().toISOString(), source: 'device' },
-  },
-  todayStats: {
-    steps: 8542,
-    calories: 1850,
-    waterIntake: 1600,
-    sleepHours: 7.5,
-  },
-  weeklyTrends: {
-    weight: { value: 70, change: -0.5 },
-    height: { value: 175, change: 0 },
-    blood_pressure: { value: 120, change: 2 },
-    heart_rate: { value: 72, change: -3 },
-    blood_glucose: { value: 95, change: 0 },
-    oxygen_saturation: { value: 98, change: 0 },
-    temperature: { value: 36.6, change: 0 },
-    steps: { value: 8500, change: 500 },
-    sleep: { value: 7.2, change: 0.3 },
-    water_intake: { value: 1800, change: 200 },
-    calories_burned: { value: 1900, change: 100 },
-  },
-};
+// Demo data removed - using real API data only
 
 const HealthSyncScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
@@ -87,20 +49,110 @@ const HealthSyncScreen: React.FC = () => {
   const loadData = useCallback(async () => {
     try {
       const [devicesRes, summaryRes] = await Promise.all([
-        wellnessApi.getDevices(),
-        wellnessApi.getMetricsSummary(),
+        wellnessApi.getDevices().catch(() => ({ data: { data: [] } })),
+        wellnessApi.getMetricsSummary().catch(() => ({ data: { data: null } })),
       ]);
-      const fetchedDevices = devicesRes.data?.data || [];
-      const fetchedSummary = summaryRes.data?.data || null;
 
-      // Use demo data if API returns empty
-      setDevices(fetchedDevices.length > 0 ? fetchedDevices : DEMO_DEVICES);
-      setSummary(fetchedSummary || DEMO_SUMMARY);
+      // Transform devices response
+      const rawDevices = devicesRes.data?.data || [];
+      const transformedDevices = Array.isArray(rawDevices) ? rawDevices.map((d: any) => ({
+        id: d.id,
+        provider: (d.provider || '').toLowerCase().replace('_', '-'),
+        status: d.isActive ? 'connected' : 'disconnected',
+        lastSync: d.lastSyncAt,
+      })) : [];
+      setDevices(transformedDevices);
+
+      // Transform backend summary to mobile format
+      // Backend returns: { STEPS: { value, unit, count }, WATER_INTAKE: {...}, ... }
+      // Mobile expects: { todayStats: { steps, calories, waterIntake, sleepHours } }
+      const rawSummary = summaryRes.data?.data;
+      if (rawSummary && typeof rawSummary === 'object') {
+        const transformedSummary: MetricsSummary = {
+          latestMetrics: {
+            weight: null,
+            height: null,
+            blood_pressure: null,
+            heart_rate: rawSummary.HEART_RATE ? {
+              id: 'hr',
+              type: 'heart_rate',
+              value: rawSummary.HEART_RATE.value || 0,
+              unit: 'bpm',
+              timestamp: new Date().toISOString(),
+              source: 'manual',
+            } : null,
+            blood_glucose: rawSummary.BLOOD_GLUCOSE ? {
+              id: 'bg',
+              type: 'blood_glucose',
+              value: rawSummary.BLOOD_GLUCOSE.value || 0,
+              unit: 'mg/dL',
+              timestamp: new Date().toISOString(),
+              source: 'manual',
+            } : null,
+            oxygen_saturation: null,
+            temperature: null,
+            steps: rawSummary.STEPS ? {
+              id: 'steps',
+              type: 'steps',
+              value: rawSummary.STEPS.value || 0,
+              unit: 'steps',
+              timestamp: new Date().toISOString(),
+              source: 'manual',
+            } : null,
+            sleep: rawSummary.SLEEP_DURATION ? {
+              id: 'sleep',
+              type: 'sleep',
+              value: rawSummary.SLEEP_DURATION.value || 0,
+              unit: 'hours',
+              timestamp: new Date().toISOString(),
+              source: 'manual',
+            } : null,
+            water_intake: rawSummary.WATER_INTAKE ? {
+              id: 'water',
+              type: 'water_intake',
+              value: rawSummary.WATER_INTAKE.value || 0,
+              unit: 'ml',
+              timestamp: new Date().toISOString(),
+              source: 'manual',
+            } : null,
+            calories_burned: rawSummary.CALORIES_BURNED ? {
+              id: 'cal',
+              type: 'calories_burned',
+              value: rawSummary.CALORIES_BURNED.value || 0,
+              unit: 'kcal',
+              timestamp: new Date().toISOString(),
+              source: 'manual',
+            } : null,
+          },
+          todayStats: {
+            steps: Number(rawSummary.STEPS?.value) || 0,
+            calories: Number(rawSummary.CALORIES_BURNED?.value) || 0,
+            waterIntake: Number(rawSummary.WATER_INTAKE?.value) || 0,
+            sleepHours: Number(rawSummary.SLEEP_DURATION?.value) || 0,
+          },
+          weeklyTrends: {
+            weight: { value: 0, change: 0 },
+            height: { value: 0, change: 0 },
+            blood_pressure: { value: 0, change: 0 },
+            heart_rate: { value: Number(rawSummary.HEART_RATE?.value) || 0, change: 0 },
+            blood_glucose: { value: Number(rawSummary.BLOOD_GLUCOSE?.value) || 0, change: 0 },
+            oxygen_saturation: { value: 0, change: 0 },
+            temperature: { value: 0, change: 0 },
+            steps: { value: Number(rawSummary.STEPS?.value) || 0, change: 0 },
+            sleep: { value: Number(rawSummary.SLEEP_DURATION?.value) || 0, change: 0 },
+            water_intake: { value: Number(rawSummary.WATER_INTAKE?.value) || 0, change: 0 },
+            calories_burned: { value: Number(rawSummary.CALORIES_BURNED?.value) || 0, change: 0 },
+          },
+        };
+        setSummary(transformedSummary);
+      } else {
+        setSummary(null);
+      }
     } catch (error) {
       console.error('Error loading health sync data:', error);
-      // Use demo data on error
-      setDevices(DEMO_DEVICES);
-      setSummary(DEMO_SUMMARY);
+      // On error, show empty state (no demo data)
+      setDevices([]);
+      setSummary(null);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -110,6 +162,13 @@ const HealthSyncScreen: React.FC = () => {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Refresh data when screen comes into focus (e.g., after logging a metric)
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   const handleRefresh = () => {
     setIsRefreshing(true);
@@ -181,41 +240,42 @@ const HealthSyncScreen: React.FC = () => {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
         }
       >
-        {/* Today's Summary */}
-        {summary && (
-          <View style={styles.summaryCard}>
-            <Text style={styles.sectionTitle}>Today's Summary</Text>
-            <View style={styles.statsGrid}>
-              <View style={styles.statItem}>
-                <Ionicons name="footsteps" size={24} color={colors.primary[600]} />
-                <Text style={styles.statValue}>{summary.todayStats.steps.toLocaleString()}</Text>
-                <Text style={styles.statLabel}>Steps</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Ionicons name="flame" size={24} color={colors.error[500]} />
-                <Text style={styles.statValue}>{summary.todayStats.calories}</Text>
-                <Text style={styles.statLabel}>Calories</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Ionicons name="water" size={24} color={colors.info[500]} />
-                <Text style={styles.statValue}>{summary.todayStats.waterIntake}ml</Text>
-                <Text style={styles.statLabel}>Water</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Ionicons name="moon" size={24} color={colors.primary[700]} />
-                <Text style={styles.statValue}>{summary.todayStats.sleepHours}h</Text>
-                <Text style={styles.statLabel}>Sleep</Text>
-              </View>
+        {/* Today's Summary - Always show, with proper null handling */}
+        <View style={styles.summaryCard}>
+          <Text style={styles.sectionTitle}>Today's Summary</Text>
+          <View style={styles.statsGrid}>
+            <View style={styles.statItem}>
+              <Ionicons name="footsteps" size={24} color={colors.primary[600]} />
+              <Text style={styles.statValue}>{(summary?.todayStats?.steps ?? 0).toLocaleString()}</Text>
+              <Text style={styles.statLabel}>Steps</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Ionicons name="flame" size={24} color={colors.error[500]} />
+              <Text style={styles.statValue}>{summary?.todayStats?.calories ?? 0}</Text>
+              <Text style={styles.statLabel}>Calories</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Ionicons name="water" size={24} color={colors.info[500]} />
+              <Text style={styles.statValue}>{summary?.todayStats?.waterIntake ?? 0}ml</Text>
+              <Text style={styles.statLabel}>Water</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Ionicons name="moon" size={24} color={colors.primary[700]} />
+              <Text style={styles.statValue}>{summary?.todayStats?.sleepHours ?? 0}h</Text>
+              <Text style={styles.statLabel}>Sleep</Text>
             </View>
           </View>
-        )}
+          {!summary && (
+            <Text style={styles.emptyText}>Log your metrics to see your daily summary</Text>
+          )}
+        </View>
 
         {/* Connected Devices */}
         <View style={styles.section}>

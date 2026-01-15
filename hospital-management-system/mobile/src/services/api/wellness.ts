@@ -305,6 +305,58 @@ export interface WorkoutRecommendationData {
   injuries?: string[];
 }
 
+// ==================== Helper functions for data transformation ====================
+
+// Map mobile metric types to backend enum values
+const METRIC_TYPE_MAP: Record<string, string> = {
+  weight: 'WEIGHT',
+  height: 'HEIGHT',
+  blood_pressure: 'BLOOD_PRESSURE_SYSTOLIC',
+  heart_rate: 'HEART_RATE',
+  blood_glucose: 'BLOOD_GLUCOSE',
+  oxygen_saturation: 'BLOOD_OXYGEN',
+  temperature: 'BODY_TEMPERATURE',
+  steps: 'STEPS',
+  sleep: 'SLEEP_DURATION',
+  water_intake: 'WATER_INTAKE',
+  calories_burned: 'CALORIES_BURNED',
+};
+
+// Map mobile intensity values to backend enum values
+const INTENSITY_MAP: Record<string, string> = {
+  low: 'LIGHT',
+  moderate: 'MODERATE',
+  high: 'VIGOROUS',
+  very_high: 'VERY_VIGOROUS',
+};
+
+// Map mobile meal types to backend enum values
+const MEAL_TYPE_MAP: Record<string, string> = {
+  breakfast: 'BREAKFAST',
+  lunch: 'LUNCH',
+  dinner: 'DINNER',
+  snack: 'AFTERNOON_SNACK',
+};
+
+// Map mobile wellness categories to backend enum values
+const WELLNESS_CATEGORY_MAP: Record<string, string> = {
+  physical: 'PHYSICAL_FITNESS',
+  mental: 'MENTAL_HEALTH',
+  nutrition: 'NUTRITION',
+  sleep: 'SLEEP',
+  stress: 'STRESS_MANAGEMENT',
+  social: 'SOCIAL_WELLNESS',
+  purpose: 'MINDFULNESS',
+  environment: 'HABIT_BUILDING',
+};
+
+// Map mobile frequency values to backend enum values
+const FREQUENCY_MAP: Record<string, string> = {
+  daily: 'DAILY',
+  weekly: 'WEEKLY',
+  monthly: 'MONTHLY',
+};
+
 // ==================== API Service ====================
 export const wellnessApi = {
   // ==================== Device Management ====================
@@ -312,13 +364,17 @@ export const wellnessApi = {
     api.get<ApiResponse<DeviceConnection[]>>('/wellness/devices'),
 
   connectDevice: (data: ConnectDeviceData) =>
-    api.post<ApiResponse<DeviceConnection>>('/wellness/devices/connect', data),
+    api.post<ApiResponse<DeviceConnection>>('/wellness/devices/connect', {
+      provider: data.provider.toUpperCase().replace('-', '_'),
+      accessToken: data.authCode,
+      scopes: data.permissions,
+    }),
 
   disconnectDevice: (provider: string) =>
-    api.delete<ApiResponse<void>>(`/wellness/devices/${provider}`),
+    api.delete<ApiResponse<void>>(`/wellness/devices/${provider.toUpperCase()}`),
 
   syncDevice: (provider: string) =>
-    api.post<ApiResponse<{ synced: number; lastSync: string }>>(`/wellness/devices/${provider}/sync`),
+    api.post<ApiResponse<{ synced: number; lastSync: string }>>(`/wellness/devices/${provider.toUpperCase()}/sync`),
 
   // ==================== Health Metrics ====================
   getMetrics: (params?: { type?: MetricType; startDate?: string; endDate?: string; limit?: number }) =>
@@ -328,7 +384,14 @@ export const wellnessApi = {
     api.get<ApiResponse<MetricsSummary>>('/wellness/metrics/summary'),
 
   logMetric: (data: LogMetricData) =>
-    api.post<ApiResponse<HealthMetric>>('/wellness/metrics', data),
+    api.post<ApiResponse<HealthMetric>>('/wellness/metrics', {
+      metricType: METRIC_TYPE_MAP[data.type] || data.type.toUpperCase(),
+      value: data.value,
+      unit: data.unit || 'units',
+      recordedAt: data.timestamp || new Date().toISOString(),
+      source: 'MANUAL',
+      metadata: data.secondaryValue ? { secondaryValue: data.secondaryValue } : undefined,
+    }),
 
   syncMetrics: (metrics: HealthMetric[]) =>
     api.post<ApiResponse<{ synced: number }>>('/wellness/metrics/sync', { metrics }),
@@ -344,7 +407,16 @@ export const wellnessApi = {
     api.get<ApiResponse<FitnessActivity>>(`/wellness/fitness/activities/${activityId}`),
 
   logActivity: (data: LogActivityData) =>
-    api.post<ApiResponse<FitnessActivity>>('/wellness/fitness/activities', data),
+    api.post<ApiResponse<FitnessActivity>>('/wellness/fitness/activities', {
+      activityType: data.type.toUpperCase(),
+      name: data.name || data.type,
+      durationMinutes: data.duration,
+      intensity: INTENSITY_MAP[data.intensity] || 'MODERATE',
+      caloriesBurned: data.caloriesBurned,
+      distanceKm: data.distance ? (data.distanceUnit === 'mi' ? data.distance * 1.60934 : data.distance) : undefined,
+      startTime: data.startTime || new Date().toISOString(),
+      notes: data.notes,
+    }),
 
   updateActivity: (activityId: string, data: Partial<LogActivityData>) =>
     api.put<ApiResponse<FitnessActivity>>(`/wellness/fitness/activities/${activityId}`, data),
@@ -359,7 +431,13 @@ export const wellnessApi = {
     api.get<ApiResponse<FitnessGoal[]>>('/wellness/fitness/goals', { params: { active } }),
 
   createFitnessGoal: (data: CreateFitnessGoalData) =>
-    api.post<ApiResponse<FitnessGoal>>('/wellness/fitness/goals', data),
+    api.post<ApiResponse<FitnessGoal>>('/wellness/fitness/goals', {
+      goalType: data.type.toUpperCase(),
+      targetValue: data.target,
+      unit: data.type === 'workouts' ? 'count' : data.type === 'duration' ? 'minutes' : data.type === 'calories' ? 'cal' : data.type === 'distance' ? 'km' : 'steps',
+      frequency: FREQUENCY_MAP[data.period] || 'DAILY',
+      startDate: data.startDate || new Date().toISOString(),
+    }),
 
   updateFitnessGoal: (goalId: string, data: Partial<CreateFitnessGoalData>) =>
     api.put<ApiResponse<FitnessGoal>>(`/wellness/fitness/goals/${goalId}`, data),
@@ -378,7 +456,18 @@ export const wellnessApi = {
     api.get<ApiResponse<NutritionLog>>(`/wellness/nutrition/logs/${logId}`),
 
   logMeal: (data: LogMealData) =>
-    api.post<ApiResponse<NutritionLog>>('/wellness/nutrition/logs', data),
+    api.post<ApiResponse<NutritionLog>>('/wellness/nutrition/logs', {
+      mealType: MEAL_TYPE_MAP[data.mealType] || data.mealType.toUpperCase(),
+      mealName: data.name,
+      description: data.description,
+      calories: data.calories,
+      protein: data.protein,
+      carbohydrates: data.carbs,
+      fat: data.fat,
+      fiber: data.fiber,
+      servingSize: data.servingSize ? `${data.servingSize} ${data.servingUnit || 'g'}` : undefined,
+      loggedAt: data.timestamp || new Date().toISOString(),
+    }),
 
   updateMealLog: (logId: string, data: Partial<LogMealData>) =>
     api.put<ApiResponse<NutritionLog>>(`/wellness/nutrition/logs/${logId}`, data),
@@ -412,7 +501,14 @@ export const wellnessApi = {
     api.get<ApiResponse<WellnessGoal>>(`/wellness/wellness/goals/${goalId}`),
 
   createWellnessGoal: (data: CreateWellnessGoalData) =>
-    api.post<ApiResponse<WellnessGoal>>('/wellness/wellness/goals', data),
+    api.post<ApiResponse<WellnessGoal>>('/wellness/wellness/goals', {
+      category: WELLNESS_CATEGORY_MAP[data.category] || data.category.toUpperCase(),
+      title: data.title,
+      description: data.description,
+      targetValue: data.target,
+      unit: data.unit,
+      // Note: frequency is not supported in backend wellness goals schema
+    }),
 
   updateWellnessGoal: (goalId: string, data: Partial<CreateWellnessGoalData & { currentValue?: number }>) =>
     api.put<ApiResponse<WellnessGoal>>(`/wellness/wellness/goals/${goalId}`, data),

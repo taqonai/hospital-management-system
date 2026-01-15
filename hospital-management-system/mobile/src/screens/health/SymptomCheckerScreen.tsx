@@ -14,7 +14,7 @@ import {
   Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { colors, spacing, borderRadius, typography, shadows, keyboardConfig } from '../../theme';
@@ -132,6 +132,8 @@ const calculateFallbackTriage = (responses: string[]): TriageResult => {
 
 const SymptomCheckerScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const route = useRoute<RouteProp<{ params: { source?: 'home' | 'healthHub' } }, 'params'>>();
+  const source = route.params?.source;
   const { user } = useAppSelector((state) => state.auth);
   const scrollViewRef = useRef<ScrollView>(null);
   const recordingRef = useRef<Audio.Recording | null>(null);
@@ -895,10 +897,16 @@ const SymptomCheckerScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Header with Back Button */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => {
+          if (source === 'home') {
+            navigation.navigate('HomeTab');
+          } else {
+            navigation.navigate('HealthHub');
+          }
+        }}>
           <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Symptom Checker</Text>

@@ -32,38 +32,7 @@ const ACTIVITY_ICONS: Record<string, string> = {
   other: 'ellipsis-horizontal-outline',
 };
 
-// Demo data for when API returns empty
-const DEMO_STATS: FitnessStats = {
-  period: 'week',
-  totalWorkouts: 12,
-  totalDuration: 420,
-  totalCalories: 3240,
-  totalDistance: 35,
-  avgWorkoutsPerWeek: 4,
-  favoriteActivity: 'running',
-  streakDays: 5,
-  dailyStats: [
-    { date: '2026-01-07', workouts: 2, duration: 60, calories: 450, steps: 8500 },
-    { date: '2026-01-08', workouts: 1, duration: 45, calories: 320, steps: 7200 },
-    { date: '2026-01-09', workouts: 2, duration: 90, calories: 680, steps: 10500 },
-    { date: '2026-01-10', workouts: 1, duration: 30, calories: 240, steps: 6800 },
-    { date: '2026-01-11', workouts: 2, duration: 75, calories: 520, steps: 9200 },
-    { date: '2026-01-12', workouts: 3, duration: 120, calories: 850, steps: 12000 },
-    { date: '2026-01-13', workouts: 1, duration: 0, calories: 180, steps: 5500 },
-  ],
-};
-
-const DEMO_GOALS: FitnessGoal[] = [
-  { id: 'demo-1', type: 'workouts', target: 5, currentValue: 3, progress: 60, unit: 'workouts', period: 'weekly', isActive: true, startDate: '2026-01-06' },
-  { id: 'demo-2', type: 'calories', target: 2000, currentValue: 1540, progress: 77, unit: 'cal', period: 'weekly', isActive: true, startDate: '2026-01-06' },
-  { id: 'demo-3', type: 'duration', target: 300, currentValue: 195, progress: 65, unit: 'min', period: 'weekly', isActive: true, startDate: '2026-01-06' },
-];
-
-const DEMO_ACTIVITIES: FitnessActivity[] = [
-  { id: 'demo-1', type: 'running', name: 'Morning Run', duration: 30, caloriesBurned: 320, distance: 5, distanceUnit: 'km', intensity: 'moderate', startTime: new Date().toISOString(), source: 'manual' },
-  { id: 'demo-2', type: 'yoga', name: 'Yoga Session', duration: 45, caloriesBurned: 180, intensity: 'low', startTime: new Date(Date.now() - 86400000).toISOString(), source: 'manual' },
-  { id: 'demo-3', type: 'cycling', name: 'Evening Cycling', duration: 60, caloriesBurned: 450, distance: 15, distanceUnit: 'km', intensity: 'high', startTime: new Date(Date.now() - 172800000).toISOString(), source: 'manual' },
-];
+// Demo data removed - using real API data only
 
 const FitnessTrackerScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
@@ -80,20 +49,16 @@ const FitnessTrackerScreen: React.FC = () => {
         wellnessApi.getFitnessGoals(true),
         wellnessApi.getFitnessStats('week'),
       ]);
-      const fetchedActivities = activitiesRes.data?.data || [];
-      const fetchedGoals = goalsRes.data?.data || [];
-      const fetchedStats = statsRes.data?.data || null;
-
-      // Use demo data if API returns empty
-      setActivities(fetchedActivities.length > 0 ? fetchedActivities : DEMO_ACTIVITIES);
-      setGoals(fetchedGoals.length > 0 ? fetchedGoals : DEMO_GOALS);
-      setStats(fetchedStats || DEMO_STATS);
+      // Use real data from API - empty arrays are valid (user has no data yet)
+      setActivities(activitiesRes.data?.data || []);
+      setGoals(goalsRes.data?.data || []);
+      setStats(statsRes.data?.data || null);
     } catch (error) {
       console.error('Error loading fitness data:', error);
-      // Use demo data on error
-      setActivities(DEMO_ACTIVITIES);
-      setGoals(DEMO_GOALS);
-      setStats(DEMO_STATS);
+      // On error, show empty state (no demo data)
+      setActivities([]);
+      setGoals([]);
+      setStats(null);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -109,10 +74,12 @@ const FitnessTrackerScreen: React.FC = () => {
     loadData();
   };
 
-  const formatDuration = (minutes: number) => {
-    if (minutes < 60) return `${minutes}min`;
+  const formatDuration = (minutes: number | undefined | null) => {
+    // Handle null, undefined, or NaN
+    if (minutes === null || minutes === undefined || isNaN(minutes)) return '0min';
+    if (minutes < 60) return `${Math.round(minutes)}min`;
     const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
+    const mins = Math.round(minutes % 60);
     return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`;
   };
 
@@ -155,29 +122,27 @@ const FitnessTrackerScreen: React.FC = () => {
         }
       >
         {/* Weekly Summary */}
-        {stats && (
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>This Week</Text>
-            <View style={styles.summaryGrid}>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryValue}>{stats.totalWorkouts}</Text>
-                <Text style={styles.summaryLabel}>Workouts</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryValue}>{formatDuration(stats.totalDuration)}</Text>
-                <Text style={styles.summaryLabel}>Duration</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryValue}>{stats.totalCalories.toLocaleString()}</Text>
-                <Text style={styles.summaryLabel}>Calories</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryValue}>{stats.streakDays}</Text>
-                <Text style={styles.summaryLabel}>Streak</Text>
-              </View>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryTitle}>This Week</Text>
+          <View style={styles.summaryGrid}>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>{stats?.totalWorkouts ?? 0}</Text>
+              <Text style={styles.summaryLabel}>Workouts</Text>
+            </View>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>{formatDuration(stats?.totalDuration)}</Text>
+              <Text style={styles.summaryLabel}>Duration</Text>
+            </View>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>{(stats?.totalCalories ?? 0).toLocaleString()}</Text>
+              <Text style={styles.summaryLabel}>Calories</Text>
+            </View>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>{stats?.streakDays ?? 0}</Text>
+              <Text style={styles.summaryLabel}>Streak</Text>
             </View>
           </View>
-        )}
+        </View>
 
         {/* Active Goals */}
         <View style={styles.section}>
