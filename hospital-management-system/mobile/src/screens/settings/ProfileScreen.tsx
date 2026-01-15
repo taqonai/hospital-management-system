@@ -156,7 +156,11 @@ const ProfileScreen: React.FC = () => {
   useEffect(() => {
     if (user) {
       const phoneData = extractCountryCode(user.phone || '');
-      const emergencyPhoneData = extractCountryCode(user.emergencyContactPhone || '');
+      // Backend returns emergencyPhone, mobile app may have emergencyContactPhone
+      const emergencyPhoneValue = user.emergencyPhone || user.emergencyContactPhone || '';
+      const emergencyPhoneData = extractCountryCode(emergencyPhoneValue);
+      // Backend returns emergencyContact, mobile app may have emergencyContactName
+      const emergencyContactValue = user.emergencyContact || user.emergencyContactName || '';
 
       setFormData({
         firstName: user.firstName || '',
@@ -170,7 +174,7 @@ const ProfileScreen: React.FC = () => {
         city: user.city || '',
         state: user.state || '',
         zipCode: user.zipCode || '',
-        emergencyContactName: user.emergencyContactName || '',
+        emergencyContactName: emergencyContactValue,
         emergencyContactPhone: emergencyPhoneData.number,
         emergencyPhoneCountryCode: emergencyPhoneData.code,
       });
@@ -362,7 +366,11 @@ const ProfileScreen: React.FC = () => {
   const handleCancel = () => {
     if (user) {
       const phoneData = extractCountryCode(user.phone || '');
-      const emergencyPhoneData = extractCountryCode(user.emergencyContactPhone || '');
+      // Backend returns emergencyPhone, mobile app may have emergencyContactPhone
+      const emergencyPhoneValue = user.emergencyPhone || user.emergencyContactPhone || '';
+      const emergencyPhoneData = extractCountryCode(emergencyPhoneValue);
+      // Backend returns emergencyContact, mobile app may have emergencyContactName
+      const emergencyContactValue = user.emergencyContact || user.emergencyContactName || '';
 
       setFormData({
         firstName: user.firstName || '',
@@ -376,7 +384,7 @@ const ProfileScreen: React.FC = () => {
         city: user.city || '',
         state: user.state || '',
         zipCode: user.zipCode || '',
-        emergencyContactName: user.emergencyContactName || '',
+        emergencyContactName: emergencyContactValue,
         emergencyContactPhone: emergencyPhoneData.number,
         emergencyPhoneCountryCode: emergencyPhoneData.code,
       });

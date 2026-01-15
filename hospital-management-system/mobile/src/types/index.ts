@@ -54,6 +54,10 @@ export interface PatientUser {
   city?: string;
   state?: string;
   zipCode?: string;
+  // Backend field names (emergencyContact, emergencyPhone)
+  emergencyContact?: string;
+  emergencyPhone?: string;
+  // Aliases for backward compatibility
   emergencyContactName?: string;
   emergencyContactPhone?: string;
 }
