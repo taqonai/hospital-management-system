@@ -25,6 +25,7 @@ const BillingScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -36,16 +37,20 @@ const BillingScreen: React.FC = () => {
 
   const loadData = async () => {
     try {
+      setError(null);
       const [billsResponse, summaryResponse] = await Promise.all([
         patientPortalApi.getBills(),
         patientPortalApi.getBillingSummary(),
       ]);
 
       setBills(billsResponse.data?.data || []);
-      setSummary(summaryResponse.data?.data || null);
-    } catch (error) {
-      console.error('Failed to load billing data:', error);
-      Alert.alert('Error', 'Failed to load billing information');
+      setSummary(summaryResponse.data?.data || { totalDue: 0, pendingBills: 0 });
+    } catch (err: any) {
+      console.error('Failed to load billing data:', err);
+      setError(err?.message || 'Failed to load billing information');
+      // Set default empty values so UI still renders
+      setBills([]);
+      setSummary({ totalDue: 0, pendingBills: 0 });
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -104,22 +109,22 @@ const BillingScreen: React.FC = () => {
   ];
 
   const renderSummaryCard = () => {
-    if (!summary) return null;
+    const displaySummary = summary || { totalDue: 0, pendingBills: 0 };
 
     return (
       <View style={styles.summaryCard}>
         <View style={styles.summaryRow}>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryLabel}>Total Due</Text>
-            <Text style={styles.summaryAmount}>{formatCurrency(summary.totalDue)}</Text>
+            <Text style={styles.summaryAmount}>{formatCurrency(displaySummary.totalDue)}</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
             <Text style={styles.summaryLabel}>Pending Bills</Text>
-            <Text style={styles.summaryCount}>{summary.pendingBills}</Text>
+            <Text style={styles.summaryCount}>{displaySummary.pendingBills}</Text>
           </View>
         </View>
-        {summary.totalDue > 0 && (
+        {displaySummary.totalDue > 0 && (
           <TouchableOpacity style={styles.payAllButton}>
             <Ionicons name="card" size={20} color={colors.white} />
             <Text style={styles.payAllText}>Pay All Pending</Text>
@@ -169,15 +174,33 @@ const BillingScreen: React.FC = () => {
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Ionicons name="receipt-outline" size={64} color={colors.gray[300]} />
-      <Text style={styles.emptyTitle}>No Bills</Text>
+      <Ionicons
+        name={error ? "alert-circle-outline" : "receipt-outline"}
+        size={64}
+        color={error ? colors.warning[400] : colors.gray[300]}
+      />
+      <Text style={styles.emptyTitle}>{error ? 'Unable to Load' : 'No Bills'}</Text>
       <Text style={styles.emptyText}>
-        {activeFilter === 'pending'
+        {error
+          ? 'Could not load billing data. Pull down to retry.'
+          : activeFilter === 'pending'
           ? 'No pending bills found'
           : activeFilter === 'paid'
           ? 'No paid bills found'
           : 'Your billing history will appear here'}
       </Text>
+      {error && (
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => {
+            setIsLoading(true);
+            loadData();
+          }}
+        >
+          <Ionicons name="refresh" size={18} color={colors.primary[600]} />
+          <Text style={styles.retryText}>Retry</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 
@@ -503,6 +526,22 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     marginTop: spacing.sm,
     textAlign: 'center',
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.lg,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.primary[600],
+    gap: spacing.xs,
+  },
+  retryText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.primary[600],
   },
 });
 
