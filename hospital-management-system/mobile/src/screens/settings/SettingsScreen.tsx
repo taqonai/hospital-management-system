@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch, ActivityIndicator, Image } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme';
@@ -176,9 +176,17 @@ const SettingsScreen: React.FC = () => {
         style={styles.profileCard}
         onPress={() => navigation.navigate('Profile')}
       >
-        <View style={styles.avatar}>
-          <Ionicons name="person" size={32} color={colors.primary[600]} />
-        </View>
+        {user?.photo ? (
+          <Image
+            source={{ uri: user.photo }}
+            style={styles.avatarImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={styles.avatar}>
+            <Ionicons name="person" size={32} color={colors.primary[600]} />
+          </View>
+        )}
         <View style={styles.profileInfo}>
           <Text style={styles.profileName}>
             {user?.firstName} {user?.lastName}
@@ -311,6 +319,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: spacing.lg,
+  },
+  avatarImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    marginRight: spacing.lg,
+    backgroundColor: colors.gray[200],
   },
   profileInfo: {
     flex: 1,
