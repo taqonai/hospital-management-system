@@ -26,8 +26,15 @@ import {
   ChartBarIcon,
   CalendarIcon,
 } from '@heroicons/react/24/outline';
-import { patientApi, aiApi, smartOrderApi, medSafetyApi, ipdApi, appointmentApi, opdApi } from '../../services/api';
+import { patientApi, aiApi, smartOrderApi, medSafetyApi, ipdApi, appointmentApi, opdApi, insuranceCodingApi } from '../../services/api';
 import { useAIHealth } from '../../hooks/useAI';
+import {
+  CodeSuggestionPanel,
+  ICD10Picker,
+  CPTCodePicker,
+  AcceptanceMeter,
+  PayerRulesAlert,
+} from '../../components/insurance';
 import { useBookingData, usePatientHistory } from '../../hooks/useBookingData';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
@@ -207,6 +214,35 @@ export default function Consultation() {
   const [symptomInput, setSymptomInput] = useState('');
   const [chiefComplaint, setChiefComplaint] = useState('');
   const [selectedDiagnoses, setSelectedDiagnoses] = useState<Diagnosis[]>([]);
+  // Insurance Coding State
+  const [showInsuranceCoding, setShowInsuranceCoding] = useState(false);
+  const [selectedIcdCodes, setSelectedIcdCodes] = useState<Array<{
+    id: string;
+    code: string;
+    description: string;
+    category?: string;
+    specificityLevel?: string;
+    dhaApproved?: boolean;
+  }>>([]);
+  const [selectedCptCodes, setSelectedCptCodes] = useState<Array<{
+    id: string;
+    code: string;
+    description: string;
+    modifiers?: string[];
+    units?: number;
+    price?: number;
+    basePrice?: number;
+    dhaPrice?: number;
+    requiresPreAuth?: boolean;
+  }>>([]);
+  const [payerAlerts, setPayerAlerts] = useState<Array<{
+    type: 'preauth' | 'coverage' | 'documentation' | 'limit' | 'exclusion' | 'modifier';
+    severity: 'critical' | 'warning' | 'info';
+    code?: string;
+    codeType?: 'icd10' | 'cpt';
+    message: string;
+    action?: string;
+  }>>([]);
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [clinicalNotes, setClinicalNotes] = useState('');
   const [soapNotes, setSoapNotes] = useState<SOAPNote>({
@@ -1565,6 +1601,119 @@ export default function Consultation() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Insurance Coding Section */}
+      {selectedDiagnoses.length > 0 && (
+        <div className="mt-6">
+          <button
+            onClick={() => setShowInsuranceCoding(!showInsuranceCoding)}
+            className="w-full flex items-center justify-between px-4 py-3 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-xl text-purple-700 font-medium transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <ClipboardDocumentListIcon className="h-5 w-5" />
+              Insurance Coding & Billing
+            </div>
+            <ChevronRightIcon className={clsx(
+              'h-5 w-5 transition-transform',
+              showInsuranceCoding && 'rotate-90'
+            )} />
+          </button>
+
+          {showInsuranceCoding && (
+            <div className="mt-4 space-y-4">
+              {/* Payer Alerts */}
+              {payerAlerts.length > 0 && (
+                <PayerRulesAlert
+                  alerts={payerAlerts}
+                  onDismiss={(idx) => {
+                    setPayerAlerts(alerts => alerts.filter((_, i) => i !== idx));
+                  }}
+                />
+              )}
+
+              {/* AI Code Suggestions Panel */}
+              <CodeSuggestionPanel
+                clinicalText={`${chiefComplaint}\n${symptoms.map(s => s.name).join(', ')}\n${selectedDiagnoses.map(d => d.name).join(', ')}`}
+                patientAge={patientData?.dateOfBirth ? calculateAge(patientData.dateOfBirth) : undefined}
+                patientGender={patientData?.gender}
+                encounterType="outpatient"
+                selectedIcdCodes={selectedIcdCodes.map(c => c.code)}
+                selectedCptCodes={selectedCptCodes.map(c => c.code)}
+                onSelectIcdCode={(code) => {
+                  if (!selectedIcdCodes.find(c => c.code === code.code)) {
+                    setSelectedIcdCodes([...selectedIcdCodes, {
+                      id: code.code, // Use code as ID for AI suggestions
+                      code: code.code,
+                      description: code.description,
+                      specificityLevel: code.specificityLevel,
+                    }]);
+                  }
+                }}
+                onSelectCptCode={(code) => {
+                  if (!selectedCptCodes.find(c => c.code === code.code)) {
+                    setSelectedCptCodes([...selectedCptCodes, {
+                      id: code.code,
+                      code: code.code,
+                      description: code.description,
+                      units: 1,
+                    }]);
+                  }
+                }}
+                onRemoveIcdCode={(code) => {
+                  setSelectedIcdCodes(codes => codes.filter(c => c.code !== code));
+                }}
+                onRemoveCptCode={(code) => {
+                  setSelectedCptCodes(codes => codes.filter(c => c.code !== code));
+                }}
+              />
+
+              {/* Manual ICD-10 Code Selection */}
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+                <h4 className="text-md font-semibold text-gray-900 mb-4">ICD-10 Diagnosis Codes</h4>
+                <ICD10Picker
+                  selectedCodes={selectedIcdCodes}
+                  onSelect={(code) => {
+                    if (!selectedIcdCodes.find(c => c.id === code.id)) {
+                      setSelectedIcdCodes([...selectedIcdCodes, code]);
+                    }
+                  }}
+                  onRemove={(codeId) => {
+                    setSelectedIcdCodes(codes => codes.filter(c => c.id !== codeId));
+                  }}
+                  maxSelections={10}
+                />
+              </div>
+
+              {/* CPT Code Selection */}
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+                <h4 className="text-md font-semibold text-gray-900 mb-4">CPT Procedure Codes</h4>
+                <CPTCodePicker
+                  selectedCodes={selectedCptCodes}
+                  onSelect={(code) => {
+                    if (!selectedCptCodes.find(c => c.id === code.id)) {
+                      setSelectedCptCodes([...selectedCptCodes, {
+                        ...code,
+                        units: 1,
+                        price: code.dhaPrice || code.basePrice,
+                      }]);
+                    }
+                  }}
+                  onRemove={(codeId) => {
+                    setSelectedCptCodes(codes => codes.filter(c => c.id !== codeId));
+                  }}
+                  onUpdateCode={(codeId, updates) => {
+                    setSelectedCptCodes(codes => codes.map(c =>
+                      c.id === codeId ? { ...c, ...updates } : c
+                    ));
+                  }}
+                  showPrices={true}
+                  maxSelections={20}
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

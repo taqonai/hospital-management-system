@@ -1651,4 +1651,425 @@ export const smartOrderApi = {
   getHealth: () => api.get('/smart-orders/health'),
 };
 
+// Insurance Coding APIs (ICD-10 / CPT)
+export const insuranceCodingApi = {
+  // ICD-10 Codes
+  getICD10Codes: (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    category?: string;
+    dhaApproved?: boolean;
+    isActive?: boolean;
+    isBillable?: boolean;
+    specificityLevel?: number;
+  }) => api.get('/insurance-coding/icd10', { params }),
+
+  searchICD10: (q: string, limit?: number) =>
+    api.get('/insurance-coding/icd10/search', { params: { q, limit } }),
+
+  getICD10Categories: () => api.get('/insurance-coding/icd10/categories'),
+
+  getICD10ById: (id: string) => api.get(`/insurance-coding/icd10/${id}`),
+
+  getICD10SpecificCodes: (id: string) => api.get(`/insurance-coding/icd10/${id}/specific-codes`),
+
+  getICD10Stats: (id: string, startDate?: string, endDate?: string) =>
+    api.get(`/insurance-coding/icd10/${id}/stats`, { params: { startDate, endDate } }),
+
+  createICD10: (data: {
+    code: string;
+    description: string;
+    shortDescription?: string;
+    category: string;
+    subcategory?: string;
+    dhaApproved?: boolean;
+    specificityLevel?: number;
+    isUnspecified?: boolean;
+    preferredCode?: string;
+    isActive?: boolean;
+    isBillable?: boolean;
+    notes?: string;
+  }) => api.post('/insurance-coding/icd10', data),
+
+  updateICD10: (id: string, data: Partial<{
+    code: string;
+    description: string;
+    shortDescription?: string;
+    category: string;
+    subcategory?: string;
+    dhaApproved?: boolean;
+    specificityLevel?: number;
+    isUnspecified?: boolean;
+    preferredCode?: string;
+    isActive?: boolean;
+    isBillable?: boolean;
+    notes?: string;
+  }>) => api.put(`/insurance-coding/icd10/${id}`, data),
+
+  deleteICD10: (id: string) => api.delete(`/insurance-coding/icd10/${id}`),
+
+  bulkImportICD10: (codes: Array<{
+    code: string;
+    description: string;
+    category: string;
+    [key: string]: any;
+  }>) => api.post('/insurance-coding/icd10/bulk', { codes }),
+
+  // CPT Codes
+  getCPTCodes: (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    category?: string;
+    requiresPreAuth?: boolean;
+    isActive?: boolean;
+    minPrice?: number;
+    maxPrice?: number;
+  }) => api.get('/insurance-coding/cpt', { params }),
+
+  searchCPT: (q: string, limit?: number) =>
+    api.get('/insurance-coding/cpt/search', { params: { q, limit } }),
+
+  getCPTCategories: () => api.get('/insurance-coding/cpt/categories'),
+
+  getCPTById: (id: string) => api.get(`/insurance-coding/cpt/${id}`),
+
+  getCPTForICD: (icdCodeId: string) => api.get(`/insurance-coding/cpt/for-icd/${icdCodeId}`),
+
+  checkCPTBundling: (cptCodes: string[]) =>
+    api.post('/insurance-coding/cpt/check-bundling', { cptCodes }),
+
+  getCPTStats: (id: string, startDate?: string, endDate?: string) =>
+    api.get(`/insurance-coding/cpt/${id}/stats`, { params: { startDate, endDate } }),
+
+  createCPT: (data: {
+    code: string;
+    description: string;
+    shortDescription?: string;
+    category: string;
+    subcategory?: string;
+    basePrice: number;
+    dhaPrice?: number;
+    cashPrice?: number;
+    requiresPreAuth?: boolean;
+    isActive?: boolean;
+    notes?: string;
+  }) => api.post('/insurance-coding/cpt', data),
+
+  updateCPT: (id: string, data: Partial<{
+    code: string;
+    description: string;
+    shortDescription?: string;
+    category: string;
+    subcategory?: string;
+    basePrice: number;
+    dhaPrice?: number;
+    cashPrice?: number;
+    requiresPreAuth?: boolean;
+    isActive?: boolean;
+    notes?: string;
+  }>) => api.put(`/insurance-coding/cpt/${id}`, data),
+
+  deleteCPT: (id: string) => api.delete(`/insurance-coding/cpt/${id}`),
+
+  bulkImportCPT: (codes: Array<{
+    code: string;
+    description: string;
+    category: string;
+    basePrice: number;
+    [key: string]: any;
+  }>) => api.post('/insurance-coding/cpt/bulk', { codes }),
+
+  // CPT Modifiers
+  getModifiers: () => api.get('/insurance-coding/modifiers'),
+
+  createModifier: (data: {
+    code: string;
+    description: string;
+    priceImpact?: number;
+    isActive?: boolean;
+    notes?: string;
+  }) => api.post('/insurance-coding/modifiers', data),
+
+  updateModifier: (id: string, data: Partial<{
+    code: string;
+    description: string;
+    priceImpact?: number;
+    isActive?: boolean;
+    notes?: string;
+  }>) => api.put(`/insurance-coding/modifiers/${id}`, data),
+
+  deleteModifier: (id: string) => api.delete(`/insurance-coding/modifiers/${id}`),
+
+  bulkImportModifiers: (modifiers: Array<{
+    code: string;
+    description: string;
+    priceImpact?: number;
+  }>) => api.post('/insurance-coding/modifiers/bulk', { modifiers }),
+
+  // ==================== Insurance Payers ====================
+  getPayers: (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    regulator?: string;
+    isActive?: boolean;
+  }) => api.get('/insurance-coding/payers', { params }),
+
+  getRegulators: () => api.get('/insurance-coding/payers/regulators'),
+
+  getPayerById: (id: string) => api.get(`/insurance-coding/payers/${id}`),
+
+  createPayer: (data: {
+    name: string;
+    code: string;
+    regulator?: string;
+    claimPlatform?: string;
+    claimSubmissionDeadline?: number;
+    appealDeadline?: number;
+    preAuthRequired?: boolean;
+    preAuthPhone?: string;
+    preAuthEmail?: string;
+    preAuthPortal?: string;
+    contactPhone?: string;
+    contactEmail?: string;
+    address?: string;
+    paymentTerms?: number;
+    isActive?: boolean;
+    notes?: string;
+  }) => api.post('/insurance-coding/payers', data),
+
+  updatePayer: (id: string, data: Partial<{
+    name: string;
+    code: string;
+    regulator?: string;
+    claimPlatform?: string;
+    claimSubmissionDeadline?: number;
+    appealDeadline?: number;
+    preAuthRequired?: boolean;
+    preAuthPhone?: string;
+    preAuthEmail?: string;
+    preAuthPortal?: string;
+    contactPhone?: string;
+    contactEmail?: string;
+    address?: string;
+    paymentTerms?: number;
+    isActive?: boolean;
+    notes?: string;
+  }>) => api.put(`/insurance-coding/payers/${id}`, data),
+
+  deletePayer: (id: string) => api.delete(`/insurance-coding/payers/${id}`),
+
+  // ==================== Payer ICD-10 Rules ====================
+  getPayerICDRules: (payerId: string, params?: { search?: string; isActive?: boolean }) =>
+    api.get(`/insurance-coding/payers/${payerId}/icd-rules`, { params }),
+
+  getPayerICDRule: (payerId: string, icdCodeId: string) =>
+    api.get(`/insurance-coding/payers/${payerId}/icd-rules/${icdCodeId}`),
+
+  createPayerICDRule: (payerId: string, data: {
+    icd10CodeId: string;
+    isCovered?: boolean;
+    requiresPreAuth?: boolean;
+    maxVisitsPerYear?: number;
+    waitingPeriodDays?: number;
+    copayAmount?: number;
+    copayPercentage?: number;
+    deductibleApplies?: boolean;
+    ageMinimum?: number;
+    ageMaximum?: number;
+    genderRestriction?: string;
+    priorDiagRequired?: string;
+    documentationNotes?: string;
+    effectiveDate?: string;
+    terminationDate?: string;
+    isActive?: boolean;
+  }) => api.post(`/insurance-coding/payers/${payerId}/icd-rules`, data),
+
+  updatePayerICDRule: (payerId: string, ruleId: string, data: Partial<{
+    isCovered?: boolean;
+    requiresPreAuth?: boolean;
+    maxVisitsPerYear?: number;
+    waitingPeriodDays?: number;
+    copayAmount?: number;
+    copayPercentage?: number;
+    deductibleApplies?: boolean;
+    ageMinimum?: number;
+    ageMaximum?: number;
+    genderRestriction?: string;
+    priorDiagRequired?: string;
+    documentationNotes?: string;
+    effectiveDate?: string;
+    terminationDate?: string;
+    isActive?: boolean;
+  }>) => api.put(`/insurance-coding/payers/${payerId}/icd-rules/${ruleId}`, data),
+
+  deletePayerICDRule: (payerId: string, ruleId: string) =>
+    api.delete(`/insurance-coding/payers/${payerId}/icd-rules/${ruleId}`),
+
+  bulkImportPayerICDRules: (payerId: string, rules: Array<{
+    icd10CodeId: string;
+    isCovered?: boolean;
+    requiresPreAuth?: boolean;
+    [key: string]: any;
+  }>) => api.post(`/insurance-coding/payers/${payerId}/icd-rules/bulk`, { rules }),
+
+  // ==================== Payer CPT Rules ====================
+  getPayerCPTRules: (payerId: string, params?: { search?: string; isActive?: boolean }) =>
+    api.get(`/insurance-coding/payers/${payerId}/cpt-rules`, { params }),
+
+  getPayerCPTRule: (payerId: string, cptCodeId: string) =>
+    api.get(`/insurance-coding/payers/${payerId}/cpt-rules/${cptCodeId}`),
+
+  createPayerCPTRule: (payerId: string, data: {
+    cptCodeId: string;
+    isCovered?: boolean;
+    requiresPreAuth?: boolean;
+    priceOverride?: number;
+    maxUnitsPerVisit?: number;
+    maxUnitsPerYear?: number;
+    frequencyLimit?: string;
+    ageMinimum?: number;
+    ageMaximum?: number;
+    genderRestriction?: string;
+    placeOfService?: string[];
+    requiresModifier?: string[];
+    documentationNotes?: string;
+    effectiveDate?: string;
+    terminationDate?: string;
+    isActive?: boolean;
+  }) => api.post(`/insurance-coding/payers/${payerId}/cpt-rules`, data),
+
+  updatePayerCPTRule: (payerId: string, ruleId: string, data: Partial<{
+    isCovered?: boolean;
+    requiresPreAuth?: boolean;
+    priceOverride?: number;
+    maxUnitsPerVisit?: number;
+    maxUnitsPerYear?: number;
+    frequencyLimit?: string;
+    ageMinimum?: number;
+    ageMaximum?: number;
+    genderRestriction?: string;
+    placeOfService?: string[];
+    requiresModifier?: string[];
+    documentationNotes?: string;
+    effectiveDate?: string;
+    terminationDate?: string;
+    isActive?: boolean;
+  }>) => api.put(`/insurance-coding/payers/${payerId}/cpt-rules/${ruleId}`, data),
+
+  deletePayerCPTRule: (payerId: string, ruleId: string) =>
+    api.delete(`/insurance-coding/payers/${payerId}/cpt-rules/${ruleId}`),
+
+  bulkImportPayerCPTRules: (payerId: string, rules: Array<{
+    cptCodeId: string;
+    isCovered?: boolean;
+    requiresPreAuth?: boolean;
+    [key: string]: any;
+  }>) => api.post(`/insurance-coding/payers/${payerId}/cpt-rules/bulk`, { rules }),
+
+  // ==================== Coverage Checks ====================
+  checkICDCoverage: (data: {
+    payerId: string;
+    icdCode: string;
+    patientAge?: number;
+    patientGender?: string;
+  }) => api.post('/insurance-coding/check-icd-coverage', data),
+
+  checkCPTCoverage: (data: {
+    payerId: string;
+    cptCode: string;
+    patientAge?: number;
+    patientGender?: string;
+    placeOfService?: string;
+  }) => api.post('/insurance-coding/check-cpt-coverage', data),
+
+  // ==================== Medical Necessity (ICD-CPT Mappings) ====================
+  getICDCPTMappings: (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    icd10CodeId?: string;
+    cptCodeId?: string;
+    isRequired?: boolean;
+    isCommon?: boolean;
+    isActive?: boolean;
+  }) => api.get('/insurance-coding/icd-cpt-mappings', { params }),
+
+  getValidCPTsForICD: (icdCodeId: string) =>
+    api.get(`/insurance-coding/icd-cpt-mappings/for-icd/${icdCodeId}`),
+
+  getValidICDsForCPT: (cptCodeId: string) =>
+    api.get(`/insurance-coding/icd-cpt-mappings/for-cpt/${cptCodeId}`),
+
+  createICDCPTMapping: (data: {
+    icd10CodeId: string;
+    cptCodeId: string;
+    validityScore?: number;
+    isRequired?: boolean;
+    isCommon?: boolean;
+    documentation?: string;
+    notes?: string;
+    isActive?: boolean;
+  }) => api.post('/insurance-coding/icd-cpt-mappings', data),
+
+  updateICDCPTMapping: (id: string, data: Partial<{
+    validityScore?: number;
+    isRequired?: boolean;
+    isCommon?: boolean;
+    documentation?: string;
+    notes?: string;
+    isActive?: boolean;
+  }>) => api.put(`/insurance-coding/icd-cpt-mappings/${id}`, data),
+
+  deleteICDCPTMapping: (id: string) => api.delete(`/insurance-coding/icd-cpt-mappings/${id}`),
+
+  bulkImportICDCPTMappings: (mappings: Array<{
+    icd10CodeId: string;
+    cptCodeId: string;
+    validityScore?: number;
+    isRequired?: boolean;
+    isCommon?: boolean;
+    [key: string]: any;
+  }>) => api.post('/insurance-coding/icd-cpt-mappings/bulk', { mappings }),
+
+  validateICDCPTPair: (data: { icd10Code: string; cptCode: string }) =>
+    api.post('/insurance-coding/validate-pair', data),
+
+  getRequiredCPTsForICDs: (icd10CodeIds: string[]) =>
+    api.post('/insurance-coding/required-cpts', { icd10CodeIds }),
+
+  suggestCPTsForDiagnoses: (icdCodes: string[]) =>
+    api.post('/insurance-coding/suggest-cpts', { icdCodes }),
+
+  // Analytics
+  getAnalyticsDashboard: (params?: { startDate?: string; endDate?: string }) =>
+    api.get('/insurance-coding/analytics/dashboard', { params }),
+
+  getICD10Usage: (params?: { startDate?: string; endDate?: string; limit?: number }) =>
+    api.get('/insurance-coding/analytics/icd-usage', { params }),
+
+  getCPTUsage: (params?: { startDate?: string; endDate?: string; limit?: number }) =>
+    api.get('/insurance-coding/analytics/cpt-usage', { params }),
+
+  getRevenueByCategory: (params?: { startDate?: string; endDate?: string }) =>
+    api.get('/insurance-coding/analytics/revenue', { params }),
+
+  getAIAdoptionMetrics: (params?: { startDate?: string; endDate?: string }) =>
+    api.get('/insurance-coding/analytics/ai-adoption', { params }),
+
+  getCodingTrends: (params?: { startDate?: string; endDate?: string; granularity?: 'day' | 'week' | 'month' }) =>
+    api.get('/insurance-coding/analytics/trends', { params }),
+
+  getTopCodePairs: (params?: { startDate?: string; endDate?: string; limit?: number }) =>
+    api.get('/insurance-coding/analytics/code-pairs', { params }),
+
+  getSpecificityAnalysis: (params?: { startDate?: string; endDate?: string }) =>
+    api.get('/insurance-coding/analytics/specificity', { params }),
+
+  getDischargeCodingAnalytics: (params?: { startDate?: string; endDate?: string }) =>
+    api.get('/insurance-coding/analytics/discharge', { params }),
+};
+
 export default api;

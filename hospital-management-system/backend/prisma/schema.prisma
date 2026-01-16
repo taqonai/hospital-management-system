@@ -53,6 +53,13 @@ model Hospital {
   customRoles      CustomRole[]
   rbacAuditLogs    RBACauditLog[]
 
+  // Insurance Coding
+  icd10Codes       ICD10Code[]
+  cptCodes         CPTCode[]
+  cptModifiers     CPTModifier[]
+  insurancePayers  InsurancePayer[]
+  icd10CptMappings ICD10CPTMapping[]
+
   @@map("hospitals")
 }
 
@@ -602,6 +609,10 @@ model Consultation {
   imagingOrders ImagingOrder[]
   clinicalNotes ClinicalNote[]
 
+  // Insurance Coding
+  consultationDiagnoses  ConsultationDiagnosis[]
+  consultationProcedures ConsultationProcedure[]
+
   @@map("consultations")
 }
 
@@ -749,6 +760,7 @@ model Admission {
   prescriptions   Prescription[]
   surgeries       Surgery[]
   dischargeSummary DischargeSummary?
+  dischargeCoding  DischargeCoding?
 
   @@map("admissions")
 }
@@ -4651,4 +4663,377 @@ enum WellnessAssessmentType {
   PERIODIC
   GOAL_BASED
   COMPREHENSIVE
+}
+
+// ==================== INSURANCE CODING (ICD-10 / CPT) ====================
+
+// Master ICD-10 code table
+model ICD10Code {
+  id               String   @id @default(uuid())
+  hospitalId       String
+  code             String   // e.g., "J18.9", "E11.65"
+  description      String   // Full description
+  shortDescription String?  // Short display name
+  category         String   // Chapter/category, e.g., "Respiratory", "Endocrine"
+  subcategory      String?  // More specific grouping
+  dhaApproved      Boolean  @default(true)  // Dubai Health Authority approved
+  specificityLevel Int      @default(3)     // 3=category, 4-7=more specific
+  isUnspecified    Boolean  @default(false) // True for unspecified codes like "J18.9"
+  preferredCode    String?  // More specific code to use instead
+  isActive         Boolean  @default(true)
+  isBillable       Boolean  @default(true)  // Can be used for billing
+  effectiveDate    DateTime @default(now())
+  terminationDate  DateTime?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  createdBy        String?
+
+  // Relations
+  hospital               Hospital                 @relation(fields: [hospitalId], references: [id])
+  payerRules             ICD10PayerRule[]
+  icdCptMappings         ICD10CPTMapping[]        @relation("ICD10ToMapping")
+  consultationDiagnoses  ConsultationDiagnosis[]
+  dischargeDiagnoses     DischargeDiagnosis[]
+
+  @@unique([hospitalId, code])
+  @@index([hospitalId, category])
+  @@index([hospitalId, dhaApproved])
+  @@index([code])
+  @@map("icd10_codes")
+}
+
+// Master CPT code table
+model CPTCode {
+  id                String   @id @default(uuid())
+  hospitalId        String
+  code              String   // e.g., "99213", "99214"
+  description       String   // Full description
+  shortDescription  String?  // Short display name
+  category          String   // e.g., "E&M", "Surgery", "Radiology"
+  subcategory       String?  // More specific grouping
+  basePrice         Decimal  @db.Decimal(10, 2)  // Hospital standard price
+  dhaPrice          Decimal? @db.Decimal(10, 2)  // DHA regulated price
+  cashPrice         Decimal? @db.Decimal(10, 2)  // Cash patient price
+  requiresPreAuth   Boolean  @default(false)     // Requires pre-authorization
+  isActive          Boolean  @default(true)
+  workRVU           Decimal? @db.Decimal(6, 2)   // Work relative value units
+  facilityRVU       Decimal? @db.Decimal(6, 2)   // Facility RVU
+  malpracticeRVU    Decimal? @db.Decimal(6, 2)   // Malpractice RVU
+  globalPeriod      Int?     // Global surgery period in days (0, 10, 90)
+  professionalComponent Boolean @default(false)  // Has professional component (26 modifier)
+  technicalComponent    Boolean @default(false)  // Has technical component (TC modifier)
+  effectiveDate     DateTime @default(now())
+  terminationDate   DateTime?
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdBy         String?
+
+  // Bundling rules - JSON arrays of CPT codes
+  bundledWith       String[]  // CPT codes typically bundled with this one
+  excludedWith      String[]  // CPT codes that cannot be billed together (NCCI edits)
+  requiresModifier  String[]  // Modifiers often needed with this code
+
+  // Relations
+  hospital               Hospital                 @relation(fields: [hospitalId], references: [id])
+  payerRules             CPTPayerRule[]
+  icdCptMappings         ICD10CPTMapping[]        @relation("CPTToMapping")
+  consultationProcedures ConsultationProcedure[]
+  dischargeProcedures    DischargeProcedure[]
+
+  @@unique([hospitalId, code])
+  @@index([hospitalId, category])
+  @@index([hospitalId, requiresPreAuth])
+  @@index([code])
+  @@map("cpt_codes")
+}
+
+// CPT Modifiers (e.g., 25, 59, 76, TC, 26)
+model CPTModifier {
+  id           String   @id @default(uuid())
+  hospitalId   String
+  code         String   // e.g., "25", "59", "76", "TC", "26"
+  description  String
+  priceImpact  Decimal? @db.Decimal(5, 4)  // Multiplier (e.g., 0.50 for 50% reduction)
+  isActive     Boolean  @default(true)
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  hospital Hospital @relation(fields: [hospitalId], references: [id])
+
+  @@unique([hospitalId, code])
+  @@map("cpt_modifiers")
+}
+
+// Insurance Payer master
+model InsurancePayer {
+  id                String   @id @default(uuid())
+  hospitalId        String
+  name              String   // e.g., "Daman", "Neuron", "ADNIC"
+  code              String   // Short code
+  regulator         String?  // e.g., "DHA", "DOH", "HAAD"
+  claimPlatform     String?  // e.g., "eClaimLink", "SHIFA", "Riayati"
+  claimSubmissionDeadline Int? // Days after service
+  appealDeadline    Int?     // Days after rejection
+  preAuthRequired   Boolean  @default(false)
+  preAuthPhone      String?
+  preAuthEmail      String?
+  preAuthPortal     String?
+  contactPhone      String?
+  contactEmail      String?
+  address           String?
+  paymentTerms      Int?     // Days to payment
+  isActive          Boolean  @default(true)
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdBy         String?
+
+  // Relations
+  hospital     Hospital         @relation(fields: [hospitalId], references: [id])
+  icdRules     ICD10PayerRule[]
+  cptRules     CPTPayerRule[]
+
+  @@unique([hospitalId, code])
+  @@index([hospitalId, isActive])
+  @@map("insurance_payers")
+}
+
+// Payer-specific rules for ICD-10 codes
+model ICD10PayerRule {
+  id                 String   @id @default(uuid())
+  payerId            String
+  icd10CodeId        String
+  isCovered          Boolean  @default(true)
+  requiresPreAuth    Boolean  @default(false)
+  maxVisitsPerYear   Int?     // Visit limit
+  waitingPeriodDays  Int?     // Coverage waiting period
+  copayAmount        Decimal? @db.Decimal(10, 2)
+  copayPercentage    Decimal? @db.Decimal(5, 2)
+  deductibleApplies  Boolean  @default(true)
+  ageMinimum         Int?     // Age restrictions
+  ageMaximum         Int?
+  genderRestriction  String?  // "M", "F", or null for any
+  priorDiagRequired  String?  // ICD code that must be documented first
+  documentationNotes String?  // Required documentation
+  effectiveDate      DateTime @default(now())
+  terminationDate    DateTime?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // Relations
+  payer     InsurancePayer @relation(fields: [payerId], references: [id], onDelete: Cascade)
+  icd10Code ICD10Code      @relation(fields: [icd10CodeId], references: [id], onDelete: Cascade)
+
+  @@unique([payerId, icd10CodeId])
+  @@index([payerId])
+  @@index([icd10CodeId])
+  @@map("icd10_payer_rules")
+}
+
+// Payer-specific rules for CPT codes
+model CPTPayerRule {
+  id                 String   @id @default(uuid())
+  payerId            String
+  cptCodeId          String
+  isCovered          Boolean  @default(true)
+  requiresPreAuth    Boolean  @default(false)
+  priceOverride      Decimal? @db.Decimal(10, 2)  // Payer-specific price
+  maxUnitsPerVisit   Int?     // Unit limit per encounter
+  maxUnitsPerYear    Int?     // Annual limit
+  frequencyLimit     String?  // e.g., "1/30days", "4/year"
+  ageMinimum         Int?
+  ageMaximum         Int?
+  genderRestriction  String?
+  placeOfService     String[] // Allowed place of service codes
+  requiresModifier   String[] // Required modifiers for this payer
+  documentationNotes String?
+  effectiveDate      DateTime @default(now())
+  terminationDate    DateTime?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // Relations
+  payer   InsurancePayer @relation(fields: [payerId], references: [id], onDelete: Cascade)
+  cptCode CPTCode        @relation(fields: [cptCodeId], references: [id], onDelete: Cascade)
+
+  @@unique([payerId, cptCodeId])
+  @@index([payerId])
+  @@index([cptCodeId])
+  @@map("cpt_payer_rules")
+}
+
+// Medical necessity mappings - valid ICD-10 + CPT pairs
+model ICD10CPTMapping {
+  id               String   @id @default(uuid())
+  hospitalId       String
+  icd10CodeId      String
+  cptCodeId        String
+  validityScore    Decimal  @db.Decimal(3, 2) @default(1.00)  // 0.00-1.00 necessity strength
+  isRequired       Boolean  @default(false)  // ICD required for CPT
+  isCommon         Boolean  @default(true)   // Commonly paired
+  documentation    String?  // Required documentation for this pair
+  notes            String?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  createdBy        String?
+
+  // Relations
+  hospital  Hospital  @relation(fields: [hospitalId], references: [id])
+  icd10Code ICD10Code @relation("ICD10ToMapping", fields: [icd10CodeId], references: [id], onDelete: Cascade)
+  cptCode   CPTCode   @relation("CPTToMapping", fields: [cptCodeId], references: [id], onDelete: Cascade)
+
+  @@unique([hospitalId, icd10CodeId, cptCodeId])
+  @@index([hospitalId])
+  @@index([icd10CodeId])
+  @@index([cptCodeId])
+  @@map("icd10_cpt_mappings")
+}
+
+// ==================== CONSULTATION & DISCHARGE CODING ====================
+
+// Diagnoses linked to a consultation (OPD)
+model ConsultationDiagnosis {
+  id               String   @id @default(uuid())
+  consultationId   String
+  icd10CodeId      String
+  sequenceNumber   Int      @default(1)  // 1 = primary, 2+ = secondary
+  isPrimary        Boolean  @default(false)
+  isAdmitting      Boolean  @default(false)  // Reason for visit
+  diagnosisType    DiagnosisType @default(FINAL)
+  presentOnAdmission String? // Y, N, U, W (for IPD)
+  notes            String?
+  aiSuggested      Boolean  @default(false)  // Was this AI suggested
+  aiConfidence     Decimal? @db.Decimal(3, 2) // AI confidence if suggested
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  createdBy        String?
+
+  // Relations
+  consultation Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  icd10Code    ICD10Code    @relation(fields: [icd10CodeId], references: [id])
+
+  @@unique([consultationId, icd10CodeId])
+  @@index([consultationId])
+  @@map("consultation_diagnoses")
+}
+
+// Procedures linked to a consultation (OPD)
+model ConsultationProcedure {
+  id               String   @id @default(uuid())
+  consultationId   String
+  cptCodeId        String
+  modifiers        String[] // Applied modifiers
+  units            Int      @default(1)
+  serviceDate      DateTime @default(now())
+  price            Decimal  @db.Decimal(10, 2)
+  notes            String?
+  aiSuggested      Boolean  @default(false)
+  aiConfidence     Decimal? @db.Decimal(3, 2)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  createdBy        String?
+
+  // Relations
+  consultation Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  cptCode      CPTCode      @relation(fields: [cptCodeId], references: [id])
+
+  @@index([consultationId])
+  @@map("consultation_procedures")
+}
+
+// Discharge coding for IPD admissions
+model DischargeCoding {
+  id               String   @id @default(uuid())
+  admissionId      String   @unique
+  status           DischargeCodingStatus @default(DRAFT)
+  codingCompleteAt DateTime?
+  codedBy          String?
+  reviewedBy       String?
+  reviewedAt       DateTime?
+  totalCharges     Decimal? @db.Decimal(12, 2)
+  acceptancePrediction Decimal? @db.Decimal(3, 2) // AI predicted acceptance
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relations
+  admission   Admission            @relation(fields: [admissionId], references: [id], onDelete: Cascade)
+  diagnoses   DischargeDiagnosis[]
+  procedures  DischargeProcedure[]
+
+  @@map("discharge_codings")
+}
+
+// Diagnoses for discharge (IPD)
+model DischargeDiagnosis {
+  id                 String   @id @default(uuid())
+  dischargeCodingId  String
+  icd10CodeId        String
+  sequenceNumber     Int      @default(1)
+  isPrimary          Boolean  @default(false)
+  isAdmitting        Boolean  @default(false)
+  diagnosisType      DiagnosisType @default(FINAL)
+  presentOnAdmission String?  // Y, N, U, W
+  notes              String?
+  aiSuggested        Boolean  @default(false)
+  aiConfidence       Decimal? @db.Decimal(3, 2)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  createdBy          String?
+
+  // Relations
+  dischargeCoding DischargeCoding @relation(fields: [dischargeCodingId], references: [id], onDelete: Cascade)
+  icd10Code       ICD10Code       @relation(fields: [icd10CodeId], references: [id])
+
+  @@unique([dischargeCodingId, icd10CodeId])
+  @@index([dischargeCodingId])
+  @@map("discharge_diagnoses")
+}
+
+// Procedures for discharge (IPD)
+model DischargeProcedure {
+  id                String   @id @default(uuid())
+  dischargeCodingId String
+  cptCodeId         String
+  modifiers         String[]
+  units             Int      @default(1)
+  serviceDate       DateTime
+  price             Decimal  @db.Decimal(10, 2)
+  performedBy       String?  // Doctor ID
+  notes             String?
+  aiSuggested       Boolean  @default(false)
+  aiConfidence      Decimal? @db.Decimal(3, 2)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdBy         String?
+
+  // Relations
+  dischargeCoding DischargeCoding @relation(fields: [dischargeCodingId], references: [id], onDelete: Cascade)
+  cptCode         CPTCode         @relation(fields: [cptCodeId], references: [id])
+
+  @@index([dischargeCodingId])
+  @@map("discharge_procedures")
+}
+
+enum DiagnosisType {
+  ADMITTING    // Initial diagnosis on admission
+  PRINCIPAL    // Main condition after study
+  FINAL        // Final confirmed diagnosis
+  SECONDARY    // Contributing condition
+  RULE_OUT     // Being investigated
+}
+
+enum DischargeCodingStatus {
+  DRAFT        // Still being edited
+  PENDING_REVIEW // Awaiting coder review
+  REVIEWED     // Coder reviewed
+  FINALIZED    // Locked for billing
+  SUBMITTED    // Claim submitted
 }

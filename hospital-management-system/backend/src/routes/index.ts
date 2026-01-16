@@ -44,6 +44,7 @@ import patientAuthRoutes from './patientAuthRoutes';
 import notificationRoutes from './notificationRoutes';
 import wellnessRoutes from './wellnessRoutes';
 import aiSettingsRoutes from './aiSettingsRoutes';
+import insuranceCodingRoutes from './insuranceCodingRoutes';
 
 const router = Router();
 
@@ -115,5 +116,8 @@ router.use('/wellness', wellnessRoutes);
 
 // AI Settings routes (Admin only)
 router.use('/ai-settings', aiSettingsRoutes);
+
+// Insurance Coding (ICD-10 / CPT) routes
+router.use('/insurance-coding', insuranceCodingRoutes);
 
 export default router;

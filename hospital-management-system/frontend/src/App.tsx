@@ -118,6 +118,9 @@ import RBAC from './pages/RBAC';
 // AI Settings (Admin only)
 import AISettings from './pages/AISettings';
 
+// Insurance Coding (Admin only)
+import InsuranceCoding from './pages/InsuranceCoding';
+
 // Protected Route Component
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -222,6 +225,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'SUPER_ADMIN']}>
               <AISettings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/insurance-coding"
+          element={
+            <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'ACCOUNTANT']}>
+              <InsuranceCoding />
             </ProtectedRoute>
           }
         />

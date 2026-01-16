@@ -38,6 +38,7 @@ from med_safety.service import MedicationSafetyAI
 from smart_orders.service import SmartOrdersAI, PatientContext as SmartOrdersPatientContext
 from ai_scribe.service import AIScribeService
 from health_assistant.service import HealthAssistantAI
+from insurance_coding.service import InsuranceCodingAI
 
 app = FastAPI(
     title="HMS AI Services",
@@ -71,6 +72,7 @@ med_safety_ai = MedicationSafetyAI()
 smart_orders_ai = SmartOrdersAI()
 ai_scribe = AIScribeService()
 health_assistant_ai = HealthAssistantAI()
+insurance_coding_ai = InsuranceCodingAI()
 
 
 # Request/Response Models
@@ -2789,6 +2791,318 @@ async def get_scribe_templates():
     try:
         result = ai_scribe.get_templates()
         return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# Insurance Coding AI Endpoints
+# =============================================================================
+
+class PatientContextModel(BaseModel):
+    """Patient context for insurance coding"""
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    conditions: Optional[List[str]] = []
+    medications: Optional[List[str]] = []
+
+
+class CodeSuggestRequest(BaseModel):
+    """Request for AI code suggestions"""
+    clinicalText: str
+    patientContext: Optional[PatientContextModel] = None
+    encounterType: Optional[str] = "outpatient"
+    payerId: Optional[str] = None
+
+
+class SuggestedICD10(BaseModel):
+    code: str
+    description: str
+    confidence: float
+    specificityLevel: Optional[str] = None
+    isPreferred: Optional[bool] = False
+    rationale: Optional[str] = None
+
+
+class SuggestedCPT(BaseModel):
+    code: str
+    description: str
+    confidence: float
+    medicalNecessityScore: Optional[float] = None
+    requiredModifiers: Optional[List[str]] = []
+    rationale: Optional[str] = None
+
+
+class CodeSuggestResponse(BaseModel):
+    icd10Codes: List[SuggestedICD10]
+    cptCodes: List[SuggestedCPT]
+    extractedDiagnoses: List[str]
+    confidence: float
+    modelVersion: str
+
+
+class CodeValidateRequest(BaseModel):
+    """Request for code validation"""
+    icdCodes: List[str]
+    cptCodes: List[str]
+    payerId: Optional[str] = None
+
+
+class ValidationIssue(BaseModel):
+    type: str
+    severity: str
+    icdCode: Optional[str] = None
+    cptCode: Optional[str] = None
+    message: str
+    suggestion: Optional[str] = None
+
+
+class CodeValidateResponse(BaseModel):
+    isValid: bool
+    issues: List[ValidationIssue]
+    medicalNecessityScore: float
+    suggestions: List[str]
+    modelVersion: str
+
+
+class AcceptancePredictRequest(BaseModel):
+    """Request for claim acceptance prediction"""
+    icdCodes: List[str]
+    cptCodes: List[str]
+    payerId: str
+    documentationScore: Optional[float] = None
+    patientContext: Optional[PatientContextModel] = None
+
+
+class RiskFactor(BaseModel):
+    factor: str
+    impact: str
+    weight: float
+
+
+class AcceptancePredictResponse(BaseModel):
+    acceptanceProbability: float
+    riskLevel: str
+    riskFactors: List[RiskFactor]
+    recommendations: List[str]
+    estimatedReimbursement: Optional[float] = None
+    modelVersion: str
+
+
+class DiagnosisExtractRequest(BaseModel):
+    """Request for diagnosis extraction from clinical text"""
+    clinicalText: str
+    extractConditions: Optional[bool] = True
+    extractProcedures: Optional[bool] = True
+
+
+class ExtractedDiagnosis(BaseModel):
+    text: str
+    icd10Suggestion: Optional[str] = None
+    confidence: float
+    location: Optional[Dict[str, int]] = None
+
+
+class ExtractedProcedure(BaseModel):
+    text: str
+    cptSuggestion: Optional[str] = None
+    confidence: float
+
+
+class DiagnosisExtractResponse(BaseModel):
+    diagnoses: List[ExtractedDiagnosis]
+    procedures: List[ExtractedProcedure]
+    clinicalSummary: Optional[str] = None
+    modelVersion: str
+
+
+class MedicalNecessityCheckRequest(BaseModel):
+    """Request for medical necessity check"""
+    icdCodes: List[str]
+    cptCodes: List[str]
+
+
+class NecessityPair(BaseModel):
+    icdCode: str
+    cptCode: str
+    isNecessary: bool
+    score: float
+    rationale: Optional[str] = None
+
+
+class MedicalNecessityCheckResponse(BaseModel):
+    overallScore: float
+    pairs: List[NecessityPair]
+    invalidPairs: List[Dict[str, str]]
+    recommendations: List[str]
+    modelVersion: str
+
+
+@app.post("/api/insurance-coding/suggest", response_model=CodeSuggestResponse)
+async def suggest_codes(request: CodeSuggestRequest):
+    """Suggest ICD-10 and CPT codes from clinical text"""
+    try:
+        patient_context = None
+        if request.patientContext:
+            patient_context = {
+                'age': request.patientContext.age,
+                'gender': request.patientContext.gender,
+                'conditions': request.patientContext.conditions or [],
+                'medications': request.patientContext.medications or [],
+            }
+
+        result = insurance_coding_ai.suggest_codes(
+            clinical_text=request.clinicalText,
+            patient_context=patient_context,
+            encounter_type=request.encounterType,
+            payer_id=request.payerId,
+        )
+
+        return CodeSuggestResponse(
+            icd10Codes=[SuggestedICD10(**icd) for icd in result.get('icd10_codes', [])],
+            cptCodes=[SuggestedCPT(**cpt) for cpt in result.get('cpt_codes', [])],
+            extractedDiagnoses=result.get('extracted_diagnoses', []),
+            confidence=result.get('confidence', 0.0),
+            modelVersion=result.get('model_version', 'rule-based-1.0'),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/insurance-coding/validate", response_model=CodeValidateResponse)
+async def validate_codes(request: CodeValidateRequest):
+    """Validate ICD-10 and CPT code combinations"""
+    try:
+        result = insurance_coding_ai.validate_codes(
+            icd_codes=request.icdCodes,
+            cpt_codes=request.cptCodes,
+            payer_id=request.payerId,
+        )
+
+        return CodeValidateResponse(
+            isValid=result.get('is_valid', False),
+            issues=[ValidationIssue(**issue) for issue in result.get('issues', [])],
+            medicalNecessityScore=result.get('medical_necessity_score', 0.0),
+            suggestions=result.get('suggestions', []),
+            modelVersion=result.get('model_version', 'rule-based-1.0'),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/insurance-coding/predict-acceptance", response_model=AcceptancePredictResponse)
+async def predict_acceptance(request: AcceptancePredictRequest):
+    """Predict claim acceptance probability"""
+    try:
+        patient_context = None
+        if request.patientContext:
+            patient_context = {
+                'age': request.patientContext.age,
+                'gender': request.patientContext.gender,
+                'conditions': request.patientContext.conditions or [],
+                'medications': request.patientContext.medications or [],
+            }
+
+        result = insurance_coding_ai.predict_acceptance(
+            icd_codes=request.icdCodes,
+            cpt_codes=request.cptCodes,
+            payer_id=request.payerId,
+            documentation_score=request.documentationScore,
+            patient_context=patient_context,
+        )
+
+        return AcceptancePredictResponse(
+            acceptanceProbability=result.get('acceptance_probability', 0.0),
+            riskLevel=result.get('risk_level', 'unknown'),
+            riskFactors=[RiskFactor(
+                factor=rf.get('factor', ''),
+                impact=rf.get('impact', 'neutral'),
+                weight=rf.get('weight', 0.0)
+            ) for rf in result.get('risk_factors', [])],
+            recommendations=result.get('recommendations', []),
+            estimatedReimbursement=result.get('estimated_reimbursement'),
+            modelVersion=result.get('model_version', 'rule-based-1.0'),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/insurance-coding/extract-diagnoses", response_model=DiagnosisExtractResponse)
+async def extract_diagnoses(request: DiagnosisExtractRequest):
+    """Extract diagnoses and procedures from clinical text"""
+    try:
+        result = insurance_coding_ai.extract_diagnoses_from_text(
+            clinical_text=request.clinicalText,
+        )
+
+        return DiagnosisExtractResponse(
+            diagnoses=[ExtractedDiagnosis(
+                text=d.get('text', ''),
+                icd10Suggestion=d.get('icd10_suggestion'),
+                confidence=d.get('confidence', 0.0),
+                location=d.get('location'),
+            ) for d in result.get('diagnoses', [])],
+            procedures=[ExtractedProcedure(
+                text=p.get('text', ''),
+                cptSuggestion=p.get('cpt_suggestion'),
+                confidence=p.get('confidence', 0.0),
+            ) for p in result.get('procedures', [])],
+            clinicalSummary=result.get('clinical_summary'),
+            modelVersion=result.get('model_version', 'gpt-4o-1.0'),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/insurance-coding/check-necessity", response_model=MedicalNecessityCheckResponse)
+async def check_medical_necessity(request: MedicalNecessityCheckRequest):
+    """Check medical necessity for ICD-CPT code pairs"""
+    try:
+        result = insurance_coding_ai.check_medical_necessity(
+            icd_codes=request.icdCodes,
+            cpt_codes=request.cptCodes,
+        )
+
+        return MedicalNecessityCheckResponse(
+            overallScore=result.get('overall_score', 0.0),
+            pairs=[NecessityPair(
+                icdCode=p.get('icd_code', ''),
+                cptCode=p.get('cpt_code', ''),
+                isNecessary=p.get('is_necessary', False),
+                score=p.get('score', 0.0),
+                rationale=p.get('rationale'),
+            ) for p in result.get('pairs', [])],
+            invalidPairs=result.get('invalid_pairs', []),
+            recommendations=result.get('recommendations', []),
+            modelVersion=result.get('model_version', 'rule-based-1.0'),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/insurance-coding/status")
+async def insurance_coding_status():
+    """Get insurance coding AI service status"""
+    try:
+        return {
+            "service": "insurance_coding",
+            "status": "operational",
+            "features": {
+                "code_suggestion": True,
+                "code_validation": True,
+                "acceptance_prediction": True,
+                "diagnosis_extraction": True,
+                "medical_necessity": True,
+            },
+            "knowledge_base": {
+                "icd10_mappings": True,
+                "cpt_categories": True,
+                "denial_reasons": True,
+                "modifier_rules": True,
+                "dha_rules": True,
+            },
+            "model_version": "1.0.0",
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
