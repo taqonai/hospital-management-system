@@ -167,19 +167,19 @@ const NutritionPlanScreen: React.FC = () => {
               <Text style={styles.planDescription}>{activePlan.description}</Text>
               <View style={styles.planStats}>
                 <View style={styles.planStat}>
-                  <Text style={styles.planStatValue}>{activePlan.calorieTarget}</Text>
+                  <Text style={styles.planStatValue}>{activePlan.calorieTarget || 0}</Text>
                   <Text style={styles.planStatLabel}>Calories/day</Text>
                 </View>
                 <View style={styles.planStat}>
-                  <Text style={styles.planStatValue}>{activePlan.macros.protein}g</Text>
+                  <Text style={styles.planStatValue}>{activePlan.macros?.protein || 0}g</Text>
                   <Text style={styles.planStatLabel}>Protein</Text>
                 </View>
                 <View style={styles.planStat}>
-                  <Text style={styles.planStatValue}>{activePlan.macros.carbs}g</Text>
+                  <Text style={styles.planStatValue}>{activePlan.macros?.carbs || 0}g</Text>
                   <Text style={styles.planStatLabel}>Carbs</Text>
                 </View>
                 <View style={styles.planStat}>
-                  <Text style={styles.planStatValue}>{activePlan.macros.fat}g</Text>
+                  <Text style={styles.planStatValue}>{activePlan.macros?.fat || 0}g</Text>
                   <Text style={styles.planStatLabel}>Fat</Text>
                 </View>
               </View>
@@ -220,8 +220,8 @@ const NutritionPlanScreen: React.FC = () => {
                       />
                     </View>
                     <View style={styles.planTitleContainer}>
-                      <Text style={styles.planName}>{plan.name}</Text>
-                      <Text style={styles.planType}>{plan.type.replace('_', ' ')}</Text>
+                      <Text style={styles.planName}>{plan.name || 'Untitled Plan'}</Text>
+                      <Text style={styles.planType}>{(plan.type || 'general').replace('_', ' ')}</Text>
                     </View>
                     {plan.isActive ? (
                       <View style={styles.activeBadge}>
@@ -237,13 +237,13 @@ const NutritionPlanScreen: React.FC = () => {
                     )}
                   </View>
                   <Text style={styles.planCalories}>
-                    {plan.calorieTarget} cal/day
+                    {plan.calorieTarget || 0} cal/day
                   </Text>
                   <Text style={styles.planMacros}>
-                    {plan.macros.protein}g protein · {plan.macros.carbs}g carbs · {plan.macros.fat}g fat
+                    {plan.macros?.protein || 0}g protein · {plan.macros?.carbs || 0}g carbs · {plan.macros?.fat || 0}g fat
                   </Text>
                   <Text style={styles.planCreator}>
-                    Created by: {plan.createdBy === 'ai' ? 'AI' : plan.createdBy}
+                    Created by: {plan.createdBy === 'ai' ? 'AI' : (plan.createdBy || 'Unknown')}
                   </Text>
                 </View>
               ))}

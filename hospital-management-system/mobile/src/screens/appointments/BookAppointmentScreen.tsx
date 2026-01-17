@@ -621,7 +621,7 @@ const BookAppointmentScreen: React.FC = () => {
                 <Text style={styles.optionSubtitle}>{doctor.specialization}</Text>
                 {doctor.consultationFee && (
                   <Text style={styles.feeText}>
-                    Consultation: AED {Number(doctor.consultationFee).toFixed(2)}
+                    Consultation: AED {(Number(doctor.consultationFee) || 0).toFixed(2)}
                   </Text>
                 )}
               </View>
@@ -800,7 +800,7 @@ const BookAppointmentScreen: React.FC = () => {
                 <View style={styles.summaryInfo}>
                   <Text style={styles.summaryLabel}>Consultation Fee</Text>
                   <Text style={styles.summaryValue}>
-                    AED {Number(bookingData.doctor.consultationFee).toFixed(2)}
+                    AED {(Number(bookingData.doctor?.consultationFee) || 0).toFixed(2)}
                   </Text>
                 </View>
               </View>

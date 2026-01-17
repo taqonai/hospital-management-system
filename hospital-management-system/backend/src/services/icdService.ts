@@ -1,6 +1,14 @@
 import prisma from '../config/database';
 import { NotFoundError } from '../middleware/errorHandler';
 import { Prisma } from '@prisma/client';
+import {
+  parseCSV,
+  parseCSVBoolean,
+  parseCSVNumber,
+  validateRequiredFields,
+  generateICD10Template,
+  ICD10_CSV_FIELDS,
+} from '../utils/csvParser';
 
 export interface ICD10CodeInput {
   code: string;
@@ -338,6 +346,120 @@ export class ICDService {
       },
       orderBy: { code: 'asc' },
     });
+  }
+
+  /**
+   * Import ICD-10 codes from CSV content
+   */
+  async importFromCSV(
+    hospitalId: string,
+    csvContent: string | Buffer,
+    createdBy?: string
+  ) {
+    const results = {
+      total: 0,
+      created: 0,
+      updated: 0,
+      errors: [] as { row: number; code: string; error: string }[],
+    };
+
+    try {
+      // Parse CSV
+      const rows = parseCSV<Record<string, any>>(csvContent);
+      results.total = rows.length;
+
+      // Process each row
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+
+        // Validate required fields
+        const validationError = validateRequiredFields(
+          row,
+          ['code', 'description', 'category'],
+          i
+        );
+        if (validationError) {
+          results.errors.push({
+            row: i + 1,
+            code: row.code || 'unknown',
+            error: validationError,
+          });
+          continue;
+        }
+
+        try {
+          // Transform row to ICD10CodeInput
+          const codeData: ICD10CodeInput = {
+            code: String(row.code).toUpperCase().trim(),
+            description: String(row.description).trim(),
+            shortDescription: row.shortDescription ? String(row.shortDescription).trim() : undefined,
+            category: String(row.category).trim(),
+            subcategory: row.subcategory ? String(row.subcategory).trim() : undefined,
+            dhaApproved: parseCSVBoolean(row.dhaApproved ?? true),
+            specificityLevel: parseCSVNumber(row.specificityLevel, 3),
+            isUnspecified: parseCSVBoolean(row.isUnspecified ?? false),
+            preferredCode: row.preferredCode ? String(row.preferredCode).toUpperCase().trim() : undefined,
+            isActive: parseCSVBoolean(row.isActive ?? true),
+            isBillable: parseCSVBoolean(row.isBillable ?? true),
+            notes: row.notes ? String(row.notes).trim() : undefined,
+          };
+
+          // Check if code already exists
+          const existing = await prisma.iCD10Code.findFirst({
+            where: { hospitalId, code: codeData.code },
+          });
+
+          if (existing) {
+            // Update existing code
+            await prisma.iCD10Code.update({
+              where: { id: existing.id },
+              data: {
+                description: codeData.description,
+                shortDescription: codeData.shortDescription,
+                category: codeData.category,
+                subcategory: codeData.subcategory,
+                dhaApproved: codeData.dhaApproved,
+                specificityLevel: codeData.specificityLevel,
+                isUnspecified: codeData.isUnspecified,
+                preferredCode: codeData.preferredCode,
+                isActive: codeData.isActive,
+                isBillable: codeData.isBillable,
+                notes: codeData.notes,
+              },
+            });
+            results.updated++;
+          } else {
+            // Create new code
+            await this.create(hospitalId, codeData, createdBy);
+            results.created++;
+          }
+        } catch (error: any) {
+          results.errors.push({
+            row: i + 1,
+            code: row.code || 'unknown',
+            error: error.message || 'Unknown error',
+          });
+        }
+      }
+    } catch (error: any) {
+      throw new Error(`Failed to parse CSV: ${error.message}`);
+    }
+
+    return results;
+  }
+
+  /**
+   * Get CSV template for ICD-10 import
+   */
+  getCSVTemplate(): string {
+    return generateICD10Template();
+  }
+
+  /**
+   * Get CSV field definitions for ICD-10
+   */
+  getCSVFields() {
+    return ICD10_CSV_FIELDS;
   }
 }
 

@@ -1716,6 +1716,18 @@ export const insuranceCodingApi = {
     [key: string]: any;
   }>) => api.post('/insurance-coding/icd10/bulk', { codes }),
 
+  importICD10CSV: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/insurance-coding/icd10/import-csv', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  getICD10CSVTemplate: () => api.get('/insurance-coding/icd10/csv-template', { responseType: 'blob' }),
+
+  getICD10CSVFields: () => api.get('/insurance-coding/icd10/csv-fields'),
+
   // CPT Codes
   getCPTCodes: (params?: {
     page?: number;
@@ -1780,6 +1792,18 @@ export const insuranceCodingApi = {
     basePrice: number;
     [key: string]: any;
   }>) => api.post('/insurance-coding/cpt/bulk', { codes }),
+
+  importCPTCSV: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/insurance-coding/cpt/import-csv', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  getCPTCSVTemplate: () => api.get('/insurance-coding/cpt/csv-template', { responseType: 'blob' }),
+
+  getCPTCSVFields: () => api.get('/insurance-coding/cpt/csv-fields'),
 
   // CPT Modifiers
   getModifiers: () => api.get('/insurance-coding/modifiers'),

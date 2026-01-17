@@ -9,8 +9,10 @@ import {
   ShieldCheckIcon,
   CurrencyDollarIcon,
   XMarkIcon,
+  DocumentArrowUpIcon,
 } from '@heroicons/react/24/outline';
 import { insuranceCodingApi } from '../../services/api';
+import CSVImportModal from '../../components/insurance/CSVImportModal';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 
@@ -82,6 +84,7 @@ export default function CPTManager() {
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
+  const [showCSVImport, setShowCSVImport] = useState(false);
   const [editingCode, setEditingCode] = useState<CPTCode | null>(null);
   const [formData, setFormData] = useState<CPTFormData>(defaultFormData);
 
@@ -257,6 +260,14 @@ export default function CPTManager() {
           className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
         >
           <ArrowPathIcon className="h-5 w-5" />
+        </button>
+
+        <button
+          onClick={() => setShowCSVImport(true)}
+          className="flex items-center gap-2 px-4 py-2 border border-primary-500 text-primary-600 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+        >
+          <DocumentArrowUpIcon className="h-5 w-5" />
+          Import CSV
         </button>
 
         <button
@@ -660,6 +671,37 @@ export default function CPTManager() {
           </div>
         </div>
       )}
+
+      {/* CSV Import Modal */}
+      <CSVImportModal
+        isOpen={showCSVImport}
+        onClose={() => setShowCSVImport(false)}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['cpt-codes'] });
+          setShowCSVImport(false);
+        }}
+        title="Import CPT Codes"
+        description="Upload a CSV file with CPT procedure codes"
+        importFn={insuranceCodingApi.importCPTCSV}
+        downloadTemplateFn={insuranceCodingApi.getCPTCSVTemplate}
+        templateFilename="cpt-template.csv"
+        fields={[
+          { name: 'code', required: true, example: '99213' },
+          { name: 'description', required: true, example: 'Office visit, established patient, low complexity' },
+          { name: 'shortDescription', required: false, example: 'Office visit est low' },
+          { name: 'category', required: true, example: 'E&M' },
+          { name: 'subcategory', required: false, example: 'Office Visit' },
+          { name: 'basePrice', required: true, example: '150' },
+          { name: 'dhaPrice', required: false, example: '145' },
+          { name: 'cashPrice', required: false, example: '135' },
+          { name: 'requiresPreAuth', required: false, example: 'false' },
+          { name: 'workRVU', required: false, example: '1.30' },
+          { name: 'globalPeriod', required: false, example: '0' },
+          { name: 'professionalComponent', required: false, example: 'false' },
+          { name: 'technicalComponent', required: false, example: 'false' },
+          { name: 'notes', required: false, example: 'Common E&M code' },
+        ]}
+      />
     </div>
   );
 }

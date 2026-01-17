@@ -11,8 +11,10 @@ import {
   XMarkIcon,
   ArrowUpTrayIcon,
   FunnelIcon,
+  DocumentArrowUpIcon,
 } from '@heroicons/react/24/outline';
 import { insuranceCodingApi } from '../../services/api';
+import CSVImportModal from '../../components/insurance/CSVImportModal';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 
@@ -75,6 +77,7 @@ export default function ICD10Manager() {
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
+  const [showCSVImport, setShowCSVImport] = useState(false);
   const [editingCode, setEditingCode] = useState<ICD10Code | null>(null);
   const [formData, setFormData] = useState<CodeFormData>(defaultFormData);
 
@@ -242,6 +245,14 @@ export default function ICD10Manager() {
           className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
         >
           <ArrowPathIcon className="h-5 w-5" />
+        </button>
+
+        <button
+          onClick={() => setShowCSVImport(true)}
+          className="flex items-center gap-2 px-4 py-2 border border-primary-500 text-primary-600 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+        >
+          <DocumentArrowUpIcon className="h-5 w-5" />
+          Import CSV
         </button>
 
         <button
@@ -601,6 +612,34 @@ export default function ICD10Manager() {
           </div>
         </div>
       )}
+
+      {/* CSV Import Modal */}
+      <CSVImportModal
+        isOpen={showCSVImport}
+        onClose={() => setShowCSVImport(false)}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['icd10-codes'] });
+          setShowCSVImport(false);
+        }}
+        title="Import ICD-10 Codes"
+        description="Upload a CSV file with ICD-10 diagnosis codes"
+        importFn={insuranceCodingApi.importICD10CSV}
+        downloadTemplateFn={insuranceCodingApi.getICD10CSVTemplate}
+        templateFilename="icd10-template.csv"
+        fields={[
+          { name: 'code', required: true, example: 'J18.9' },
+          { name: 'description', required: true, example: 'Pneumonia, unspecified organism' },
+          { name: 'shortDescription', required: false, example: 'Pneumonia NOS' },
+          { name: 'category', required: true, example: 'Respiratory' },
+          { name: 'subcategory', required: false, example: 'Lower Respiratory' },
+          { name: 'dhaApproved', required: false, example: 'true' },
+          { name: 'specificityLevel', required: false, example: '4' },
+          { name: 'isUnspecified', required: false, example: 'true' },
+          { name: 'preferredCode', required: false, example: 'J18.1' },
+          { name: 'isBillable', required: false, example: 'true' },
+          { name: 'notes', required: false, example: 'Common diagnosis code' },
+        ]}
+      />
     </div>
   );
 }

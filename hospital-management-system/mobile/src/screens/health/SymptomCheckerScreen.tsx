@@ -828,7 +828,7 @@ const SymptomCheckerScreen: React.FC = () => {
           </View>
           {triageResult.urgencyScore && (
             <View style={styles.urgencyScoreContainer}>
-              <Text style={styles.urgencyScoreValue}>{triageResult.urgencyScore.toFixed(1)}</Text>
+              <Text style={styles.urgencyScoreValue}>{(triageResult.urgencyScore || 0).toFixed(1)}</Text>
               <Text style={styles.urgencyScoreMax}>/10</Text>
               <Text style={styles.urgencyScoreLabel}>Urgency</Text>
             </View>

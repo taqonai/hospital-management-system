@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import axios from 'axios';
+import multer from 'multer';
 import { icdService } from '../services/icdService';
 import { cptService } from '../services/cptService';
 import { payerService } from '../services/payerService';
@@ -15,6 +16,19 @@ import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '..
 import { AuthenticatedRequest } from '../types';
 import logger from '../utils/logger';
 import { DischargeCodingStatus } from '@prisma/client';
+
+// Configure multer for CSV file uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV files are allowed'));
+    }
+  },
+});
 
 const router = Router();
 
@@ -126,6 +140,47 @@ router.post(
     const { codes } = req.body;
     const result = await icdService.bulkImport(req.user!.hospitalId, codes, req.user!.userId);
     sendSuccess(res, result, `Imported ${result.created} codes, updated ${result.updated} codes`);
+  })
+);
+
+// Import ICD-10 codes from CSV (admin only)
+router.post(
+  '/icd10/import-csv',
+  authenticate,
+  authorize('HOSPITAL_ADMIN'),
+  upload.single('file'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
+    }
+    const result = await icdService.importFromCSV(
+      req.user!.hospitalId,
+      req.file.buffer,
+      req.user!.userId
+    );
+    sendSuccess(res, result, `Imported ${result.created} codes, updated ${result.updated} codes`);
+  })
+);
+
+// Get ICD-10 CSV template
+router.get(
+  '/icd10/csv-template',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const template = icdService.getCSVTemplate();
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="icd10-template.csv"');
+    res.send(template);
+  })
+);
+
+// Get ICD-10 CSV field definitions
+router.get(
+  '/icd10/csv-fields',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const fields = icdService.getCSVFields();
+    sendSuccess(res, fields);
   })
 );
 
@@ -266,6 +321,47 @@ router.post(
     const { codes } = req.body;
     const result = await cptService.bulkImport(req.user!.hospitalId, codes, req.user!.userId);
     sendSuccess(res, result, `Imported ${result.created} codes, updated ${result.updated} codes`);
+  })
+);
+
+// Import CPT codes from CSV (admin only)
+router.post(
+  '/cpt/import-csv',
+  authenticate,
+  authorize('HOSPITAL_ADMIN'),
+  upload.single('file'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
+    }
+    const result = await cptService.importFromCSV(
+      req.user!.hospitalId,
+      req.file.buffer,
+      req.user!.userId
+    );
+    sendSuccess(res, result, `Imported ${result.created} codes, updated ${result.updated} codes`);
+  })
+);
+
+// Get CPT CSV template
+router.get(
+  '/cpt/csv-template',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const template = cptService.getCSVTemplate();
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="cpt-template.csv"');
+    res.send(template);
+  })
+);
+
+// Get CPT CSV field definitions
+router.get(
+  '/cpt/csv-fields',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const fields = cptService.getCSVFields();
+    sendSuccess(res, fields);
   })
 );
 

@@ -154,12 +154,12 @@ const FitnessStatsScreen: React.FC = () => {
               </View>
               <View style={styles.statItem}>
                 <Ionicons name="flame-outline" size={24} color={colors.error[500]} />
-                <Text style={styles.statValue}>{stats.totalCalories.toLocaleString()}</Text>
+                <Text style={styles.statValue}>{(stats.totalCalories || 0).toLocaleString()}</Text>
                 <Text style={styles.statLabel}>Calories</Text>
               </View>
               <View style={styles.statItem}>
                 <Ionicons name="map-outline" size={24} color={colors.success[500]} />
-                <Text style={styles.statValue}>{stats.totalDistance.toFixed(1)}</Text>
+                <Text style={styles.statValue}>{(stats.totalDistance || 0).toFixed(1)}</Text>
                 <Text style={styles.statLabel}>km</Text>
               </View>
             </View>
@@ -180,7 +180,7 @@ const FitnessStatsScreen: React.FC = () => {
               <View style={styles.highlightIcon}>
                 <Ionicons name="trending-up" size={28} color={colors.success[600]} />
               </View>
-              <Text style={styles.highlightValue}>{stats.avgWorkoutsPerWeek.toFixed(1)}</Text>
+              <Text style={styles.highlightValue}>{(stats.avgWorkoutsPerWeek || 0).toFixed(1)}</Text>
               <Text style={styles.highlightLabel}>Avg/Week</Text>
             </View>
           </View>
@@ -211,7 +211,7 @@ const FitnessStatsScreen: React.FC = () => {
                 <View key={item.type} style={styles.distributionItem}>
                   <View style={styles.distributionInfo}>
                     <Text style={styles.distributionType}>
-                      {item.type.replace('_', ' ')}
+                      {(item.type || 'unknown').replace('_', ' ')}
                     </Text>
                     <Text style={styles.distributionCount}>
                       {item.count} {item.count === 1 ? 'workout' : 'workouts'}
@@ -239,7 +239,7 @@ const FitnessStatsScreen: React.FC = () => {
             <View style={styles.favoriteInfo}>
               <Text style={styles.favoriteLabel}>Favorite Activity</Text>
               <Text style={styles.favoriteValue}>
-                {stats.favoriteActivity.replace('_', ' ')}
+                {(stats.favoriteActivity || '').replace('_', ' ')}
               </Text>
             </View>
           </View>

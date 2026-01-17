@@ -1,6 +1,14 @@
 import prisma from '../config/database';
 import { NotFoundError } from '../middleware/errorHandler';
 import { Prisma } from '@prisma/client';
+import {
+  parseCSV,
+  parseCSVBoolean,
+  parseCSVNumber,
+  validateRequiredFields,
+  generateCPTTemplate,
+  CPT_CSV_FIELDS,
+} from '../utils/csvParser';
 
 export interface CPTCodeInput {
   code: string;
@@ -506,6 +514,140 @@ export class CPTService {
   calculatePriceWithModifier(basePrice: number, modifierPriceImpact: number | null): number {
     if (!modifierPriceImpact) return basePrice;
     return basePrice * Number(modifierPriceImpact);
+  }
+
+  /**
+   * Import CPT codes from CSV content
+   */
+  async importFromCSV(
+    hospitalId: string,
+    csvContent: string | Buffer,
+    createdBy?: string
+  ) {
+    const results = {
+      total: 0,
+      created: 0,
+      updated: 0,
+      errors: [] as { row: number; code: string; error: string }[],
+    };
+
+    try {
+      // Parse CSV
+      const rows = parseCSV<Record<string, any>>(csvContent);
+      results.total = rows.length;
+
+      // Process each row
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+
+        // Validate required fields
+        const validationError = validateRequiredFields(
+          row,
+          ['code', 'description', 'category', 'basePrice'],
+          i
+        );
+        if (validationError) {
+          results.errors.push({
+            row: i + 1,
+            code: row.code || 'unknown',
+            error: validationError,
+          });
+          continue;
+        }
+
+        try {
+          // Transform row to CPTCodeInput
+          const basePrice = parseCSVNumber(row.basePrice);
+          if (basePrice === undefined || isNaN(basePrice)) {
+            results.errors.push({
+              row: i + 1,
+              code: row.code,
+              error: 'Invalid basePrice value',
+            });
+            continue;
+          }
+
+          const codeData: CPTCodeInput = {
+            code: String(row.code).trim(),
+            description: String(row.description).trim(),
+            shortDescription: row.shortDescription ? String(row.shortDescription).trim() : undefined,
+            category: String(row.category).trim(),
+            subcategory: row.subcategory ? String(row.subcategory).trim() : undefined,
+            basePrice,
+            dhaPrice: parseCSVNumber(row.dhaPrice),
+            cashPrice: parseCSVNumber(row.cashPrice),
+            requiresPreAuth: parseCSVBoolean(row.requiresPreAuth ?? false),
+            isActive: parseCSVBoolean(row.isActive ?? true),
+            workRVU: parseCSVNumber(row.workRVU),
+            facilityRVU: parseCSVNumber(row.facilityRVU),
+            malpracticeRVU: parseCSVNumber(row.malpracticeRVU),
+            globalPeriod: parseCSVNumber(row.globalPeriod),
+            professionalComponent: parseCSVBoolean(row.professionalComponent ?? false),
+            technicalComponent: parseCSVBoolean(row.technicalComponent ?? false),
+            notes: row.notes ? String(row.notes).trim() : undefined,
+          };
+
+          // Check if code already exists
+          const existing = await prisma.cPTCode.findFirst({
+            where: { hospitalId, code: codeData.code },
+          });
+
+          if (existing) {
+            // Update existing code
+            await prisma.cPTCode.update({
+              where: { id: existing.id },
+              data: {
+                description: codeData.description,
+                shortDescription: codeData.shortDescription,
+                category: codeData.category,
+                subcategory: codeData.subcategory,
+                basePrice: codeData.basePrice,
+                dhaPrice: codeData.dhaPrice,
+                cashPrice: codeData.cashPrice,
+                requiresPreAuth: codeData.requiresPreAuth,
+                isActive: codeData.isActive,
+                workRVU: codeData.workRVU,
+                facilityRVU: codeData.facilityRVU,
+                malpracticeRVU: codeData.malpracticeRVU,
+                globalPeriod: codeData.globalPeriod,
+                professionalComponent: codeData.professionalComponent,
+                technicalComponent: codeData.technicalComponent,
+                notes: codeData.notes,
+              },
+            });
+            results.updated++;
+          } else {
+            // Create new code
+            await this.create(hospitalId, codeData, createdBy);
+            results.created++;
+          }
+        } catch (error: any) {
+          results.errors.push({
+            row: i + 1,
+            code: row.code || 'unknown',
+            error: error.message || 'Unknown error',
+          });
+        }
+      }
+    } catch (error: any) {
+      throw new Error(`Failed to parse CSV: ${error.message}`);
+    }
+
+    return results;
+  }
+
+  /**
+   * Get CSV template for CPT import
+   */
+  getCSVTemplate(): string {
+    return generateCPTTemplate();
+  }
+
+  /**
+   * Get CSV field definitions for CPT
+   */
+  getCSVFields() {
+    return CPT_CSV_FIELDS;
   }
 }
 
