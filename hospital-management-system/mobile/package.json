@@ -26,6 +26,7 @@
     "doctor": "npx expo-doctor"
   },
   "dependencies": {
+    "@amad/health-platform": "file:./modules/health-platform",
     "@expo/vector-icons": "^15.0.3",
     "@hookform/resolvers": "^5.2.2",
     "@react-native-async-storage/async-storage": "^2.2.0",
@@ -41,6 +42,7 @@
     "dotenv": "^17.2.3",
     "expo": "~54.0.31",
     "expo-av": "~16.0.8",
+    "expo-build-properties": "^1.0.10",
     "expo-calendar": "~15.0.8",
     "expo-constants": "~18.0.13",
     "expo-device": "^8.0.10",

@@ -541,7 +541,7 @@ class HealthPlatformModule : Module() {
 
     // ==================== HELPER METHODS ====================
 
-    private fun mapToReadPermission(dataType: String): HealthPermission? {
+    private fun mapToReadPermission(dataType: String): String? {
         return when (dataType) {
             "STEPS" -> HealthPermission.getReadPermission(StepsRecord::class)
             "HEART_RATE" -> HealthPermission.getReadPermission(HeartRateRecord::class)
@@ -561,23 +561,22 @@ class HealthPlatformModule : Module() {
         }
     }
 
-    private fun mapPermissionToDataType(permission: HealthPermission): String? {
-        val permissionStr = permission.toString()
+    private fun mapPermissionToDataType(permission: String): String? {
         return when {
-            permissionStr.contains("StepsRecord") -> "STEPS"
-            permissionStr.contains("HeartRateRecord") -> "HEART_RATE"
-            permissionStr.contains("RestingHeartRateRecord") -> "HEART_RATE_RESTING"
-            permissionStr.contains("OxygenSaturation") -> "BLOOD_OXYGEN"
-            permissionStr.contains("BloodPressure") -> "BLOOD_PRESSURE"
-            permissionStr.contains("BloodGlucose") -> "BLOOD_GLUCOSE"
-            permissionStr.contains("WeightRecord") -> "WEIGHT"
-            permissionStr.contains("BodyTemperature") -> "BODY_TEMPERATURE"
-            permissionStr.contains("ActiveCalories") -> "CALORIES_BURNED"
-            permissionStr.contains("DistanceRecord") -> "DISTANCE"
-            permissionStr.contains("RespiratoryRate") -> "RESPIRATORY_RATE"
-            permissionStr.contains("HeartRateVariability") -> "HRV"
-            permissionStr.contains("SleepSession") -> "SLEEP_DURATION"
-            permissionStr.contains("ExerciseSession") -> "WORKOUT"
+            permission.contains("StepsRecord") -> "STEPS"
+            permission.contains("HeartRateRecord") && !permission.contains("Resting") && !permission.contains("Variability") -> "HEART_RATE"
+            permission.contains("RestingHeartRateRecord") -> "HEART_RATE_RESTING"
+            permission.contains("OxygenSaturation") -> "BLOOD_OXYGEN"
+            permission.contains("BloodPressure") -> "BLOOD_PRESSURE"
+            permission.contains("BloodGlucose") -> "BLOOD_GLUCOSE"
+            permission.contains("WeightRecord") -> "WEIGHT"
+            permission.contains("BodyTemperature") -> "BODY_TEMPERATURE"
+            permission.contains("ActiveCalories") -> "CALORIES_BURNED"
+            permission.contains("DistanceRecord") -> "DISTANCE"
+            permission.contains("RespiratoryRate") -> "RESPIRATORY_RATE"
+            permission.contains("HeartRateVariability") -> "HRV"
+            permission.contains("SleepSession") -> "SLEEP_DURATION"
+            permission.contains("ExerciseSession") -> "WORKOUT"
             else -> null
         }
     }

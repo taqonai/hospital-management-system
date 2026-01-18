@@ -1,0 +1,30 @@
+{
+  "name": "@amad/health-platform",
+  "version": "1.0.0",
+  "main": "src/index",
+  "types": "src/index.ts",
+  "description": "Native health platform integration for A'mad Precision Health (HealthKit, Health Connect, Samsung Health)",
+  "license": "MIT",
+  "author": "Taqon AI",
+  "homepage": "https://taqon.ai",
+  "keywords": [
+    "expo",
+    "expo-module",
+    "health",
+    "healthkit",
+    "health-connect",
+    "samsung-health"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/taqon/hms"
+  },
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  },
+  "devDependencies": {
+    "expo-modules-core": "*"
+  }
+}

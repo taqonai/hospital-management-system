@@ -683,6 +683,19 @@ class NutritionAIService:
             openai_client: Optional OpenAI client for GPT-4 Vision
         """
         self.openai_client = openai_client
+
+        # Auto-initialize OpenAI client from environment if not provided
+        if self.openai_client is None:
+            import os
+            api_key = os.getenv("OPENAI_API_KEY")
+            if api_key:
+                try:
+                    from openai import AsyncOpenAI
+                    self.openai_client = AsyncOpenAI(api_key=api_key)
+                    logger.info("NutritionAIService: OpenAI client initialized from environment")
+                except Exception as e:
+                    logger.warning(f"NutritionAIService: Failed to initialize OpenAI client: {e}")
+
         self.regional_db = REGIONAL_FOOD_DATABASE
         self.standard_db = STANDARD_FOOD_DATABASE
         logger.info("NutritionAIService initialized")

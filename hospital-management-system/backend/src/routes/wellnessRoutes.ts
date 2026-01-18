@@ -95,6 +95,175 @@ router.delete(
   })
 );
 
+// Sync data from a connected device
+const syncDeviceSchema = z.object({
+  body: z.object({
+    metrics: z.array(z.object({
+      dataType: z.string(),
+      value: z.number(),
+      unit: z.string(),
+      timestamp: z.string(),
+      endTime: z.string().optional(),
+      metadata: z.any().optional(),
+    })).optional(),
+    workouts: z.array(z.object({
+      workoutType: z.string(),
+      startTime: z.string(),
+      endTime: z.string(),
+      duration: z.number(),
+      calories: z.number().optional(),
+      distance: z.number().optional(),
+      avgHeartRate: z.number().optional(),
+    })).optional(),
+    sleep: z.array(z.object({
+      startTime: z.string(),
+      endTime: z.string(),
+      duration: z.number(),
+      stages: z.array(z.object({
+        stage: z.string(),
+        startTime: z.string(),
+        endTime: z.string(),
+      })).optional(),
+    })).optional(),
+  }),
+});
+
+router.post(
+  '/devices/:provider/sync',
+  patientAuthenticate,
+  validate(syncDeviceSchema),
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const { provider } = req.params;
+    const { metrics = [], workouts = [], sleep = [] } = req.body;
+    const patientId = req.patient!.patientId;
+
+    // Verify device is connected
+    const connection = await prisma.healthDeviceConnection.findFirst({
+      where: {
+        patientId,
+        provider: provider as any,
+        isActive: true,
+      },
+    });
+
+    if (!connection) {
+      return res.status(404).json({
+        success: false,
+        message: `Device ${provider} is not connected`,
+      });
+    }
+
+    let syncedMetrics = 0;
+    let syncedWorkouts = 0;
+    let syncedSleep = 0;
+
+    // Map data types from health platform format to our schema
+    const dataTypeMap: Record<string, string> = {
+      'STEPS': 'STEPS',
+      'HEART_RATE': 'HEART_RATE',
+      'HEART_RATE_RESTING': 'HEART_RATE_RESTING',
+      'HRV': 'HEART_RATE_VARIABILITY',
+      'BLOOD_OXYGEN': 'BLOOD_OXYGEN',
+      'BLOOD_PRESSURE_SYSTOLIC': 'BLOOD_PRESSURE_SYSTOLIC',
+      'BLOOD_PRESSURE_DIASTOLIC': 'BLOOD_PRESSURE_DIASTOLIC',
+      'BLOOD_GLUCOSE': 'BLOOD_GLUCOSE',
+      'WEIGHT': 'WEIGHT',
+      'BODY_TEMPERATURE': 'BODY_TEMPERATURE',
+      'CALORIES_BURNED': 'CALORIES_BURNED',
+      'DISTANCE': 'DISTANCE_WALKED',
+      'RESPIRATORY_RATE': 'RESPIRATORY_RATE',
+    };
+
+    // Sync health metrics
+    if (metrics.length > 0) {
+      const metricsToCreate = metrics
+        .filter((m: any) => dataTypeMap[m.dataType])
+        .map((m: any) => ({
+          patientId,
+          metricType: dataTypeMap[m.dataType] as any,
+          value: m.value,
+          unit: m.unit,
+          recordedAt: new Date(m.timestamp),
+          source: provider as any,
+          metadata: m.metadata || {},
+        }));
+
+      if (metricsToCreate.length > 0) {
+        await prisma.healthMetric.createMany({
+          data: metricsToCreate,
+          skipDuplicates: true,
+        });
+        syncedMetrics = metricsToCreate.length;
+      }
+    }
+
+    // Sync workouts
+    if (workouts.length > 0) {
+      const activityTypeMap: Record<string, string> = {
+        'WALKING': 'walking',
+        'RUNNING': 'running',
+        'CYCLING': 'cycling',
+        'SWIMMING': 'swimming',
+        'HIIT': 'hiit',
+        'STRENGTH_TRAINING': 'weight_training',
+        'YOGA': 'yoga',
+        'OTHER': 'other',
+      };
+
+      const workoutsToCreate = workouts.map((w: any) => ({
+        patientId,
+        activityType: activityTypeMap[w.workoutType] || 'other',
+        duration: w.duration,
+        caloriesBurned: w.calories,
+        distance: w.distance,
+        avgHeartRate: w.avgHeartRate,
+        startTime: new Date(w.startTime),
+        endTime: new Date(w.endTime),
+        source: provider,
+        metadata: { workoutType: w.workoutType },
+      }));
+
+      await prisma.activityLog.createMany({
+        data: workoutsToCreate,
+        skipDuplicates: true,
+      });
+      syncedWorkouts = workouts.length;
+    }
+
+    // Sync sleep data
+    if (sleep.length > 0) {
+      const sleepToCreate = sleep.map((s: any) => ({
+        patientId,
+        sleepStart: new Date(s.startTime),
+        sleepEnd: new Date(s.endTime),
+        duration: s.duration,
+        quality: 'UNKNOWN' as any,
+        stages: s.stages || [],
+        source: provider,
+      }));
+
+      await prisma.sleepLog.createMany({
+        data: sleepToCreate,
+        skipDuplicates: true,
+      });
+      syncedSleep = sleep.length;
+    }
+
+    // Update last sync time on connection
+    await prisma.healthDeviceConnection.update({
+      where: { id: connection.id },
+      data: { lastSyncAt: new Date() },
+    });
+
+    sendSuccess(res, {
+      syncedMetrics,
+      syncedWorkouts,
+      syncedSleep,
+      lastSyncAt: new Date().toISOString(),
+    }, 'Data synced successfully');
+  })
+);
+
 // =============================================================================
 // HEALTH METRICS
 // =============================================================================
