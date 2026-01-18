@@ -45,6 +45,11 @@ import notificationRoutes from './notificationRoutes';
 import wellnessRoutes from './wellnessRoutes';
 import aiSettingsRoutes from './aiSettingsRoutes';
 import insuranceCodingRoutes from './insuranceCodingRoutes';
+// A'mad Precision Health Platform routes
+import healthPlatformRoutes from './healthPlatformRoutes';
+import genomicRoutes from './genomicRoutes';
+import recommendationRoutes from './recommendationRoutes';
+import clinicianRoutes from './clinicianRoutes';
 
 const router = Router();
 
@@ -119,5 +124,11 @@ router.use('/ai-settings', aiSettingsRoutes);
 
 // Insurance Coding (ICD-10 / CPT) routes
 router.use('/insurance-coding', insuranceCodingRoutes);
+
+// A'mad Precision Health Platform routes
+router.use('/health', healthPlatformRoutes);
+router.use('/genomics', genomicRoutes);
+router.use('/recommendations', recommendationRoutes);
+router.use('/clinician', clinicianRoutes);
 
 export default router;

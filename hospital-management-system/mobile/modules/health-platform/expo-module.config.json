@@ -1,0 +1,9 @@
+{
+  "platforms": ["ios", "android"],
+  "ios": {
+    "modules": ["HealthPlatformModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.healthplatform.HealthPlatformModule"]
+  }
+}

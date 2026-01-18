@@ -60,6 +60,15 @@ model Hospital {
   insurancePayers  InsurancePayer[]
   icd10CptMappings ICD10CPTMapping[]
 
+  // A'mad Precision Health Platform
+  healthDataPoints     HealthDataPoint[]
+  genomicProfiles      GenomicProfile[]
+  patientConsents      PatientConsent[]
+  recommendations      Recommendation[]
+  dailyHealthScores    DailyHealthScore[]
+  foodItems            FoodItem[]
+  clinicianHealthNotes ClinicianHealthNote[]
+
   @@map("hospitals")
 }
 
@@ -140,6 +149,9 @@ model User {
   signedClinicalNotes   ClinicalNote[] @relation("ClinicalNoteSigner")
   aiScribeSessions      AiScribeSession[]
   customRoles           UserCustomRole[]
+
+  // A'mad Precision Health Platform
+  clinicianHealthNotes  ClinicianHealthNote[] @relation("ClinicianHealthNotes")
 
   @@unique([hospitalId, email])
   @@map("users")
@@ -405,6 +417,14 @@ model Patient {
   // Settings & Preferences
   notificationPreference  PatientNotificationPreference?
   communicationPreference PatientCommunicationPreference?
+
+  // A'mad Precision Health Platform
+  healthDataPoints     HealthDataPoint[]
+  genomicProfile       GenomicProfile?
+  patientConsents      PatientConsent[]
+  recommendations      Recommendation[]
+  dailyHealthScores    DailyHealthScore[]
+  clinicianHealthNotes ClinicianHealthNote[]
 
   @@unique([hospitalId, mrn])
   @@map("patients")
@@ -4461,6 +4481,9 @@ model NutritionLog {
   // AI analysis
   aiAnalysis    Json?
   healthScore   Int?     // 1-100
+  aiGenerated   Boolean  @default(false) // Was this meal logged via AI photo analysis?
+  userVerified  Boolean  @default(false) // Did user verify AI-detected foods?
+  aiConfidence  Float?   // 0.0-1.0 confidence in AI detection
 
   loggedAt      DateTime
   createdAt     DateTime @default(now())
@@ -5036,4 +5059,369 @@ enum DischargeCodingStatus {
   REVIEWED     // Coder reviewed
   FINALIZED    // Locked for billing
   SUBMITTED    // Claim submitted
+}
+
+// =============================================================================
+// A'MAD PRECISION HEALTH PLATFORM - GENOMICS, RECOMMENDATIONS, HEALTH SCORES
+// =============================================================================
+
+// Native Health Platform Data (HealthKit, Health Connect, Samsung Health)
+model HealthDataPoint {
+  id          String         @id @default(uuid())
+  patientId   String
+  hospitalId  String
+  source      HealthPlatformSource
+  dataType    HealthPlatformDataType
+  value       Float
+  unit        String
+  timestamp   DateTime
+  metadata    Json?
+  syncedAt    DateTime       @default(now())
+
+  patient     Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  hospital    Hospital       @relation(fields: [hospitalId], references: [id])
+
+  @@index([patientId, dataType, timestamp])
+  @@index([hospitalId])
+  @@map("health_data_points")
+}
+
+enum HealthPlatformSource {
+  GOOGLE_HEALTH_CONNECT
+  APPLE_HEALTH_KIT
+  SAMSUNG_HEALTH
+  MANUAL
+}
+
+enum HealthPlatformDataType {
+  STEPS
+  SLEEP_DURATION
+  SLEEP_STAGE
+  HEART_RATE
+  HEART_RATE_RESTING
+  HRV
+  WORKOUT
+  CALORIES_BURNED
+  BLOOD_OXYGEN
+  STRESS_LEVEL
+  BLOOD_PRESSURE_SYSTOLIC
+  BLOOD_PRESSURE_DIASTOLIC
+  BLOOD_GLUCOSE
+  BODY_TEMPERATURE
+  WEIGHT
+  RESPIRATORY_RATE
+  DISTANCE
+  FLOORS_CLIMBED
+  ACTIVE_MINUTES
+}
+
+// Genomic Profile from uploaded files (VCF, 23andMe, AncestryDNA)
+model GenomicProfile {
+  id          String           @id @default(uuid())
+  patientId   String           @unique
+  hospitalId  String
+  source      GenomicSource
+  fileName    String?          // Original uploaded file name
+  fileHash    String           // SHA256 for deduplication
+  fileUrl     String?          // S3 URL for raw file
+  uploadedAt  DateTime         @default(now())
+  processedAt DateTime?
+  status      GenomicProcessingStatus @default(PENDING)
+  errorMessage String?
+
+  markers     GenomicMarker[]
+  riskScores  GenomicRiskScore[]
+
+  patient     Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  hospital    Hospital         @relation(fields: [hospitalId], references: [id])
+
+  @@index([hospitalId])
+  @@map("genomic_profiles")
+}
+
+enum GenomicSource {
+  VCF
+  TWENTYTHREE_AND_ME
+  ANCESTRY_DNA
+  MANUAL
+}
+
+enum GenomicProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// Individual Genetic Markers from genomic profile
+model GenomicMarker {
+  id              String         @id @default(uuid())
+  profileId       String
+  rsId            String         // e.g., rs762551
+  gene            String         // e.g., CYP1A2
+  genotype        String         // e.g., "AC"
+  category        GenomicMarkerCategory
+  phenotype       String         // e.g., "Slow caffeine metabolizer"
+  confidence      Float          // 0.0 - 1.0
+  recommendations Json           // Array of recommendation strings
+  metadata        Json?          // Additional SNP data
+
+  profile         GenomicProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, category])
+  @@index([rsId])
+  @@map("genomic_markers")
+}
+
+enum GenomicMarkerCategory {
+  METABOLISM       // Drug/nutrient metabolism
+  NUTRITION        // Dietary needs (lactose, gluten, etc.)
+  INFLAMMATION     // Inflammatory markers
+  FITNESS          // Athletic performance
+  SLEEP            // Sleep quality/circadian
+  CARDIOVASCULAR   // Heart health
+  MENTAL_HEALTH    // Cognitive/mood
+  DETOXIFICATION   // Detox pathways
+}
+
+// Risk Scores calculated from genomic data
+model GenomicRiskScore {
+  id              String         @id @default(uuid())
+  profileId       String
+  condition       String         // e.g., "Type 2 Diabetes", "Coronary Heart Disease"
+  riskLevel       GenomicRiskLevel
+  percentile      Float          // Population percentile (0-100)
+  confidenceScore Float          // 0.0 - 1.0
+  contributingSnps Json          // Array of rsIds that contribute
+  recommendations Json           // Array of recommendations
+  calculatedAt    DateTime       @default(now())
+
+  profile         GenomicProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("genomic_risk_scores")
+}
+
+enum GenomicRiskLevel {
+  LOW
+  BELOW_AVERAGE
+  AVERAGE
+  ABOVE_AVERAGE
+  HIGH
+}
+
+// Patient Consent Management (HIPAA/GDPR compliance)
+model PatientConsent {
+  id          String       @id @default(uuid())
+  patientId   String
+  hospitalId  String
+  consentType DataConsentType
+  granted     Boolean
+  grantedAt   DateTime?
+  revokedAt   DateTime?
+  ipAddress   String?
+  userAgent   String?
+  version     String       @default("1.0") // Consent form version
+
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  hospital    Hospital     @relation(fields: [hospitalId], references: [id])
+
+  @@unique([patientId, consentType])
+  @@index([hospitalId])
+  @@map("patient_consents")
+}
+
+enum DataConsentType {
+  HEALTH_DATA_COLLECTION
+  GENOMIC_ANALYSIS
+  AI_RECOMMENDATIONS
+  CLINICIAN_ACCESS
+  DATA_SHARING_RESEARCH
+  MEAL_PHOTO_ANALYSIS
+}
+
+// AI-Generated Recommendations
+model Recommendation {
+  id           String                 @id @default(uuid())
+  patientId    String
+  hospitalId   String
+  category     RecommendationCategory
+  priority     RecommendationPriority
+  title        String
+  description  String                 @db.Text
+  reasoning    Json                   // Array of reasons explaining why
+  dataSources  Json                   // What data informed this recommendation
+  actionItems  Json?                  // Specific action steps
+  validFrom    DateTime               @default(now())
+  validUntil   DateTime
+  status       RecommendationStatus   @default(ACTIVE)
+  dismissedAt  DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  patient      Patient                @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  hospital     Hospital               @relation(fields: [hospitalId], references: [id])
+  feedback     RecommendationFeedback[]
+
+  @@index([patientId, status])
+  @@index([hospitalId])
+  @@map("recommendations")
+}
+
+enum RecommendationCategory {
+  NUTRITION
+  SUPPLEMENT
+  ACTIVITY
+  SLEEP
+  LIFESTYLE
+  MEDICAL
+  GENOMIC        // Based on genomic profile
+  LAB_BASED      // Based on lab results
+  WEARABLE_BASED // Based on wearable data
+}
+
+enum RecommendationPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum RecommendationStatus {
+  ACTIVE
+  DISMISSED
+  COMPLETED
+  EXPIRED
+  SNOOZED
+}
+
+// User feedback on recommendations
+model RecommendationFeedback {
+  id               String         @id @default(uuid())
+  recommendationId String
+  helpful          Boolean?       // Was this recommendation helpful?
+  followed         Boolean?       // Did the patient follow it?
+  rating           Int?           // 1-5 star rating
+  comment          String?        @db.Text
+  createdAt        DateTime       @default(now())
+
+  recommendation   Recommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+
+  @@index([recommendationId])
+  @@map("recommendation_feedback")
+}
+
+// Daily Health Score (composite wellness metric)
+model DailyHealthScore {
+  id          String       @id @default(uuid())
+  patientId   String
+  hospitalId  String
+  date        DateTime     @db.Date
+  overall     Int          // 0-100
+  sleep       Int          // 0-100
+  activity    Int          // 0-100
+  nutrition   Int          // 0-100
+  recovery    Int          // 0-100 (HRV-based)
+  compliance  Int          // 0-100 (goal adherence)
+  stress      Int?         // 0-100 (if available)
+  trend       HealthScoreTrend
+  insights    Json         // Array of insight strings
+  dataQuality Float        // 0.0-1.0 how much data was available
+  calculatedAt DateTime    @default(now())
+
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  hospital    Hospital     @relation(fields: [hospitalId], references: [id])
+
+  @@unique([patientId, date])
+  @@index([hospitalId])
+  @@map("daily_health_scores")
+}
+
+enum HealthScoreTrend {
+  IMPROVING
+  STABLE
+  DECLINING
+  INSUFFICIENT_DATA
+}
+
+// Regional Food Database for AI Nutrition Analysis
+model FoodItem {
+  id              String   @id @default(uuid())
+  hospitalId      String?  // null = global, otherwise hospital-specific
+  name            String
+  nameAr          String?  // Arabic name
+  category        String   // e.g., "Grains", "Proteins", "Vegetables"
+  subcategory     String?  // e.g., "Rice dishes", "Lamb"
+  servingSize     Float
+  servingUnit     String   // e.g., "g", "cup", "piece"
+
+  // Macronutrients (per serving)
+  calories        Float
+  protein         Float    // grams
+  carbs           Float    // grams
+  fat             Float    // grams
+  fiber           Float    // grams
+  sugar           Float?   // grams
+  sodium          Float?   // mg
+
+  // Micronutrients (optional)
+  vitaminA        Float?   // IU
+  vitaminC        Float?   // mg
+  vitaminD        Float?   // IU
+  calcium         Float?   // mg
+  iron            Float?   // mg
+  potassium       Float?   // mg
+
+  // Regional classification
+  isRegional      Boolean  @default(false)
+  region          String?  // "gulf", "levant", "north_african", "south_asian"
+  cuisine         String?  // "emirati", "saudi", "lebanese", etc.
+
+  // AI assistance
+  commonAliases   String[] // Alternative names for AI matching
+  imageUrl        String?  // Reference image
+  isVerified      Boolean  @default(false)
+
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  hospital        Hospital? @relation(fields: [hospitalId], references: [id])
+
+  @@index([name])
+  @@index([nameAr])
+  @@index([hospitalId, category])
+  @@map("food_items")
+}
+
+// Clinician Notes on Patient Health Summary
+model ClinicianHealthNote {
+  id          String   @id @default(uuid())
+  patientId   String
+  hospitalId  String
+  clinicianId String   // User ID of the clinician
+  noteType    ClinicianNoteType
+  content     String   @db.Text
+  isPrivate   Boolean  @default(false) // Not visible to patient
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  hospital    Hospital @relation(fields: [hospitalId], references: [id])
+  clinician   User     @relation("ClinicianHealthNotes", fields: [clinicianId], references: [id])
+
+  @@index([patientId])
+  @@index([hospitalId])
+  @@index([clinicianId])
+  @@map("clinician_health_notes")
+}
+
+enum ClinicianNoteType {
+  GENERAL
+  GENOMIC_REVIEW
+  WEARABLE_REVIEW
+  LAB_INTERPRETATION
+  RECOMMENDATION_OVERRIDE
+  CARE_PLAN
 }
