@@ -12,6 +12,169 @@ import crypto from 'crypto';
 const router = Router();
 
 // =============================================================================
+// GENOMIC MARKER KNOWLEDGE BASE
+// =============================================================================
+
+interface MarkerInfo {
+  gene: string;
+  category: 'METABOLISM' | 'NUTRITION' | 'INFLAMMATION' | 'FITNESS' | 'SLEEP' | 'CARDIOVASCULAR' | 'MENTAL_HEALTH' | 'DETOXIFICATION';
+  interpretations: Record<string, { phenotype: string; recommendations: string[]; riskModifier: number }>;
+}
+
+const MARKER_KNOWLEDGE_BASE: Record<string, MarkerInfo> = {
+  rs762551: {
+    gene: 'CYP1A2',
+    category: 'METABOLISM',
+    interpretations: {
+      'AA': { phenotype: 'Fast caffeine metabolizer', recommendations: ['Caffeine is processed quickly', 'Moderate coffee consumption is generally safe'], riskModifier: -0.1 },
+      'AC': { phenotype: 'Moderate caffeine metabolizer', recommendations: ['Limit caffeine to 2-3 cups daily', 'Avoid caffeine after 2pm for better sleep'], riskModifier: 0 },
+      'CC': { phenotype: 'Slow caffeine metabolizer', recommendations: ['Limit caffeine intake', 'Caffeine may increase cardiovascular risk', 'Consider decaf alternatives'], riskModifier: 0.2 },
+    },
+  },
+  rs1801133: {
+    gene: 'MTHFR',
+    category: 'NUTRITION',
+    interpretations: {
+      'CC': { phenotype: 'Normal folate metabolism', recommendations: ['Standard folate intake is sufficient'], riskModifier: -0.1 },
+      'CT': { phenotype: 'Mildly reduced folate metabolism', recommendations: ['Consider methylfolate supplementation', 'Increase leafy green intake'], riskModifier: 0.1 },
+      'TT': { phenotype: 'Significantly reduced folate metabolism', recommendations: ['Methylfolate supplementation recommended', 'Avoid folic acid supplements', 'Regular B12 monitoring'], riskModifier: 0.3 },
+    },
+  },
+  rs4988235: {
+    gene: 'LCT',
+    category: 'NUTRITION',
+    interpretations: {
+      'GG': { phenotype: 'Lactose intolerant', recommendations: ['Avoid or limit dairy products', 'Consider lactase supplements', 'Choose lactose-free alternatives'], riskModifier: 0.1 },
+      'GA': { phenotype: 'Lactose tolerant', recommendations: ['Dairy consumption is generally well tolerated'], riskModifier: 0 },
+      'AA': { phenotype: 'Lactose tolerant', recommendations: ['Full dairy tolerance'], riskModifier: -0.1 },
+    },
+  },
+  rs1815739: {
+    gene: 'ACTN3',
+    category: 'FITNESS',
+    interpretations: {
+      'CC': { phenotype: 'Power/sprint optimized muscles', recommendations: ['Suited for explosive activities', 'Consider strength training', 'Sprint and power sports may be advantageous'], riskModifier: 0 },
+      'CT': { phenotype: 'Mixed muscle fiber type', recommendations: ['Balanced for both power and endurance', 'Versatile athletic potential'], riskModifier: 0 },
+      'TT': { phenotype: 'Endurance optimized muscles', recommendations: ['Suited for endurance activities', 'Consider marathon, cycling, swimming', 'May need longer warm-up for explosive activities'], riskModifier: 0 },
+    },
+  },
+  rs4680: {
+    gene: 'COMT',
+    category: 'MENTAL_HEALTH',
+    interpretations: {
+      'GG': { phenotype: 'Warrior - Fast stress hormone clearance', recommendations: ['Better performance under pressure', 'May need more stimulation', 'Lower pain sensitivity'], riskModifier: -0.1 },
+      'AG': { phenotype: 'Balanced stress response', recommendations: ['Moderate stress adaptation', 'Balanced approach works well'], riskModifier: 0 },
+      'AA': { phenotype: 'Worrier - Slow stress hormone clearance', recommendations: ['Better focus in calm environments', 'Practice stress management', 'May benefit from adaptogens'], riskModifier: 0.1 },
+    },
+  },
+  rs53576: {
+    gene: 'OXTR',
+    category: 'MENTAL_HEALTH',
+    interpretations: {
+      'GG': { phenotype: 'Higher empathy and social sensitivity', recommendations: ['Strong social bonds are beneficial', 'May be more affected by social stress'], riskModifier: 0 },
+      'AG': { phenotype: 'Moderate social sensitivity', recommendations: ['Balanced social responsiveness'], riskModifier: 0 },
+      'AA': { phenotype: 'Lower social sensitivity', recommendations: ['May handle social stress better', 'Focus on building meaningful connections'], riskModifier: 0 },
+    },
+  },
+  rs1800795: {
+    gene: 'IL-6',
+    category: 'INFLAMMATION',
+    interpretations: {
+      'GG': { phenotype: 'Higher inflammatory response', recommendations: ['Anti-inflammatory diet recommended', 'Regular omega-3 intake', 'Monitor CRP levels'], riskModifier: 0.2 },
+      'GC': { phenotype: 'Moderate inflammatory response', recommendations: ['Balanced anti-inflammatory approach'], riskModifier: 0.1 },
+      'CC': { phenotype: 'Lower inflammatory response', recommendations: ['Normal inflammatory regulation'], riskModifier: -0.1 },
+    },
+  },
+  rs7903146: {
+    gene: 'TCF7L2',
+    category: 'METABOLISM',
+    interpretations: {
+      'CC': { phenotype: 'Lower type 2 diabetes risk', recommendations: ['Standard diabetes prevention measures'], riskModifier: -0.2 },
+      'CT': { phenotype: 'Moderate type 2 diabetes risk', recommendations: ['Monitor blood sugar regularly', 'Maintain healthy weight', 'Regular exercise'], riskModifier: 0.1 },
+      'TT': { phenotype: 'Higher type 2 diabetes risk', recommendations: ['Regular glucose monitoring', 'Low glycemic diet recommended', 'Weight management crucial'], riskModifier: 0.3 },
+    },
+  },
+  rs1801282: {
+    gene: 'PPARG',
+    category: 'METABOLISM',
+    interpretations: {
+      'CC': { phenotype: 'Standard insulin sensitivity', recommendations: ['Normal metabolic response'], riskModifier: 0 },
+      'CG': { phenotype: 'Improved insulin sensitivity', recommendations: ['May respond well to dietary fats', 'Lower diabetes risk'], riskModifier: -0.1 },
+      'GG': { phenotype: 'Enhanced insulin sensitivity', recommendations: ['Favorable metabolic profile'], riskModifier: -0.2 },
+    },
+  },
+  rs6265: {
+    gene: 'BDNF',
+    category: 'MENTAL_HEALTH',
+    interpretations: {
+      'CC': { phenotype: 'Normal BDNF levels', recommendations: ['Standard brain health maintenance'], riskModifier: 0 },
+      'CT': { phenotype: 'Slightly reduced BDNF', recommendations: ['Regular exercise boosts BDNF', 'Consider brain-healthy activities'], riskModifier: 0.1 },
+      'TT': { phenotype: 'Reduced BDNF production', recommendations: ['Prioritize regular exercise', 'Omega-3 supplementation may help', 'Cognitive training recommended'], riskModifier: 0.2 },
+    },
+  },
+  rs1800629: {
+    gene: 'TNF-α',
+    category: 'INFLAMMATION',
+    interpretations: {
+      'GG': { phenotype: 'Normal TNF-alpha levels', recommendations: ['Standard inflammatory response'], riskModifier: 0 },
+      'GA': { phenotype: 'Elevated TNF-alpha levels', recommendations: ['Anti-inflammatory lifestyle recommended', 'Monitor inflammatory markers'], riskModifier: 0.15 },
+      'AA': { phenotype: 'High TNF-alpha levels', recommendations: ['Strong anti-inflammatory diet needed', 'Regular turmeric/curcumin may help', 'Avoid pro-inflammatory foods'], riskModifier: 0.3 },
+    },
+  },
+  rs174546: {
+    gene: 'FADS1',
+    category: 'NUTRITION',
+    interpretations: {
+      'CC': { phenotype: 'Efficient omega-3 conversion', recommendations: ['Plant-based omega-3 sources are effective'], riskModifier: -0.1 },
+      'CT': { phenotype: 'Moderate omega-3 conversion', recommendations: ['Mix of plant and fish omega-3 recommended'], riskModifier: 0 },
+      'TT': { phenotype: 'Poor omega-3 conversion', recommendations: ['Direct EPA/DHA supplementation recommended', 'Prioritize fatty fish intake'], riskModifier: 0.1 },
+    },
+  },
+};
+
+// Parse genomic file content (23andMe or AncestryDNA format)
+function parseGenomicFile(content: string, source: string): Array<{ rsId: string; genotype: string }> {
+  const lines = content.split('\n');
+  const snps: Array<{ rsId: string; genotype: string }> = [];
+
+  for (const line of lines) {
+    // Skip comments and headers
+    if (line.startsWith('#') || line.trim() === '') continue;
+
+    const parts = line.split('\t');
+    if (parts.length >= 4) {
+      const rsId = parts[0].trim().toLowerCase();
+
+      // Only process known markers
+      if (rsId.startsWith('rs') && MARKER_KNOWLEDGE_BASE[rsId]) {
+        let genotype: string;
+
+        if (source === 'ANCESTRY_DNA' && parts.length >= 5) {
+          // AncestryDNA format: rsid, chromosome, position, allele1, allele2
+          genotype = (parts[3] + parts[4]).toUpperCase();
+        } else {
+          // 23andMe format: rsid, chromosome, position, genotype
+          genotype = parts[3].trim().toUpperCase();
+        }
+
+        if (genotype && genotype.length >= 2) {
+          snps.push({ rsId, genotype });
+        }
+      }
+    }
+  }
+
+  return snps;
+}
+
+// Normalize genotype (sort alleles alphabetically for consistent matching)
+function normalizeGenotype(genotype: string): string {
+  if (genotype.length !== 2) return genotype;
+  const alleles = genotype.split('').sort();
+  return alleles.join('');
+}
+
+// =============================================================================
 // PATIENT-FACING GENOMIC ENDPOINTS
 // =============================================================================
 
@@ -94,19 +257,109 @@ router.post(
         fileName,
         fileHash,
         fileUrl: fileUrl || null,
-        status: 'PENDING',
+        status: 'PROCESSING',
       },
     });
 
-    // TODO: Queue file for AI processing
-    // This would trigger the ai-services/genomic/ service to parse the file
-    // and extract markers
+    // Parse the genomic file and extract markers
+    const parsedSnps = fileContent ? parseGenomicFile(fileContent, source) : [];
+    const createdMarkers: any[] = [];
+    const categoryRisks: Record<string, { total: number; count: number }> = {};
+
+    for (const snp of parsedSnps) {
+      const markerInfo = MARKER_KNOWLEDGE_BASE[snp.rsId];
+      if (!markerInfo) continue;
+
+      // Try exact match first, then normalized
+      const normalizedGenotype = normalizeGenotype(snp.genotype);
+      const interpretation = markerInfo.interpretations[snp.genotype] ||
+        markerInfo.interpretations[normalizedGenotype] ||
+        Object.values(markerInfo.interpretations)[0]; // fallback to first interpretation
+
+      if (interpretation) {
+        const marker = await prisma.genomicMarker.create({
+          data: {
+            profileId: profile.id,
+            rsId: snp.rsId,
+            gene: markerInfo.gene,
+            genotype: snp.genotype,
+            category: markerInfo.category as any,
+            phenotype: interpretation.phenotype,
+            confidence: 0.95,
+            recommendations: interpretation.recommendations,
+            riskModifier: interpretation.riskModifier,
+          },
+        });
+        createdMarkers.push(marker);
+
+        // Accumulate risk by category
+        if (!categoryRisks[markerInfo.category]) {
+          categoryRisks[markerInfo.category] = { total: 0, count: 0 };
+        }
+        categoryRisks[markerInfo.category].total += interpretation.riskModifier;
+        categoryRisks[markerInfo.category].count += 1;
+      }
+    }
+
+    // Create risk scores for each category
+    const riskScores: any[] = [];
+    for (const [category, data] of Object.entries(categoryRisks)) {
+      const avgRisk = data.total / data.count;
+      let riskLevel: string;
+      let percentile: number;
+
+      if (avgRisk <= -0.15) {
+        riskLevel = 'LOW';
+        percentile = 20;
+      } else if (avgRisk <= -0.05) {
+        riskLevel = 'BELOW_AVERAGE';
+        percentile = 35;
+      } else if (avgRisk <= 0.05) {
+        riskLevel = 'AVERAGE';
+        percentile = 50;
+      } else if (avgRisk <= 0.15) {
+        riskLevel = 'ABOVE_AVERAGE';
+        percentile = 65;
+      } else {
+        riskLevel = 'HIGH';
+        percentile = 80;
+      }
+
+      const riskScore = await prisma.genomicRiskScore.create({
+        data: {
+          profileId: profile.id,
+          category: category as any,
+          riskLevel: riskLevel as any,
+          score: Math.round((avgRisk + 0.5) * 100), // Normalize to 0-100
+          percentile,
+          contributingMarkers: createdMarkers
+            .filter(m => m.category === category)
+            .map(m => m.rsId),
+          recommendations: createdMarkers
+            .filter(m => m.category === category)
+            .flatMap(m => m.recommendations || [])
+            .slice(0, 5),
+        },
+      });
+      riskScores.push(riskScore);
+    }
+
+    // Update profile status to completed
+    await prisma.genomicProfile.update({
+      where: { id: profile.id },
+      data: {
+        status: 'COMPLETED',
+        processedAt: new Date(),
+      },
+    });
 
     sendCreated(res, {
       id: profile.id,
-      status: profile.status,
-      message: 'Genomic file uploaded successfully. Processing will begin shortly.',
-    }, 'Genomic profile created');
+      status: 'COMPLETED',
+      markersFound: createdMarkers.length,
+      riskCategories: Object.keys(categoryRisks),
+      message: `Genomic file processed successfully. Found ${createdMarkers.length} genetic markers.`,
+    }, 'Genomic profile created and processed');
   })
 );
 

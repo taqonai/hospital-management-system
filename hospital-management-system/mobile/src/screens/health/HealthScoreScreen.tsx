@@ -30,9 +30,9 @@ const SCORE_CATEGORIES = [
 ];
 
 const TREND_INFO: Record<HealthScoreTrend, { icon: string; color: string; label: string }> = {
-  IMPROVING: { icon: 'trending-up', color: colors.status.success, label: 'Improving' },
-  STABLE: { icon: 'remove', color: colors.status.warning, label: 'Stable' },
-  DECLINING: { icon: 'trending-down', color: colors.status.error, label: 'Declining' },
+  IMPROVING: { icon: 'trending-up', color: colors.success[500], label: 'Improving' },
+  STABLE: { icon: 'remove', color: colors.warning[500], label: 'Stable' },
+  DECLINING: { icon: 'trending-down', color: colors.error[500], label: 'Declining' },
   INSUFFICIENT_DATA: { icon: 'help-circle', color: colors.text.secondary, label: 'More data needed' },
 };
 
@@ -98,9 +98,9 @@ function CategoryScoreBar({
   color: string;
 }) {
   const getScoreColor = (s: number) => {
-    if (s >= 80) return colors.status.success;
-    if (s >= 60) return colors.status.warning;
-    return colors.status.error;
+    if (s >= 80) return colors.success[500];
+    if (s >= 60) return colors.warning[500];
+    return colors.error[500];
   };
 
   return (
@@ -183,10 +183,10 @@ export default function HealthScoreScreen() {
   };
 
   const getOverallScoreColor = (score: number) => {
-    if (score >= 80) return colors.status.success;
+    if (score >= 80) return colors.success[500];
     if (score >= 60) return colors.primary;
-    if (score >= 40) return colors.status.warning;
-    return colors.status.error;
+    if (score >= 40) return colors.warning[500];
+    return colors.error[500];
   };
 
   const renderTrendBadge = () => {
@@ -205,7 +205,7 @@ export default function HealthScoreScreen() {
     return (
       <View style={styles.insightsCard}>
         <View style={styles.insightsHeader}>
-          <Ionicons name="bulb" size={20} color={colors.status.warning} />
+          <Ionicons name="bulb" size={20} color={colors.warning[500]} />
           <Text style={styles.insightsTitle}>Today's Insights</Text>
         </View>
         {currentScore.insights.map((insight, index) => (
@@ -477,10 +477,10 @@ const styles = StyleSheet.create({
   insightsCard: {
     margin: spacing.md,
     padding: spacing.md,
-    backgroundColor: colors.status.warning + '10',
+    backgroundColor: colors.warning[500] + '10',
     borderRadius: borderRadius.md,
     borderLeftWidth: 3,
-    borderLeftColor: colors.status.warning,
+    borderLeftColor: colors.warning[500],
   },
   insightsHeader: {
     flexDirection: 'row',
@@ -501,7 +501,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: colors.status.warning,
+    backgroundColor: colors.warning[500],
     marginTop: 6,
     marginRight: spacing.sm,
   },

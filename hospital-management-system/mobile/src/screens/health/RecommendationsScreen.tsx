@@ -34,9 +34,9 @@ const CATEGORY_INFO: Record<RecommendationCategory, { icon: string; color: strin
 
 const PRIORITY_INFO: Record<RecommendationPriority, { color: string; label: string }> = {
   LOW: { color: colors.text.secondary, label: 'Low' },
-  MEDIUM: { color: colors.status.warning, label: 'Medium' },
+  MEDIUM: { color: colors.warning[500], label: 'Medium' },
   HIGH: { color: '#FF9F43', label: 'High' },
-  URGENT: { color: colors.status.error, label: 'Urgent' },
+  URGENT: { color: colors.error[500], label: 'Urgent' },
 };
 
 export default function RecommendationsScreen() {
@@ -272,7 +272,7 @@ export default function RecommendationsScreen() {
                 <Text style={styles.sectionLabel}>Action Items:</Text>
                 {recommendation.actionItems.map((action, idx) => (
                   <View key={idx} style={styles.actionItem}>
-                    <Ionicons name="checkmark-circle-outline" size={16} color={colors.status.success} />
+                    <Ionicons name="checkmark-circle-outline" size={16} color={colors.success[500]} />
                     <Text style={styles.actionText}>{action}</Text>
                   </View>
                 ))}
@@ -284,8 +284,8 @@ export default function RecommendationsScreen() {
                 style={styles.actionButton}
                 onPress={() => handleComplete(recommendation.id)}
               >
-                <Ionicons name="checkmark" size={18} color={colors.status.success} />
-                <Text style={[styles.actionButtonText, { color: colors.status.success }]}>Done</Text>
+                <Ionicons name="checkmark" size={18} color={colors.success[500]} />
+                <Text style={[styles.actionButtonText, { color: colors.success[500] }]}>Done</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.actionButton}
@@ -298,8 +298,8 @@ export default function RecommendationsScreen() {
                 style={styles.actionButton}
                 onPress={() => handleDismiss(recommendation.id)}
               >
-                <Ionicons name="close" size={18} color={colors.status.error} />
-                <Text style={[styles.actionButtonText, { color: colors.status.error }]}>Dismiss</Text>
+                <Ionicons name="close" size={18} color={colors.error[500]} />
+                <Text style={[styles.actionButtonText, { color: colors.error[500] }]}>Dismiss</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -310,7 +310,7 @@ export default function RecommendationsScreen() {
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Ionicons name="checkmark-circle" size={64} color={colors.status.success} />
+      <Ionicons name="checkmark-circle" size={64} color={colors.success[500]} />
       <Text style={styles.emptyTitle}>All Caught Up!</Text>
       <Text style={styles.emptySubtitle}>
         You don't have any active recommendations. Keep up the great work!

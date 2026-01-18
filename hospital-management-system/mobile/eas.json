@@ -43,11 +43,12 @@
         "resourceClass": "m-medium"
       },
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "credentialsSource": "local"
       },
       "env": {
         "APP_ENV": "production",
-        "API_URL": "http://spetaar.ai/api/v1"
+        "API_URL": "https://spetaar.ai/api/v1"
       }
     }
   },

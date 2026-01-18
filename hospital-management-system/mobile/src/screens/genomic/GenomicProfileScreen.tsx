@@ -33,11 +33,11 @@ const CATEGORY_INFO: Record<MarkerCategory, { icon: string; color: string; title
 };
 
 const RISK_LEVEL_INFO: Record<string, { color: string; label: string }> = {
-  LOW: { color: colors.status.success, label: 'Low Risk' },
+  LOW: { color: colors.success[500], label: 'Low Risk' },
   BELOW_AVERAGE: { color: '#4ECDC4', label: 'Below Average' },
-  AVERAGE: { color: colors.status.warning, label: 'Average' },
+  AVERAGE: { color: colors.warning[500], label: 'Average' },
   ABOVE_AVERAGE: { color: '#FF9F43', label: 'Above Average' },
-  HIGH: { color: colors.status.error, label: 'High Risk' },
+  HIGH: { color: colors.error[500], label: 'High Risk' },
 };
 
 export default function GenomicProfileScreen() {
@@ -247,7 +247,7 @@ export default function GenomicProfileScreen() {
             <Text style={styles.recommendationsTitle}>Recommendations:</Text>
             {marker.recommendations.slice(0, 3).map((rec, idx) => (
               <View key={idx} style={styles.recommendationItem}>
-                <Ionicons name="checkmark-circle" size={16} color={colors.status.success} />
+                <Ionicons name="checkmark-circle" size={16} color={colors.success[500]} />
                 <Text style={styles.recommendationText}>{rec}</Text>
               </View>
             ))}
@@ -277,7 +277,7 @@ export default function GenomicProfileScreen() {
         <Text style={styles.headerTitle}>Genetic Profile</Text>
         {profile && (
           <TouchableOpacity onPress={handleDeleteProfile} style={styles.menuButton}>
-            <Ionicons name="trash-outline" size={24} color={colors.status.error} />
+            <Ionicons name="trash-outline" size={24} color={colors.error[500]} />
           </TouchableOpacity>
         )}
         {!profile && <View style={{ width: 40 }} />}
@@ -321,7 +321,7 @@ export default function GenomicProfileScreen() {
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: colors.status.success }]}>
+                <Text style={[styles.statValue, { color: colors.success[500] }]}>
                   {profile.status}
                 </Text>
                 <Text style={styles.statLabel}>Status</Text>

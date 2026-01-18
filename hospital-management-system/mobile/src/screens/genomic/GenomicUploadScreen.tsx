@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme';
 import { genomicsApi, GenomicSource, DataConsentType } from '../../services/api';
 
@@ -144,6 +144,7 @@ export default function GenomicUploadScreen() {
         fileContent,
         source,
         fileName: file.name,
+        consentGranted: true,
       });
 
       setUploadProgress(100);
@@ -262,7 +263,7 @@ export default function GenomicUploadScreen() {
 
       {error && (
         <View style={styles.errorBox}>
-          <Ionicons name="alert-circle" size={20} color={colors.status.error} />
+          <Ionicons name="alert-circle" size={20} color={colors.error[500]} />
           <Text style={styles.errorText}>{error}</Text>
         </View>
       )}
@@ -295,7 +296,7 @@ export default function GenomicUploadScreen() {
   const renderCompleteStep = () => (
     <View style={styles.centerContent}>
       <View style={styles.successIcon}>
-        <Ionicons name="checkmark-circle" size={80} color={colors.status.success} />
+        <Ionicons name="checkmark-circle" size={80} color={colors.success[500]} />
       </View>
       <Text style={styles.successTitle}>Analysis Complete!</Text>
       <Text style={styles.successSubtitle}>
@@ -466,14 +467,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   requiredBadge: {
-    backgroundColor: colors.status.error + '20',
+    backgroundColor: colors.error[500] + '20',
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     borderRadius: borderRadius.sm,
   },
   requiredText: {
     ...typography.caption,
-    color: colors.status.error,
+    color: colors.error[500],
     fontWeight: '600',
   },
   consentDescription: {
@@ -546,14 +547,14 @@ const styles = StyleSheet.create({
   },
   errorBox: {
     flexDirection: 'row',
-    backgroundColor: colors.status.error + '15',
+    backgroundColor: colors.error[500] + '15',
     padding: spacing.md,
     borderRadius: borderRadius.md,
     marginBottom: spacing.md,
   },
   errorText: {
     ...typography.body,
-    color: colors.status.error,
+    color: colors.error[500],
     flex: 1,
     marginLeft: spacing.sm,
   },

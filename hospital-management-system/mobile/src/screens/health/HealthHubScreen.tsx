@@ -15,6 +15,34 @@ interface MenuItem {
 }
 
 const menuItems: MenuItem[] = [
+  // A'mad Precision Health Features (Top Priority)
+  {
+    id: 'healthScore',
+    title: 'Daily Health Score',
+    description: 'Your personalized health score',
+    icon: 'speedometer-outline',
+    color: '#00B894',
+    bgColor: '#E8FFF5',
+    screen: 'HealthScore',
+  },
+  {
+    id: 'recommendations',
+    title: 'AI Recommendations',
+    description: 'Personalized health insights',
+    icon: 'bulb-outline',
+    color: '#6C5CE7',
+    bgColor: '#F3F0FF',
+    screen: 'Recommendations',
+  },
+  {
+    id: 'genomic',
+    title: 'Genomic Profile',
+    description: 'Your genetic health markers',
+    icon: 'git-network-outline',
+    color: '#E84393',
+    bgColor: '#FFF0F7',
+    screen: 'GenomicUpload',
+  },
   {
     id: 'insights',
     title: 'Health Insights',

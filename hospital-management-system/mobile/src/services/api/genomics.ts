@@ -58,6 +58,7 @@ export interface UploadGenomicFileData {
   fileContent: string; // Base64 encoded or raw text
   source?: GenomicSource;
   fileName?: string;
+  consentGranted: boolean;
 }
 
 export interface GenomicUploadResponse {
@@ -128,6 +129,7 @@ export const genomicsApi = {
       fileContent: data.fileContent,
       source: data.source,
       fileName: data.fileName,
+      consentGranted: data.consentGranted,
     }),
 
   /**
