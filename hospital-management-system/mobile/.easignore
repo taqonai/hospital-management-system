@@ -1,0 +1,22 @@
+# Local dist folders
+dist/
+dist-bundle/
+dist-debug/
+dist-prod/
+
+# Build outputs
+build/
+android/app/build/
+ios/build/
+
+# IDE
+.idea/
+.vscode/
+
+# Debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# Local test outputs
+coverage/

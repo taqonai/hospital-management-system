@@ -2,7 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { SchedulableTriggerInputTypes } from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
-import { secureStorage } from '../storage/secureStorage';
+import { secureStorage } from '../securestore/secureStorage';
 
 // Configure how notifications should be displayed when app is in foreground
 Notifications.setNotificationHandler({

@@ -1,5 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
-import { secureStorage } from '../storage/secureStorage';
+import { secureStorage } from '../securestore/secureStorage';
 import { ApiResponse } from '../../types';
 import { env } from '../../config/env';
 

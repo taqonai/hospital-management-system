@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { PatientUser } from '../types';
-import { secureStorage } from '../services/storage/secureStorage';
+import { secureStorage } from '../services/securestore/secureStorage';
 import { authApi, AuthResponse, LoginCredentials, RegisterData, OTPVerification } from '../services/api';
 import { biometricService, BiometricStatus } from '../services/biometric/biometricService';
 

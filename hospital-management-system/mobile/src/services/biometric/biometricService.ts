@@ -1,6 +1,6 @@
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Platform } from 'react-native';
-import { secureStorage } from '../storage/secureStorage';
+import { secureStorage } from '../securestore/secureStorage';
 
 export type BiometricType = 'fingerprint' | 'facial' | 'iris' | 'none';
 
