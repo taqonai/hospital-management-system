@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "scheme": "hms-patient",
     "splash": {
       "image": "./assets/splash.png",
@@ -97,6 +97,7 @@
       "bundler": "metro"
     },
     "plugins": [
+      "expo-font",
       "expo-secure-store",
       "expo-local-authentication",
       "expo-document-picker",
