@@ -1227,9 +1227,14 @@ function getMealTemplates(goal: string, restrictions: string[], allergies: strin
 }
 
 function selectMeal(meals: any[], targetCalories: number) {
-  if (!meals.length) return null;
-  const suitable = meals.filter(m => Math.abs(m.calories - targetCalories) < 100);
-  return suitable.length ? suitable[Math.floor(Math.random() * suitable.length)] : meals[0];
+  if (!meals.length) return { name: 'Custom Meal', calories: targetCalories, protein: 20, carbs: 30, fat: 15 };
+  // Sort by closest to target calories and pick from top options
+  const sorted = [...meals].sort((a, b) =>
+    Math.abs(a.calories - targetCalories) - Math.abs(b.calories - targetCalories)
+  );
+  // Return the closest match or a random one from top 3 closest
+  const topMatches = sorted.slice(0, Math.min(3, sorted.length));
+  return topMatches[Math.floor(Math.random() * topMatches.length)];
 }
 
 function generateWellnessAssessment(data: any) {
