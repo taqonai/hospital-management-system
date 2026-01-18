@@ -83,6 +83,12 @@ export type HealthStackParamList = {
   Messages: undefined;
   MessageThread: { threadId: string };
   NewMessage: { recipientId?: string };
+  // A'mad Precision Health - Genomics
+  GenomicUpload: undefined;
+  GenomicProfile: undefined;
+  // A'mad Precision Health - Recommendations
+  Recommendations: undefined;
+  HealthScore: undefined;
 };
 
 // Settings stack

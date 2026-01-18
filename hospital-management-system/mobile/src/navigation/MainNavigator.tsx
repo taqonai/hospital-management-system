@@ -54,6 +54,13 @@ import { WellnessHubScreen, WellnessAssessmentScreen, WellnessGoalsScreen, Healt
 // Messages screens
 import { MessagesScreen, MessageThreadScreen, NewMessageScreen } from '../screens/messages';
 
+// A'mad Precision Health - Genomic screens
+import { GenomicUploadScreen, GenomicProfileScreen } from '../screens/genomic';
+
+// A'mad Precision Health - Recommendation screens
+import RecommendationsScreen from '../screens/health/RecommendationsScreen';
+import HealthScoreScreen from '../screens/health/HealthScoreScreen';
+
 // Settings screens
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import ProfileScreen from '../screens/settings/ProfileScreen';
@@ -293,6 +300,28 @@ const HealthStackNavigator = () => {
       name="NewMessage"
       component={NewMessageScreen}
       options={{ title: 'New Message' }}
+    />
+    {/* A'mad Precision Health - Genomics */}
+    <HealthStack.Screen
+      name="GenomicUpload"
+      component={GenomicUploadScreen}
+      options={{ headerShown: false }}
+    />
+    <HealthStack.Screen
+      name="GenomicProfile"
+      component={GenomicProfileScreen}
+      options={{ headerShown: false }}
+    />
+    {/* A'mad Precision Health - Recommendations */}
+    <HealthStack.Screen
+      name="Recommendations"
+      component={RecommendationsScreen}
+      options={{ headerShown: false }}
+    />
+    <HealthStack.Screen
+      name="HealthScore"
+      component={HealthScoreScreen}
+      options={{ headerShown: false }}
     />
   </HealthStack.Navigator>
   );

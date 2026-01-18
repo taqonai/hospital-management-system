@@ -40,6 +40,11 @@ from ai_scribe.service import AIScribeService
 from health_assistant.service import HealthAssistantAI
 from insurance_coding.service import InsuranceCodingAI
 
+# A'mad Precision Health Platform services
+from genomic.service import GenomicService, get_genomic_service, GenomicSource, MarkerCategory
+from nutrition_ai.service import NutritionAIService, get_nutrition_service, MealType, PortionSize
+from recommendation.service import RecommendationService, get_recommendation_service
+
 app = FastAPI(
     title="HMS AI Services",
     description="AI-powered clinical decision support microservices",
@@ -73,6 +78,11 @@ smart_orders_ai = SmartOrdersAI()
 ai_scribe = AIScribeService()
 health_assistant_ai = HealthAssistantAI()
 insurance_coding_ai = InsuranceCodingAI()
+
+# A'mad Precision Health Platform service instances
+genomic_service = get_genomic_service()
+nutrition_service = get_nutrition_service()
+recommendation_service = get_recommendation_service()
 
 
 # Request/Response Models
@@ -3105,6 +3115,296 @@ async def insurance_coding_status():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# A'mad Precision Health Platform - Genomic Services
+# =============================================================================
+
+class GenomicUploadRequest(BaseModel):
+    """Request for genomic file upload and processing"""
+    file_content: str  # Base64 encoded or raw text
+    source: Optional[str] = None  # VCF, TWENTYTHREE_AND_ME, ANCESTRY_DNA
+
+class GenomicMarkerResponse(BaseModel):
+    """Response with extracted genomic markers"""
+    markers: List[Dict[str, Any]]
+    risk_scores: List[Dict[str, Any]]
+    file_hash: str
+    source: str
+    snp_count: int
+
+@app.post("/api/genomic/upload", response_model=GenomicMarkerResponse)
+async def upload_genomic_file(request: GenomicUploadRequest):
+    """Upload and process a genomic data file"""
+    try:
+        result = genomic_service.process_file(request.file_content, request.source)
+        return GenomicMarkerResponse(
+            markers=[m.to_dict() for m in result["markers"]],
+            risk_scores=[r.to_dict() for r in result["risk_scores"]],
+            file_hash=result["file_hash"],
+            source=result["source"],
+            snp_count=result["snp_count"]
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/genomic/interpret")
+async def interpret_snps(snp_data: Dict[str, str]):
+    """Interpret specific SNPs from raw genotype data"""
+    try:
+        markers = genomic_service.extract_markers(snp_data)
+        return {
+            "markers": [m.to_dict() for m in markers],
+            "count": len(markers)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/genomic/markers")
+async def get_supported_markers():
+    """Get list of all supported genomic markers"""
+    try:
+        markers = genomic_service.get_supported_markers()
+        return {
+            "markers": markers,
+            "count": len(markers),
+            "categories": list(set(m["category"] for m in markers))
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/genomic/status")
+async def genomic_service_status():
+    """Get genomic service status"""
+    return {
+        "service": "genomic",
+        "status": "operational",
+        "supported_sources": ["VCF", "TWENTYTHREE_AND_ME", "ANCESTRY_DNA"],
+        "marker_count": len(genomic_service.get_supported_markers()),
+        "categories": [c.value for c in MarkerCategory],
+        "model_version": "1.0.0"
+    }
+
+
+# =============================================================================
+# A'mad Precision Health Platform - Nutrition AI Services
+# =============================================================================
+
+class MealAnalysisRequest(BaseModel):
+    """Request for meal image analysis"""
+    image_base64: str
+    meal_type: Optional[str] = None  # BREAKFAST, LUNCH, DINNER, SNACK
+
+class MealAnalysisResponse(BaseModel):
+    """Response with meal analysis results"""
+    foods: List[Dict[str, Any]]
+    total_calories: float
+    total_protein: float
+    total_carbs: float
+    total_fat: float
+    total_fiber: float
+    meal_type: str
+    confidence: float
+    suggestions: List[str]
+    warnings: List[str]
+
+class FoodSearchRequest(BaseModel):
+    """Request for food database search"""
+    query: str
+    include_regional: bool = True
+    limit: int = 20
+
+@app.post("/api/nutrition/analyze-image", response_model=MealAnalysisResponse)
+async def analyze_meal_image(request: MealAnalysisRequest):
+    """Analyze a meal image using GPT-4 Vision"""
+    try:
+        meal_type = MealType(request.meal_type) if request.meal_type else None
+        result = await nutrition_service.analyze_meal_image(
+            request.image_base64,
+            meal_type
+        )
+        return MealAnalysisResponse(**result.to_dict())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/nutrition/search")
+async def search_foods(request: FoodSearchRequest):
+    """Search food database by name"""
+    try:
+        results = nutrition_service.search_foods(
+            request.query,
+            request.include_regional,
+            request.limit
+        )
+        return {
+            "results": results,
+            "count": len(results),
+            "query": request.query
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/nutrition/food/{food_id}")
+async def get_food_details(food_id: str):
+    """Get detailed nutrition info for a food item"""
+    try:
+        food = nutrition_service.get_food_details(food_id)
+        if not food:
+            raise HTTPException(status_code=404, detail="Food not found")
+        return food
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/nutrition/regional")
+async def get_regional_foods(region: Optional[str] = None):
+    """Get regional foods, optionally filtered by region"""
+    try:
+        foods = nutrition_service.get_regional_foods(region)
+        return {
+            "foods": foods,
+            "count": len(foods),
+            "regions": nutrition_service.get_supported_regions()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/nutrition/estimate-portion")
+async def estimate_portion(food_id: str, portion_size: str):
+    """Estimate nutrition for a specific portion size"""
+    try:
+        result = nutrition_service.estimate_portion(
+            food_id,
+            PortionSize(portion_size)
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/nutrition/status")
+async def nutrition_service_status():
+    """Get nutrition AI service status"""
+    return {
+        "service": "nutrition_ai",
+        "status": "operational",
+        "features": {
+            "image_analysis": nutrition_service.openai_client is not None,
+            "food_search": True,
+            "regional_database": True,
+            "portion_estimation": True
+        },
+        "regional_foods_count": len(nutrition_service.regional_db),
+        "standard_foods_count": len(nutrition_service.standard_db),
+        "supported_regions": nutrition_service.get_supported_regions(),
+        "model_version": "1.0.0"
+    }
+
+
+# =============================================================================
+# A'mad Precision Health Platform - Recommendation Engine
+# =============================================================================
+
+class PatientDataRequest(BaseModel):
+    """Patient data for recommendation generation"""
+    wearable_data: Optional[Dict[str, Any]] = None
+    genomic_markers: Optional[List[Dict[str, Any]]] = None
+    lab_results: Optional[List[Dict[str, Any]]] = None
+    nutrition_logs: Optional[List[Dict[str, Any]]] = None
+    fitness_goals: Optional[Dict[str, Any]] = None
+    current_recommendations: Optional[List[Dict[str, Any]]] = None
+
+class RecommendationResponse(BaseModel):
+    """Response with generated recommendations"""
+    recommendations: List[Dict[str, Any]]
+    count: int
+    categories: List[str]
+
+class HealthScoreResponse(BaseModel):
+    """Response with daily health score"""
+    overall: int
+    sleep: int
+    activity: int
+    nutrition: int
+    recovery: int
+    compliance: int
+    trend: str
+    insights: List[str]
+    data_quality: float
+
+@app.post("/api/recommendations/generate", response_model=RecommendationResponse)
+async def generate_recommendations(request: PatientDataRequest):
+    """Generate personalized health recommendations"""
+    try:
+        patient_data = {
+            "wearable_data": request.wearable_data,
+            "genomic_markers": request.genomic_markers,
+            "lab_results": request.lab_results,
+            "nutrition_logs": request.nutrition_logs,
+            "fitness_goals": request.fitness_goals,
+            "current_recommendations": request.current_recommendations
+        }
+        recommendations = recommendation_service.generate_recommendations(patient_data)
+        categories = list(set(r["category"] for r in recommendations))
+        return RecommendationResponse(
+            recommendations=recommendations,
+            count=len(recommendations),
+            categories=categories
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/recommendations/score", response_model=HealthScoreResponse)
+async def calculate_health_score(request: PatientDataRequest):
+    """Calculate daily health score"""
+    try:
+        patient_data = {
+            "wearable_data": request.wearable_data,
+            "genomic_markers": request.genomic_markers,
+            "lab_results": request.lab_results,
+            "nutrition_logs": request.nutrition_logs,
+            "fitness_goals": request.fitness_goals,
+            "current_recommendations": request.current_recommendations
+        }
+        score = recommendation_service.calculate_daily_score(patient_data)
+        return HealthScoreResponse(**score)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/recommendations/rules")
+async def get_recommendation_rules():
+    """Get available recommendation rules by category"""
+    try:
+        return {
+            "wearable_rules": list(recommendation_service.wearable_rules.keys()),
+            "lab_rules": list(recommendation_service.lab_rules.keys()),
+            "genomic_rules": list(recommendation_service.genomic_rules.keys()),
+            "nutrition_rules": list(recommendation_service.nutrition_rules.keys())
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/recommendations/status")
+async def recommendation_service_status():
+    """Get recommendation engine status"""
+    return {
+        "service": "recommendation",
+        "status": "operational",
+        "features": {
+            "recommendation_generation": True,
+            "health_score_calculation": True,
+            "multi_source_correlation": True,
+            "genomic_integration": True
+        },
+        "rule_counts": {
+            "wearable": len(recommendation_service.wearable_rules),
+            "lab": len(recommendation_service.lab_rules),
+            "genomic": len(recommendation_service.genomic_rules),
+            "nutrition": len(recommendation_service.nutrition_rules)
+        },
+        "model_version": "1.0.0"
+    }
 
 
 if __name__ == "__main__":

@@ -4,6 +4,8 @@ export { patientPortalApi } from './patientPortal';
 export { symptomCheckerApi } from './symptomChecker';
 export { offlinePatientApi } from './offlineApi';
 export { wellnessApi } from './wellness';
+export { genomicsApi } from './genomics';
+export { recommendationsApi } from './recommendations';
 
 // Re-export types
 export type { LoginCredentials, RegisterData, OTPRequest, OTPVerification, AuthTokens, AuthResponse } from './auth';
@@ -35,3 +37,39 @@ export type {
   HealthCoachMessage,
   WorkoutRecommendationData,
 } from './wellness';
+
+// A'mad Precision Health Platform types
+export type {
+  GenomicSource,
+  MarkerCategory,
+  GenomicProcessingStatus,
+  GenomicRiskLevel,
+  GenomicMarker,
+  GenomicRiskScore,
+  GenomicProfile,
+  UploadGenomicFileData,
+  GenomicUploadResponse,
+  SupportedMarker,
+  MarkerInterpretation,
+  DataConsentType,
+  PatientConsent,
+  GrantConsentData,
+} from './genomics';
+
+export type {
+  RecommendationCategory,
+  RecommendationPriority,
+  RecommendationStatus,
+  HealthScoreTrend,
+  Recommendation,
+  DailyHealthScore,
+  RecommendationFeedback,
+  PatientHealthData,
+  DismissRecommendationData,
+  SnoozeRecommendationData,
+  SubmitFeedbackData,
+  ScoreHistoryParams,
+  RecommendationsResponse,
+  HealthScoreResponse,
+  ScoreHistoryResponse,
+} from './recommendations';
