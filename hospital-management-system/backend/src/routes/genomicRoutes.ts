@@ -328,11 +328,11 @@ router.post(
       const riskScore = await prisma.genomicRiskScore.create({
         data: {
           profileId: profile.id,
-          category: category as any,
+          condition: category, // Using category as condition name
           riskLevel: riskLevel as any,
-          score: Math.round((avgRisk + 0.5) * 100), // Normalize to 0-100
           percentile,
-          contributingMarkers: createdMarkers
+          confidenceScore: 0.85,
+          contributingSnps: createdMarkers
             .filter(m => m.category === category)
             .map(m => m.rsId),
           recommendations: createdMarkers
