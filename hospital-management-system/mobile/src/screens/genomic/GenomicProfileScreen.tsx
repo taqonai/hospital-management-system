@@ -62,17 +62,19 @@ export default function GenomicProfileScreen() {
       if (profileRes.data?.data) {
         setProfile(profileRes.data.data);
       }
-      // Backend returns { markers: [...], grouped: {...}, ... }
-      if (markersRes.data?.data?.markers) {
-        setMarkers(markersRes.data.data.markers);
-      } else if (Array.isArray(markersRes.data?.data)) {
-        setMarkers(markersRes.data.data);
+      // Backend returns { markers: [...], grouped: {...}, ... } or just [...]
+      const markersData = markersRes.data?.data as any;
+      if (markersData?.markers) {
+        setMarkers(markersData.markers);
+      } else if (Array.isArray(markersData)) {
+        setMarkers(markersData);
       }
-      // Backend returns { riskScores: [...], totalConditions: ... }
-      if (risksRes.data?.data?.riskScores) {
-        setRiskScores(risksRes.data.data.riskScores);
-      } else if (Array.isArray(risksRes.data?.data)) {
-        setRiskScores(risksRes.data.data);
+      // Backend returns { riskScores: [...], totalConditions: ... } or just [...]
+      const risksData = risksRes.data?.data as any;
+      if (risksData?.riskScores) {
+        setRiskScores(risksData.riskScores);
+      } else if (Array.isArray(risksData)) {
+        setRiskScores(risksData);
       }
     } catch (err: any) {
       console.error('Failed to fetch genomic data:', err);
@@ -601,9 +603,9 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.sm,
   },
   genotypeText: {
-    fontSize: typography.fontSize.base, fontWeight: typography.fontWeight.semibold,
-    color: colors.primary[500],
+    fontSize: typography.fontSize.base,
     fontWeight: '700',
+    color: colors.primary[500],
   },
   markerPhenotype: {
     fontSize: typography.fontSize.base,

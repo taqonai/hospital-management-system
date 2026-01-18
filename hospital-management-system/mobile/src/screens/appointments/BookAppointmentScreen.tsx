@@ -205,7 +205,7 @@ const BookAppointmentScreen: React.FC = () => {
     setIsLoading(true);
     try {
       const response = await patientPortalApi.getAvailableSlots(doctorId, date);
-      const rawSlots = response.data?.data || response.data || [];
+      const rawSlots = (response.data?.data || response.data || []) as any[];
 
       if (rawSlots.length > 0) {
         // Transform backend response to expected TimeSlot format

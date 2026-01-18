@@ -32,7 +32,8 @@ const AppointmentsScreen: React.FC = () => {
       });
       // Handle different API response formats
       // Backend may return { data: [...], pagination: {...} } or just [...]
-      const rawData = response.data?.data?.data || response.data?.data || response.data || [];
+      const responseData = response.data as any;
+      const rawData = responseData?.data?.data || responseData?.data || responseData || [];
       const appointments = Array.isArray(rawData) ? rawData : [];
 
       // Transform backend format to expected Appointment format
@@ -61,7 +62,7 @@ const AppointmentsScreen: React.FC = () => {
             name: apt.departmentName || '',
           },
         },
-      })) as Appointment[];
+      })) as unknown as Appointment[];
     },
     retry: 1,
   });

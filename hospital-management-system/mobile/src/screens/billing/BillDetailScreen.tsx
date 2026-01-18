@@ -11,22 +11,60 @@ import {
   Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 
 var API_URL = 'https://spetaar.ai/api/v1';
 var TOKEN_KEY = 'patientPortalToken';
 
+interface BillItem {
+  name?: string;
+  description?: string;
+  quantity?: number;
+  unitPrice?: number;
+  amount?: number;
+}
+
+interface Payment {
+  method?: string;
+  date?: string;
+  amount?: number;
+}
+
+interface Bill {
+  id: string;
+  billNumber?: string;
+  billDate?: string;
+  createdAt?: string;
+  dueDate?: string;
+  status?: string;
+  type?: string;
+  description?: string;
+  totalAmount?: number;
+  amount?: number;
+  balanceAmount?: number;
+  subtotal?: number;
+  discount?: number;
+  tax?: number;
+  insuranceCoverage?: number;
+  items?: BillItem[];
+  payments?: Payment[];
+}
+
+type BillDetailParams = {
+  BillDetail: { billId: string };
+};
+
 function BillDetailScreen() {
   var navigation = useNavigation();
-  var route = useRoute();
+  var route = useRoute<RouteProp<BillDetailParams, 'BillDetail'>>();
   var billId = route.params?.billId;
 
-  var [bill, setBill] = useState(null);
+  var [bill, setBill] = useState<Bill | null>(null);
   var [isLoading, setIsLoading] = useState(true);
   var [isRefreshing, setIsRefreshing] = useState(false);
-  var [error, setError] = useState(null);
+  var [error, setError] = useState<string | null>(null);
 
   function loadBill() {
     setError(null);
@@ -86,12 +124,12 @@ function BillDetailScreen() {
     loadBill();
   }
 
-  function formatAmount(amount) {
+  function formatAmount(amount: number | string | undefined): string {
     var num = typeof amount === 'string' ? parseFloat(amount) : amount;
     return 'AED ' + (num || 0).toFixed(2);
   }
 
-  function formatDate(dateStr) {
+  function formatDate(dateStr: string | undefined): string {
     if (!dateStr) return '';
     try {
       var d = new Date(dateStr);
@@ -101,7 +139,7 @@ function BillDetailScreen() {
     }
   }
 
-  function formatShortDate(dateStr) {
+  function formatShortDate(dateStr: string | undefined): string {
     if (!dateStr) return '';
     try {
       var d = new Date(dateStr);
@@ -111,7 +149,7 @@ function BillDetailScreen() {
     }
   }
 
-  function getStatusColor(status) {
+  function getStatusColor(status: string | undefined): { bg: string; text: string } {
     if (!status) return { bg: '#F3F4F6', text: '#6B7280' };
     var s = status.toUpperCase();
     if (s === 'PAID') return { bg: '#D1FAE5', text: '#047857' };
@@ -282,13 +320,14 @@ function BillDetailScreen() {
             <Text style={styles.sectionTitle}>Itemized Charges</Text>
 
             <View style={styles.itemsCard}>
-              {bill.items.map(function(item, index) {
+              {bill.items.map(function(item: BillItem, index: number) {
+                const itemsLength = bill!.items?.length ?? 0;
                 return (
                   <View
                     key={index}
                     style={[
                       styles.itemRow,
-                      index < bill.items.length - 1 && styles.itemRowBorder,
+                      index < itemsLength - 1 && styles.itemRowBorder,
                     ]}
                   >
                     <View style={styles.itemInfo}>
@@ -345,13 +384,14 @@ function BillDetailScreen() {
             <Text style={styles.sectionTitle}>Payment History</Text>
 
             <View style={styles.paymentsCard}>
-              {bill.payments.map(function(payment, index) {
+              {bill.payments.map(function(payment: Payment, index: number) {
+                const paymentsLength = bill!.payments?.length ?? 0;
                 return (
                   <View
                     key={index}
                     style={[
                       styles.paymentRow,
-                      index < bill.payments.length - 1 && styles.paymentRowBorder,
+                      index < paymentsLength - 1 && styles.paymentRowBorder,
                     ]}
                   >
                     <View style={styles.paymentInfo}>

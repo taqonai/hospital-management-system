@@ -2,20 +2,41 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 
 var API_URL = 'https://spetaar.ai/api/v1';
 var TOKEN_KEY = 'patientPortalToken';
 
+interface BillRecord {
+  id?: string;
+  billId?: string;
+  billNumber?: string;
+  invoiceNumber?: string;
+  totalAmount?: number;
+  amount?: number;
+  status?: string;
+  billDate?: string;
+  createdAt?: string;
+  date?: string;
+  description?: string;
+  serviceName?: string;
+}
+
+type SettingsStackParamList = {
+  Billing: undefined;
+  BillDetail: { billId: string };
+};
+
 function BillingScreen() {
-  var navigation = useNavigation();
+  var navigation = useNavigation<NativeStackNavigationProp<SettingsStackParamList>>();
   var [activeTab, setActiveTab] = useState('all');
   var [isLoading, setIsLoading] = useState(true);
   var [isRefreshing, setIsRefreshing] = useState(false);
-  var [bills, setBills] = useState([]);
+  var [bills, setBills] = useState<BillRecord[]>([]);
   var [summary, setSummary] = useState({ totalDue: 0, pendingBills: 0 });
-  var [error, setError] = useState(null);
+  var [error, setError] = useState<string | null>(null);
 
   function loadData() {
     setError(null);
@@ -92,14 +113,14 @@ function BillingScreen() {
     loadData();
   }
 
-  function formatMoney(val) {
+  function formatMoney(val: number | string | null | undefined): string {
     if (val == null) return 'AED 0.00';
     var n = Number(val);
     if (isNaN(n)) return 'AED 0.00';
     return 'AED ' + n.toFixed(2);
   }
 
-  function formatDate(dateStr) {
+  function formatDate(dateStr: string | undefined): string {
     if (!dateStr) return '';
     try {
       var d = new Date(dateStr);
@@ -109,7 +130,7 @@ function BillingScreen() {
     }
   }
 
-  function getStatusColor(status) {
+  function getStatusColor(status: string | undefined): string {
     if (!status) return '#6B7280';
     var s = status.toLowerCase();
     if (s === 'paid') return '#10B981';
@@ -118,7 +139,7 @@ function BillingScreen() {
     return '#6B7280';
   }
 
-  function goToDetail(billId) {
+  function goToDetail(billId: string) {
     navigation.navigate('BillDetail', { billId: billId });
   }
 
@@ -191,8 +212,8 @@ function BillingScreen() {
           </View>
         ) : (
           <View style={styles.billsList}>
-            {filteredBills.map(function(bill, index) {
-              var billId = bill.id || bill.billId || index;
+            {filteredBills.map(function(bill: BillRecord, index: number) {
+              var billId = bill.id || bill.billId || String(index);
               var billNumber = bill.billNumber || bill.invoiceNumber || 'Bill #' + (index + 1);
               var amount = bill.totalAmount || bill.amount || 0;
               var status = bill.status || 'pending';

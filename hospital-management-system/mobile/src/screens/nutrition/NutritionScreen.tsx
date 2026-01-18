@@ -61,7 +61,7 @@ const NutritionScreen: React.FC = () => {
       ]);
 
       // Transform backend response to match mobile expected format
-      const rawSummary = summaryRes?.data?.data;
+      const rawSummary = summaryRes?.data?.data as any;
 
       if (rawSummary && typeof rawSummary === 'object') {
         // Backend returns byMealType with uppercase keys, we need meals with lowercase

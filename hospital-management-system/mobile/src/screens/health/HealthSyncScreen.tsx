@@ -55,10 +55,10 @@ const HealthSyncScreen: React.FC = () => {
 
       // Transform devices response
       const rawDevices = devicesRes.data?.data || [];
-      const transformedDevices = Array.isArray(rawDevices) ? rawDevices.map((d: any) => ({
+      const transformedDevices: DeviceConnection[] = Array.isArray(rawDevices) ? rawDevices.map((d: any) => ({
         id: d.id,
-        provider: (d.provider || '').toLowerCase().replace('_', '-'),
-        status: d.isActive ? 'connected' : 'disconnected',
+        provider: (d.provider || '').toLowerCase().replace('_', '-') as DeviceConnection['provider'],
+        status: (d.isActive ? 'connected' : 'disconnected') as DeviceConnection['status'],
         lastSync: d.lastSyncAt,
       })) : [];
       setDevices(transformedDevices);
@@ -66,7 +66,7 @@ const HealthSyncScreen: React.FC = () => {
       // Transform backend summary to mobile format
       // Backend returns: { STEPS: { value, unit, count }, WATER_INTAKE: {...}, ... }
       // Mobile expects: { todayStats: { steps, calories, waterIntake, sleepHours } }
-      const rawSummary = summaryRes.data?.data;
+      const rawSummary = summaryRes.data?.data as any;
       if (rawSummary && typeof rawSummary === 'object') {
         const transformedSummary: MetricsSummary = {
           latestMetrics: {

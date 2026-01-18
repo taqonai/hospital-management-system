@@ -222,7 +222,7 @@ const HealthPlatformConnectScreen: React.FC = () => {
         const response = await healthPlatformApi.syncHealthData({
           source: platform.id,
           data: syncResult.dataPoints.map((dp: { dataType: string; value: number; unit: string; timestamp: string; metadata?: Record<string, any> }) => ({
-            dataType: dp.dataType,
+            dataType: dp.dataType as HealthDataType,
             value: dp.value,
             unit: dp.unit,
             timestamp: dp.timestamp,

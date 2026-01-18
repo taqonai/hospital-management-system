@@ -247,7 +247,7 @@ const HealthAssistantScreen: React.FC = () => {
         })),
       });
 
-      const data = response.data?.data || response.data;
+      const data = (response.data?.data || response.data) as any;
       if (data && data.response) {
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),

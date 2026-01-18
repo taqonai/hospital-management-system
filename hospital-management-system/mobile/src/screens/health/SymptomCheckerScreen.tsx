@@ -329,7 +329,7 @@ const SymptomCheckerScreen: React.FC = () => {
       });
       console.log('[SymptomChecker] Raw API response:', JSON.stringify(response.data, null, 2));
 
-      const data = response.data?.data || response.data;
+      const data = (response.data?.data || response.data) as any;
       console.log('[SymptomChecker] Extracted data:', JSON.stringify(data, null, 2));
 
       if (data && data.sessionId) {
@@ -537,7 +537,7 @@ const SymptomCheckerScreen: React.FC = () => {
         }],
       });
       console.log('[SymptomChecker] Raw respond API response:', JSON.stringify(apiResponse.data, null, 2));
-      const data = apiResponse.data?.data || apiResponse.data;
+      const data = (apiResponse.data?.data || apiResponse.data) as any;
       console.log('[SymptomChecker] Extracted respond data:', JSON.stringify(data, null, 2));
 
       if (data) {
@@ -546,7 +546,7 @@ const SymptomCheckerScreen: React.FC = () => {
           console.log('[SymptomChecker] Assessment complete, fetching result with hospitalId:', user?.hospitalId);
           const completeResponse = await symptomCheckerApi.complete(sessionId!, user?.hospitalId);
           console.log('[SymptomChecker] Raw complete API response:', JSON.stringify(completeResponse.data, null, 2));
-          const result = completeResponse.data?.data || completeResponse.data;
+          const result = (completeResponse.data?.data || completeResponse.data) as any;
           console.log('[SymptomChecker] Extracted complete result:', JSON.stringify(result, null, 2));
 
           if (result) {

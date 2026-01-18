@@ -170,7 +170,7 @@ export default function GenomicUploadScreen() {
   const renderConsentStep = () => (
     <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.headerSection}>
-        <Ionicons name="shield-checkmark" size={48} color={colors.primary} />
+        <Ionicons name="shield-checkmark" size={48} color={colors.primary[500]} />
         <Text style={styles.title}>Data Privacy & Consent</Text>
         <Text style={styles.subtitle}>
           Your genetic data is highly sensitive. Please review and agree to the following before uploading.
@@ -190,7 +190,7 @@ export default function GenomicUploadScreen() {
           >
             <View style={styles.consentCheckbox}>
               {consents[item.type] ? (
-                <Ionicons name="checkbox" size={24} color={colors.primary} />
+                <Ionicons name="checkbox" size={24} color={colors.primary[500]} />
               ) : (
                 <Ionicons name="square-outline" size={24} color={colors.text.secondary} />
               )}
@@ -211,7 +211,7 @@ export default function GenomicUploadScreen() {
       </View>
 
       <View style={styles.infoBox}>
-        <Ionicons name="information-circle" size={20} color={colors.primary} />
+        <Ionicons name="information-circle" size={20} color={colors.primary[500]} />
         <Text style={styles.infoText}>
           Your data is encrypted and stored securely. You can delete your genomic data at any time from the settings.
         </Text>
@@ -234,7 +234,7 @@ export default function GenomicUploadScreen() {
   const renderUploadStep = () => (
     <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.headerSection}>
-        <Ionicons name="cloud-upload" size={48} color={colors.primary} />
+        <Ionicons name="cloud-upload" size={48} color={colors.primary[500]} />
         <Text style={styles.title}>Upload Genetic Data</Text>
         <Text style={styles.subtitle}>
           Select your data source and upload your raw genetic data file.
@@ -250,7 +250,7 @@ export default function GenomicUploadScreen() {
             activeOpacity={0.7}
           >
             <View style={styles.sourceIcon}>
-              <Ionicons name={source.icon as any} size={32} color={colors.primary} />
+              <Ionicons name={source.icon as any} size={32} color={colors.primary[500]} />
             </View>
             <View style={styles.sourceContent}>
               <Text style={styles.sourceName}>{source.name}</Text>
@@ -281,7 +281,7 @@ export default function GenomicUploadScreen() {
 
   const renderProcessingStep = () => (
     <View style={styles.centerContent}>
-      <ActivityIndicator size="large" color={colors.primary} />
+      <ActivityIndicator size="large" color={colors.primary[500]} />
       <Text style={styles.processingTitle}>Analyzing Your Genetic Data</Text>
       <Text style={styles.processingSubtitle}>
         This may take a few moments...
@@ -360,7 +360,7 @@ export default function GenomicUploadScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.primary,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -369,13 +369,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
+    borderBottomColor: colors.border,
   },
   backButton: {
     padding: spacing.xs,
   },
   headerTitle: {
-    ...typography.h3,
+    fontSize: typography.fontSize.xl,
+    fontWeight: typography.fontWeight.bold,
     color: colors.text.primary,
   },
   stepIndicator: {
@@ -392,19 +393,19 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: colors.border.light,
+    backgroundColor: colors.border,
   },
   stepDotActive: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primary[500],
   },
   stepLine: {
     width: 40,
     height: 2,
-    backgroundColor: colors.border.light,
+    backgroundColor: colors.border,
     marginHorizontal: spacing.xs,
   },
   stepLineActive: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primary[500],
   },
   content: {
     flex: 1,
@@ -421,13 +422,14 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xl,
   },
   title: {
-    ...typography.h2,
+    fontSize: typography.fontSize['2xl'],
+    fontWeight: typography.fontWeight.bold,
     color: colors.text.primary,
     marginTop: spacing.md,
     textAlign: 'center',
   },
   subtitle: {
-    ...typography.body,
+    fontSize: typography.fontSize.base,
     color: colors.text.secondary,
     textAlign: 'center',
     marginTop: spacing.sm,
@@ -439,15 +441,15 @@ const styles = StyleSheet.create({
   consentItem: {
     flexDirection: 'row',
     padding: spacing.md,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: colors.surface,
     borderRadius: borderRadius.md,
     marginBottom: spacing.sm,
     borderWidth: 1,
-    borderColor: colors.border.light,
+    borderColor: colors.border,
   },
   consentItemSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primary + '10',
+    borderColor: colors.primary[500],
+    backgroundColor: colors.primary[50],
   },
   consentCheckbox: {
     marginRight: spacing.md,
@@ -462,35 +464,36 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   consentTitle: {
-    ...typography.subtitle,
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
     color: colors.text.primary,
     flex: 1,
   },
   requiredBadge: {
-    backgroundColor: colors.error[500] + '20',
+    backgroundColor: colors.error[100],
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     borderRadius: borderRadius.sm,
   },
   requiredText: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.error[500],
     fontWeight: '600',
   },
   consentDescription: {
-    ...typography.body,
+    fontSize: typography.fontSize.base,
     color: colors.text.secondary,
     lineHeight: 20,
   },
   infoBox: {
     flexDirection: 'row',
-    backgroundColor: colors.primary + '10',
+    backgroundColor: colors.primary[50],
     padding: spacing.md,
     borderRadius: borderRadius.md,
     marginBottom: spacing.lg,
   },
   infoText: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.text.secondary,
     flex: 1,
     marginLeft: spacing.sm,
@@ -499,7 +502,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primary[500],
     paddingVertical: spacing.md,
     borderRadius: borderRadius.md,
     marginBottom: spacing.xl,
@@ -508,7 +511,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.text.disabled,
   },
   continueButtonText: {
-    ...typography.button,
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
     color: colors.white,
     marginRight: spacing.sm,
   },
@@ -519,7 +523,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: spacing.md,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: colors.surface,
     borderRadius: borderRadius.md,
     marginBottom: spacing.sm,
     ...shadows.sm,
@@ -528,7 +532,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: borderRadius.md,
-    backgroundColor: colors.primary + '15',
+    backgroundColor: colors.primary[100],
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.md,
@@ -537,68 +541,71 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sourceName: {
-    ...typography.subtitle,
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
     color: colors.text.primary,
     marginBottom: 2,
   },
   sourceDescription: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.text.secondary,
   },
   errorBox: {
     flexDirection: 'row',
-    backgroundColor: colors.error[500] + '15',
+    backgroundColor: colors.error[100],
     padding: spacing.md,
     borderRadius: borderRadius.md,
     marginBottom: spacing.md,
   },
   errorText: {
-    ...typography.body,
+    fontSize: typography.fontSize.base,
     color: colors.error[500],
     flex: 1,
     marginLeft: spacing.sm,
   },
   instructionsBox: {
-    backgroundColor: colors.background.secondary,
+    backgroundColor: colors.surface,
     padding: spacing.md,
     borderRadius: borderRadius.md,
     marginBottom: spacing.xl,
   },
   instructionsTitle: {
-    ...typography.subtitle,
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
     color: colors.text.primary,
     marginBottom: spacing.sm,
   },
   instructionsText: {
-    ...typography.body,
+    fontSize: typography.fontSize.base,
     color: colors.text.secondary,
     lineHeight: 22,
   },
   processingTitle: {
-    ...typography.h3,
+    fontSize: typography.fontSize.xl,
+    fontWeight: typography.fontWeight.bold,
     color: colors.text.primary,
     marginTop: spacing.lg,
   },
   processingSubtitle: {
-    ...typography.body,
+    fontSize: typography.fontSize.base,
     color: colors.text.secondary,
     marginTop: spacing.sm,
   },
   progressContainer: {
     width: '80%',
     height: 6,
-    backgroundColor: colors.border.light,
+    backgroundColor: colors.border,
     borderRadius: 3,
     marginTop: spacing.lg,
     overflow: 'hidden',
   },
   progressBar: {
     height: '100%',
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primary[500],
     borderRadius: 3,
   },
   progressText: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.text.secondary,
     marginTop: spacing.sm,
   },
@@ -606,12 +613,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   successTitle: {
-    ...typography.h2,
+    fontSize: typography.fontSize['2xl'],
+    fontWeight: typography.fontWeight.bold,
     color: colors.text.primary,
     textAlign: 'center',
   },
   successSubtitle: {
-    ...typography.body,
+    fontSize: typography.fontSize.base,
     color: colors.text.secondary,
     textAlign: 'center',
     marginTop: spacing.sm,
@@ -621,14 +629,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primary[500],
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.xl,
     borderRadius: borderRadius.md,
     marginTop: spacing.xl,
   },
   viewProfileButtonText: {
-    ...typography.button,
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
     color: colors.white,
     marginRight: spacing.sm,
   },

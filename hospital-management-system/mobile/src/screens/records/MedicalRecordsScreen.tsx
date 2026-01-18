@@ -23,7 +23,7 @@ type MedicalRecordsRouteProp = RouteProp<HealthStackParamList, 'MedicalRecords'>
 const MedicalRecordsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<MedicalRecordsRouteProp>();
-  const source = route.params?.source;
+  const source = (route.params as any)?.source;
 
   // Custom back handler when accessed from home dashboard
   // Reset entire navigation state to ensure Health tab opens HealthHub next time
