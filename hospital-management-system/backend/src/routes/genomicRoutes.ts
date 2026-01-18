@@ -287,10 +287,10 @@ router.post(
             phenotype: interpretation.phenotype,
             confidence: 0.95,
             recommendations: interpretation.recommendations,
-            riskModifier: interpretation.riskModifier,
+            metadata: { riskModifier: interpretation.riskModifier },
           },
         });
-        createdMarkers.push(marker);
+        createdMarkers.push({ ...marker, riskModifier: interpretation.riskModifier });
 
         // Accumulate risk by category
         if (!categoryRisks[markerInfo.category]) {
