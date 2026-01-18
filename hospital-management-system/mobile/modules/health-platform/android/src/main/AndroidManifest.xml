@@ -23,10 +23,11 @@
     </queries>
 
     <application>
-        <!-- Declare that this app interacts with Health Connect -->
+        <!-- Activity to request Health Connect permissions -->
         <activity
-            android:name="androidx.health.connect.client.permission.HealthPermissionRequest"
-            android:exported="true">
+            android:name=".HealthPermissionsActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>
                 <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE"/>
             </intent-filter>

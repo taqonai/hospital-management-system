@@ -373,8 +373,12 @@ export const wellnessApi = {
   disconnectDevice: (provider: string) =>
     api.delete<ApiResponse<void>>(`/wellness/devices/${provider.toUpperCase()}`),
 
-  syncDevice: (provider: string) =>
-    api.post<ApiResponse<{ synced: number; lastSync: string }>>(`/wellness/devices/${provider.toUpperCase()}/sync`),
+  syncDevice: (provider: string, data?: {
+    metrics?: Array<{ dataType: string; value: number; unit: string; timestamp: string; endTime?: string }>;
+    workouts?: Array<{ workoutType: string; startTime: string; endTime: string; duration: number; calories?: number; distance?: number }>;
+    sleep?: Array<{ startTime: string; endTime: string; duration: number; stages?: Array<{ stage: string; startTime: string; endTime: string }> }>;
+  }) =>
+    api.post<ApiResponse<{ syncedMetrics: number; syncedWorkouts: number; syncedSleep: number; lastSyncAt: string }>>(`/wellness/devices/${provider.toUpperCase()}/sync`, data || {}),
 
   // ==================== Health Metrics ====================
   getMetrics: (params?: { type?: MetricType; startDate?: string; endDate?: string; limit?: number }) =>

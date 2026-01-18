@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme';
 import { wellnessApi, DeviceConnection, MetricsSummary, MetricType } from '../../services/api';
 import { HealthStackParamList } from '../../types';
+import { healthPlatformService } from '../../../modules/health-platform/src';
 
 type NavigationProp = NativeStackNavigationProp<HealthStackParamList>;
 
@@ -178,11 +179,89 @@ const HealthSyncScreen: React.FC = () => {
   const handleSyncDevice = async (provider: string) => {
     setSyncingDevice(provider);
     try {
-      await wellnessApi.syncDevice(provider);
-      Alert.alert('Success', 'Data synced successfully!');
+      // Get data from native health platform for the past 7 days
+      const endDate = new Date().toISOString();
+      const startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      // Check if health platform is available
+      const isAvailable = await healthPlatformService.isAvailable();
+      console.log('[HealthSync] Platform available:', isAvailable);
+
+      if (!isAvailable) {
+        Alert.alert(
+          'Health Connect Required',
+          'Please install Health Connect from the Play Store and grant permissions to sync health data.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      // Request authorization first
+      const authResult = await healthPlatformService.requestAuthorization([
+        'STEPS', 'HEART_RATE', 'HEART_RATE_RESTING', 'HRV',
+        'BLOOD_OXYGEN', 'WEIGHT', 'CALORIES_BURNED', 'DISTANCE',
+        'SLEEP_DURATION', 'WORKOUT',
+      ]);
+      console.log('[HealthSync] Authorization result:', authResult);
+
+      if (!authResult.granted && authResult.error) {
+        Alert.alert('Permissions Required', authResult.error);
+        return;
+      }
+
+      // Fetch health data from native module
+      const syncResult = await healthPlatformService.syncData({
+        startDate,
+        endDate,
+        dataTypes: [
+          'STEPS', 'HEART_RATE', 'HEART_RATE_RESTING', 'HRV',
+          'BLOOD_OXYGEN', 'WEIGHT', 'CALORIES_BURNED', 'DISTANCE',
+          'SLEEP_DURATION', 'WORKOUT',
+        ],
+      });
+      console.log('[HealthSync] Sync result:', syncResult);
+
+      // Get workouts and sleep data
+      const workouts = await healthPlatformService.getWorkouts(startDate, endDate);
+      const sleepData = await healthPlatformService.getSleepData(startDate, endDate);
+      console.log('[HealthSync] Workouts:', workouts?.length, 'Sleep:', sleepData?.length);
+
+      // Send synced data to backend
+      const response = await wellnessApi.syncDevice(provider.toUpperCase(), {
+        metrics: syncResult.dataPoints?.map(dp => ({
+          dataType: dp.dataType,
+          value: dp.value,
+          unit: dp.unit,
+          timestamp: dp.timestamp,
+        })) || [],
+        workouts: workouts?.map(w => ({
+          workoutType: w.workoutType,
+          startTime: w.startTime,
+          endTime: w.endTime,
+          duration: w.duration,
+          calories: w.calories,
+          distance: w.distance,
+        })) || [],
+        sleep: sleepData?.map(s => ({
+          startTime: s.startTime,
+          endTime: s.endTime,
+          duration: s.duration,
+          stages: s.stages,
+        })) || [],
+      });
+
+      const { syncedMetrics = 0, syncedWorkouts = 0, syncedSleep = 0 } = response.data.data || {};
+      const totalSynced = syncedMetrics + syncedWorkouts + syncedSleep;
+
+      if (totalSynced > 0) {
+        Alert.alert('Success', `Synced ${totalSynced} records successfully!`);
+      } else {
+        Alert.alert('Info', 'No new data to sync.');
+      }
       loadData();
-    } catch (error) {
-      Alert.alert('Error', 'Failed to sync data. Please try again.');
+    } catch (error: any) {
+      console.error('Sync error:', error);
+      Alert.alert('Error', error.message || 'Failed to sync data. Please try again.');
     } finally {
       setSyncingDevice(null);
     }

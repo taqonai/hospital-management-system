@@ -26,7 +26,7 @@
  */
 
 export * from './types';
-export { HealthPlatformService } from './HealthPlatformService';
+export { HealthPlatformService, healthPlatformService } from './HealthPlatformService';
 export { GoogleHealthAdapter } from './adapters/GoogleHealthAdapter';
 export { AppleHealthAdapter } from './adapters/AppleHealthAdapter';
 export { SamsungHealthAdapter } from './adapters/SamsungHealthAdapter';

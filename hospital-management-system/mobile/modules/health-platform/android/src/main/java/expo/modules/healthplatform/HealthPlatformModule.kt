@@ -77,9 +77,35 @@ class HealthPlatformModule : Module() {
         }
 
         /**
-         * Open Health Connect app or Play Store to install it
+         * Open Health Connect app to manage permissions
          */
         AsyncFunction("openHealthConnectSettings") { promise: Promise ->
+            try {
+                // Try to open Health Connect app directly
+                val intent = Intent("androidx.health.ACTION_HEALTH_CONNECT_SETTINGS")
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                try {
+                    context.startActivity(intent)
+                    promise.resolve(true)
+                } catch (e: Exception) {
+                    // If Health Connect is not installed, open Play Store
+                    val playStoreIntent = Intent(Intent.ACTION_VIEW).apply {
+                        data = Uri.parse("market://details?id=com.google.android.apps.healthdata")
+                        setPackage("com.android.vending")
+                    }
+                    playStoreIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(playStoreIntent)
+                    promise.resolve(true)
+                }
+            } catch (e: Exception) {
+                promise.reject(CodedException("OPEN_FAILED", e.message, e))
+            }
+        }
+
+        /**
+         * Open Play Store to install Health Connect
+         */
+        AsyncFunction("openHealthConnectPlayStore") { promise: Promise ->
             try {
                 val intent = Intent(Intent.ACTION_VIEW).apply {
                     data = Uri.parse("market://details?id=com.google.android.apps.healthdata")
@@ -90,6 +116,21 @@ class HealthPlatformModule : Module() {
                 promise.resolve(true)
             } catch (e: Exception) {
                 promise.reject(CodedException("OPEN_FAILED", e.message, e))
+            }
+        }
+
+        /**
+         * Launch the Health Connect permissions request activity
+         * This uses the proper Activity Result API to register with Health Connect
+         */
+        AsyncFunction("requestPermissionsActivity") { promise: Promise ->
+            try {
+                val intent = Intent(context, HealthPermissionsActivity::class.java)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                promise.resolve(true)
+            } catch (e: Exception) {
+                promise.reject(CodedException("LAUNCH_FAILED", e.message, e))
             }
         }
 
@@ -106,7 +147,7 @@ class HealthPlatformModule : Module() {
                     if (client == null) {
                         promise.resolve(mapOf(
                             "granted" to false,
-                            "error" to "Health Connect not available"
+                            "error" to "Health Connect not available. Please install Health Connect from the Play Store."
                         ))
                         return@launch
                     }
@@ -134,11 +175,27 @@ class HealthPlatformModule : Module() {
                             "permissions" to dataTypes.map { mapOf("dataType" to it, "read" to true, "write" to false) }
                         ))
                     } else {
-                        // Need to request permissions - return info for UI to handle
+                        // Launch the permissions activity to request permissions
+                        try {
+                            val intent = Intent(context, HealthPermissionsActivity::class.java)
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            // Fallback to opening Health Connect settings
+                            try {
+                                val settingsIntent = Intent("androidx.health.ACTION_HEALTH_CONNECT_SETTINGS")
+                                settingsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                context.startActivity(settingsIntent)
+                            } catch (e2: Exception) {
+                                // Ignore if can't open
+                            }
+                        }
+
+                        // Return that permissions are needed
                         promise.resolve(mapOf(
                             "granted" to false,
                             "needsPermission" to true,
-                            "requiredPermissions" to dataTypes
+                            "error" to "Please grant permissions in the dialog that appeared, then try syncing again."
                         ))
                     }
                 } catch (e: Exception) {
