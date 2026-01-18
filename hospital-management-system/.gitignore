@@ -70,3 +70,8 @@ ssl/
 # Secrets
 secrets/
 *.secret
+
+# Dist folders
+mobile/dist-bundle/
+mobile/dist-debug/
+mobile/dist-prod/

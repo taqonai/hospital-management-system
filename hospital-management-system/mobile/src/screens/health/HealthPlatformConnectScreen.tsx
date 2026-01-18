@@ -24,7 +24,7 @@ import {
   HealthPlatformService,
   HealthDataType,
   HealthPlatformStatus,
-} from '../../../modules/health-platform';
+} from '../../../modules/health-platform/src';
 
 // Available data types to sync
 const DATA_TYPES_TO_SYNC: HealthDataType[] = [
@@ -221,7 +221,7 @@ const HealthPlatformConnectScreen: React.FC = () => {
       if (syncResult.dataPoints.length > 0) {
         const response = await healthPlatformApi.syncHealthData({
           source: platform.id,
-          data: syncResult.dataPoints.map(dp => ({
+          data: syncResult.dataPoints.map((dp: { dataType: string; value: number; unit: string; timestamp: string; metadata?: Record<string, any> }) => ({
             dataType: dp.dataType,
             value: dp.value,
             unit: dp.unit,
@@ -658,7 +658,7 @@ const styles = StyleSheet.create({
   disconnectButton: {
     backgroundColor: colors.error[50],
     borderWidth: 1,
-    borderColor: colors.error[200],
+    borderColor: colors.error[100],
   },
   disconnectButtonText: {
     color: colors.error[600],
