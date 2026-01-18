@@ -19,6 +19,7 @@
     "db:seed:icd10": "ts-node prisma/seed-icd10.ts",
     "db:seed:cpt": "ts-node prisma/seed-cpt.ts",
     "db:seed:insurance-coding": "npm run db:seed:icd10 && npm run db:seed:cpt",
+    "db:seed:amad": "ts-node prisma/seed-amad.ts",
     "lint": "eslint src/**/*.ts",
     "test": "jest"
   },

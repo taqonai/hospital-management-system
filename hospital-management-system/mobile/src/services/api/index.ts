@@ -6,6 +6,8 @@ export { offlinePatientApi } from './offlineApi';
 export { wellnessApi } from './wellness';
 export { genomicsApi } from './genomics';
 export { recommendationsApi } from './recommendations';
+export { nutritionAiApi } from './nutritionAi';
+export { healthPlatformApi } from './healthPlatform';
 
 // Re-export types
 export type { LoginCredentials, RegisterData, OTPRequest, OTPVerification, AuthTokens, AuthResponse } from './auth';
@@ -73,3 +75,36 @@ export type {
   HealthScoreResponse,
   ScoreHistoryResponse,
 } from './recommendations';
+
+// Nutrition AI types
+export type {
+  MealType as NutritionMealType,
+  PortionSize,
+  FoodCategory,
+  DetectedFood,
+  MealAnalysis,
+  FoodSearchResult,
+  FoodDetails,
+  PortionEstimate,
+  RegionalFoodsResponse,
+  FoodSearchResponse,
+  NutritionAiStatus,
+  AnalyzeMealRequest,
+  SearchFoodsRequest,
+  EstimatePortionRequest,
+} from './nutritionAi';
+
+// Health Platform types
+export type {
+  HealthPlatformType,
+  HealthDataType as HealthPlatformDataType,
+  HealthDataPoint as HealthPlatformDataPoint,
+  PlatformConnection,
+  ConnectPlatformData,
+  SyncHealthDataRequest,
+  SyncHealthDataResponse,
+  HealthDataQuery,
+  HealthDataResponse,
+  HealthSummary,
+  HealthSummaryResponse,
+} from './healthPlatform';

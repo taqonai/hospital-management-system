@@ -41,7 +41,7 @@ const menuItems: MenuItem[] = [
     icon: 'git-network-outline',
     color: '#E84393',
     bgColor: '#FFF0F7',
-    screen: 'GenomicUpload',
+    screen: 'GenomicProfile',
   },
   {
     id: 'insights',

@@ -260,7 +260,7 @@ export default function RecommendationsScreen() {
                 <Text style={styles.sectionLabel}>Why this recommendation:</Text>
                 {recommendation.reasoning.map((reason, idx) => (
                   <View key={idx} style={styles.reasonItem}>
-                    <Ionicons name="information-circle" size={16} color={colors.primary} />
+                    <Ionicons name="information-circle" size={16} color={colors.primary[500]} />
                     <Text style={styles.reasonText}>{reason}</Text>
                   </View>
                 ))}
@@ -322,7 +322,7 @@ export default function RecommendationsScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <ActivityIndicator size="large" color={colors.primary[500]} />
           <Text style={styles.loadingText}>Loading recommendations...</Text>
         </View>
       </SafeAreaView>
@@ -340,7 +340,7 @@ export default function RecommendationsScreen() {
           onPress={() => navigation.navigate('HealthScore' as never)}
           style={styles.scoreButton}
         >
-          <Ionicons name="speedometer" size={24} color={colors.primary} />
+          <Ionicons name="speedometer" size={24} color={colors.primary[500]} />
         </TouchableOpacity>
       </View>
 
@@ -370,7 +370,7 @@ export default function RecommendationsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.primary,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -379,7 +379,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
+    borderBottomColor: colors.border,
   },
   backButton: {
     padding: spacing.xs,
@@ -388,7 +388,8 @@ const styles = StyleSheet.create({
     padding: spacing.xs,
   },
   headerTitle: {
-    ...typography.h3,
+    fontSize: typography.fontSize.xl,
+    fontWeight: typography.fontWeight.bold,
     color: colors.text.primary,
   },
   loadingContainer: {
@@ -397,7 +398,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    ...typography.body,
+    fontSize: typography.fontSize.base,
     color: colors.text.secondary,
     marginTop: spacing.md,
   },
@@ -410,7 +411,7 @@ const styles = StyleSheet.create({
   filterScroll: {
     maxHeight: 50,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
+    borderBottomColor: colors.border,
   },
   filterContainer: {
     paddingHorizontal: spacing.md,
@@ -422,17 +423,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: borderRadius.full,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: colors.surface,
     marginRight: spacing.sm,
     borderWidth: 1,
-    borderColor: colors.border.light,
+    borderColor: colors.border,
   },
   filterChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: colors.primary[500],
+    borderColor: colors.primary[500],
   },
   filterChipText: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.text.secondary,
   },
   filterChipTextActive: {
@@ -442,7 +443,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   recommendationCard: {
-    backgroundColor: colors.background.secondary,
+    backgroundColor: colors.surface,
     borderRadius: borderRadius.md,
     marginBottom: spacing.sm,
     overflow: 'hidden',
@@ -470,7 +471,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   cardTitle: {
-    ...typography.subtitle,
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
     color: colors.text.primary,
     flex: 1,
     marginRight: spacing.sm,
@@ -481,11 +483,11 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.sm,
   },
   priorityText: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     fontWeight: '600',
   },
   cardCategory: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.text.secondary,
     marginTop: 2,
   },
@@ -493,11 +495,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: colors.border.light,
+    borderTopColor: colors.border,
     paddingTop: spacing.md,
   },
   cardDescription: {
-    ...typography.body,
+    fontSize: typography.fontSize.base,
     color: colors.text.secondary,
     lineHeight: 22,
   },
@@ -508,7 +510,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   sectionLabel: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.text.primary,
     fontWeight: '600',
     marginBottom: spacing.xs,
@@ -519,7 +521,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   reasonText: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.text.secondary,
     flex: 1,
     marginLeft: spacing.xs,
@@ -530,7 +532,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   actionText: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.text.secondary,
     flex: 1,
     marginLeft: spacing.xs,
@@ -541,7 +543,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     paddingTop: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: colors.border.light,
+    borderTopColor: colors.border,
   },
   actionButton: {
     flexDirection: 'row',
@@ -551,7 +553,7 @@ const styles = StyleSheet.create({
     marginLeft: spacing.sm,
   },
   actionButtonText: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.text.secondary,
     marginLeft: 4,
   },
@@ -562,12 +564,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
   },
   emptyTitle: {
-    ...typography.h3,
+    fontSize: typography.fontSize.xl,
+    fontWeight: typography.fontWeight.bold,
     color: colors.text.primary,
     marginTop: spacing.md,
   },
   emptySubtitle: {
-    ...typography.body,
+    fontSize: typography.fontSize.base,
     color: colors.text.secondary,
     textAlign: 'center',
     marginTop: spacing.sm,

@@ -40,7 +40,7 @@ function ScoreRing({
   score,
   size = 200,
   strokeWidth = 15,
-  color = colors.primary,
+  color = colors.primary[500],
 }: {
   score: number;
   size?: number;
@@ -60,7 +60,7 @@ function ScoreRing({
           height: size,
           borderRadius: size / 2,
           borderWidth: strokeWidth,
-          borderColor: colors.border.light,
+          borderColor: colors.border,
         }}
       />
       <View
@@ -184,7 +184,7 @@ export default function HealthScoreScreen() {
 
   const getOverallScoreColor = (score: number) => {
     if (score >= 80) return colors.success[500];
-    if (score >= 60) return colors.primary;
+    if (score >= 60) return colors.primary[500];
     if (score >= 40) return colors.warning[500];
     return colors.error[500];
   };
@@ -241,7 +241,7 @@ export default function HealthScoreScreen() {
                         height: barHeight,
                         backgroundColor: isToday
                           ? getOverallScoreColor(day.overall)
-                          : colors.primary + '60',
+                          : colors.primary[500] + '60',
                       },
                     ]}
                   />
@@ -261,7 +261,7 @@ export default function HealthScoreScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <ActivityIndicator size="large" color={colors.primary[500]} />
           <Text style={styles.loadingText}>Calculating your health score...</Text>
         </View>
       </SafeAreaView>
@@ -362,7 +362,7 @@ export default function HealthScoreScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.primary,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -371,13 +371,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
+    borderBottomColor: colors.border,
   },
   backButton: {
     padding: spacing.xs,
   },
   headerTitle: {
-    ...typography.h3,
+    fontSize: typography.fontSize.xl,
+    fontWeight: typography.fontWeight.bold,
     color: colors.text.primary,
   },
   loadingContainer: {
@@ -386,7 +387,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    ...typography.body,
+    fontSize: typography.fontSize.base,
     color: colors.text.secondary,
     marginTop: spacing.md,
   },
@@ -402,7 +403,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   scoreLabel: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.text.secondary,
   },
   trendBadge: {
@@ -414,12 +415,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   trendText: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     fontWeight: '600',
     marginLeft: spacing.xs,
   },
   dateLabel: {
-    ...typography.body,
+    fontSize: typography.fontSize.base,
     color: colors.text.secondary,
     marginTop: spacing.sm,
   },
@@ -427,12 +428,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   sectionTitle: {
-    ...typography.subtitle,
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
     color: colors.text.primary,
     marginBottom: spacing.sm,
   },
   breakdownCard: {
-    backgroundColor: colors.background.secondary,
+    backgroundColor: colors.surface,
     borderRadius: borderRadius.md,
     padding: spacing.md,
     ...shadows.sm,
@@ -450,7 +452,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   categoryLabel: {
-    ...typography.body,
+    fontSize: typography.fontSize.base,
     color: colors.text.primary,
     width: 80,
     marginLeft: spacing.sm,
@@ -461,7 +463,7 @@ const styles = StyleSheet.create({
   },
   progressBarBg: {
     height: 8,
-    backgroundColor: colors.border.light,
+    backgroundColor: colors.border,
     borderRadius: 4,
     overflow: 'hidden',
   },
@@ -470,7 +472,8 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   categoryScore: {
-    ...typography.subtitle,
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
     width: 30,
     textAlign: 'right',
   },
@@ -488,7 +491,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   insightsTitle: {
-    ...typography.subtitle,
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
     color: colors.text.primary,
     marginLeft: spacing.sm,
   },
@@ -506,7 +510,7 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
   },
   insightText: {
-    ...typography.body,
+    fontSize: typography.fontSize.base,
     color: colors.text.secondary,
     flex: 1,
   },
@@ -518,7 +522,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-end',
     height: 130,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: colors.surface,
     borderRadius: borderRadius.md,
     padding: spacing.md,
     ...shadows.sm,
@@ -538,7 +542,7 @@ const styles = StyleSheet.create({
     minHeight: 4,
   },
   barLabel: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.text.secondary,
     marginTop: spacing.xs,
   },
@@ -552,23 +556,23 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   dataQualityLabel: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.text.secondary,
     marginLeft: spacing.xs,
   },
   dataQualityBar: {
     height: 4,
-    backgroundColor: colors.border.light,
+    backgroundColor: colors.border,
     borderRadius: 2,
     overflow: 'hidden',
   },
   dataQualityFill: {
     height: '100%',
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primary[500],
     borderRadius: 2,
   },
   dataQualityText: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.text.disabled,
     marginTop: spacing.xs,
   },
@@ -576,14 +580,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primary[500],
     marginHorizontal: spacing.md,
     marginTop: spacing.lg,
     paddingVertical: spacing.md,
     borderRadius: borderRadius.md,
   },
   ctaButtonText: {
-    ...typography.button,
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
     color: colors.white,
     marginHorizontal: spacing.sm,
   },

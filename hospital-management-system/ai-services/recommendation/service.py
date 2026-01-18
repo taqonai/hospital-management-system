@@ -365,17 +365,17 @@ class RecommendationService:
         """
         Generate personalized recommendations based on all available patient data.
 
-        patient_data should include:
-        - healthData: Dict of aggregated wearable metrics
-        - genomicProfile: Dict with markers list
-        - labResults: List of recent lab results
-        - nutritionLogs: List of nutrition entries
-        - fitnessGoals: Dict with fitness and wellness goals
+        patient_data should include (accepts multiple field name formats):
+        - healthData / wearable_data: Dict of aggregated wearable metrics
+        - genomicProfile / genomic_markers: Dict with markers list or list of markers
+        - labResults / lab_results: List of recent lab results
+        - nutritionLogs / nutrition_logs: List of nutrition entries
+        - fitnessGoals / fitness_goals: Dict with fitness and wellness goals
         """
         recommendations = []
 
-        # Process wearable data
-        health_data = patient_data.get("healthData", {})
+        # Process wearable data (support both field names)
+        health_data = patient_data.get("healthData") or patient_data.get("wearable_data", {})
         wearable_metrics = self._aggregate_wearable_data(health_data)
 
         for rule_name, rule in self.wearable_rules.items():
@@ -386,8 +386,9 @@ class RecommendationService:
             except Exception as e:
                 logger.warning(f"Error evaluating wearable rule {rule_name}: {e}")
 
-        # Process lab results
-        lab_data = {"lab_results": patient_data.get("labResults", [])}
+        # Process lab results (support both field names)
+        lab_results = patient_data.get("labResults") or patient_data.get("lab_results", [])
+        lab_data = {"lab_results": lab_results}
         for rule_name, rule in self.lab_rules.items():
             try:
                 if rule["condition"](lab_data):
@@ -396,10 +397,13 @@ class RecommendationService:
             except Exception as e:
                 logger.warning(f"Error evaluating lab rule {rule_name}: {e}")
 
-        # Process genomic markers
-        genomic_data = {
-            "genomic_markers": patient_data.get("genomicProfile", {}).get("markers", [])
-        }
+        # Process genomic markers (support multiple formats)
+        genomic_profile = patient_data.get("genomicProfile") or {}
+        genomic_markers = patient_data.get("genomic_markers") or genomic_profile.get("markers", [])
+        # Handle both list of markers and profile with markers key
+        if isinstance(genomic_markers, dict) and "markers" in genomic_markers:
+            genomic_markers = genomic_markers["markers"]
+        genomic_data = {"genomic_markers": genomic_markers}
         for rule_name, rule in self.genomic_rules.items():
             try:
                 if rule["condition"](genomic_data):
@@ -408,10 +412,9 @@ class RecommendationService:
             except Exception as e:
                 logger.warning(f"Error evaluating genomic rule {rule_name}: {e}")
 
-        # Process nutrition logs
-        nutrition_data = self._aggregate_nutrition_data(
-            patient_data.get("nutritionLogs", [])
-        )
+        # Process nutrition logs (support both field names)
+        nutrition_logs = patient_data.get("nutritionLogs") or patient_data.get("nutrition_logs", [])
+        nutrition_data = self._aggregate_nutrition_data(nutrition_logs)
         for rule_name, rule in self.nutrition_rules.items():
             try:
                 if rule["condition"](nutrition_data):
@@ -497,6 +500,7 @@ class RecommendationService:
         Calculate daily health score based on available data.
 
         Returns a HealthScore with component scores and insights.
+        Accepts multiple field name formats for flexibility.
         """
         scores = {}
         insights = []
@@ -504,7 +508,8 @@ class RecommendationService:
         max_data_points = 5  # sleep, activity, nutrition, recovery, compliance
 
         # Sleep score (based on duration and quality)
-        health_data = patient_data.get("healthData", {})
+        # Support both field name formats
+        health_data = patient_data.get("healthData") or patient_data.get("wearable_data", {})
         sleep_data = health_data.get("SLEEP_DURATION", {}).get("values", [])
         if sleep_data:
             avg_sleep_hours = sum(v["value"] / 60 for v in sleep_data) / len(sleep_data)
@@ -538,7 +543,8 @@ class RecommendationService:
             scores["activity"] = 50
 
         # Nutrition score (based on logged meals)
-        nutrition_logs = patient_data.get("nutritionLogs", [])
+        # Support both field name formats
+        nutrition_logs = patient_data.get("nutritionLogs") or patient_data.get("nutrition_logs", [])
         if nutrition_logs:
             # Score based on meal logging compliance and balance
             meals_logged = len(nutrition_logs)
@@ -600,7 +606,8 @@ class RecommendationService:
             scores["recovery"] = 50
 
         # Compliance score (goal adherence)
-        goals = patient_data.get("fitnessGoals", {})
+        # Support both field name formats
+        goals = patient_data.get("fitnessGoals") or patient_data.get("fitness_goals", {})
         fitness_goals = goals.get("fitness", [])
         wellness_goals = goals.get("wellness", [])
 

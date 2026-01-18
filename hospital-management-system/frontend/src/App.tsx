@@ -121,6 +121,11 @@ import AISettings from './pages/AISettings';
 // Insurance Coding (Admin only)
 import InsuranceCoding from './pages/InsuranceCoding';
 
+// Clinician Dashboard (A'mad Precision Health Platform)
+import ClinicianDashboard from './pages/Clinician';
+import ClinicianPatientSummary from './pages/Clinician/PatientSummary';
+import ClinicianAlerts from './pages/Clinician/Alerts';
+
 // Protected Route Component
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -242,6 +247,32 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']}>
               <AIAssistant />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Clinician Dashboard - A'mad Precision Health Platform */}
+        <Route
+          path="/clinician"
+          element={
+            <ProtectedRoute allowedRoles={['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']}>
+              <ClinicianDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/clinician/patients/:patientId"
+          element={
+            <ProtectedRoute allowedRoles={['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']}>
+              <ClinicianPatientSummary />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/clinician/alerts"
+          element={
+            <ProtectedRoute allowedRoles={['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']}>
+              <ClinicianAlerts />
             </ProtectedRoute>
           }
         />

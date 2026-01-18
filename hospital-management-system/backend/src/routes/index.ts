@@ -50,6 +50,7 @@ import healthPlatformRoutes from './healthPlatformRoutes';
 import genomicRoutes from './genomicRoutes';
 import recommendationRoutes from './recommendationRoutes';
 import clinicianRoutes from './clinicianRoutes';
+import nutritionAiRoutes from './nutritionAiRoutes';
 
 const router = Router();
 
@@ -130,5 +131,6 @@ router.use('/health', healthPlatformRoutes);
 router.use('/genomics', genomicRoutes);
 router.use('/recommendations', recommendationRoutes);
 router.use('/clinician', clinicianRoutes);
+router.use('/nutrition-ai', nutritionAiRoutes);
 
 export default router;

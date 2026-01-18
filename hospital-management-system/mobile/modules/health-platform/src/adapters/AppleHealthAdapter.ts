@@ -2,16 +2,16 @@
  * Apple HealthKit Adapter
  *
  * This adapter integrates with Apple HealthKit on iOS devices.
- * It requires the following:
+ * It communicates with the native HealthPlatformModule (Swift).
  *
- * 1. HealthKit capability enabled in Xcode
- * 2. NSHealthShareUsageDescription in Info.plist
- * 3. NSHealthUpdateUsageDescription in Info.plist (for write access)
+ * Requirements:
+ * 1. iOS 13.0+
+ * 2. HealthKit capability enabled in Xcode
+ * 3. NSHealthShareUsageDescription in Info.plist
  * 4. User consent to share data
- *
- * Native implementation in: ios/HealthKitModule.swift
  */
 
+import { requireNativeModule } from 'expo-modules-core';
 import {
   HealthDataType,
   HealthDataPoint,
@@ -23,122 +23,171 @@ import {
   SleepData,
 } from '../types';
 
-// Native module will be imported when the native code is built
-// import { HealthKitModule } from 'expo-modules-core';
+// Try to get the native module
+let HealthPlatformModule: any;
+try {
+  HealthPlatformModule = requireNativeModule('HealthPlatformModule');
+} catch (e) {
+  console.warn('[AppleHealthAdapter] Native module not available:', e);
+  HealthPlatformModule = null;
+}
 
 export class AppleHealthAdapter {
   private isInitialized: boolean = false;
 
   /**
-   * Map our data types to HealthKit types
-   */
-  private getHealthKitType(dataType: HealthDataType): string {
-    const typeMapping: Record<HealthDataType, string> = {
-      STEPS: 'HKQuantityTypeIdentifierStepCount',
-      SLEEP_DURATION: 'HKCategoryTypeIdentifierSleepAnalysis',
-      SLEEP_STAGE: 'HKCategoryTypeIdentifierSleepAnalysis',
-      HEART_RATE: 'HKQuantityTypeIdentifierHeartRate',
-      HEART_RATE_RESTING: 'HKQuantityTypeIdentifierRestingHeartRate',
-      HRV: 'HKQuantityTypeIdentifierHeartRateVariabilitySDNN',
-      WORKOUT: 'HKWorkoutType',
-      CALORIES_BURNED: 'HKQuantityTypeIdentifierActiveEnergyBurned',
-      BLOOD_OXYGEN: 'HKQuantityTypeIdentifierOxygenSaturation',
-      STRESS_LEVEL: 'HKQuantityTypeIdentifierHeartRateVariabilitySDNN', // Derived from HRV
-      BLOOD_PRESSURE_SYSTOLIC: 'HKQuantityTypeIdentifierBloodPressureSystolic',
-      BLOOD_PRESSURE_DIASTOLIC: 'HKQuantityTypeIdentifierBloodPressureDiastolic',
-      BLOOD_GLUCOSE: 'HKQuantityTypeIdentifierBloodGlucose',
-      BODY_TEMPERATURE: 'HKQuantityTypeIdentifierBodyTemperature',
-      WEIGHT: 'HKQuantityTypeIdentifierBodyMass',
-      RESPIRATORY_RATE: 'HKQuantityTypeIdentifierRespiratoryRate',
-      DISTANCE: 'HKQuantityTypeIdentifierDistanceWalkingRunning',
-      FLOORS_CLIMBED: 'HKQuantityTypeIdentifierFlightsClimbed',
-      ACTIVE_MINUTES: 'HKQuantityTypeIdentifierAppleExerciseTime',
-    };
-    return typeMapping[dataType] || dataType;
-  }
-
-  /**
    * Check if HealthKit is available on this device
    */
   async isAvailable(): Promise<boolean> {
-    // TODO: Call native module to check HealthKit availability
-    // return await HealthKitModule.isHealthDataAvailable();
+    if (!HealthPlatformModule) {
+      console.log('[AppleHealthAdapter] Native module not loaded');
+      return false;
+    }
 
-    // Stub implementation
-    console.log('[AppleHealthAdapter] Checking HealthKit availability...');
-    return false;
+    try {
+      return await HealthPlatformModule.isAvailable();
+    } catch (e) {
+      console.error('[AppleHealthAdapter] isAvailable error:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Get SDK status
+   */
+  async getSdkStatus(): Promise<string> {
+    if (!HealthPlatformModule) {
+      return 'not_supported';
+    }
+
+    try {
+      return await HealthPlatformModule.getSdkStatus();
+    } catch (e) {
+      return 'not_supported';
+    }
   }
 
   /**
    * Check if we're connected and have active permissions
    */
   async isConnected(): Promise<boolean> {
-    // TODO: Call native module
-    // return await HealthKitModule.isConnected();
+    if (!HealthPlatformModule) {
+      return false;
+    }
 
-    console.log('[AppleHealthAdapter] Checking connection status...');
-    return false;
+    try {
+      const permissions = await HealthPlatformModule.getGrantedPermissions();
+      return permissions && permissions.length > 0;
+    } catch (e) {
+      console.error('[AppleHealthAdapter] isConnected error:', e);
+      return false;
+    }
   }
 
   /**
    * Get current permissions
    */
   async getPermissions(): Promise<HealthPermission[]> {
-    // TODO: Call native module
-    // return await HealthKitModule.getAuthorizationStatus();
+    if (!HealthPlatformModule) {
+      return [];
+    }
 
-    console.log('[AppleHealthAdapter] Getting permissions...');
-    return [];
+    try {
+      const permissions = await HealthPlatformModule.getGrantedPermissions();
+      return permissions.map((p: any) => ({
+        dataType: p.dataType as HealthDataType,
+        read: p.read ?? false,
+        write: p.write ?? false,
+      }));
+    } catch (e) {
+      console.error('[AppleHealthAdapter] getPermissions error:', e);
+      return [];
+    }
   }
 
   /**
    * Request authorization for specified data types
    */
   async requestAuthorization(dataTypes: HealthDataType[]): Promise<AuthorizationResult> {
-    console.log('[AppleHealthAdapter] Requesting authorization for:', dataTypes);
+    if (!HealthPlatformModule) {
+      return {
+        granted: false,
+        permissions: [],
+        error: 'Native module not available',
+      };
+    }
 
-    // Map to HealthKit types
-    const healthKitTypes = dataTypes.map(dt => this.getHealthKitType(dt));
+    try {
+      const result = await HealthPlatformModule.requestAuthorization(dataTypes);
 
-    // TODO: Call native module to request permissions
-    // const result = await HealthKitModule.requestAuthorization({
-    //   read: healthKitTypes,
-    //   write: [], // Read-only for now
-    // });
-    // return result;
-
-    // Stub implementation
-    return {
-      granted: false,
-      permissions: [],
-      error: 'Native module not yet implemented',
-    };
+      return {
+        granted: result.granted ?? false,
+        permissions: (result.permissions || []).map((p: any) => ({
+          dataType: p.dataType as HealthDataType,
+          read: p.read ?? false,
+          write: p.write ?? false,
+        })),
+        error: result.error,
+      };
+    } catch (e: any) {
+      console.error('[AppleHealthAdapter] requestAuthorization error:', e);
+      return {
+        granted: false,
+        permissions: [],
+        error: e.message || 'Authorization failed',
+      };
+    }
   }
 
   /**
    * Sync data from HealthKit
    */
   async syncData(options: SyncOptions): Promise<SyncResult> {
-    console.log('[AppleHealthAdapter] Syncing data:', options);
+    if (!HealthPlatformModule) {
+      return {
+        success: false,
+        dataPoints: [],
+        syncedAt: new Date().toISOString(),
+        error: 'Native module not available',
+      };
+    }
 
-    // TODO: Call native module to fetch data
-    // const dataPoints: HealthDataPoint[] = [];
-    // for (const dataType of options.dataTypes) {
-    //   const samples = await HealthKitModule.querySamples({
-    //     type: this.getHealthKitType(dataType),
-    //     startDate: options.startDate,
-    //     endDate: options.endDate,
-    //   });
-    //   dataPoints.push(...this.mapSamplesToDataPoints(samples, dataType));
-    // }
+    try {
+      const allDataPoints: HealthDataPoint[] = [];
 
-    // Stub implementation
-    return {
-      success: false,
-      dataPoints: [],
-      syncedAt: new Date().toISOString(),
-      error: 'Native module not yet implemented',
-    };
+      // Fetch data for each requested data type
+      for (const dataType of options.dataTypes) {
+        const records = await HealthPlatformModule.readRecords(
+          dataType,
+          options.startDate,
+          options.endDate
+        );
+
+        const dataPoints = records.map((r: any) => ({
+          dataType: r.dataType as HealthDataType,
+          value: r.value,
+          unit: r.unit,
+          timestamp: r.timestamp,
+          metadata: r.metadata,
+        }));
+
+        allDataPoints.push(...dataPoints);
+      }
+
+      return {
+        success: true,
+        dataPoints: allDataPoints,
+        syncedAt: new Date().toISOString(),
+      };
+    } catch (e: any) {
+      console.error('[AppleHealthAdapter] syncData error:', e);
+      return {
+        success: false,
+        dataPoints: [],
+        syncedAt: new Date().toISOString(),
+        error: e.message || 'Sync failed',
+      };
+    }
   }
 
   /**
@@ -149,84 +198,121 @@ export class AppleHealthAdapter {
     startDate: string,
     endDate: string
   ): Promise<HealthDataPoint[]> {
-    console.log('[AppleHealthAdapter] Getting historical data:', dataType, startDate, endDate);
+    if (!HealthPlatformModule) {
+      return [];
+    }
 
-    // TODO: Call native module
-    // const samples = await HealthKitModule.querySamples({
-    //   type: this.getHealthKitType(dataType),
-    //   startDate,
-    //   endDate,
-    // });
-    // return this.mapSamplesToDataPoints(samples, dataType);
-
-    return [];
+    try {
+      const records = await HealthPlatformModule.readRecords(dataType, startDate, endDate);
+      return records.map((r: any) => ({
+        dataType: r.dataType as HealthDataType,
+        value: r.value,
+        unit: r.unit,
+        timestamp: r.timestamp,
+        metadata: r.metadata,
+      }));
+    } catch (e) {
+      console.error('[AppleHealthAdapter] getHistoricalData error:', e);
+      return [];
+    }
   }
 
   /**
-   * Get workout data
+   * Get workout sessions
    */
   async getWorkouts(startDate: string, endDate: string): Promise<WorkoutData[]> {
-    console.log('[AppleHealthAdapter] Getting workouts:', startDate, endDate);
+    if (!HealthPlatformModule) {
+      return [];
+    }
 
-    // TODO: Call native module
-    // return await HealthKitModule.queryWorkouts({
-    //   startDate,
-    //   endDate,
-    // });
-
-    return [];
+    try {
+      const sessions = await HealthPlatformModule.readExerciseSessions(startDate, endDate);
+      return sessions.map((s: any) => ({
+        workoutType: s.workoutType as any,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        duration: s.duration,
+        calories: s.calories,
+        distance: s.distance,
+        avgHeartRate: s.avgHeartRate,
+        maxHeartRate: s.maxHeartRate,
+        metadata: s.metadata,
+      }));
+    } catch (e) {
+      console.error('[AppleHealthAdapter] getWorkouts error:', e);
+      return [];
+    }
   }
 
   /**
    * Get sleep data
    */
   async getSleepData(startDate: string, endDate: string): Promise<SleepData[]> {
-    console.log('[AppleHealthAdapter] Getting sleep data:', startDate, endDate);
+    if (!HealthPlatformModule) {
+      return [];
+    }
 
-    // TODO: Call native module
-    // const samples = await HealthKitModule.querySleepAnalysis({
-    //   startDate,
-    //   endDate,
-    // });
-    // return this.mapSleepSamples(samples);
-
-    return [];
+    try {
+      const sessions = await HealthPlatformModule.readSleepSessions(startDate, endDate);
+      return sessions.map((s: any) => ({
+        startTime: s.startTime,
+        endTime: s.endTime,
+        duration: s.duration,
+        stages: s.stages?.map((stage: any) => ({
+          stage: stage.stage as any,
+          startTime: stage.startTime,
+          endTime: stage.endTime,
+        })),
+      }));
+    } catch (e) {
+      console.error('[AppleHealthAdapter] getSleepData error:', e);
+      return [];
+    }
   }
 
   /**
-   * Disconnect from HealthKit (revoke our app's authorization)
+   * Get aggregated data
+   */
+  async getAggregatedData(
+    dataType: HealthDataType,
+    startDate: string,
+    endDate: string
+  ): Promise<{ total: number; average: number; min: number; max: number; count: number }> {
+    if (!HealthPlatformModule) {
+      return { total: 0, average: 0, min: 0, max: 0, count: 0 };
+    }
+
+    try {
+      return await HealthPlatformModule.aggregateData(dataType, startDate, endDate);
+    } catch (e) {
+      console.error('[AppleHealthAdapter] getAggregatedData error:', e);
+      return { total: 0, average: 0, min: 0, max: 0, count: 0 };
+    }
+  }
+
+  /**
+   * Disconnect from HealthKit
    */
   async disconnect(): Promise<boolean> {
-    console.log('[AppleHealthAdapter] Disconnecting...');
-    // Note: HealthKit doesn't allow programmatic revocation
-    // Users must revoke access in Settings > Health > Data Access & Devices
+    // HealthKit doesn't support programmatic disconnection
+    // Users must revoke permissions in iOS Settings
+    console.log('[AppleHealthAdapter] Disconnect requested - user must revoke in iOS Settings');
     return true;
   }
 
   /**
-   * Start background delivery for health data updates
+   * Start background sync
    */
   async startBackgroundSync(): Promise<boolean> {
-    console.log('[AppleHealthAdapter] Starting background delivery...');
-
-    // TODO: Enable background delivery via native module
-    // await HealthKitModule.enableBackgroundDelivery({
-    //   types: ['HKQuantityTypeIdentifierStepCount', 'HKQuantityTypeIdentifierHeartRate'],
-    //   frequency: 'hourly', // HKUpdateFrequency.hourly
-    // });
-
+    // TODO: Implement background delivery using HealthKit's observer queries
+    console.log('[AppleHealthAdapter] Background sync not yet implemented');
     return false;
   }
 
   /**
-   * Stop background delivery
+   * Stop background sync
    */
   async stopBackgroundSync(): Promise<boolean> {
-    console.log('[AppleHealthAdapter] Stopping background delivery...');
-
-    // TODO: Disable background delivery via native module
-    // await HealthKitModule.disableAllBackgroundDelivery();
-
     return true;
   }
 
@@ -234,17 +320,8 @@ export class AppleHealthAdapter {
    * Write data to HealthKit
    */
   async writeData(dataPoint: HealthDataPoint): Promise<boolean> {
-    console.log('[AppleHealthAdapter] Writing data:', dataPoint);
-
-    // TODO: Call native module to write sample
-    // return await HealthKitModule.saveSample({
-    //   type: this.getHealthKitType(dataPoint.dataType),
-    //   value: dataPoint.value,
-    //   unit: dataPoint.unit,
-    //   startDate: dataPoint.timestamp,
-    //   endDate: dataPoint.timestamp,
-    // });
-
+    // TODO: Implement write functionality
+    console.log('[AppleHealthAdapter] Write data not yet implemented');
     return false;
   }
 }

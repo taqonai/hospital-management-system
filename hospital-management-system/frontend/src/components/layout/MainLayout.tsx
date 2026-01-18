@@ -76,6 +76,8 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
   {
     name: 'Clinical',
     items: [
+      { name: 'Precision Health', href: '/clinician', icon: HeartIcon, color: 'from-rose-500 to-pink-600',
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'] },
       { name: 'OPD', href: '/opd', icon: ClipboardDocumentListIcon, color: 'from-indigo-500 to-indigo-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'] },
       { name: 'IPD', href: '/ipd', icon: BuildingOffice2Icon, color: 'from-violet-500 to-violet-600',

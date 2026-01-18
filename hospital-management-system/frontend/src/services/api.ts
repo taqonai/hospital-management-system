@@ -2096,4 +2096,65 @@ export const insuranceCodingApi = {
     api.get('/insurance-coding/analytics/discharge', { params }),
 };
 
+// =============================================================================
+// CLINICIAN DASHBOARD API (A'mad Precision Health Platform)
+// =============================================================================
+
+export const clinicianApi = {
+  // Patient Roster
+  getPatientRoster: (params?: {
+    search?: string;
+    hasGenomic?: boolean;
+    hasWearable?: boolean;
+    limit?: number;
+    offset?: number;
+  }) => api.get('/clinician/patients', { params }),
+
+  // Patient Health Summary
+  getPatientSummary: (patientId: string) =>
+    api.get(`/clinician/patients/${patientId}/summary`),
+
+  // Health Event Timeline
+  getPatientTimeline: (patientId: string, params?: { days?: number }) =>
+    api.get(`/clinician/patients/${patientId}/timeline`, { params }),
+
+  // Clinical Notes
+  getPatientNotes: (patientId: string, params?: {
+    noteType?: string;
+    limit?: number;
+    offset?: number;
+  }) => api.get(`/clinician/patients/${patientId}/notes`, { params }),
+
+  addPatientNote: (patientId: string, data: {
+    noteType: 'GENERAL' | 'GENOMIC_REVIEW' | 'WEARABLE_REVIEW' | 'LAB_INTERPRETATION' | 'RECOMMENDATION_OVERRIDE' | 'CARE_PLAN';
+    content: string;
+    isPrivate?: boolean;
+  }) => api.post(`/clinician/patients/${patientId}/notes`, data),
+
+  // Alerts
+  getAlerts: (params?: { acknowledged?: boolean }) =>
+    api.get('/clinician/alerts', { params }),
+
+  // Reports
+  generateReport: (data: {
+    patientId: string;
+    reportType?: 'summary' | 'genomic' | 'wearable' | 'comprehensive';
+  }) => api.post('/clinician/reports/generate', data),
+
+  // Patient Recommendations (from recommendationRoutes)
+  getPatientRecommendations: (patientId: string, params?: {
+    status?: string;
+    category?: string;
+  }) => api.get(`/recommendations/patients/${patientId}`, { params }),
+
+  createPatientRecommendation: (patientId: string, data: {
+    category?: string;
+    priority?: string;
+    title: string;
+    description: string;
+    reasoning?: string;
+    validDays?: number;
+  }) => api.post(`/recommendations/patients/${patientId}`, data),
+};
+
 export default api;

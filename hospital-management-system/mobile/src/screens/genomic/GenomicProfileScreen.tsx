@@ -62,10 +62,16 @@ export default function GenomicProfileScreen() {
       if (profileRes.data?.data) {
         setProfile(profileRes.data.data);
       }
-      if (markersRes.data?.data) {
+      // Backend returns { markers: [...], grouped: {...}, ... }
+      if (markersRes.data?.data?.markers) {
+        setMarkers(markersRes.data.data.markers);
+      } else if (Array.isArray(markersRes.data?.data)) {
         setMarkers(markersRes.data.data);
       }
-      if (risksRes.data?.data) {
+      // Backend returns { riskScores: [...], totalConditions: ... }
+      if (risksRes.data?.data?.riskScores) {
+        setRiskScores(risksRes.data.data.riskScores);
+      } else if (Array.isArray(risksRes.data?.data)) {
         setRiskScores(risksRes.data.data);
       }
     } catch (err: any) {
@@ -192,9 +198,12 @@ export default function GenomicProfileScreen() {
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Risk Overview</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        {riskScores.map((risk, index) => {
-          const categoryInfo = CATEGORY_INFO[risk.category];
-          const riskInfo = RISK_LEVEL_INFO[risk.riskLevel];
+        {riskScores.map((risk: any, index) => {
+          // Backend returns 'condition' field with category name
+          const categoryKey = (risk.category || risk.condition) as MarkerCategory;
+          const categoryInfo = CATEGORY_INFO[categoryKey] || { icon: 'help-circle', color: '#888', title: categoryKey };
+          const riskInfo = RISK_LEVEL_INFO[risk.riskLevel] || { color: '#888', label: risk.riskLevel };
+          const scoreValue = risk.score ?? risk.percentile ?? 0;
           return (
             <View key={index} style={styles.riskCard}>
               <View style={[styles.riskIconContainer, { backgroundColor: categoryInfo.color + '20' }]}>
@@ -206,7 +215,7 @@ export default function GenomicProfileScreen() {
                   {riskInfo.label}
                 </Text>
               </View>
-              <Text style={styles.riskScore}>{Math.round(risk.score)}%</Text>
+              <Text style={styles.riskScore}>{Math.round(scoreValue)}%</Text>
             </View>
           );
         })}
@@ -215,7 +224,8 @@ export default function GenomicProfileScreen() {
   );
 
   const renderMarkerCard = (marker: GenomicMarker) => {
-    const categoryInfo = CATEGORY_INFO[marker.category];
+    const categoryInfo = CATEGORY_INFO[marker.category] || { icon: 'help-circle', color: '#888', title: marker.category || 'Unknown' };
+    const recommendations = Array.isArray(marker.recommendations) ? marker.recommendations : [];
     return (
       <View key={marker.rsId} style={styles.markerCard}>
         <View style={styles.markerHeader}>
@@ -242,10 +252,10 @@ export default function GenomicProfileScreen() {
         <Text style={styles.confidenceText}>
           {Math.round(marker.confidence * 100)}% confidence
         </Text>
-        {marker.recommendations.length > 0 && (
+        {recommendations.length > 0 && (
           <View style={styles.recommendationsContainer}>
             <Text style={styles.recommendationsTitle}>Recommendations:</Text>
-            {marker.recommendations.slice(0, 3).map((rec, idx) => (
+            {recommendations.slice(0, 3).map((rec, idx) => (
               <View key={idx} style={styles.recommendationItem}>
                 <Ionicons name="checkmark-circle" size={16} color={colors.success[500]} />
                 <Text style={styles.recommendationText}>{rec}</Text>
@@ -261,7 +271,7 @@ export default function GenomicProfileScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <ActivityIndicator size="large" color={colors.primary[500]} />
           <Text style={styles.loadingText}>Loading your genetic profile...</Text>
         </View>
       </SafeAreaView>
@@ -297,7 +307,7 @@ export default function GenomicProfileScreen() {
           <View style={styles.profileCard}>
             <View style={styles.profileHeader}>
               <View style={styles.profileIcon}>
-                <Ionicons name="flask" size={32} color={colors.primary} />
+                <Ionicons name="flask" size={32} color={colors.primary[500]} />
               </View>
               <View style={styles.profileInfo}>
                 <Text style={styles.profileTitle}>Genomic Profile</Text>
@@ -353,7 +363,7 @@ export default function GenomicProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.primary,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -362,7 +372,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
+    borderBottomColor: colors.border,
   },
   backButton: {
     padding: spacing.xs,
@@ -371,7 +381,7 @@ const styles = StyleSheet.create({
     padding: spacing.xs,
   },
   headerTitle: {
-    ...typography.h3,
+    fontSize: typography.fontSize.xl, fontWeight: typography.fontWeight.bold,
     color: colors.text.primary,
   },
   loadingContainer: {
@@ -380,7 +390,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    ...typography.body,
+    fontSize: typography.fontSize.base,
     color: colors.text.secondary,
     marginTop: spacing.md,
   },
@@ -394,12 +404,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
   },
   emptyTitle: {
-    ...typography.h3,
+    fontSize: typography.fontSize.xl, fontWeight: typography.fontWeight.bold,
     color: colors.text.primary,
     marginTop: spacing.md,
   },
   emptySubtitle: {
-    ...typography.body,
+    fontSize: typography.fontSize.base,
     color: colors.text.secondary,
     textAlign: 'center',
     marginTop: spacing.sm,
@@ -407,21 +417,21 @@ const styles = StyleSheet.create({
   uploadButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primary[500],
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.xl,
     borderRadius: borderRadius.md,
     marginTop: spacing.xl,
   },
   uploadButtonText: {
-    ...typography.button,
+    fontSize: typography.fontSize.base, fontWeight: typography.fontWeight.semibold,
     color: colors.white,
     marginLeft: spacing.sm,
   },
   profileCard: {
     margin: spacing.md,
     padding: spacing.md,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
     ...shadows.sm,
   },
@@ -433,7 +443,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: borderRadius.md,
-    backgroundColor: colors.primary + '15',
+    backgroundColor: colors.primary[500] + '15',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -442,16 +452,16 @@ const styles = StyleSheet.create({
     marginLeft: spacing.md,
   },
   profileTitle: {
-    ...typography.h3,
+    fontSize: typography.fontSize.xl, fontWeight: typography.fontWeight.bold,
     color: colors.text.primary,
   },
   profileSubtitle: {
-    ...typography.body,
+    fontSize: typography.fontSize.base,
     color: colors.text.secondary,
     marginTop: 2,
   },
   profileDate: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.text.disabled,
     marginTop: 2,
   },
@@ -460,38 +470,38 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     paddingTop: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: colors.border.light,
+    borderTopColor: colors.border,
   },
   statItem: {
     flex: 1,
     alignItems: 'center',
   },
   statValue: {
-    ...typography.h3,
-    color: colors.primary,
+    fontSize: typography.fontSize.xl, fontWeight: typography.fontWeight.bold,
+    color: colors.primary[500],
   },
   statLabel: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.text.secondary,
     marginTop: 2,
   },
   statDivider: {
     width: 1,
-    backgroundColor: colors.border.light,
+    backgroundColor: colors.border,
   },
   section: {
     paddingHorizontal: spacing.md,
     marginTop: spacing.md,
   },
   sectionTitle: {
-    ...typography.subtitle,
+    fontSize: typography.fontSize.base, fontWeight: typography.fontWeight.semibold,
     color: colors.text.primary,
     marginBottom: spacing.sm,
   },
   riskCard: {
     width: 140,
     padding: spacing.md,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: colors.surface,
     borderRadius: borderRadius.md,
     marginRight: spacing.sm,
     alignItems: 'center',
@@ -506,7 +516,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   riskCategory: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.text.secondary,
     textAlign: 'center',
   },
@@ -517,11 +527,11 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   riskBadgeText: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     fontWeight: '600',
   },
   riskScore: {
-    ...typography.h3,
+    fontSize: typography.fontSize.xl, fontWeight: typography.fontWeight.bold,
     color: colors.text.primary,
     marginTop: spacing.xs,
   },
@@ -537,24 +547,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: borderRadius.full,
-    backgroundColor: colors.background.secondary,
+    backgroundColor: colors.surface,
     marginRight: spacing.sm,
     borderWidth: 1,
-    borderColor: colors.border.light,
+    borderColor: colors.border,
   },
   filterChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: colors.primary[500],
+    borderColor: colors.primary[500],
   },
   filterChipText: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.text.secondary,
   },
   filterChipTextActive: {
     color: colors.white,
   },
   markerCard: {
-    backgroundColor: colors.background.secondary,
+    backgroundColor: colors.surface,
     borderRadius: borderRadius.md,
     padding: spacing.md,
     marginBottom: spacing.sm,
@@ -577,32 +587,32 @@ const styles = StyleSheet.create({
     marginLeft: spacing.sm,
   },
   markerGene: {
-    ...typography.subtitle,
+    fontSize: typography.fontSize.base, fontWeight: typography.fontWeight.semibold,
     color: colors.text.primary,
   },
   markerRsId: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.text.disabled,
   },
   markerGenotype: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
-    backgroundColor: colors.primary + '15',
+    backgroundColor: colors.primary[500] + '15',
     borderRadius: borderRadius.sm,
   },
   genotypeText: {
-    ...typography.subtitle,
-    color: colors.primary,
+    fontSize: typography.fontSize.base, fontWeight: typography.fontWeight.semibold,
+    color: colors.primary[500],
     fontWeight: '700',
   },
   markerPhenotype: {
-    ...typography.body,
+    fontSize: typography.fontSize.base,
     color: colors.text.secondary,
     marginBottom: spacing.sm,
   },
   confidenceBar: {
     height: 4,
-    backgroundColor: colors.border.light,
+    backgroundColor: colors.border,
     borderRadius: 2,
     overflow: 'hidden',
   },
@@ -611,7 +621,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   confidenceText: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.text.disabled,
     marginTop: 4,
   },
@@ -619,10 +629,10 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: colors.border.light,
+    borderTopColor: colors.border,
   },
   recommendationsTitle: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.text.secondary,
     fontWeight: '600',
     marginBottom: spacing.xs,
@@ -633,7 +643,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   recommendationText: {
-    ...typography.caption,
+    fontSize: typography.fontSize.xs,
     color: colors.text.secondary,
     flex: 1,
     marginLeft: spacing.xs,

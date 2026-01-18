@@ -1,7 +1,8 @@
 {
   "platforms": ["ios", "android"],
   "ios": {
-    "modules": ["HealthPlatformModule"]
+    "modules": ["HealthPlatformModule"],
+    "dependencies": ["HealthKit"]
   },
   "android": {
     "modules": ["expo.modules.healthplatform.HealthPlatformModule"]

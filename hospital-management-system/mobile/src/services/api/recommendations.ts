@@ -155,9 +155,15 @@ export const recommendationsApi = {
 
   /**
    * Generate new recommendations based on patient data
+   * Note: Backend gathers patient data automatically - no need to send it
    */
-  generateRecommendations: (data: PatientHealthData) =>
-    api.post<ApiResponse<RecommendationsResponse>>('/recommendations/generate', data),
+  generateRecommendations: () =>
+    api.post<ApiResponse<{
+      status: string;
+      recommendationsCreated: number;
+      recommendations: Recommendation[];
+      healthScore: DailyHealthScore | null;
+    }>>('/recommendations/generate'),
 
   /**
    * Dismiss a recommendation
@@ -198,10 +204,11 @@ export const recommendationsApi = {
     api.get<ApiResponse<ScoreHistoryResponse>>('/recommendations/score/history', { params }),
 
   /**
-   * Calculate health score from provided data
+   * Calculate/refresh health score for today
+   * Note: Backend gathers patient data automatically
    */
-  calculateScore: (data: PatientHealthData) =>
-    api.post<ApiResponse<DailyHealthScore>>('/recommendations/score/calculate', data),
+  calculateScore: () =>
+    api.post<ApiResponse<DailyHealthScore>>('/recommendations/score/calculate'),
 
   // ==================== Categories ====================
 
@@ -249,6 +256,18 @@ export const recommendationsApi = {
       topAchievements: string[];
       areasForImprovement: string[];
     }>>('/recommendations/weekly-summary'),
+
+  /**
+   * Get recommendation statistics
+   */
+  getStats: () =>
+    api.get<ApiResponse<{
+      active: number;
+      completed: number;
+      dismissed: number;
+      complianceRate: number | null;
+      byCategory: Array<{ category: RecommendationCategory; count: number }>;
+    }>>('/recommendations/stats'),
 };
 
 export default recommendationsApi;
