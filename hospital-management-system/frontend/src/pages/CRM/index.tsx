@@ -36,6 +36,8 @@ import {
   ChatBubbleOvalLeftEllipsisIcon,
   PaperAirplaneIcon,
   EyeIcon,
+  DocumentTextIcon,
+  ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline';
 import { crmApi } from '../../services/api';
 import api from '../../services/api';
@@ -109,10 +111,32 @@ interface DashboardStats {
     newLeads: number;
     contactedLeads: number;
     qualifiedLeads: number;
+    scheduledLeads: number;
     convertedLeads: number;
     lostLeads: number;
     conversionRate: string;
+    newThisMonth: number;
     bySource: Array<{ source: string; _count: { source: number } }>;
+  };
+  taskStats: {
+    openTasks: number;
+    overdueTasks: number;
+    completedToday: number;
+    completedTasks: number;
+  };
+  communicationStats: {
+    totalCount: number;
+    todayCount: number;
+    emailCount: number;
+    phoneCount: number;
+    whatsappCount: number;
+    smsCount: number;
+  };
+  surveyStats: {
+    avgNPS: number;
+    promoters: number;
+    passives: number;
+    detractors: number;
   };
   overdueTasks: any[];
   recentLeads: Lead[];
@@ -127,6 +151,7 @@ const tabs = [
   { id: 'campaigns', label: 'Campaigns', icon: MegaphoneIcon },
   { id: 'surveys', label: 'Surveys', icon: ChatBubbleLeftRightIcon },
   { id: 'templates', label: 'Templates', icon: DocumentDuplicateIcon },
+  { id: 'reports', label: 'Reports', icon: DocumentTextIcon },
 ];
 
 // Lead status configuration for Kanban
@@ -201,6 +226,9 @@ export default function CRM() {
   const [taskFilter, setTaskFilter] = useState<'all' | 'my' | 'overdue' | 'today'>('all');
   const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
   const [showCampaignDetailModal, setShowCampaignDetailModal] = useState(false);
+  // Phase 5: Survey & Analytics state
+  const [selectedSurvey, setSelectedSurvey] = useState<any>(null);
+  const [showSurveyDetailModal, setShowSurveyDetailModal] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -264,6 +292,20 @@ export default function CRM() {
     queryKey: ['crm-surveys'],
     queryFn: () => crmApi.getSurveys(),
     enabled: activeTab === 'surveys',
+  });
+
+  // Phase 5: Survey responses query
+  const { data: surveyResponsesData, isLoading: loadingSurveyResponses } = useQuery({
+    queryKey: ['crm-survey-responses', selectedSurvey?.id],
+    queryFn: () => crmApi.getSurveyResponses(selectedSurvey.id),
+    enabled: !!selectedSurvey?.id && showSurveyDetailModal,
+  });
+
+  // Phase 5: Lead conversion report query
+  const { data: conversionReportData } = useQuery({
+    queryKey: ['crm-conversion-report'],
+    queryFn: () => crmApi.getLeadConversionReport(),
+    enabled: activeTab === 'dashboard',
   });
 
   const { data: templatesData, isLoading: loadingTemplates, refetch: refetchTemplates } = useQuery({
@@ -516,50 +558,196 @@ export default function CRM() {
     }
 
     const stats = dashboardData?.data?.leadStats;
+    const taskStats = dashboardData?.data?.taskStats;
+    const commStats = dashboardData?.data?.communicationStats;
+    const surveyStats = dashboardData?.data?.surveyStats;
+
+    // Calculate pipeline funnel percentages
+    const totalLeads = stats?.totalLeads || 0;
+    const pipelineStages = [
+      { label: 'New', count: stats?.newLeads || 0, color: 'purple' },
+      { label: 'Contacted', count: stats?.contactedLeads || 0, color: 'blue' },
+      { label: 'Qualified', count: stats?.qualifiedLeads || 0, color: 'amber' },
+      { label: 'Scheduled', count: stats?.scheduledLeads || 0, color: 'cyan' },
+      { label: 'Converted', count: stats?.convertedLeads || 0, color: 'green' },
+    ];
+
+    // NPS calculation helper
+    const getNPSCategory = (score: number) => {
+      if (score >= 50) return { label: 'Excellent', color: 'text-green-600' };
+      if (score >= 0) return { label: 'Good', color: 'text-blue-600' };
+      if (score >= -50) return { label: 'Needs Improvement', color: 'text-amber-600' };
+      return { label: 'Critical', color: 'text-red-600' };
+    };
+
+    const npsScore = surveyStats?.avgNPS || 0;
+    const npsCategory = getNPSCategory(npsScore);
 
     return (
       <div className="space-y-6">
-        {/* Stats Cards */}
+        {/* Top Stats Row */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
           <StatCard label="Total Leads" value={stats?.totalLeads || 0} color="purple" />
-          <StatCard label="New" value={stats?.newLeads || 0} color="blue" />
-          <StatCard label="Contacted" value={stats?.contactedLeads || 0} color="indigo" />
-          <StatCard label="Qualified" value={stats?.qualifiedLeads || 0} color="amber" />
+          <StatCard label="This Month" value={stats?.newThisMonth || 0} color="blue" />
           <StatCard label="Converted" value={stats?.convertedLeads || 0} color="green" />
           <StatCard label="Conversion Rate" value={`${stats?.conversionRate || 0}%`} color="teal" />
+          <StatCard label="Open Tasks" value={taskStats?.openTasks || 0} color="amber" />
+          <StatCard label="Avg NPS" value={npsScore} color="indigo" />
+        </div>
+
+        {/* Pipeline Funnel */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Lead Pipeline Funnel</h3>
+          <div className="space-y-3">
+            {pipelineStages.map((stage, index) => {
+              const percentage = totalLeads > 0 ? Math.round((stage.count / totalLeads) * 100) : 0;
+              const widthPercent = totalLeads > 0 ? Math.max(20, 100 - (index * 15)) : 100;
+              const colorClasses: Record<string, string> = {
+                purple: 'from-purple-500 to-violet-500',
+                blue: 'from-blue-500 to-indigo-500',
+                amber: 'from-amber-500 to-orange-500',
+                cyan: 'from-cyan-500 to-teal-500',
+                green: 'from-green-500 to-emerald-500',
+              };
+
+              return (
+                <div key={stage.label} className="flex items-center gap-4">
+                  <span className="w-24 text-sm text-gray-600">{stage.label}</span>
+                  <div className="flex-1 flex items-center justify-center">
+                    <div
+                      className={`h-10 bg-gradient-to-r ${colorClasses[stage.color]} rounded-lg flex items-center justify-center transition-all`}
+                      style={{ width: `${widthPercent}%` }}
+                    >
+                      <span className="text-white font-semibold text-sm">
+                        {stage.count} ({percentage}%)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Charts Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Lead Sources */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Leads by Source</h3>
             <div className="space-y-3">
-              {stats?.bySource?.map((item: any) => (
-                <div key={item.source} className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">{sourceLabels[item.source] || item.source}</span>
-                  <div className="flex items-center gap-2">
-                    <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-purple-500 to-violet-500 rounded-full"
-                        style={{ width: `${(item._count.source / (stats?.totalLeads || 1)) * 100}%` }}
-                      />
+              {stats?.bySource?.slice(0, 6).map((item: any) => {
+                const percentage = totalLeads > 0 ? Math.round((item._count.source / totalLeads) * 100) : 0;
+                return (
+                  <div key={item.source} className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600 truncate flex-1">{sourceLabels[item.source] || item.source}</span>
+                    <div className="flex items-center gap-2 ml-2">
+                      <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-purple-500 to-violet-500 rounded-full"
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                      <span className="text-sm font-medium text-gray-900 w-12 text-right">{item._count.source}</span>
                     </div>
-                    <span className="text-sm font-medium text-gray-900 w-8">{item._count.source}</span>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {(!stats?.bySource || stats.bySource.length === 0) && (
                 <p className="text-sm text-gray-500 text-center py-4">No data available</p>
               )}
             </div>
           </div>
 
+          {/* NPS Score Card */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Net Promoter Score</h3>
+            <div className="text-center py-4">
+              <div className="relative w-32 h-32 mx-auto mb-4">
+                <svg className="w-full h-full transform -rotate-90">
+                  <circle
+                    cx="64"
+                    cy="64"
+                    r="56"
+                    fill="none"
+                    stroke="#e5e7eb"
+                    strokeWidth="12"
+                  />
+                  <circle
+                    cx="64"
+                    cy="64"
+                    r="56"
+                    fill="none"
+                    stroke={npsScore >= 50 ? '#10b981' : npsScore >= 0 ? '#3b82f6' : npsScore >= -50 ? '#f59e0b' : '#ef4444'}
+                    strokeWidth="12"
+                    strokeLinecap="round"
+                    strokeDasharray={`${Math.max(0, (npsScore + 100) / 200 * 352)} 352`}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className={`text-3xl font-bold ${npsCategory.color}`}>{npsScore}</span>
+                </div>
+              </div>
+              <p className={`text-lg font-semibold ${npsCategory.color}`}>{npsCategory.label}</p>
+              <div className="grid grid-cols-3 gap-2 mt-4 text-center text-xs">
+                <div className="bg-green-50 rounded-lg p-2">
+                  <p className="font-bold text-green-700">{surveyStats?.promoters || 0}</p>
+                  <p className="text-green-600">Promoters</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-2">
+                  <p className="font-bold text-gray-700">{surveyStats?.passives || 0}</p>
+                  <p className="text-gray-600">Passives</p>
+                </div>
+                <div className="bg-red-50 rounded-lg p-2">
+                  <p className="font-bold text-red-700">{surveyStats?.detractors || 0}</p>
+                  <p className="text-red-600">Detractors</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Task & Communication Stats */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Activity Overview</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <ClipboardDocumentListIcon className="h-5 w-5 text-blue-600" />
+                  <span className="text-sm text-gray-700">Open Tasks</span>
+                </div>
+                <span className="font-bold text-blue-600">{taskStats?.openTasks || 0}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-red-50 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <ExclamationTriangleIcon className="h-5 w-5 text-red-600" />
+                  <span className="text-sm text-gray-700">Overdue Tasks</span>
+                </div>
+                <span className="font-bold text-red-600">{taskStats?.overdueTasks || 0}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-green-50 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <CheckIcon className="h-5 w-5 text-green-600" />
+                  <span className="text-sm text-gray-700">Completed Today</span>
+                </div>
+                <span className="font-bold text-green-600">{taskStats?.completedToday || 0}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-purple-50 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <ChatBubbleOvalLeftEllipsisIcon className="h-5 w-5 text-purple-600" />
+                  <span className="text-sm text-gray-700">Communications Today</span>
+                </div>
+                <span className="font-bold text-purple-600">{commStats?.todayCount || 0}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Recent Leads & Overdue Tasks */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Recent Leads */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Leads</h3>
             <div className="space-y-3">
-              {dashboardData?.data?.recentLeads?.map((lead: any) => (
+              {dashboardData?.data?.recentLeads?.slice(0, 5).map((lead: any) => (
                 <div key={lead.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
                   <div>
                     <p className="font-medium text-gray-900">{lead.firstName} {lead.lastName}</p>
@@ -581,30 +769,39 @@ export default function CRM() {
               )}
             </div>
           </div>
-        </div>
 
-        {/* Overdue Tasks */}
-        {dashboardData?.data?.overdueTasks && dashboardData.data.overdueTasks.length > 0 && (
-          <div className="bg-red-50 rounded-2xl border border-red-200 p-6">
+          {/* Overdue Tasks */}
+          <div className={`rounded-2xl border p-6 ${
+            dashboardData?.data?.overdueTasks?.length > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'
+          }`}>
             <div className="flex items-center gap-2 mb-4">
-              <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
-              <h3 className="text-lg font-semibold text-red-900">Overdue Tasks</h3>
+              <ExclamationTriangleIcon className={`h-5 w-5 ${dashboardData?.data?.overdueTasks?.length > 0 ? 'text-red-500' : 'text-gray-400'}`} />
+              <h3 className={`text-lg font-semibold ${dashboardData?.data?.overdueTasks?.length > 0 ? 'text-red-900' : 'text-gray-900'}`}>
+                Overdue Tasks
+              </h3>
             </div>
-            <div className="space-y-2">
-              {dashboardData.data.overdueTasks.map((task: any) => (
-                <div key={task.id} className="flex items-center justify-between p-3 bg-white rounded-xl">
-                  <div>
-                    <p className="font-medium text-gray-900">{task.title}</p>
-                    <p className="text-sm text-gray-500">
-                      Due {format(new Date(task.dueDate), 'MMM d, yyyy')}
-                    </p>
+            {dashboardData?.data?.overdueTasks && dashboardData.data.overdueTasks.length > 0 ? (
+              <div className="space-y-2">
+                {dashboardData.data.overdueTasks.slice(0, 5).map((task: any) => (
+                  <div key={task.id} className="flex items-center justify-between p-3 bg-white rounded-xl">
+                    <div>
+                      <p className="font-medium text-gray-900">{task.title}</p>
+                      <p className="text-sm text-gray-500">
+                        Due {format(new Date(task.dueDate), 'MMM d, yyyy')}
+                      </p>
+                    </div>
+                    <span className="text-sm text-red-600">{task.lead?.firstName} {task.lead?.lastName}</span>
                   </div>
-                  <span className="text-sm text-red-600">{task.lead?.firstName} {task.lead?.lastName}</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <CheckIcon className="h-12 w-12 text-green-500 mx-auto mb-2" />
+                <p className="text-gray-600">All caught up! No overdue tasks.</p>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     );
   };
@@ -1401,8 +1598,79 @@ export default function CRM() {
       return <div className="flex justify-center py-12"><ArrowPathIcon className="h-8 w-8 animate-spin text-purple-500" /></div>;
     }
 
+    const surveys = surveysData?.data?.data || [];
+    const activeSurveys = surveys.filter((s: any) => s.isActive).length;
+    const totalResponses = surveys.reduce((sum: number, s: any) => sum + (s._count?.responses || s.responseCount || 0), 0);
+    const avgRating = surveys.length > 0
+      ? surveys.reduce((sum: number, s: any) => sum + (Number(s.avgRating) || 0), 0) / surveys.filter((s: any) => s.avgRating).length
+      : 0;
+
+    const surveyTypeLabels: Record<string, string> = {
+      POST_VISIT: 'Post Visit',
+      POST_DISCHARGE: 'Post Discharge',
+      NPS: 'Net Promoter Score',
+      CSAT: 'Customer Satisfaction',
+      SERVICE_QUALITY: 'Service Quality',
+      DOCTOR_FEEDBACK: 'Doctor Feedback',
+      CUSTOM: 'Custom',
+    };
+
+    const handleSurveyClick = (survey: any) => {
+      setSelectedSurvey(survey);
+      setShowSurveyDetailModal(true);
+    };
+
     return (
-      <div className="space-y-4">
+      <div className="space-y-6">
+        {/* Survey Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl p-4 border border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
+                <ChatBubbleLeftRightIcon className="h-5 w-5 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{surveys.length}</p>
+                <p className="text-xs text-gray-500">Total Surveys</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
+                <CheckIcon className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{activeSurveys}</p>
+                <p className="text-xs text-gray-500">Active</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+                <UserGroupIcon className="h-5 w-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{totalResponses}</p>
+                <p className="text-xs text-gray-500">Responses</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
+                <ArrowTrendingUpIcon className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{avgRating ? avgRating.toFixed(1) : '-'}</p>
+                <p className="text-xs text-gray-500">Avg Rating</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Header */}
         <div className="flex justify-between items-center">
           <h3 className="text-lg font-semibold text-gray-900">Surveys</h3>
           <button
@@ -1414,39 +1682,94 @@ export default function CRM() {
           </button>
         </div>
 
+        {/* Survey Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {(surveysData?.data?.data || []).map((survey: any) => (
-            <div key={survey.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h4 className="font-semibold text-gray-900">{survey.name}</h4>
-                  <span className={`inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded-full ${
-                    survey.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                  }`}>
-                    {survey.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-                <ChatBubbleLeftRightIcon className="h-8 w-8 text-purple-200" />
-              </div>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Type</span>
-                  <span className="text-gray-900">{survey.surveyType?.replace(/_/g, ' ') || '-'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Responses</span>
-                  <span className="text-gray-900">{survey._count?.responses || survey.responseCount || 0}</span>
-                </div>
-                {survey.avgRating && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Avg Rating</span>
-                    <span className="text-gray-900">{Number(survey.avgRating).toFixed(1)} / 5</span>
+          {surveys.map((survey: any) => {
+            const responseCount = survey._count?.responses || survey.responseCount || 0;
+            const rating = survey.avgRating ? Number(survey.avgRating) : null;
+            const npsScore = survey.avgNPS ? Number(survey.avgNPS) : null;
+
+            return (
+              <div
+                key={survey.id}
+                className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => handleSurveyClick(survey)}
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h4 className="font-semibold text-gray-900">{survey.name}</h4>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                        survey.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                      }`}>
+                        {survey.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                      <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-700">
+                        {surveyTypeLabels[survey.surveyType] || survey.surveyType}
+                      </span>
+                    </div>
                   </div>
+                  <ChatBubbleLeftRightIcon className="h-8 w-8 text-purple-200" />
+                </div>
+
+                {survey.description && (
+                  <p className="text-sm text-gray-500 mb-3 line-clamp-2">{survey.description}</p>
                 )}
+
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Responses</span>
+                    <span className="font-medium text-gray-900">{responseCount}</span>
+                  </div>
+                  {rating !== null && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">Avg Rating</span>
+                      <div className="flex items-center gap-1">
+                        <span className="font-medium text-gray-900">{rating.toFixed(1)}</span>
+                        <div className="flex">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <span
+                              key={star}
+                              className={`text-sm ${star <= Math.round(rating) ? 'text-amber-400' : 'text-gray-300'}`}
+                            >
+                              ★
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {npsScore !== null && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">NPS Score</span>
+                      <span className={`font-medium ${
+                        npsScore >= 50 ? 'text-green-600' :
+                        npsScore >= 0 ? 'text-blue-600' :
+                        npsScore >= -50 ? 'text-amber-600' : 'text-red-600'
+                      }`}>
+                        {npsScore}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* View Responses Button */}
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSurveyClick(survey);
+                    }}
+                    className="w-full flex items-center justify-center gap-1 px-3 py-2 text-sm font-medium text-purple-700 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
+                  >
+                    <EyeIcon className="h-4 w-4" />
+                    View Responses
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
-          {(!surveysData?.data?.data || surveysData.data.data.length === 0) && (
+            );
+          })}
+          {surveys.length === 0 && (
             <div className="col-span-full p-8 text-center text-gray-500 bg-white rounded-2xl border border-gray-100">
               No surveys found. Create your first survey to collect feedback.
             </div>
@@ -1560,6 +1883,277 @@ export default function CRM() {
     );
   };
 
+  // Render Reports Tab
+  const renderReports = () => {
+    const stats = dashboardData?.data?.leadStats;
+    const taskStats = dashboardData?.data?.taskStats;
+    const commStats = dashboardData?.data?.communicationStats;
+    const conversionData = conversionReportData?.data?.data;
+
+    // Sample data for reports - in production, this would come from API
+    const reportTypes = [
+      {
+        id: 'lead-conversion',
+        name: 'Lead Conversion Report',
+        description: 'Track conversion rates across lead sources and time periods',
+        icon: ArrowTrendingUpIcon,
+        color: 'purple',
+      },
+      {
+        id: 'communication-metrics',
+        name: 'Communication Metrics',
+        description: 'Analyze communication effectiveness by channel and template',
+        icon: ChatBubbleOvalLeftEllipsisIcon,
+        color: 'blue',
+      },
+      {
+        id: 'staff-performance',
+        name: 'Staff Performance',
+        description: 'Measure staff productivity in lead handling and task completion',
+        icon: UserGroupIcon,
+        color: 'green',
+      },
+      {
+        id: 'roi-analysis',
+        name: 'ROI by Source',
+        description: 'Calculate return on investment for each lead acquisition channel',
+        icon: ChartPieIcon,
+        color: 'amber',
+      },
+      {
+        id: 'survey-insights',
+        name: 'Survey Insights',
+        description: 'Patient satisfaction trends and NPS analysis over time',
+        icon: ChatBubbleLeftRightIcon,
+        color: 'teal',
+      },
+      {
+        id: 'campaign-performance',
+        name: 'Campaign Performance',
+        description: 'Detailed analysis of marketing campaign effectiveness',
+        icon: MegaphoneIcon,
+        color: 'indigo',
+      },
+    ];
+
+    const colorClasses: Record<string, { bg: string; text: string; gradient: string }> = {
+      purple: { bg: 'bg-purple-100', text: 'text-purple-600', gradient: 'from-purple-500 to-violet-600' },
+      blue: { bg: 'bg-blue-100', text: 'text-blue-600', gradient: 'from-blue-500 to-indigo-600' },
+      green: { bg: 'bg-green-100', text: 'text-green-600', gradient: 'from-green-500 to-emerald-600' },
+      amber: { bg: 'bg-amber-100', text: 'text-amber-600', gradient: 'from-amber-500 to-orange-600' },
+      teal: { bg: 'bg-teal-100', text: 'text-teal-600', gradient: 'from-teal-500 to-cyan-600' },
+      indigo: { bg: 'bg-indigo-100', text: 'text-indigo-600', gradient: 'from-indigo-500 to-purple-600' },
+    };
+
+    // Mock monthly data for the conversion chart
+    const monthlyData = conversionData?.monthlyTrends || [
+      { month: 'Jul', leads: 45, converted: 12 },
+      { month: 'Aug', leads: 52, converted: 15 },
+      { month: 'Sep', leads: 48, converted: 18 },
+      { month: 'Oct', leads: 61, converted: 22 },
+      { month: 'Nov', leads: 55, converted: 19 },
+      { month: 'Dec', leads: 67, converted: 28 },
+    ];
+    const maxLeads = Math.max(...monthlyData.map((d: any) => d.leads), 1);
+
+    return (
+      <div className="space-y-6">
+        {/* Reports Summary */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl p-4 border border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
+                <UserPlusIcon className="h-5 w-5 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{stats?.totalLeads || 0}</p>
+                <p className="text-xs text-gray-500">Total Leads</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
+                <ArrowTrendingUpIcon className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{stats?.conversionRate || 0}%</p>
+                <p className="text-xs text-gray-500">Conversion Rate</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+                <ChatBubbleOvalLeftEllipsisIcon className="h-5 w-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{commStats?.totalCount || 0}</p>
+                <p className="text-xs text-gray-500">Communications</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
+                <ClipboardDocumentListIcon className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{taskStats?.completedTasks || 0}</p>
+                <p className="text-xs text-gray-500">Tasks Completed</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Conversion Trend Chart */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Lead Conversion Trend</h3>
+              <p className="text-sm text-gray-500">Monthly leads vs conversions</p>
+            </div>
+            <button className="flex items-center gap-2 px-3 py-1.5 text-sm text-purple-600 hover:bg-purple-50 rounded-lg transition-colors">
+              <ArrowDownTrayIcon className="h-4 w-4" />
+              Export
+            </button>
+          </div>
+          <div className="h-64">
+            <div className="flex items-end justify-between h-full gap-4">
+              {monthlyData.map((data: any, index: number) => {
+                const leadHeight = (data.leads / maxLeads) * 100;
+                const convertedHeight = (data.converted / maxLeads) * 100;
+                return (
+                  <div key={data.month} className="flex-1 flex flex-col items-center gap-2">
+                    <div className="w-full h-48 flex items-end justify-center gap-1">
+                      <div
+                        className="w-6 bg-gradient-to-t from-purple-300 to-purple-400 rounded-t-lg transition-all"
+                        style={{ height: `${leadHeight}%` }}
+                        title={`Leads: ${data.leads}`}
+                      />
+                      <div
+                        className="w-6 bg-gradient-to-t from-green-400 to-green-500 rounded-t-lg transition-all"
+                        style={{ height: `${convertedHeight}%` }}
+                        title={`Converted: ${data.converted}`}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-500">{data.month}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex items-center justify-center gap-6 mt-4">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-purple-400" />
+              <span className="text-sm text-gray-600">Leads</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-green-500" />
+              <span className="text-sm text-gray-600">Converted</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Source Performance */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Lead Source Performance</h3>
+            <div className="space-y-3">
+              {stats?.bySource?.slice(0, 6).map((item: any) => {
+                const total = stats?.totalLeads || 1;
+                const percentage = Math.round((item._count.source / total) * 100);
+                const sourceLabel = sourceLabels[item.source] || item.source;
+                return (
+                  <div key={item.source} className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600 flex-1 truncate">{sourceLabel}</span>
+                    <div className="flex items-center gap-3 ml-2">
+                      <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-purple-500 to-violet-500 rounded-full"
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                      <span className="text-sm font-medium text-gray-700 w-12 text-right">{item._count.source}</span>
+                      <span className="text-xs text-gray-500 w-10 text-right">{percentage}%</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {(!stats?.bySource || stats.bySource.length === 0) && (
+                <p className="text-sm text-gray-500 text-center py-4">No source data available</p>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Communication Channels</h3>
+            <div className="space-y-3">
+              {[
+                { channel: 'Email', count: commStats?.emailCount || 0, color: 'blue' },
+                { channel: 'Phone', count: commStats?.phoneCount || 0, color: 'green' },
+                { channel: 'WhatsApp', count: commStats?.whatsappCount || 0, color: 'emerald' },
+                { channel: 'SMS', count: commStats?.smsCount || 0, color: 'purple' },
+              ].map((item) => {
+                const total = commStats?.totalCount || 1;
+                const percentage = Math.round((item.count / total) * 100);
+                return (
+                  <div key={item.channel} className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600 flex-1">{item.channel}</span>
+                    <div className="flex items-center gap-3">
+                      <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full bg-${item.color}-500 rounded-full`}
+                          style={{ width: `${percentage || 0}%` }}
+                        />
+                      </div>
+                      <span className="text-sm font-medium text-gray-700 w-12 text-right">{item.count}</span>
+                      <span className="text-xs text-gray-500 w-10 text-right">{percentage || 0}%</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Available Reports */}
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Available Reports</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {reportTypes.map((report) => {
+              const colors = colorClasses[report.color];
+              return (
+                <div
+                  key={report.id}
+                  className="bg-white rounded-xl border border-gray-100 p-5 hover:shadow-md transition-all cursor-pointer group"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className={`p-3 rounded-xl ${colors.bg}`}>
+                      <report.icon className={`h-6 w-6 ${colors.text}`} />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-gray-900 group-hover:text-purple-600 transition-colors">
+                        {report.name}
+                      </h4>
+                      <p className="text-sm text-gray-500 mt-1">{report.description}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end mt-4 pt-4 border-t border-gray-100">
+                    <button className={`flex items-center gap-1 text-sm font-medium bg-gradient-to-r ${colors.gradient} bg-clip-text text-transparent hover:opacity-80 transition-opacity`}>
+                      Generate Report
+                      <ArrowRightIcon className="h-4 w-4 text-purple-600" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -1601,6 +2195,7 @@ export default function CRM() {
         {activeTab === 'campaigns' && renderCampaigns()}
         {activeTab === 'surveys' && renderSurveys()}
         {activeTab === 'templates' && renderTemplates()}
+        {activeTab === 'reports' && renderReports()}
       </div>
 
       {/* Lead Creation/Edit Modal */}
@@ -1738,6 +2333,19 @@ export default function CRM() {
           onPause={() => pauseCampaignMutation.mutate(selectedCampaign.id)}
           isLaunching={launchCampaignMutation.isPending}
           isPausing={pauseCampaignMutation.isPending}
+        />
+      )}
+
+      {/* Survey Detail Modal */}
+      {showSurveyDetailModal && selectedSurvey && (
+        <SurveyDetailModal
+          survey={selectedSurvey}
+          responses={surveyResponsesData?.data?.data || []}
+          isLoading={loadingSurveyResponses}
+          onClose={() => {
+            setShowSurveyDetailModal(false);
+            setSelectedSurvey(null);
+          }}
         />
       )}
     </div>
@@ -3906,6 +4514,348 @@ function CampaignDetailModal({
               Close
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Survey Detail Modal Component
+function SurveyDetailModal({
+  survey,
+  responses,
+  isLoading,
+  onClose,
+}: {
+  survey: any;
+  responses: any[];
+  isLoading: boolean;
+  onClose: () => void;
+}) {
+  const [activeView, setActiveView] = useState<'responses' | 'analytics'>('responses');
+
+  const surveyTypeLabels: Record<string, string> = {
+    POST_VISIT: 'Post Visit',
+    POST_DISCHARGE: 'Post Discharge',
+    NPS: 'Net Promoter Score',
+    CSAT: 'Customer Satisfaction',
+    SERVICE_QUALITY: 'Service Quality',
+    DOCTOR_FEEDBACK: 'Doctor Feedback',
+    CUSTOM: 'Custom',
+  };
+
+  // Calculate analytics
+  const totalResponses = responses.length;
+  const avgRating = totalResponses > 0
+    ? responses.filter(r => r.overallRating).reduce((sum, r) => sum + r.overallRating, 0) /
+      responses.filter(r => r.overallRating).length
+    : 0;
+
+  const npsResponses = responses.filter(r => r.npsScore !== null && r.npsScore !== undefined);
+  const promoters = npsResponses.filter(r => r.npsScore >= 9).length;
+  const passives = npsResponses.filter(r => r.npsScore >= 7 && r.npsScore <= 8).length;
+  const detractors = npsResponses.filter(r => r.npsScore <= 6).length;
+  const npsScore = npsResponses.length > 0
+    ? Math.round(((promoters - detractors) / npsResponses.length) * 100)
+    : 0;
+
+  // Sentiment breakdown
+  const sentimentCounts = responses.reduce((acc: Record<string, number>, r) => {
+    if (r.sentiment) {
+      acc[r.sentiment] = (acc[r.sentiment] || 0) + 1;
+    }
+    return acc;
+  }, {});
+
+  // Follow-up required count
+  const followUpRequired = responses.filter(r => r.requiresFollowUp).length;
+
+  // Rating distribution
+  const ratingDistribution = [1, 2, 3, 4, 5].map(rating => ({
+    rating,
+    count: responses.filter(r => r.overallRating === rating).length,
+  }));
+  const maxRatingCount = Math.max(...ratingDistribution.map(r => r.count), 1);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-100">
+          <div>
+            <h3 className="text-xl font-semibold text-gray-900">{survey.name}</h3>
+            <div className="flex items-center gap-2 mt-1">
+              <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                survey.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+              }`}>
+                {survey.isActive ? 'Active' : 'Inactive'}
+              </span>
+              <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-700">
+                {surveyTypeLabels[survey.surveyType] || survey.surveyType}
+              </span>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <XMarkIcon className="h-5 w-5 text-gray-500" />
+          </button>
+        </div>
+
+        {/* View Toggle */}
+        <div className="flex gap-2 px-6 pt-4">
+          <button
+            onClick={() => setActiveView('responses')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeView === 'responses'
+                ? 'bg-purple-100 text-purple-700'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            Responses ({totalResponses})
+          </button>
+          <button
+            onClick={() => setActiveView('analytics')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeView === 'analytics'
+                ? 'bg-purple-100 text-purple-700'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            Analytics
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {isLoading ? (
+            <div className="flex justify-center py-12">
+              <ArrowPathIcon className="h-8 w-8 animate-spin text-purple-500" />
+            </div>
+          ) : activeView === 'responses' ? (
+            <div className="space-y-4">
+              {responses.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <ChatBubbleLeftRightIcon className="h-12 w-12 mx-auto text-gray-300 mb-3" />
+                  <p>No responses yet</p>
+                </div>
+              ) : (
+                responses.map((response, index) => (
+                  <div
+                    key={response.id || index}
+                    className="bg-gray-50 rounded-xl p-4 space-y-3"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          {response.patient
+                            ? `${response.patient.firstName} ${response.patient.lastName}`
+                            : survey.isAnonymous
+                            ? 'Anonymous'
+                            : `Response #${index + 1}`}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {format(new Date(response.submittedAt), 'MMM d, yyyy h:mm a')}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {response.overallRating && (
+                          <div className="flex items-center gap-1 px-2 py-1 bg-amber-100 rounded-lg">
+                            <span className="text-amber-600">★</span>
+                            <span className="text-sm font-medium text-amber-700">
+                              {response.overallRating}/5
+                            </span>
+                          </div>
+                        )}
+                        {response.npsScore !== null && response.npsScore !== undefined && (
+                          <div className={`px-2 py-1 rounded-lg text-sm font-medium ${
+                            response.npsScore >= 9
+                              ? 'bg-green-100 text-green-700'
+                              : response.npsScore >= 7
+                              ? 'bg-gray-100 text-gray-700'
+                              : 'bg-red-100 text-red-700'
+                          }`}>
+                            NPS: {response.npsScore}
+                          </div>
+                        )}
+                        {response.sentiment && (
+                          <span className={`px-2 py-1 text-xs rounded-lg ${
+                            response.sentiment === 'positive'
+                              ? 'bg-green-100 text-green-700'
+                              : response.sentiment === 'negative'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-gray-100 text-gray-700'
+                          }`}>
+                            {response.sentiment}
+                          </span>
+                        )}
+                        {response.requiresFollowUp && (
+                          <span className="px-2 py-1 text-xs bg-amber-100 text-amber-700 rounded-lg">
+                            Follow-up Required
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {response.feedback && (
+                      <div className="bg-white rounded-lg p-3">
+                        <p className="text-sm text-gray-600 italic">"{response.feedback}"</p>
+                      </div>
+                    )}
+
+                    {response.answers && Object.keys(response.answers).length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-gray-500 uppercase">Answers</p>
+                        <div className="bg-white rounded-lg p-3 space-y-2">
+                          {Object.entries(response.answers).map(([question, answer]: [string, any]) => (
+                            <div key={question} className="text-sm">
+                              <p className="text-gray-500">{question}</p>
+                              <p className="text-gray-900 font-medium">
+                                {typeof answer === 'object' ? JSON.stringify(answer) : String(answer)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          ) : (
+            // Analytics View
+            <div className="space-y-6">
+              {/* Key Metrics */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 text-center">
+                  <p className="text-3xl font-bold text-purple-700">{totalResponses}</p>
+                  <p className="text-sm text-purple-600">Total Responses</p>
+                </div>
+                <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-4 text-center">
+                  <p className="text-3xl font-bold text-amber-700">
+                    {avgRating ? avgRating.toFixed(1) : '-'}
+                  </p>
+                  <p className="text-sm text-amber-600">Avg Rating</p>
+                </div>
+                <div className={`rounded-xl p-4 text-center ${
+                  npsScore >= 50 ? 'bg-gradient-to-br from-green-50 to-green-100' :
+                  npsScore >= 0 ? 'bg-gradient-to-br from-blue-50 to-blue-100' :
+                  'bg-gradient-to-br from-red-50 to-red-100'
+                }`}>
+                  <p className={`text-3xl font-bold ${
+                    npsScore >= 50 ? 'text-green-700' :
+                    npsScore >= 0 ? 'text-blue-700' : 'text-red-700'
+                  }`}>
+                    {npsResponses.length > 0 ? npsScore : '-'}
+                  </p>
+                  <p className={`text-sm ${
+                    npsScore >= 50 ? 'text-green-600' :
+                    npsScore >= 0 ? 'text-blue-600' : 'text-red-600'
+                  }`}>
+                    NPS Score
+                  </p>
+                </div>
+                <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 text-center">
+                  <p className="text-3xl font-bold text-red-700">{followUpRequired}</p>
+                  <p className="text-sm text-red-600">Need Follow-up</p>
+                </div>
+              </div>
+
+              {/* Rating Distribution */}
+              <div className="bg-white border border-gray-200 rounded-xl p-4">
+                <h4 className="text-sm font-medium text-gray-700 mb-4">Rating Distribution</h4>
+                <div className="space-y-2">
+                  {ratingDistribution.reverse().map(({ rating, count }) => (
+                    <div key={rating} className="flex items-center gap-3">
+                      <div className="flex items-center gap-1 w-16">
+                        <span className="text-amber-500">★</span>
+                        <span className="text-sm text-gray-600">{rating}</span>
+                      </div>
+                      <div className="flex-1 h-6 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full transition-all"
+                          style={{ width: `${(count / maxRatingCount) * 100}%` }}
+                        />
+                      </div>
+                      <span className="text-sm font-medium text-gray-700 w-8 text-right">{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* NPS Breakdown */}
+              {npsResponses.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-xl p-4">
+                  <h4 className="text-sm font-medium text-gray-700 mb-4">NPS Breakdown</h4>
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div className="bg-green-50 rounded-xl p-4">
+                      <p className="text-2xl font-bold text-green-700">{promoters}</p>
+                      <p className="text-sm text-green-600">Promoters (9-10)</p>
+                      <p className="text-xs text-green-500 mt-1">
+                        {npsResponses.length > 0 ? Math.round((promoters / npsResponses.length) * 100) : 0}%
+                      </p>
+                    </div>
+                    <div className="bg-gray-50 rounded-xl p-4">
+                      <p className="text-2xl font-bold text-gray-700">{passives}</p>
+                      <p className="text-sm text-gray-600">Passives (7-8)</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {npsResponses.length > 0 ? Math.round((passives / npsResponses.length) * 100) : 0}%
+                      </p>
+                    </div>
+                    <div className="bg-red-50 rounded-xl p-4">
+                      <p className="text-2xl font-bold text-red-700">{detractors}</p>
+                      <p className="text-sm text-red-600">Detractors (0-6)</p>
+                      <p className="text-xs text-red-500 mt-1">
+                        {npsResponses.length > 0 ? Math.round((detractors / npsResponses.length) * 100) : 0}%
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Sentiment Analysis */}
+              {Object.keys(sentimentCounts).length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-xl p-4">
+                  <h4 className="text-sm font-medium text-gray-700 mb-4">Sentiment Analysis</h4>
+                  <div className="flex gap-4">
+                    {['positive', 'neutral', 'negative'].map((sentiment) => {
+                      const count = sentimentCounts[sentiment] || 0;
+                      const percentage = totalResponses > 0 ? Math.round((count / totalResponses) * 100) : 0;
+                      const colors = {
+                        positive: { bg: 'bg-green-100', text: 'text-green-700', bar: 'bg-green-500' },
+                        neutral: { bg: 'bg-gray-100', text: 'text-gray-700', bar: 'bg-gray-500' },
+                        negative: { bg: 'bg-red-100', text: 'text-red-700', bar: 'bg-red-500' },
+                      };
+                      const c = colors[sentiment as keyof typeof colors];
+                      return (
+                        <div key={sentiment} className="flex-1">
+                          <div className={`${c.bg} rounded-lg p-3 text-center`}>
+                            <p className={`text-xl font-bold ${c.text}`}>{count}</p>
+                            <p className={`text-xs ${c.text} capitalize`}>{sentiment}</p>
+                          </div>
+                          <div className="mt-2 h-1 bg-gray-200 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full ${c.bar} rounded-full`}
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                          <p className="text-xs text-gray-500 text-center mt-1">{percentage}%</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end items-center p-6 border-t border-gray-100">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            Close
+          </button>
         </div>
       </div>
     </div>
