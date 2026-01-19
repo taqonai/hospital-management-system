@@ -33,6 +33,9 @@ npx prisma generate          # Required after schema changes
 npx prisma migrate dev       # Run migrations
 npm run db:seed              # Seed test data
 npm run db:seed:wellness     # Seed wellness/fitness test data
+npm run db:seed:icd10        # Seed ICD-10 diagnosis codes
+npm run db:seed:cpt          # Seed CPT procedure codes
+npm run db:seed:amad         # Seed A'mad precision health data
 npm run dev                  # Start dev server (port 3001)
 npm run build                # TypeScript compile
 npm run build:strict         # TypeScript compile with strict mode
@@ -133,6 +136,7 @@ docker-compose restart [service]              # Restart service
    - State: Redux Toolkit (`mobile/src/store/`) + TanStack Query for server state
    - API client: `mobile/src/services/api/client.ts`
    - Key features: biometric auth, push notifications, offline support, secure storage
+   - Native module: `@amad/health-platform` (`mobile/modules/health-platform/`) for Google Health Connect, Apple HealthKit, and Samsung Health integration
 
 ### TypeScript Path Aliases
 
@@ -253,6 +257,10 @@ RootNavigator (auth state check)
 | `api/client.ts` | Axios with auto token refresh on 401 |
 | `api/patientPortal.ts` | Dashboard, appointments, records, billing |
 | `api/symptomChecker.ts` | AI symptom assessment with Whisper |
+| `api/healthPlatform.ts` | Health Connect/HealthKit data sync |
+| `api/genomics.ts` | Genomic data and genetic reports |
+| `api/nutritionAi.ts` | AI-powered nutrition analysis |
+| `api/wellness.ts` | Wellness metrics and recommendations |
 | `offline/cacheManager.ts` | TTL-based caching (5min-24hr) |
 | `offline/actionQueue.ts` | Queues mutations offline, syncs on reconnect |
 | `biometric/` | Face ID/Touch ID/Fingerprint auth |
