@@ -38,6 +38,15 @@ export function useWhisperRecorder(options: UseWhisperRecorderOptions = {}) {
   const startTimeRef = useRef<number>(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const maxDurationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isProcessingRef = useRef(false); // Guard against duplicate processing
+  const onTranscriptRef = useRef(onTranscript); // Store callback in ref to avoid stale closures
+  const onErrorRef = useRef(onError);
+
+  // Keep refs updated with latest callbacks
+  useEffect(() => {
+    onTranscriptRef.current = onTranscript;
+    onErrorRef.current = onError;
+  }, [onTranscript, onError]);
 
   // Check Whisper availability on mount
   useEffect(() => {
@@ -157,6 +166,11 @@ export function useWhisperRecorder(options: UseWhisperRecorderOptions = {}) {
       return;
     }
 
+    // Guard against duplicate processing (React StrictMode, double-clicks, etc.)
+    if (isProcessingRef.current) {
+      return;
+    }
+    isProcessingRef.current = true;
     setIsProcessing(true);
 
     // Create a promise that resolves when recording stops
@@ -170,9 +184,11 @@ export function useWhisperRecorder(options: UseWhisperRecorderOptions = {}) {
           streamRef.current = null;
         }
 
-        // Create blob from chunks
+        // Create blob from chunks and immediately clear them to prevent reprocessing
         if (audioChunksRef.current.length > 0) {
-          const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
+          const chunks = audioChunksRef.current;
+          audioChunksRef.current = []; // Clear immediately
+          const blob = new Blob(chunks, { type: recorder.mimeType });
           resolve(blob);
         } else {
           resolve(null);
@@ -190,10 +206,11 @@ export function useWhisperRecorder(options: UseWhisperRecorderOptions = {}) {
     } else {
       const errorMsg = 'No audio recorded. Please try again and speak clearly.';
       setError(errorMsg);
-      onError?.(errorMsg);
+      onErrorRef.current?.(errorMsg);
       setIsProcessing(false);
+      isProcessingRef.current = false;
     }
-  }, [onError]);
+  }, []);
 
   // Transcribe audio with Whisper
   const transcribeAudio = useCallback(async (blob: Blob) => {
@@ -226,20 +243,21 @@ export function useWhisperRecorder(options: UseWhisperRecorderOptions = {}) {
 
       if (transcript) {
         setError(null);
-        onTranscript?.(transcript);
+        onTranscriptRef.current?.(transcript);
       } else {
         const errorMsg = 'No speech detected. Please speak clearly and try again.';
         setError(errorMsg);
-        onError?.(errorMsg);
+        onErrorRef.current?.(errorMsg);
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Transcription failed';
       setError(errorMsg);
-      onError?.(errorMsg);
+      onErrorRef.current?.(errorMsg);
     } finally {
       setIsProcessing(false);
+      isProcessingRef.current = false;
     }
-  }, [onTranscript, onError]);
+  }, []);
 
   // Toggle recording
   const toggleRecording = useCallback(async () => {
