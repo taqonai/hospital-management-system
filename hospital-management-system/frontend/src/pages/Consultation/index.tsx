@@ -25,9 +25,11 @@ import {
   MagnifyingGlassIcon,
   ChartBarIcon,
   CalendarIcon,
+  MicrophoneIcon,
 } from '@heroicons/react/24/outline';
 import { patientApi, aiApi, smartOrderApi, medSafetyApi, ipdApi, appointmentApi, opdApi, insuranceCodingApi } from '../../services/api';
 import { useAIHealth } from '../../hooks/useAI';
+import { useHybridVoice } from '../../hooks/useHybridVoice';
 import {
   CodeSuggestionPanel,
   ICD10Picker,
@@ -213,6 +215,31 @@ export default function Consultation() {
   const [symptoms, setSymptoms] = useState<Symptom[]>([]);
   const [symptomInput, setSymptomInput] = useState('');
   const [chiefComplaint, setChiefComplaint] = useState('');
+
+  // Voice-to-text for Chief Complaint using Whisper
+  const {
+    isListening: isRecordingChiefComplaint,
+    isProcessing: isProcessingVoice,
+    interimTranscript,
+    error: voiceError,
+    toggleListening: toggleChiefComplaintRecording,
+    whisperAvailable,
+  } = useHybridVoice({
+    alwaysUseWhisper: true,
+    language: 'en-US',
+    context: { field: 'chiefComplaint', type: 'medical' },
+    onResult: (result) => {
+      // Append transcribed text to existing chief complaint
+      setChiefComplaint((prev) => {
+        const separator = prev.trim() ? ' ' : '';
+        return prev + separator + result.transcript;
+      });
+    },
+    onError: (error) => {
+      toast.error(`Voice transcription failed: ${error}`);
+    },
+  });
+
   const [selectedDiagnoses, setSelectedDiagnoses] = useState<Diagnosis[]>([]);
   // Insurance Coding State
   const [showInsuranceCoding, setShowInsuranceCoding] = useState(false);
@@ -1365,14 +1392,71 @@ export default function Consultation() {
     <div className="space-y-6">
       {/* Chief Complaint */}
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Chief Complaint</h3>
-        <textarea
-          value={chiefComplaint}
-          onChange={(e) => setChiefComplaint(e.target.value)}
-          placeholder="Describe the patient's main concern..."
-          rows={3}
-          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 resize-none"
-        />
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Chief Complaint</h3>
+          {whisperAvailable && (
+            <span className="text-xs text-gray-500 flex items-center gap-1">
+              <MicrophoneIcon className="h-3 w-3" />
+              Voice enabled
+            </span>
+          )}
+        </div>
+        <div className="relative">
+          <textarea
+            value={isRecordingChiefComplaint && interimTranscript ? chiefComplaint + (chiefComplaint.trim() ? ' ' : '') + interimTranscript : chiefComplaint}
+            onChange={(e) => setChiefComplaint(e.target.value)}
+            placeholder="Describe the patient's main concern..."
+            rows={3}
+            disabled={isRecordingChiefComplaint || isProcessingVoice}
+            className={clsx(
+              "w-full px-4 py-3 pr-14 border rounded-xl focus:ring-2 focus:ring-blue-500 resize-none transition-colors",
+              isRecordingChiefComplaint ? "border-red-400 bg-red-50" : "border-gray-300",
+              (isRecordingChiefComplaint || isProcessingVoice) && "cursor-not-allowed"
+            )}
+          />
+          {/* Microphone Button */}
+          <button
+            type="button"
+            onClick={toggleChiefComplaintRecording}
+            disabled={isProcessingVoice || !whisperAvailable}
+            title={isRecordingChiefComplaint ? "Stop recording" : "Start voice input"}
+            className={clsx(
+              "absolute right-3 top-3 p-2 rounded-lg transition-all",
+              isRecordingChiefComplaint
+                ? "bg-red-500 text-white hover:bg-red-600 animate-pulse"
+                : "bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-600",
+              isProcessingVoice && "opacity-50 cursor-not-allowed",
+              !whisperAvailable && "opacity-30 cursor-not-allowed"
+            )}
+          >
+            {isProcessingVoice ? (
+              <ArrowPathIcon className="h-5 w-5 animate-spin" />
+            ) : (
+              <MicrophoneIcon className="h-5 w-5" />
+            )}
+          </button>
+        </div>
+        {/* Recording Indicator */}
+        {isRecordingChiefComplaint && (
+          <div className="mt-2 flex items-center gap-2 text-red-600 text-sm">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+            </span>
+            Recording... Speak clearly, then click the mic button to stop
+          </div>
+        )}
+        {isProcessingVoice && (
+          <div className="mt-2 flex items-center gap-2 text-blue-600 text-sm">
+            <ArrowPathIcon className="h-4 w-4 animate-spin" />
+            Transcribing with Whisper AI...
+          </div>
+        )}
+        {voiceError && (
+          <div className="mt-2 text-red-500 text-sm">
+            {voiceError}
+          </div>
+        )}
       </div>
 
       {/* Symptom Entry */}
