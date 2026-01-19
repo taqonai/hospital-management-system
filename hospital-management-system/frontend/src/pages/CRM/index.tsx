@@ -232,20 +232,14 @@ export default function CRM() {
 
   const queryClient = useQueryClient();
 
-  // Fetch staff members for assignment
+  // Fetch staff members for assignment (all non-patient users)
   const { data: staffData } = useQuery({
     queryKey: ['staff-members'],
     queryFn: async () => {
-      const response = await api.get('/doctors');
-      // Also get users with receptionist role
       const usersResponse = await api.get('/rbac/users');
-      const staff = [
-        ...(response.data?.data || response.data || []),
-        ...(usersResponse.data?.data || usersResponse.data || []).filter(
-          (u: any) => ['HOSPITAL_ADMIN', 'RECEPTIONIST'].includes(u.role)
-        ),
-      ];
-      return staff;
+      // The API returns { success: true, data: [...users] }
+      const users = usersResponse.data?.data || usersResponse.data || [];
+      return users;
     },
   });
 
