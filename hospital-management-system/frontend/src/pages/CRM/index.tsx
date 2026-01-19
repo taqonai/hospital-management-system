@@ -328,14 +328,15 @@ export default function CRM() {
   });
 
   // Group leads by status for Kanban
+  const leads = leadsData?.data?.data || [];
   const leadsByStatus = useMemo(() => {
-    if (!leadsData?.data) return {};
+    if (!leads || leads.length === 0) return {};
     const grouped: Record<string, Lead[]> = {};
     leadStatuses.forEach((s) => {
-      grouped[s.status] = leadsData.data.filter((lead: Lead) => lead.status === s.status);
+      grouped[s.status] = leads.filter((lead: Lead) => lead.status === s.status);
     });
     return grouped;
-  }, [leadsData]);
+  }, [leads]);
 
   // Handle drag and drop for Kanban
   const handleDragStart = (e: React.DragEvent, lead: Lead) => {
@@ -637,7 +638,7 @@ export default function CRM() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {leadsData?.data?.map((lead: Lead) => (
+                {leads.map((lead: Lead) => (
                   <tr key={lead.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap cursor-pointer" onClick={() => setSelectedLead(lead)}>
                       <div>
@@ -721,7 +722,7 @@ export default function CRM() {
                 ))}
               </tbody>
             </table>
-            {(!leadsData?.data || leadsData.data.length === 0) && (
+            {(!leads || leads.length === 0) && (
               <div className="p-8 text-center text-gray-500">No leads found</div>
             )}
           </div>
@@ -747,7 +748,7 @@ export default function CRM() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 divide-y divide-gray-100">
-          {tasksData?.data?.map((task: any) => (
+          {(tasksData?.data?.data || []).map((task: any) => (
             <div key={task.id} className="p-4 hover:bg-gray-50">
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-3">
@@ -781,7 +782,7 @@ export default function CRM() {
               </div>
             </div>
           ))}
-          {(!tasksData?.data || tasksData.data.length === 0) && (
+          {(!tasksData?.data?.data || tasksData.data.data.length === 0) && (
             <div className="p-8 text-center text-gray-500">No tasks found</div>
           )}
         </div>
@@ -806,7 +807,7 @@ export default function CRM() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {campaignsData?.data?.map((campaign: any) => (
+          {(campaignsData?.data?.data || []).map((campaign: any) => (
             <div key={campaign.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between mb-4">
                 <div>
@@ -839,7 +840,7 @@ export default function CRM() {
               </div>
             </div>
           ))}
-          {(!campaignsData?.data || campaignsData.data.length === 0) && (
+          {(!campaignsData?.data?.data || campaignsData.data.data.length === 0) && (
             <div className="col-span-full p-8 text-center text-gray-500 bg-white rounded-2xl border border-gray-100">
               No campaigns found. Create your first campaign to get started.
             </div>
@@ -866,7 +867,7 @@ export default function CRM() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {surveysData?.data?.map((survey: any) => (
+          {(surveysData?.data?.data || []).map((survey: any) => (
             <div key={survey.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between mb-4">
                 <div>
@@ -897,7 +898,7 @@ export default function CRM() {
               </div>
             </div>
           ))}
-          {(!surveysData?.data || surveysData.data.length === 0) && (
+          {(!surveysData?.data?.data || surveysData.data.data.length === 0) && (
             <div className="col-span-full p-8 text-center text-gray-500 bg-white rounded-2xl border border-gray-100">
               No surveys found. Create your first survey to collect feedback.
             </div>
@@ -924,7 +925,7 @@ export default function CRM() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 divide-y divide-gray-100">
-          {templatesData?.data?.map((template: any) => (
+          {(templatesData?.data?.data || []).map((template: any) => (
             <div key={template.id} className="p-4 hover:bg-gray-50">
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-3">
@@ -955,7 +956,7 @@ export default function CRM() {
               </div>
             </div>
           ))}
-          {(!templatesData?.data || templatesData.data.length === 0) && (
+          {(!templatesData?.data?.data || templatesData.data.data.length === 0) && (
             <div className="p-8 text-center text-gray-500">No templates found</div>
           )}
         </div>
@@ -1029,7 +1030,7 @@ export default function CRM() {
         <LeadDetailModal
           lead={selectedLead}
           staffList={staffData || []}
-          tagsList={tagsData?.data || []}
+          tagsList={tagsData?.data?.data || []}
           onClose={() => setSelectedLead(null)}
           onStatusChange={(status, reason) => {
             updateStatusMutation.mutate({ id: selectedLead.id, status, reason });
@@ -1058,7 +1059,7 @@ export default function CRM() {
       {/* Tag Management Modal */}
       {showTagModal && (
         <TagModal
-          tags={tagsData?.data || []}
+          tags={tagsData?.data?.data || []}
           onClose={() => setShowTagModal(false)}
           onCreate={(data) => createTagMutation.mutate(data)}
           isCreating={createTagMutation.isPending}
@@ -1723,7 +1724,7 @@ function LeadDetailModal({
                 </div>
               ) : (
                 <>
-                  {timelineData?.data?.map((activity: Activity) => (
+                  {(timelineData?.data?.data || []).map((activity: Activity) => (
                     <div key={activity.id} className="flex gap-4">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
                         activityIcons[activity.activityType] || 'bg-gray-100 text-gray-600'
@@ -1743,7 +1744,7 @@ function LeadDetailModal({
                       </div>
                     </div>
                   ))}
-                  {(!timelineData?.data || timelineData.data.length === 0) && (
+                  {(!timelineData?.data?.data || timelineData.data.data.length === 0) && (
                     <p className="text-center text-gray-500 py-8">No activity recorded yet</p>
                   )}
                 </>
