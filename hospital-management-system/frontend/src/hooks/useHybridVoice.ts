@@ -80,8 +80,10 @@ export function useHybridVoice(options: UseHybridVoiceOptions = {}) {
     const checkWhisper = async () => {
       try {
         const response = await fetch(`${API_URL}/ai/transcribe/status`);
-        const data = await response.json();
-        setWhisperAvailable(data.available);
+        const json = await response.json();
+        // API returns { success: true, data: { available: true, ... } }
+        const available = json.data?.available ?? json.available ?? false;
+        setWhisperAvailable(available);
       } catch {
         setWhisperAvailable(false);
       }
@@ -113,14 +115,16 @@ export function useHybridVoice(options: UseHybridVoiceOptions = {}) {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.detail || 'Transcription failed');
+        throw new Error(errorData.message || errorData.detail || 'Transcription failed');
       }
 
-      const data = await response.json();
+      const json = await response.json();
+      // API returns { success: true, data: { transcript, confidence, duration } }
+      const data = json.data || json;
 
       return {
-        transcript: data.transcript,
-        confidence: data.confidence,
+        transcript: data.transcript || '',
+        confidence: data.confidence || 0.9,
         source: 'whisper',
         isFinal: true,
       };

@@ -1418,19 +1418,25 @@ export default function Consultation() {
           <button
             type="button"
             onClick={toggleChiefComplaintRecording}
-            disabled={isProcessingVoice || !whisperAvailable}
-            title={isRecordingChiefComplaint ? "Stop recording" : "Start voice input"}
+            disabled={isProcessingVoice || whisperAvailable === false}
+            title={
+              whisperAvailable === null ? "Checking voice service..." :
+              whisperAvailable === false ? "Voice service unavailable" :
+              isRecordingChiefComplaint ? "Stop recording" : "Start voice input"
+            }
             className={clsx(
               "absolute right-3 top-3 p-2 rounded-lg transition-all",
               isRecordingChiefComplaint
                 ? "bg-red-500 text-white hover:bg-red-600 animate-pulse"
                 : "bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-600",
-              isProcessingVoice && "opacity-50 cursor-not-allowed",
-              !whisperAvailable && "opacity-30 cursor-not-allowed"
+              isProcessingVoice && "opacity-50",
+              whisperAvailable === false && "opacity-30 cursor-not-allowed"
             )}
           >
             {isProcessingVoice ? (
               <ArrowPathIcon className="h-5 w-5 animate-spin" />
+            ) : whisperAvailable === null ? (
+              <ArrowPathIcon className="h-5 w-5 animate-spin text-gray-400" />
             ) : (
               <MicrophoneIcon className="h-5 w-5" />
             )}
