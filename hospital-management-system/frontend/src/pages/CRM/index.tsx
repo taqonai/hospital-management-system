@@ -182,6 +182,9 @@ export default function CRM() {
   const [filters, setFilters] = useState({ source: '', priority: '', assignedToId: '' });
   const [showFilters, setShowFilters] = useState(false);
   const [showTagModal, setShowTagModal] = useState(false);
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [showCampaignModal, setShowCampaignModal] = useState(false);
+  const [showSurveyModal, setShowSurveyModal] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -325,6 +328,36 @@ export default function CRM() {
       toast.success('Tag created successfully');
     },
     onError: () => toast.error('Failed to create tag'),
+  });
+
+  const createTaskMutation = useMutation({
+    mutationFn: (data: any) => crmApi.createTask(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['crm-tasks'] });
+      setShowTaskModal(false);
+      toast.success('Task created successfully');
+    },
+    onError: () => toast.error('Failed to create task'),
+  });
+
+  const createCampaignMutation = useMutation({
+    mutationFn: (data: any) => crmApi.createCampaign(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['crm-campaigns'] });
+      setShowCampaignModal(false);
+      toast.success('Campaign created successfully');
+    },
+    onError: () => toast.error('Failed to create campaign'),
+  });
+
+  const createSurveyMutation = useMutation({
+    mutationFn: (data: any) => crmApi.createSurvey(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['crm-surveys'] });
+      setShowSurveyModal(false);
+      toast.success('Survey created successfully');
+    },
+    onError: () => toast.error('Failed to create survey'),
   });
 
   // Group leads by status for Kanban
@@ -741,7 +774,10 @@ export default function CRM() {
       <div className="space-y-4">
         <div className="flex justify-between items-center">
           <h3 className="text-lg font-semibold text-gray-900">Tasks</h3>
-          <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-xl hover:from-purple-600 hover:to-violet-700 transition-all shadow-lg shadow-purple-500/25">
+          <button
+            onClick={() => setShowTaskModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-xl hover:from-purple-600 hover:to-violet-700 transition-all shadow-lg shadow-purple-500/25"
+          >
             <PlusIcon className="h-5 w-5" />
             New Task
           </button>
@@ -800,7 +836,10 @@ export default function CRM() {
       <div className="space-y-4">
         <div className="flex justify-between items-center">
           <h3 className="text-lg font-semibold text-gray-900">Campaigns</h3>
-          <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-xl hover:from-purple-600 hover:to-violet-700 transition-all shadow-lg shadow-purple-500/25">
+          <button
+            onClick={() => setShowCampaignModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-xl hover:from-purple-600 hover:to-violet-700 transition-all shadow-lg shadow-purple-500/25"
+          >
             <PlusIcon className="h-5 w-5" />
             New Campaign
           </button>
@@ -860,7 +899,10 @@ export default function CRM() {
       <div className="space-y-4">
         <div className="flex justify-between items-center">
           <h3 className="text-lg font-semibold text-gray-900">Surveys</h3>
-          <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-xl hover:from-purple-600 hover:to-violet-700 transition-all shadow-lg shadow-purple-500/25">
+          <button
+            onClick={() => setShowSurveyModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-xl hover:from-purple-600 hover:to-violet-700 transition-all shadow-lg shadow-purple-500/25"
+          >
             <PlusIcon className="h-5 w-5" />
             New Survey
           </button>
@@ -1063,6 +1105,35 @@ export default function CRM() {
           onClose={() => setShowTagModal(false)}
           onCreate={(data) => createTagMutation.mutate(data)}
           isCreating={createTagMutation.isPending}
+        />
+      )}
+
+      {/* Task Creation Modal */}
+      {showTaskModal && (
+        <TaskModal
+          staffList={staffData || []}
+          leads={leads}
+          onClose={() => setShowTaskModal(false)}
+          onCreate={(data) => createTaskMutation.mutate(data)}
+          isCreating={createTaskMutation.isPending}
+        />
+      )}
+
+      {/* Campaign Creation Modal */}
+      {showCampaignModal && (
+        <CampaignModal
+          onClose={() => setShowCampaignModal(false)}
+          onCreate={(data) => createCampaignMutation.mutate(data)}
+          isCreating={createCampaignMutation.isPending}
+        />
+      )}
+
+      {/* Survey Creation Modal */}
+      {showSurveyModal && (
+        <SurveyModal
+          onClose={() => setShowSurveyModal(false)}
+          onCreate={(data) => createSurveyMutation.mutate(data)}
+          isCreating={createSurveyMutation.isPending}
         />
       )}
     </div>
@@ -1913,6 +1984,456 @@ function TagModal({
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Task Modal Component
+function TaskModal({
+  staffList,
+  leads,
+  onClose,
+  onCreate,
+  isCreating,
+}: {
+  staffList: StaffMember[];
+  leads: Lead[];
+  onClose: () => void;
+  onCreate: (data: any) => void;
+  isCreating: boolean;
+}) {
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    taskType: 'FOLLOW_UP_CALL',
+    priority: 'MEDIUM',
+    assignedToId: '',
+    leadId: '',
+    dueDate: '',
+  });
+
+  const taskTypes = [
+    { value: 'FOLLOW_UP_CALL', label: 'Follow-up Call' },
+    { value: 'FOLLOW_UP_EMAIL', label: 'Follow-up Email' },
+    { value: 'FOLLOW_UP_VISIT', label: 'Follow-up Visit' },
+    { value: 'APPOINTMENT_SCHEDULING', label: 'Appointment Scheduling' },
+    { value: 'DOCUMENT_COLLECTION', label: 'Document Collection' },
+    { value: 'FEEDBACK_COLLECTION', label: 'Feedback Collection' },
+    { value: 'PAYMENT_REMINDER', label: 'Payment Reminder' },
+    { value: 'CUSTOM', label: 'Custom' },
+  ];
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (formData.title.trim() && formData.assignedToId && formData.dueDate) {
+      onCreate({
+        ...formData,
+        leadId: formData.leadId || undefined,
+      });
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-gray-100 sticky top-0 bg-white">
+          <h3 className="text-lg font-semibold text-gray-900">Create New Task</h3>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <XMarkIcon className="h-5 w-5 text-gray-500" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+            <input
+              type="text"
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              placeholder="e.g., Call Mr. Smith for follow-up"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <textarea
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="Additional details..."
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Task Type</label>
+              <select
+                value={formData.taskType}
+                onChange={(e) => setFormData({ ...formData, taskType: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              >
+                {taskTypes.map((type) => (
+                  <option key={type.value} value={type.value}>{type.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+              <select
+                value={formData.priority}
+                onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              >
+                <option value="LOW">Low</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="HIGH">High</option>
+                <option value="URGENT">Urgent</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Assign To *</label>
+            <select
+              value={formData.assignedToId}
+              onChange={(e) => setFormData({ ...formData, assignedToId: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              required
+            >
+              <option value="">Select staff member</option>
+              {staffList.map((staff) => (
+                <option key={staff.id} value={staff.id}>
+                  {staff.firstName} {staff.lastName} ({staff.role})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Related Lead (Optional)</label>
+            <select
+              value={formData.leadId}
+              onChange={(e) => setFormData({ ...formData, leadId: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            >
+              <option value="">No lead selected</option>
+              {leads.map((lead) => (
+                <option key={lead.id} value={lead.id}>
+                  {lead.firstName} {lead.lastName} ({lead.leadNumber})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Due Date *</label>
+            <input
+              type="datetime-local"
+              value={formData.dueDate}
+              onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              required
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isCreating || !formData.title.trim() || !formData.assignedToId || !formData.dueDate}
+              className="px-4 py-2 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-lg hover:from-purple-600 hover:to-violet-700 transition-all disabled:opacity-50"
+            >
+              {isCreating ? 'Creating...' : 'Create Task'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Campaign Modal Component
+function CampaignModal({
+  onClose,
+  onCreate,
+  isCreating,
+}: {
+  onClose: () => void;
+  onCreate: (data: any) => void;
+  isCreating: boolean;
+}) {
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    campaignType: 'PROMOTION',
+    channel: 'EMAIL',
+    targetAudience: { criteria: 'all_leads' },
+  });
+
+  const campaignTypes = [
+    { value: 'HEALTH_CAMP', label: 'Health Camp' },
+    { value: 'PROMOTION', label: 'Promotion' },
+    { value: 'AWARENESS', label: 'Awareness' },
+    { value: 'SEASONAL', label: 'Seasonal' },
+    { value: 'FOLLOW_UP', label: 'Follow-up' },
+    { value: 'RE_ENGAGEMENT', label: 'Re-engagement' },
+    { value: 'BIRTHDAY', label: 'Birthday' },
+    { value: 'FEEDBACK', label: 'Feedback' },
+    { value: 'CUSTOM', label: 'Custom' },
+  ];
+
+  const channels = [
+    { value: 'EMAIL', label: 'Email' },
+    { value: 'SMS', label: 'SMS' },
+    { value: 'WHATSAPP', label: 'WhatsApp' },
+    { value: 'PHONE_CALL', label: 'Phone Call' },
+  ];
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (formData.name.trim()) {
+      onCreate(formData);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-gray-100 sticky top-0 bg-white">
+          <h3 className="text-lg font-semibold text-gray-900">Create New Campaign</h3>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <XMarkIcon className="h-5 w-5 text-gray-500" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Campaign Name *</label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder="e.g., Summer Health Checkup Promo"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <textarea
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="Campaign objectives and details..."
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Campaign Type</label>
+              <select
+                value={formData.campaignType}
+                onChange={(e) => setFormData({ ...formData, campaignType: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              >
+                {campaignTypes.map((type) => (
+                  <option key={type.value} value={type.value}>{type.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Channel</label>
+              <select
+                value={formData.channel}
+                onChange={(e) => setFormData({ ...formData, channel: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              >
+                {channels.map((ch) => (
+                  <option key={ch.value} value={ch.value}>{ch.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Target Audience</label>
+            <select
+              value={formData.targetAudience.criteria}
+              onChange={(e) => setFormData({ ...formData, targetAudience: { criteria: e.target.value } })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            >
+              <option value="all_leads">All Leads</option>
+              <option value="new_leads">New Leads Only</option>
+              <option value="qualified_leads">Qualified Leads</option>
+              <option value="nurturing_leads">Nurturing Leads</option>
+              <option value="all_patients">All Patients</option>
+            </select>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isCreating || !formData.name.trim()}
+              className="px-4 py-2 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-lg hover:from-purple-600 hover:to-violet-700 transition-all disabled:opacity-50"
+            >
+              {isCreating ? 'Creating...' : 'Create Campaign'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Survey Modal Component
+function SurveyModal({
+  onClose,
+  onCreate,
+  isCreating,
+}: {
+  onClose: () => void;
+  onCreate: (data: any) => void;
+  isCreating: boolean;
+}) {
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    surveyType: 'POST_VISIT',
+    isAnonymous: false,
+    questions: [
+      { type: 'rating', text: 'How would you rate your overall experience?', required: true },
+      { type: 'text', text: 'Any additional feedback?', required: false },
+    ],
+  });
+
+  const surveyTypes = [
+    { value: 'POST_VISIT', label: 'Post Visit' },
+    { value: 'POST_DISCHARGE', label: 'Post Discharge' },
+    { value: 'NPS', label: 'NPS (Net Promoter Score)' },
+    { value: 'CSAT', label: 'CSAT (Customer Satisfaction)' },
+    { value: 'SERVICE_QUALITY', label: 'Service Quality' },
+    { value: 'DOCTOR_FEEDBACK', label: 'Doctor Feedback' },
+    { value: 'CUSTOM', label: 'Custom' },
+  ];
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (formData.name.trim()) {
+      onCreate(formData);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-gray-100 sticky top-0 bg-white">
+          <h3 className="text-lg font-semibold text-gray-900">Create New Survey</h3>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <XMarkIcon className="h-5 w-5 text-gray-500" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Survey Name *</label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder="e.g., Post-Consultation Feedback"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <textarea
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="Purpose of this survey..."
+              rows={2}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Survey Type</label>
+            <select
+              value={formData.surveyType}
+              onChange={(e) => setFormData({ ...formData, surveyType: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            >
+              {surveyTypes.map((type) => (
+                <option key={type.value} value={type.value}>{type.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="isAnonymous"
+              checked={formData.isAnonymous}
+              onChange={(e) => setFormData({ ...formData, isAnonymous: e.target.checked })}
+              className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+            />
+            <label htmlFor="isAnonymous" className="text-sm text-gray-700">
+              Allow anonymous responses
+            </label>
+          </div>
+
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-sm font-medium text-gray-700 mb-2">Default Questions</p>
+            <ul className="space-y-2 text-sm text-gray-600">
+              {formData.questions.map((q, i) => (
+                <li key={i} className="flex items-center gap-2">
+                  <span className="w-5 h-5 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center text-xs">{i + 1}</span>
+                  {q.text}
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-gray-400 mt-2">You can customize questions after creation</p>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isCreating || !formData.name.trim()}
+              className="px-4 py-2 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-lg hover:from-purple-600 hover:to-violet-700 transition-all disabled:opacity-50"
+            >
+              {isCreating ? 'Creating...' : 'Create Survey'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
