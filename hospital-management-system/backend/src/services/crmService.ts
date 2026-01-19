@@ -495,12 +495,43 @@ export class CRMLeadService {
 // Communication Service
 export class CRMCommunicationService {
   async create(hospitalId: string, userId: string, data: any) {
+    // Extract known fields and put extra fields (like outcome) into metadata
+    const {
+      leadId,
+      patientId,
+      channel,
+      direction,
+      subject,
+      content,
+      templateId,
+      status,
+      scheduledAt,
+      campaignId,
+      outcome,
+      ...extraData
+    } = data;
+
+    // Build metadata with outcome and any extra fields
+    const metadata = {
+      ...(outcome && { outcome }),
+      ...extraData,
+    };
+
     const communication = await prisma.cRMCommunication.create({
       data: {
-        ...data,
         hospitalId,
         initiatedById: userId,
-        scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
+        leadId,
+        patientId,
+        channel,
+        direction,
+        subject: subject || null,
+        content,
+        templateId,
+        status,
+        scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+        campaignId,
+        metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
       },
       include: {
         lead: {
@@ -514,21 +545,22 @@ export class CRMCommunicationService {
     });
 
     // Log activity if lead
-    if (data.leadId) {
+    if (leadId) {
       await prisma.cRMActivity.create({
         data: {
           hospitalId,
-          leadId: data.leadId,
-          activityType: this.getActivityType(data.channel, data.direction),
-          title: `${data.channel} ${data.direction}`,
-          description: data.subject || data.content.substring(0, 100),
+          leadId,
+          activityType: this.getActivityType(channel, direction),
+          title: `${channel} ${direction}`,
+          description: subject || content.substring(0, 100),
+          outcome: outcome || null,
           performedById: userId,
         },
       });
 
       // Update lead's last contacted
       await prisma.cRMLead.update({
-        where: { id: data.leadId },
+        where: { id: leadId },
         data: { lastContactedAt: new Date() },
       });
     }
