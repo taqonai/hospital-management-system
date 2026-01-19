@@ -29,6 +29,9 @@ import {
   UserCircleIcon,
   ArrowRightIcon,
   ChevronDownIcon,
+  ChatBubbleOvalLeftEllipsisIcon,
+  PaperAirplaneIcon,
+  EyeIcon,
 } from '@heroicons/react/24/outline';
 import { crmApi } from '../../services/api';
 import api from '../../services/api';
@@ -115,6 +118,7 @@ interface DashboardStats {
 const tabs = [
   { id: 'dashboard', label: 'Dashboard', icon: ChartBarIcon },
   { id: 'leads', label: 'Leads', icon: UserPlusIcon },
+  { id: 'communications', label: 'Communications', icon: ChatBubbleOvalLeftEllipsisIcon },
   { id: 'tasks', label: 'Tasks', icon: ClipboardDocumentListIcon },
   { id: 'campaigns', label: 'Campaigns', icon: MegaphoneIcon },
   { id: 'surveys', label: 'Surveys', icon: ChatBubbleLeftRightIcon },
@@ -185,6 +189,10 @@ export default function CRM() {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
   const [showSurveyModal, setShowSurveyModal] = useState(false);
+  const [showCommunicationModal, setShowCommunicationModal] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<any>(null);
+  const [previewingTemplate, setPreviewingTemplate] = useState<any>(null);
 
   const queryClient = useQueryClient();
 
@@ -246,10 +254,22 @@ export default function CRM() {
     enabled: activeTab === 'surveys',
   });
 
-  const { data: templatesData, isLoading: loadingTemplates } = useQuery({
+  const { data: templatesData, isLoading: loadingTemplates, refetch: refetchTemplates } = useQuery({
     queryKey: ['crm-templates'],
     queryFn: () => crmApi.getTemplates(),
-    enabled: activeTab === 'templates',
+    enabled: activeTab === 'templates' || showCommunicationModal,
+  });
+
+  const { data: communicationsData, isLoading: loadingCommunications } = useQuery({
+    queryKey: ['crm-communications'],
+    queryFn: () => crmApi.getCommunications({ limit: 50 }),
+    enabled: activeTab === 'communications',
+  });
+
+  const { data: commStatsData } = useQuery({
+    queryKey: ['crm-communication-stats'],
+    queryFn: () => crmApi.getCommunicationStats(),
+    enabled: activeTab === 'communications',
   });
 
   // Mutations
@@ -358,6 +378,49 @@ export default function CRM() {
       toast.success('Survey created successfully');
     },
     onError: () => toast.error('Failed to create survey'),
+  });
+
+  const logCommunicationMutation = useMutation({
+    mutationFn: (data: any) => crmApi.logCommunication(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['crm-communications'] });
+      queryClient.invalidateQueries({ queryKey: ['crm-communication-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['crm-leads'] });
+      setShowCommunicationModal(false);
+      toast.success('Communication logged successfully');
+    },
+    onError: () => toast.error('Failed to log communication'),
+  });
+
+  const createTemplateMutation = useMutation({
+    mutationFn: (data: any) => crmApi.createTemplate(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['crm-templates'] });
+      setShowTemplateModal(false);
+      setEditingTemplate(null);
+      toast.success('Template created successfully');
+    },
+    onError: () => toast.error('Failed to create template'),
+  });
+
+  const updateTemplateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => crmApi.updateTemplate(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['crm-templates'] });
+      setShowTemplateModal(false);
+      setEditingTemplate(null);
+      toast.success('Template updated successfully');
+    },
+    onError: () => toast.error('Failed to update template'),
+  });
+
+  const deleteTemplateMutation = useMutation({
+    mutationFn: (id: string) => crmApi.deleteTemplate(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['crm-templates'] });
+      toast.success('Template deleted successfully');
+    },
+    onError: () => toast.error('Failed to delete template'),
   });
 
   // Group leads by status for Kanban
@@ -764,6 +827,159 @@ export default function CRM() {
     );
   };
 
+  // Render Communications Tab
+  const renderCommunications = () => {
+    if (loadingCommunications) {
+      return <div className="flex justify-center py-12"><ArrowPathIcon className="h-8 w-8 animate-spin text-purple-500" /></div>;
+    }
+
+    const communications = communicationsData?.data?.data || [];
+    const stats = commStatsData?.data?.data || commStatsData?.data || {};
+
+    const channelIcons: Record<string, any> = {
+      PHONE_CALL: PhoneIcon,
+      EMAIL: EnvelopeIcon,
+      SMS: ChatBubbleLeftRightIcon,
+      WHATSAPP: ChatBubbleLeftRightIcon,
+      IN_PERSON: UserGroupIcon,
+      VIDEO_CALL: UserGroupIcon,
+    };
+
+    const channelColors: Record<string, string> = {
+      PHONE_CALL: 'bg-blue-100 text-blue-600',
+      EMAIL: 'bg-purple-100 text-purple-600',
+      SMS: 'bg-green-100 text-green-600',
+      WHATSAPP: 'bg-emerald-100 text-emerald-600',
+      IN_PERSON: 'bg-amber-100 text-amber-600',
+      VIDEO_CALL: 'bg-cyan-100 text-cyan-600',
+    };
+
+    const statusColors: Record<string, string> = {
+      PENDING: 'bg-gray-100 text-gray-700',
+      SENT: 'bg-blue-100 text-blue-700',
+      DELIVERED: 'bg-green-100 text-green-700',
+      READ: 'bg-purple-100 text-purple-700',
+      RESPONDED: 'bg-emerald-100 text-emerald-700',
+      FAILED: 'bg-red-100 text-red-700',
+    };
+
+    return (
+      <div className="space-y-6">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <ChatBubbleOvalLeftEllipsisIcon className="h-5 w-5 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{stats.total || 0}</p>
+                <p className="text-sm text-gray-500">Total</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <PhoneIcon className="h-5 w-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{stats.byChannel?.PHONE_CALL || 0}</p>
+                <p className="text-sm text-gray-500">Calls</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <EnvelopeIcon className="h-5 w-5 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{stats.byChannel?.EMAIL || 0}</p>
+                <p className="text-sm text-gray-500">Emails</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <ChatBubbleLeftRightIcon className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{(stats.byChannel?.SMS || 0) + (stats.byChannel?.WHATSAPP || 0)}</p>
+                <p className="text-sm text-gray-500">Messages</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-semibold text-gray-900">Recent Communications</h3>
+          <button
+            onClick={() => setShowCommunicationModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-xl hover:from-purple-600 hover:to-violet-700 transition-all shadow-lg shadow-purple-500/25"
+          >
+            <PlusIcon className="h-5 w-5" />
+            Log Communication
+          </button>
+        </div>
+
+        {/* Communications List */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 divide-y divide-gray-100">
+          {communications.map((comm: any) => {
+            const ChannelIcon = channelIcons[comm.channel] || ChatBubbleLeftRightIcon;
+            return (
+              <div key={comm.id} className="p-4 hover:bg-gray-50">
+                <div className="flex items-start gap-4">
+                  <div className={`p-2 rounded-lg ${channelColors[comm.channel] || 'bg-gray-100 text-gray-600'}`}>
+                    <ChannelIcon className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          {comm.lead ? `${comm.lead.firstName} ${comm.lead.lastName}` :
+                           comm.patient ? `${comm.patient.firstName} ${comm.patient.lastName}` : 'Unknown'}
+                        </p>
+                        {comm.subject && <p className="text-sm text-gray-600 mt-0.5">{comm.subject}</p>}
+                        <p className="text-sm text-gray-500 mt-1 line-clamp-2">{comm.content}</p>
+                      </div>
+                      <div className="flex items-center gap-2 ml-4">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[comm.status] || 'bg-gray-100 text-gray-700'}`}>
+                          {comm.status}
+                        </span>
+                        <span className={`px-2 py-1 text-xs rounded-full ${comm.direction === 'OUTBOUND' ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-600'}`}>
+                          {comm.direction === 'OUTBOUND' ? '↑ Out' : '↓ In'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4 mt-2 text-xs text-gray-400">
+                      <span>{comm.channel?.replace(/_/g, ' ')}</span>
+                      <span>•</span>
+                      <span>{format(new Date(comm.createdAt), 'MMM d, yyyy h:mm a')}</span>
+                      {comm.initiatedBy && (
+                        <>
+                          <span>•</span>
+                          <span>By {comm.initiatedBy.firstName} {comm.initiatedBy.lastName}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {communications.length === 0 && (
+            <div className="p-8 text-center text-gray-500">
+              No communications logged yet. Click "Log Communication" to add one.
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // Render Tasks Tab
   const renderTasks = () => {
     if (loadingTasks) {
@@ -956,18 +1172,26 @@ export default function CRM() {
       return <div className="flex justify-center py-12"><ArrowPathIcon className="h-8 w-8 animate-spin text-purple-500" /></div>;
     }
 
+    const templates = templatesData?.data?.data || [];
+
     return (
       <div className="space-y-4">
         <div className="flex justify-between items-center">
           <h3 className="text-lg font-semibold text-gray-900">Message Templates</h3>
-          <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-xl hover:from-purple-600 hover:to-violet-700 transition-all shadow-lg shadow-purple-500/25">
+          <button
+            onClick={() => {
+              setEditingTemplate(null);
+              setShowTemplateModal(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-xl hover:from-purple-600 hover:to-violet-700 transition-all shadow-lg shadow-purple-500/25"
+          >
             <PlusIcon className="h-5 w-5" />
             New Template
           </button>
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 divide-y divide-gray-100">
-          {(templatesData?.data?.data || []).map((template: any) => (
+          {templates.map((template: any) => (
             <div key={template.id} className="p-4 hover:bg-gray-50">
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-3">
@@ -981,25 +1205,65 @@ export default function CRM() {
                      template.channel === 'PHONE_CALL' ? <PhoneIcon className="h-5 w-5" /> :
                      <ChatBubbleLeftRightIcon className="h-5 w-5" />}
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <p className="font-medium text-gray-900">{template.name}</p>
                     <p className="text-sm text-gray-500">{template.category?.replace(/_/g, ' ') || '-'}</p>
                     {template.subject && <p className="text-sm text-gray-600 mt-1">Subject: {template.subject}</p>}
+                    <p className="text-sm text-gray-400 mt-1 line-clamp-2">{template.content}</p>
+                    {template.variables?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {template.variables.map((v: string) => (
+                          <span key={v} className="px-2 py-0.5 text-xs bg-purple-50 text-purple-600 rounded">
+                            {`{{${v}}}`}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 ml-4">
                   <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                     template.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
                   }`}>
                     {template.isActive ? 'Active' : 'Inactive'}
                   </span>
                   <span className="text-sm text-gray-500">Used {template.usageCount || 0}x</span>
+                  <button
+                    onClick={() => setPreviewingTemplate(template)}
+                    className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                    title="Preview"
+                  >
+                    <EyeIcon className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditingTemplate(template);
+                      setShowTemplateModal(true);
+                    }}
+                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    title="Edit"
+                  >
+                    <PencilIcon className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm('Are you sure you want to delete this template?')) {
+                        deleteTemplateMutation.mutate(template.id);
+                      }
+                    }}
+                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Delete"
+                  >
+                    <TrashIcon className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
             </div>
           ))}
-          {(!templatesData?.data?.data || templatesData.data.data.length === 0) && (
-            <div className="p-8 text-center text-gray-500">No templates found</div>
+          {templates.length === 0 && (
+            <div className="p-8 text-center text-gray-500">
+              No templates found. Create your first template to get started.
+            </div>
           )}
         </div>
       </div>
@@ -1042,6 +1306,7 @@ export default function CRM() {
       <div>
         {activeTab === 'dashboard' && renderDashboard()}
         {activeTab === 'leads' && renderLeads()}
+        {activeTab === 'communications' && renderCommunications()}
         {activeTab === 'tasks' && renderTasks()}
         {activeTab === 'campaigns' && renderCampaigns()}
         {activeTab === 'surveys' && renderSurveys()}
@@ -1134,6 +1399,40 @@ export default function CRM() {
           onClose={() => setShowSurveyModal(false)}
           onCreate={(data) => createSurveyMutation.mutate(data)}
           isCreating={createSurveyMutation.isPending}
+        />
+      )}
+
+      {/* Communication Logging Modal */}
+      {showCommunicationModal && (
+        <CommunicationModal
+          leads={leads}
+          templates={templatesData?.data?.data || []}
+          onClose={() => setShowCommunicationModal(false)}
+          onCreate={(data) => logCommunicationMutation.mutate(data)}
+          isCreating={logCommunicationMutation.isPending}
+        />
+      )}
+
+      {/* Template Creation/Edit Modal */}
+      {showTemplateModal && (
+        <TemplateModal
+          template={editingTemplate}
+          onClose={() => {
+            setShowTemplateModal(false);
+            setEditingTemplate(null);
+          }}
+          onCreate={(data) => createTemplateMutation.mutate(data)}
+          onUpdate={(id, data) => updateTemplateMutation.mutate({ id, data })}
+          isCreating={createTemplateMutation.isPending}
+          isUpdating={updateTemplateMutation.isPending}
+        />
+      )}
+
+      {/* Template Preview Modal */}
+      {previewingTemplate && (
+        <TemplatePreviewModal
+          template={previewingTemplate}
+          onClose={() => setPreviewingTemplate(null)}
         />
       )}
     </div>
@@ -2434,6 +2733,626 @@ function SurveyModal({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// Communication Modal Component
+function CommunicationModal({
+  leads,
+  templates,
+  onClose,
+  onCreate,
+  isCreating,
+}: {
+  leads: Lead[];
+  templates: any[];
+  onClose: () => void;
+  onCreate: (data: any) => void;
+  isCreating: boolean;
+}) {
+  const [formData, setFormData] = useState({
+    leadId: '',
+    channel: 'PHONE_CALL',
+    direction: 'OUTBOUND',
+    subject: '',
+    content: '',
+    templateId: '',
+    outcome: '',
+  });
+
+  const channels = [
+    { value: 'PHONE_CALL', label: 'Phone Call', icon: '📞' },
+    { value: 'EMAIL', label: 'Email', icon: '📧' },
+    { value: 'SMS', label: 'SMS', icon: '💬' },
+    { value: 'WHATSAPP', label: 'WhatsApp', icon: '📱' },
+    { value: 'IN_PERSON', label: 'In Person', icon: '🤝' },
+    { value: 'VIDEO_CALL', label: 'Video Call', icon: '📹' },
+  ];
+
+  const directions = [
+    { value: 'OUTBOUND', label: 'Outbound (You contacted them)' },
+    { value: 'INBOUND', label: 'Inbound (They contacted you)' },
+  ];
+
+  const outcomes = [
+    { value: '', label: 'Select outcome...' },
+    { value: 'CONNECTED', label: 'Connected - Interested' },
+    { value: 'CONNECTED_NOT_INTERESTED', label: 'Connected - Not Interested' },
+    { value: 'CONNECTED_CALLBACK', label: 'Connected - Callback Requested' },
+    { value: 'NO_ANSWER', label: 'No Answer' },
+    { value: 'BUSY', label: 'Busy' },
+    { value: 'VOICEMAIL', label: 'Left Voicemail' },
+    { value: 'WRONG_NUMBER', label: 'Wrong Number' },
+    { value: 'APPOINTMENT_BOOKED', label: 'Appointment Booked' },
+    { value: 'INFORMATION_SENT', label: 'Information Sent' },
+  ];
+
+  const handleTemplateChange = (templateId: string) => {
+    const template = templates.find(t => t.id === templateId);
+    setFormData({
+      ...formData,
+      templateId,
+      subject: template?.subject || formData.subject,
+      content: template?.content || formData.content,
+    });
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (formData.content.trim()) {
+      onCreate({
+        ...formData,
+        leadId: formData.leadId || undefined,
+        templateId: formData.templateId || undefined,
+        outcome: formData.outcome || undefined,
+      });
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-xl max-w-xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-gray-100 sticky top-0 bg-white">
+          <h3 className="text-lg font-semibold text-gray-900">Log Communication</h3>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <XMarkIcon className="h-5 w-5 text-gray-500" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {/* Channel Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Channel *</label>
+            <div className="grid grid-cols-3 gap-2">
+              {channels.map((ch) => (
+                <button
+                  key={ch.value}
+                  type="button"
+                  onClick={() => setFormData({ ...formData, channel: ch.value })}
+                  className={`p-3 rounded-xl border-2 transition-all text-center ${
+                    formData.channel === ch.value
+                      ? 'border-purple-500 bg-purple-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <span className="text-xl">{ch.icon}</span>
+                  <p className="text-xs mt-1 font-medium">{ch.label}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Direction */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Direction</label>
+            <select
+              value={formData.direction}
+              onChange={(e) => setFormData({ ...formData, direction: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            >
+              {directions.map((dir) => (
+                <option key={dir.value} value={dir.value}>{dir.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Lead Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Related Lead</label>
+            <select
+              value={formData.leadId}
+              onChange={(e) => setFormData({ ...formData, leadId: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            >
+              <option value="">No lead selected</option>
+              {leads.map((lead) => (
+                <option key={lead.id} value={lead.id}>
+                  {lead.firstName} {lead.lastName} ({lead.phone})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Template Selection (for Email/SMS/WhatsApp) */}
+          {['EMAIL', 'SMS', 'WHATSAPP'].includes(formData.channel) && templates.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Use Template</label>
+              <select
+                value={formData.templateId}
+                onChange={(e) => handleTemplateChange(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              >
+                <option value="">Don't use template</option>
+                {templates
+                  .filter(t => t.channel === formData.channel)
+                  .map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
+
+          {/* Subject (for Email) */}
+          {formData.channel === 'EMAIL' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+              <input
+                type="text"
+                value={formData.subject}
+                onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                placeholder="Email subject..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              />
+            </div>
+          )}
+
+          {/* Content/Notes */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {['PHONE_CALL', 'IN_PERSON', 'VIDEO_CALL'].includes(formData.channel) ? 'Notes *' : 'Message *'}
+            </label>
+            <textarea
+              value={formData.content}
+              onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+              placeholder={
+                ['PHONE_CALL', 'IN_PERSON', 'VIDEO_CALL'].includes(formData.channel)
+                  ? 'What was discussed...'
+                  : 'Message content...'
+              }
+              rows={4}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              required
+            />
+          </div>
+
+          {/* Outcome (for calls) */}
+          {['PHONE_CALL', 'VIDEO_CALL'].includes(formData.channel) && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Outcome</label>
+              <select
+                value={formData.outcome}
+                onChange={(e) => setFormData({ ...formData, outcome: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              >
+                {outcomes.map((outcome) => (
+                  <option key={outcome.value} value={outcome.value}>{outcome.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isCreating || !formData.content.trim()}
+              className="px-4 py-2 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-lg hover:from-purple-600 hover:to-violet-700 transition-all disabled:opacity-50"
+            >
+              {isCreating ? 'Logging...' : 'Log Communication'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Template Modal Component
+function TemplateModal({
+  template,
+  onClose,
+  onCreate,
+  onUpdate,
+  isCreating,
+  isUpdating,
+}: {
+  template: any | null;
+  onClose: () => void;
+  onCreate: (data: any) => void;
+  onUpdate: (id: string, data: any) => void;
+  isCreating: boolean;
+  isUpdating: boolean;
+}) {
+  const [formData, setFormData] = useState({
+    name: template?.name || '',
+    description: template?.description || '',
+    channel: template?.channel || 'EMAIL',
+    category: template?.category || 'CUSTOM',
+    subject: template?.subject || '',
+    content: template?.content || '',
+    variables: template?.variables || [],
+  });
+
+  const [newVariable, setNewVariable] = useState('');
+
+  const channels = [
+    { value: 'EMAIL', label: 'Email' },
+    { value: 'SMS', label: 'SMS' },
+    { value: 'WHATSAPP', label: 'WhatsApp' },
+  ];
+
+  const categories = [
+    { value: 'APPOINTMENT_REMINDER', label: 'Appointment Reminder' },
+    { value: 'FOLLOW_UP', label: 'Follow Up' },
+    { value: 'WELCOME', label: 'Welcome Message' },
+    { value: 'FEEDBACK_REQUEST', label: 'Feedback Request' },
+    { value: 'PROMOTION', label: 'Promotion' },
+    { value: 'HEALTH_TIP', label: 'Health Tip' },
+    { value: 'BIRTHDAY', label: 'Birthday' },
+    { value: 'CUSTOM', label: 'Custom' },
+  ];
+
+  const addVariable = () => {
+    if (newVariable.trim() && !formData.variables.includes(newVariable.trim())) {
+      setFormData({
+        ...formData,
+        variables: [...formData.variables, newVariable.trim()],
+      });
+      setNewVariable('');
+    }
+  };
+
+  const removeVariable = (varToRemove: string) => {
+    setFormData({
+      ...formData,
+      variables: formData.variables.filter((v: string) => v !== varToRemove),
+    });
+  };
+
+  const insertVariable = (variable: string) => {
+    setFormData({
+      ...formData,
+      content: formData.content + `{{${variable}}}`,
+    });
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (formData.name.trim() && formData.content.trim()) {
+      if (template) {
+        onUpdate(template.id, formData);
+      } else {
+        onCreate(formData);
+      }
+    }
+  };
+
+  const isLoading = isCreating || isUpdating;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-gray-100 sticky top-0 bg-white">
+          <h3 className="text-lg font-semibold text-gray-900">
+            {template ? 'Edit Template' : 'Create Template'}
+          </h3>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <XMarkIcon className="h-5 w-5 text-gray-500" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Template Name *</label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="e.g., Appointment Reminder"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Channel</label>
+              <select
+                value={formData.channel}
+                onChange={(e) => setFormData({ ...formData, channel: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              >
+                {channels.map((ch) => (
+                  <option key={ch.value} value={ch.value}>{ch.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+              <select
+                value={formData.category}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              >
+                {categories.map((cat) => (
+                  <option key={cat.value} value={cat.value}>{cat.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <input
+                type="text"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Brief description..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              />
+            </div>
+          </div>
+
+          {/* Subject for Email */}
+          {formData.channel === 'EMAIL' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+              <input
+                type="text"
+                value={formData.subject}
+                onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                placeholder="Email subject line..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              />
+            </div>
+          )}
+
+          {/* Variables */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Template Variables</label>
+            <div className="flex gap-2 mb-2">
+              <input
+                type="text"
+                value={newVariable}
+                onChange={(e) => setNewVariable(e.target.value)}
+                placeholder="e.g., patientName, appointmentDate"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addVariable())}
+              />
+              <button
+                type="button"
+                onClick={addVariable}
+                className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Add
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {formData.variables.map((variable: string) => (
+                <span
+                  key={variable}
+                  className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded-lg text-sm"
+                >
+                  <button
+                    type="button"
+                    onClick={() => insertVariable(variable)}
+                    className="hover:text-purple-900"
+                    title="Insert into content"
+                  >
+                    {`{{${variable}}}`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeVariable(variable)}
+                    className="text-purple-400 hover:text-purple-600"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              {formData.variables.length === 0 && (
+                <span className="text-sm text-gray-400">No variables added. Common: patientName, doctorName, appointmentDate, hospitalName</span>
+              )}
+            </div>
+          </div>
+
+          {/* Content */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Message Content *</label>
+            <textarea
+              value={formData.content}
+              onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+              placeholder={`Example: Hello {{patientName}},\n\nThis is a reminder for your appointment on {{appointmentDate}}.\n\nBest regards,\n{{hospitalName}}`}
+              rows={6}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 font-mono text-sm"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Use {`{{variableName}}`} to insert dynamic content
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading || !formData.name.trim() || !formData.content.trim()}
+              className="px-4 py-2 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-lg hover:from-purple-600 hover:to-violet-700 transition-all disabled:opacity-50"
+            >
+              {isLoading ? 'Saving...' : template ? 'Update Template' : 'Create Template'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Template Preview Modal Component
+function TemplatePreviewModal({
+  template,
+  onClose,
+}: {
+  template: any;
+  onClose: () => void;
+}) {
+  const [variables, setVariables] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    (template.variables || []).forEach((v: string) => {
+      initial[v] = '';
+    });
+    return initial;
+  });
+
+  const getPreviewContent = () => {
+    let content = template.content;
+    Object.entries(variables).forEach(([key, value]) => {
+      content = content.replace(new RegExp(`{{${key}}}`, 'g'), value || `[${key}]`);
+    });
+    return content;
+  };
+
+  const getPreviewSubject = () => {
+    if (!template.subject) return '';
+    let subject = template.subject;
+    Object.entries(variables).forEach(([key, value]) => {
+      subject = subject.replace(new RegExp(`{{${key}}}`, 'g'), value || `[${key}]`);
+    });
+    return subject;
+  };
+
+  const channelLabels: Record<string, string> = {
+    EMAIL: 'Email',
+    SMS: 'SMS',
+    WHATSAPP: 'WhatsApp',
+  };
+
+  const categoryLabels: Record<string, string> = {
+    APPOINTMENT_REMINDER: 'Appointment Reminder',
+    FOLLOW_UP: 'Follow Up',
+    WELCOME: 'Welcome',
+    FEEDBACK_REQUEST: 'Feedback Request',
+    PROMOTION: 'Promotion',
+    HEALTH_TIP: 'Health Tip',
+    BIRTHDAY: 'Birthday',
+    CUSTOM: 'Custom',
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-gray-100 sticky top-0 bg-white">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">{template.name}</h3>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full">
+                {channelLabels[template.channel] || template.channel}
+              </span>
+              <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded-full">
+                {categoryLabels[template.category] || template.category}
+              </span>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <XMarkIcon className="h-5 w-5 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* Variable Inputs */}
+          {template.variables && template.variables.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Fill in variables to preview:
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                {template.variables.map((variable: string) => (
+                  <div key={variable}>
+                    <label className="block text-xs text-gray-500 mb-1">{variable}</label>
+                    <input
+                      type="text"
+                      value={variables[variable] || ''}
+                      onChange={(e) => setVariables({ ...variables, [variable]: e.target.value })}
+                      placeholder={`Enter ${variable}...`}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Preview */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Preview:</label>
+            <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+              {template.channel === 'EMAIL' && template.subject && (
+                <div className="mb-3 pb-3 border-b border-gray-200">
+                  <p className="text-xs text-gray-500">Subject:</p>
+                  <p className="font-medium text-gray-900">{getPreviewSubject()}</p>
+                </div>
+              )}
+              <div className="whitespace-pre-wrap text-gray-800">
+                {getPreviewContent()}
+              </div>
+            </div>
+          </div>
+
+          {/* Template Info */}
+          <div className="grid grid-cols-3 gap-4 pt-4 border-t border-gray-100">
+            <div className="text-center">
+              <p className="text-lg font-bold text-gray-900">{template.usageCount || 0}</p>
+              <p className="text-xs text-gray-500">Times Used</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-bold text-gray-900">{template.variables?.length || 0}</p>
+              <p className="text-xs text-gray-500">Variables</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-bold text-gray-900">
+                {template.isActive ? '✓' : '✗'}
+              </p>
+              <p className="text-xs text-gray-500">{template.isActive ? 'Active' : 'Inactive'}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end p-6 border-t border-gray-100">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            Close
+          </button>
+        </div>
       </div>
     </div>
   );
