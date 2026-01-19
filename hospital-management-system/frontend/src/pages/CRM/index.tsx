@@ -2775,7 +2775,7 @@ function LeadDetailModal({
     queryFn: () => crmApi.getLead(lead.id),
   });
 
-  const fullLead = leadDetails?.data || lead;
+  const fullLead = leadDetails?.data?.data || lead;
 
   const handleStatusChange = (status: string) => {
     if (status === 'LOST') {
