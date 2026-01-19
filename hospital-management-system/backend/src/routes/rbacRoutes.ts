@@ -214,6 +214,20 @@ router.get(
   })
 );
 
+// ==================== USERS LIST ====================
+
+/**
+ * Get all users for the hospital (for assignment dropdowns)
+ * Returns users that can be assigned to leads, tasks, etc.
+ */
+router.get(
+  '/users',
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const users = await rbacService.getHospitalUsers(req.user!.hospitalId);
+    sendSuccess(res, users, 'Users retrieved successfully');
+  })
+);
+
 // ==================== MY PERMISSIONS ====================
 
 /**

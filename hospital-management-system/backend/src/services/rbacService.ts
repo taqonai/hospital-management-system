@@ -1582,6 +1582,39 @@ export class RBACService {
     return permissions.map(p => p.user);
   }
 
+  /**
+   * Get all users for a hospital (for assignment dropdowns in CRM, etc.)
+   * Returns users who can be assigned to leads, tasks, etc.
+   */
+  async getHospitalUsers(hospitalId: string): Promise<Array<{ id: string; email: string; firstName: string; lastName: string; role: string; phone: string | null; avatar: string | null; isActive: boolean }>> {
+    const users = await prisma.user.findMany({
+      where: {
+        hospitalId,
+        isActive: true,
+        // Exclude patients from assignment lists
+        role: {
+          not: 'PATIENT',
+        },
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        phone: true,
+        avatar: true,
+        isActive: true,
+      },
+      orderBy: [
+        { role: 'asc' },
+        { firstName: 'asc' },
+      ],
+    });
+
+    return users;
+  }
+
   // ==================== PERMISSION CHECKING ====================
 
   /**
