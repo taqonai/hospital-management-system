@@ -18,10 +18,14 @@ import {
   CheckIcon,
   ExclamationTriangleIcon,
   UserGroupIcon,
+  UserIcon,
   CalendarIcon,
   ClockIcon,
   ArrowTrendingUpIcon,
   TagIcon,
+  PlayIcon,
+  PauseIcon,
+  ChartPieIcon,
   Squares2X2Icon,
   ListBulletIcon,
   PencilIcon,
@@ -193,6 +197,10 @@ export default function CRM() {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<any>(null);
   const [previewingTemplate, setPreviewingTemplate] = useState<any>(null);
+  // Phase 4: Task & Campaign state
+  const [taskFilter, setTaskFilter] = useState<'all' | 'my' | 'overdue' | 'today'>('all');
+  const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
+  const [showCampaignDetailModal, setShowCampaignDetailModal] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -236,9 +244,13 @@ export default function CRM() {
     enabled: activeTab === 'leads',
   });
 
-  const { data: tasksData, isLoading: loadingTasks } = useQuery({
-    queryKey: ['crm-tasks'],
-    queryFn: () => crmApi.getTasks({ limit: 50 }),
+  const { data: tasksData, isLoading: loadingTasks, refetch: refetchTasks } = useQuery({
+    queryKey: ['crm-tasks', taskFilter],
+    queryFn: () => {
+      if (taskFilter === 'my') return crmApi.getMyTasks();
+      if (taskFilter === 'overdue') return crmApi.getOverdueTasks();
+      return crmApi.getTasks({ limit: 50 });
+    },
     enabled: activeTab === 'tasks',
   });
 
@@ -368,6 +380,41 @@ export default function CRM() {
       toast.success('Campaign created successfully');
     },
     onError: () => toast.error('Failed to create campaign'),
+  });
+
+  // Phase 4: Task status update mutation
+  const updateTaskStatusMutation = useMutation({
+    mutationFn: ({ id, status, outcome }: { id: string; status: string; outcome?: string }) =>
+      crmApi.updateTaskStatus(id, status, outcome),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['crm-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['crm-dashboard'] });
+      toast.success('Task status updated');
+    },
+    onError: () => toast.error('Failed to update task status'),
+  });
+
+  // Phase 4: Campaign launch mutation
+  const launchCampaignMutation = useMutation({
+    mutationFn: (id: string) => crmApi.launchCampaign(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['crm-campaigns'] });
+      queryClient.invalidateQueries({ queryKey: ['crm-dashboard'] });
+      setShowCampaignDetailModal(false);
+      toast.success('Campaign launched successfully');
+    },
+    onError: () => toast.error('Failed to launch campaign'),
+  });
+
+  // Phase 4: Campaign pause mutation
+  const pauseCampaignMutation = useMutation({
+    mutationFn: (id: string) => crmApi.pauseCampaign(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['crm-campaigns'] });
+      setShowCampaignDetailModal(false);
+      toast.success('Campaign paused');
+    },
+    onError: () => toast.error('Failed to pause campaign'),
   });
 
   const createSurveyMutation = useMutation({
@@ -982,14 +1029,86 @@ export default function CRM() {
 
   // Render Tasks Tab
   const renderTasks = () => {
-    if (loadingTasks) {
-      return <div className="flex justify-center py-12"><ArrowPathIcon className="h-8 w-8 animate-spin text-purple-500" /></div>;
-    }
+    const tasks = tasksData?.data?.data || [];
+
+    // Filter tasks for "today" view
+    const filteredTasks = taskFilter === 'today'
+      ? tasks.filter((task: any) => {
+          const dueDate = new Date(task.dueDate);
+          const today = new Date();
+          return dueDate.toDateString() === today.toDateString();
+        })
+      : tasks;
+
+    const taskFilters = [
+      { id: 'all', label: 'All Tasks', count: tasks.length },
+      { id: 'my', label: 'My Tasks', count: null },
+      { id: 'overdue', label: 'Overdue', count: null },
+      { id: 'today', label: 'Due Today', count: null },
+    ];
+
+    const getTaskStatusActions = (task: any) => {
+      if (task.status === 'COMPLETED' || task.status === 'CANCELLED') return null;
+
+      return (
+        <div className="flex items-center gap-1">
+          {task.status === 'PENDING' && (
+            <button
+              onClick={() => updateTaskStatusMutation.mutate({ id: task.id, status: 'IN_PROGRESS' })}
+              className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+              disabled={updateTaskStatusMutation.isPending}
+            >
+              Start
+            </button>
+          )}
+          {(task.status === 'PENDING' || task.status === 'IN_PROGRESS') && (
+            <>
+              <button
+                onClick={() => updateTaskStatusMutation.mutate({ id: task.id, status: 'COMPLETED' })}
+                className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
+                disabled={updateTaskStatusMutation.isPending}
+              >
+                Complete
+              </button>
+              <button
+                onClick={() => updateTaskStatusMutation.mutate({ id: task.id, status: 'CANCELLED' })}
+                className="px-2 py-1 text-xs font-medium text-gray-700 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                disabled={updateTaskStatusMutation.isPending}
+              >
+                Cancel
+              </button>
+            </>
+          )}
+        </div>
+      );
+    };
 
     return (
       <div className="space-y-4">
-        <div className="flex justify-between items-center">
-          <h3 className="text-lg font-semibold text-gray-900">Tasks</h3>
+        {/* Header with filter tabs */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0">
+            {taskFilters.map((filter) => (
+              <button
+                key={filter.id}
+                onClick={() => setTaskFilter(filter.id as any)}
+                className={`px-4 py-2 text-sm font-medium rounded-xl whitespace-nowrap transition-all ${
+                  taskFilter === filter.id
+                    ? 'bg-gradient-to-r from-purple-500 to-violet-600 text-white shadow-lg shadow-purple-500/25'
+                    : 'bg-white text-gray-600 border border-gray-200 hover:border-purple-300'
+                }`}
+              >
+                {filter.label}
+                {filter.count !== null && (
+                  <span className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${
+                    taskFilter === filter.id ? 'bg-white/20' : 'bg-gray-100'
+                  }`}>
+                    {filter.count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
           <button
             onClick={() => setShowTaskModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-xl hover:from-purple-600 hover:to-violet-700 transition-all shadow-lg shadow-purple-500/25"
@@ -999,45 +1118,83 @@ export default function CRM() {
           </button>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 divide-y divide-gray-100">
-          {(tasksData?.data?.data || []).map((task: any) => (
-            <div key={task.id} className="p-4 hover:bg-gray-50">
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-3">
-                  <div className={`mt-1 w-3 h-3 rounded-full ${
-                    task.status === 'COMPLETED' ? 'bg-green-500' :
-                    task.status === 'OVERDUE' ? 'bg-red-500' :
-                    task.status === 'IN_PROGRESS' ? 'bg-blue-500' : 'bg-gray-400'
-                  }`} />
-                  <div>
-                    <p className="font-medium text-gray-900">{task.title}</p>
-                    {task.description && <p className="text-sm text-gray-500 mt-1">{task.description}</p>}
-                    <div className="flex items-center gap-4 mt-2">
-                      <span className="text-xs text-gray-500 flex items-center gap-1">
-                        <CalendarIcon className="h-4 w-4" />
-                        Due {format(new Date(task.dueDate), 'MMM d, yyyy')}
-                      </span>
-                      {task.lead && (
-                        <span className="text-xs text-gray-500 flex items-center gap-1">
-                          <UserGroupIcon className="h-4 w-4" />
-                          {task.lead.firstName} {task.lead.lastName}
-                        </span>
-                      )}
+        {loadingTasks ? (
+          <div className="flex justify-center py-12">
+            <ArrowPathIcon className="h-8 w-8 animate-spin text-purple-500" />
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 divide-y divide-gray-100">
+            {filteredTasks.map((task: any) => {
+              const isOverdue = new Date(task.dueDate) < new Date() && task.status !== 'COMPLETED' && task.status !== 'CANCELLED';
+
+              return (
+                <div key={task.id} className={`p-4 hover:bg-gray-50 ${isOverdue ? 'bg-red-50/50' : ''}`}>
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3 flex-1">
+                      <div className={`mt-1 w-3 h-3 rounded-full flex-shrink-0 ${
+                        task.status === 'COMPLETED' ? 'bg-green-500' :
+                        task.status === 'CANCELLED' ? 'bg-gray-400' :
+                        isOverdue ? 'bg-red-500' :
+                        task.status === 'IN_PROGRESS' ? 'bg-blue-500' : 'bg-amber-500'
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className={`font-medium ${task.status === 'COMPLETED' ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                            {task.title}
+                          </p>
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                            task.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
+                            task.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
+                            task.status === 'CANCELLED' ? 'bg-gray-100 text-gray-700' :
+                            isOverdue ? 'bg-red-100 text-red-700' :
+                            'bg-amber-100 text-amber-700'
+                          }`}>
+                            {isOverdue && task.status === 'PENDING' ? 'OVERDUE' : task.status?.replace(/_/g, ' ')}
+                          </span>
+                        </div>
+                        {task.description && (
+                          <p className="text-sm text-gray-500 mt-1 truncate">{task.description}</p>
+                        )}
+                        <div className="flex flex-wrap items-center gap-4 mt-2">
+                          <span className={`text-xs flex items-center gap-1 ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+                            <CalendarIcon className="h-4 w-4" />
+                            Due {format(new Date(task.dueDate), 'MMM d, yyyy h:mm a')}
+                          </span>
+                          {task.lead && (
+                            <span className="text-xs text-gray-500 flex items-center gap-1">
+                              <UserGroupIcon className="h-4 w-4" />
+                              {task.lead.firstName} {task.lead.lastName}
+                            </span>
+                          )}
+                          {task.assignedTo && (
+                            <span className="text-xs text-gray-500 flex items-center gap-1">
+                              <UserIcon className="h-4 w-4" />
+                              {task.assignedTo.firstName} {task.assignedTo.lastName}
+                            </span>
+                          )}
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${priorityColors[task.priority] || 'bg-gray-100 text-gray-800'}`}>
+                            {task.priority}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 ml-4">
+                      {getTaskStatusActions(task)}
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${priorityColors[task.priority] || 'bg-gray-100 text-gray-800'}`}>
-                    {task.priority}
-                  </span>
-                </div>
+              );
+            })}
+            {filteredTasks.length === 0 && (
+              <div className="p-8 text-center text-gray-500">
+                {taskFilter === 'my' ? 'No tasks assigned to you' :
+                 taskFilter === 'overdue' ? 'No overdue tasks' :
+                 taskFilter === 'today' ? 'No tasks due today' :
+                 'No tasks found'}
               </div>
-            </div>
-          ))}
-          {(!tasksData?.data?.data || tasksData.data.data.length === 0) && (
-            <div className="p-8 text-center text-gray-500">No tasks found</div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -1048,8 +1205,67 @@ export default function CRM() {
       return <div className="flex justify-center py-12"><ArrowPathIcon className="h-8 w-8 animate-spin text-purple-500" /></div>;
     }
 
+    const campaigns = campaignsData?.data?.data || [];
+    const activeCampaigns = campaigns.filter((c: any) => c.status === 'RUNNING').length;
+    const draftCampaigns = campaigns.filter((c: any) => c.status === 'DRAFT').length;
+    const completedCampaigns = campaigns.filter((c: any) => c.status === 'COMPLETED').length;
+
+    const handleCampaignClick = (campaign: any) => {
+      setSelectedCampaign(campaign);
+      setShowCampaignDetailModal(true);
+    };
+
     return (
-      <div className="space-y-4">
+      <div className="space-y-6">
+        {/* Campaign Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl p-4 border border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
+                <MegaphoneIcon className="h-5 w-5 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{campaigns.length}</p>
+                <p className="text-xs text-gray-500">Total Campaigns</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
+                <PlayIcon className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{activeCampaigns}</p>
+                <p className="text-xs text-gray-500">Active</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center">
+                <PencilIcon className="h-5 w-5 text-gray-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{draftCampaigns}</p>
+                <p className="text-xs text-gray-500">Drafts</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+                <CheckIcon className="h-5 w-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{completedCampaigns}</p>
+                <p className="text-xs text-gray-500">Completed</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Header */}
         <div className="flex justify-between items-center">
           <h3 className="text-lg font-semibold text-gray-900">Campaigns</h3>
           <button
@@ -1061,41 +1277,115 @@ export default function CRM() {
           </button>
         </div>
 
+        {/* Campaign Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {(campaignsData?.data?.data || []).map((campaign: any) => (
-            <div key={campaign.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h4 className="font-semibold text-gray-900">{campaign.name}</h4>
-                  <span className={`inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded-full ${
-                    campaign.status === 'RUNNING' ? 'bg-green-100 text-green-700' :
-                    campaign.status === 'DRAFT' ? 'bg-gray-100 text-gray-700' :
-                    campaign.status === 'SCHEDULED' ? 'bg-blue-100 text-blue-700' :
-                    campaign.status === 'COMPLETED' ? 'bg-purple-100 text-purple-700' :
-                    'bg-amber-100 text-amber-700'
-                  }`}>
-                    {campaign.status}
-                  </span>
+          {campaigns.map((campaign: any) => {
+            const progressPercent = campaign.totalRecipients > 0
+              ? Math.round((campaign.sentCount || 0) / campaign.totalRecipients * 100)
+              : 0;
+
+            return (
+              <div
+                key={campaign.id}
+                className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => handleCampaignClick(campaign)}
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h4 className="font-semibold text-gray-900">{campaign.name}</h4>
+                    <span className={`inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded-full ${
+                      campaign.status === 'RUNNING' ? 'bg-green-100 text-green-700' :
+                      campaign.status === 'DRAFT' ? 'bg-gray-100 text-gray-700' :
+                      campaign.status === 'SCHEDULED' ? 'bg-blue-100 text-blue-700' :
+                      campaign.status === 'COMPLETED' ? 'bg-purple-100 text-purple-700' :
+                      campaign.status === 'PAUSED' ? 'bg-amber-100 text-amber-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {campaign.status}
+                    </span>
+                  </div>
+                  <MegaphoneIcon className="h-8 w-8 text-purple-200" />
                 </div>
-                <MegaphoneIcon className="h-8 w-8 text-purple-200" />
+
+                {campaign.description && (
+                  <p className="text-sm text-gray-500 mb-3 line-clamp-2">{campaign.description}</p>
+                )}
+
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Type</span>
+                    <span className="text-gray-900">{campaign.campaignType?.replace(/_/g, ' ') || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Channel</span>
+                    <span className="text-gray-900">{campaign.channel?.replace(/_/g, ' ') || '-'}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Progress</span>
+                    <span className="text-gray-900">{campaign.sentCount || 0} / {campaign.totalRecipients || 0}</span>
+                  </div>
+                </div>
+
+                {/* Progress Bar */}
+                {campaign.totalRecipients > 0 && (
+                  <div className="mt-3">
+                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          campaign.status === 'COMPLETED' ? 'bg-green-500' :
+                          campaign.status === 'RUNNING' ? 'bg-blue-500' :
+                          'bg-gray-400'
+                        }`}
+                        style={{ width: `${progressPercent}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">{progressPercent}% sent</p>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-2">
+                  {campaign.status === 'DRAFT' && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        launchCampaignMutation.mutate(campaign.id);
+                      }}
+                      disabled={launchCampaignMutation.isPending}
+                      className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm font-medium text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
+                    >
+                      <PlayIcon className="h-4 w-4" />
+                      Launch
+                    </button>
+                  )}
+                  {campaign.status === 'RUNNING' && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        pauseCampaignMutation.mutate(campaign.id);
+                      }}
+                      disabled={pauseCampaignMutation.isPending}
+                      className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm font-medium text-amber-700 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors"
+                    >
+                      <PauseIcon className="h-4 w-4" />
+                      Pause
+                    </button>
+                  )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCampaignClick(campaign);
+                    }}
+                    className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm font-medium text-purple-700 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
+                  >
+                    <ChartPieIcon className="h-4 w-4" />
+                    Details
+                  </button>
+                </div>
               </div>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Type</span>
-                  <span className="text-gray-900">{campaign.campaignType?.replace(/_/g, ' ') || '-'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Channel</span>
-                  <span className="text-gray-900">{campaign.channel?.replace(/_/g, ' ') || '-'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Sent</span>
-                  <span className="text-gray-900">{campaign.sentCount || 0} / {campaign.totalRecipients || 0}</span>
-                </div>
-              </div>
-            </div>
-          ))}
-          {(!campaignsData?.data?.data || campaignsData.data.data.length === 0) && (
+            );
+          })}
+          {campaigns.length === 0 && (
             <div className="col-span-full p-8 text-center text-gray-500 bg-white rounded-2xl border border-gray-100">
               No campaigns found. Create your first campaign to get started.
             </div>
@@ -1433,6 +1723,21 @@ export default function CRM() {
         <TemplatePreviewModal
           template={previewingTemplate}
           onClose={() => setPreviewingTemplate(null)}
+        />
+      )}
+
+      {/* Campaign Detail Modal */}
+      {showCampaignDetailModal && selectedCampaign && (
+        <CampaignDetailModal
+          campaign={selectedCampaign}
+          onClose={() => {
+            setShowCampaignDetailModal(false);
+            setSelectedCampaign(null);
+          }}
+          onLaunch={() => launchCampaignMutation.mutate(selectedCampaign.id)}
+          onPause={() => pauseCampaignMutation.mutate(selectedCampaign.id)}
+          isLaunching={launchCampaignMutation.isPending}
+          isPausing={pauseCampaignMutation.isPending}
         />
       )}
     </div>
@@ -3352,6 +3657,255 @@ function TemplatePreviewModal({
           >
             Close
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Campaign Detail Modal Component
+function CampaignDetailModal({
+  campaign,
+  onClose,
+  onLaunch,
+  onPause,
+  isLaunching,
+  isPausing,
+}: {
+  campaign: any;
+  onClose: () => void;
+  onLaunch: () => void;
+  onPause: () => void;
+  isLaunching: boolean;
+  isPausing: boolean;
+}) {
+  const progressPercent = campaign.totalRecipients > 0
+    ? Math.round((campaign.sentCount || 0) / campaign.totalRecipients * 100)
+    : 0;
+
+  const deliveryRate = campaign.sentCount > 0
+    ? Math.round((campaign.deliveredCount || 0) / campaign.sentCount * 100)
+    : 0;
+
+  const openRate = campaign.deliveredCount > 0
+    ? Math.round((campaign.openedCount || 0) / campaign.deliveredCount * 100)
+    : 0;
+
+  const clickRate = campaign.openedCount > 0
+    ? Math.round((campaign.clickedCount || 0) / campaign.openedCount * 100)
+    : 0;
+
+  const conversionRate = campaign.sentCount > 0
+    ? Math.round((campaign.convertedCount || 0) / campaign.sentCount * 100)
+    : 0;
+
+  const statusColors: Record<string, string> = {
+    DRAFT: 'bg-gray-100 text-gray-700',
+    SCHEDULED: 'bg-blue-100 text-blue-700',
+    RUNNING: 'bg-green-100 text-green-700',
+    PAUSED: 'bg-amber-100 text-amber-700',
+    COMPLETED: 'bg-purple-100 text-purple-700',
+    CANCELLED: 'bg-red-100 text-red-700',
+  };
+
+  const channelLabels: Record<string, string> = {
+    EMAIL: 'Email',
+    SMS: 'SMS',
+    WHATSAPP: 'WhatsApp',
+    PHONE_CALL: 'Phone Call',
+  };
+
+  const typeLabels: Record<string, string> = {
+    HEALTH_CAMP: 'Health Camp',
+    PROMOTION: 'Promotion',
+    AWARENESS: 'Awareness',
+    SEASONAL: 'Seasonal',
+    FOLLOW_UP: 'Follow-up',
+    RE_ENGAGEMENT: 'Re-engagement',
+    BIRTHDAY: 'Birthday',
+    FEEDBACK: 'Feedback',
+    CUSTOM: 'Custom',
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-100 sticky top-0 bg-white">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">{campaign.name}</h3>
+            <div className="flex items-center gap-2 mt-1">
+              <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${statusColors[campaign.status] || 'bg-gray-100 text-gray-700'}`}>
+                {campaign.status}
+              </span>
+              <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full">
+                {channelLabels[campaign.channel] || campaign.channel}
+              </span>
+              <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded-full">
+                {typeLabels[campaign.campaignType] || campaign.campaignType}
+              </span>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <XMarkIcon className="h-5 w-5 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* Description */}
+          {campaign.description && (
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Description</h4>
+              <p className="text-gray-600 bg-gray-50 p-3 rounded-lg">{campaign.description}</p>
+            </div>
+          )}
+
+          {/* Progress */}
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 mb-3">Campaign Progress</h4>
+            <div className="bg-gray-50 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-gray-600">Messages Sent</span>
+                <span className="font-semibold text-gray-900">
+                  {campaign.sentCount || 0} / {campaign.totalRecipients || 0}
+                </span>
+              </div>
+              <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    campaign.status === 'COMPLETED' ? 'bg-green-500' :
+                    campaign.status === 'RUNNING' ? 'bg-blue-500' :
+                    'bg-purple-500'
+                  }`}
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">{progressPercent}% complete</p>
+            </div>
+          </div>
+
+          {/* Metrics Grid */}
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 mb-3">Performance Metrics</h4>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-blue-700">{campaign.deliveredCount || 0}</p>
+                <p className="text-xs text-blue-600">Delivered</p>
+                <p className="text-xs text-blue-500 mt-1">{deliveryRate}% rate</p>
+              </div>
+              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-green-700">{campaign.openedCount || 0}</p>
+                <p className="text-xs text-green-600">Opened</p>
+                <p className="text-xs text-green-500 mt-1">{openRate}% rate</p>
+              </div>
+              <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-purple-700">{campaign.clickedCount || 0}</p>
+                <p className="text-xs text-purple-600">Clicked</p>
+                <p className="text-xs text-purple-500 mt-1">{clickRate}% rate</p>
+              </div>
+              <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-amber-700">{campaign.convertedCount || 0}</p>
+                <p className="text-xs text-amber-600">Converted</p>
+                <p className="text-xs text-amber-500 mt-1">{conversionRate}% rate</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Additional Metrics */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="bg-white border border-gray-200 rounded-xl p-4">
+              <p className="text-sm text-gray-500">Responded</p>
+              <p className="text-xl font-bold text-gray-900">{campaign.respondedCount || 0}</p>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-xl p-4">
+              <p className="text-sm text-gray-500">Failed</p>
+              <p className="text-xl font-bold text-red-600">{campaign.failedCount || 0}</p>
+            </div>
+            {campaign.budget && (
+              <div className="bg-white border border-gray-200 rounded-xl p-4">
+                <p className="text-sm text-gray-500">Budget</p>
+                <p className="text-xl font-bold text-gray-900">
+                  ${Number(campaign.actualCost || 0).toFixed(2)} / ${Number(campaign.budget).toFixed(2)}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Timeline */}
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 mb-3">Timeline</h4>
+            <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Created</span>
+                <span className="text-gray-900">{format(new Date(campaign.createdAt), 'MMM d, yyyy h:mm a')}</span>
+              </div>
+              {campaign.scheduledAt && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Scheduled</span>
+                  <span className="text-gray-900">{format(new Date(campaign.scheduledAt), 'MMM d, yyyy h:mm a')}</span>
+                </div>
+              )}
+              {campaign.startedAt && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Started</span>
+                  <span className="text-gray-900">{format(new Date(campaign.startedAt), 'MMM d, yyyy h:mm a')}</span>
+                </div>
+              )}
+              {campaign.completedAt && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Completed</span>
+                  <span className="text-gray-900">{format(new Date(campaign.completedAt), 'MMM d, yyyy h:mm a')}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Target Audience */}
+          {campaign.targetAudience && (
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Target Audience</h4>
+              <div className="bg-gray-50 rounded-xl p-4">
+                <pre className="text-xs text-gray-600 overflow-auto">
+                  {JSON.stringify(campaign.targetAudience, null, 2)}
+                </pre>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer Actions */}
+        <div className="flex justify-between items-center p-6 border-t border-gray-100">
+          <div className="text-sm text-gray-500">
+            Created by {campaign.createdBy?.firstName || 'Unknown'} {campaign.createdBy?.lastName || ''}
+          </div>
+          <div className="flex items-center gap-3">
+            {campaign.status === 'DRAFT' && (
+              <button
+                onClick={onLaunch}
+                disabled={isLaunching}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50"
+              >
+                <PlayIcon className="h-4 w-4" />
+                {isLaunching ? 'Launching...' : 'Launch Campaign'}
+              </button>
+            )}
+            {campaign.status === 'RUNNING' && (
+              <button
+                onClick={onPause}
+                disabled={isPausing}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-lg hover:from-amber-600 hover:to-orange-700 transition-all disabled:opacity-50"
+              >
+                <PauseIcon className="h-4 w-4" />
+                {isPausing ? 'Pausing...' : 'Pause Campaign'}
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Close
+            </button>
+          </div>
         </div>
       </div>
     </div>
