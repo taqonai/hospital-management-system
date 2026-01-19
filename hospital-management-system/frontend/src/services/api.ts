@@ -2157,4 +2157,86 @@ export const clinicianApi = {
   }) => api.post(`/recommendations/patients/${patientId}`, data),
 };
 
+// =============================================================================
+// CRM API (Customer Relationship Management)
+// =============================================================================
+
+export const crmApi = {
+  // Leads
+  getLeads: (params?: any) => api.get('/crm/leads', { params }),
+  createLead: (data: any) => api.post('/crm/leads', data),
+  getLead: (id: string) => api.get(`/crm/leads/${id}`),
+  updateLead: (id: string, data: any) => api.put(`/crm/leads/${id}`, data),
+  deleteLead: (id: string) => api.delete(`/crm/leads/${id}`),
+  updateLeadStatus: (id: string, status: string, reason?: string) =>
+    api.patch(`/crm/leads/${id}/status`, { status, reason }),
+  assignLead: (id: string, assignedToId: string) =>
+    api.patch(`/crm/leads/${id}/assign`, { assignedToId }),
+  convertLead: (id: string, patientData: any) =>
+    api.post(`/crm/leads/${id}/convert`, patientData),
+  getLeadTimeline: (id: string) => api.get(`/crm/leads/${id}/timeline`),
+  getLeadStats: (params?: any) => api.get('/crm/leads/stats', { params }),
+
+  // Communications
+  getCommunications: (params?: any) => api.get('/crm/communications', { params }),
+  logCommunication: (data: any) => api.post('/crm/communications', data),
+  getCommunicationStats: () => api.get('/crm/communications/stats'),
+
+  // Templates
+  getTemplates: (params?: any) => api.get('/crm/templates', { params }),
+  createTemplate: (data: any) => api.post('/crm/templates', data),
+  updateTemplate: (id: string, data: any) => api.put(`/crm/templates/${id}`, data),
+  deleteTemplate: (id: string) => api.delete(`/crm/templates/${id}`),
+  previewTemplate: (id: string, variables: Record<string, string>) =>
+    api.post(`/crm/templates/${id}/preview`, variables),
+
+  // Tasks
+  getTasks: (params?: any) => api.get('/crm/tasks', { params }),
+  createTask: (data: any) => api.post('/crm/tasks', data),
+  updateTask: (id: string, data: any) => api.put(`/crm/tasks/${id}`, data),
+  updateTaskStatus: (id: string, status: string, outcome?: string) =>
+    api.patch(`/crm/tasks/${id}/status`, { status, outcome }),
+  getMyTasks: () => api.get('/crm/tasks/my'),
+  getOverdueTasks: () => api.get('/crm/tasks/overdue'),
+
+  // Activities
+  getActivities: (params?: any) => api.get('/crm/activities', { params }),
+  logActivity: (data: any) => api.post('/crm/activities', data),
+
+  // Campaigns
+  getCampaigns: (params?: any) => api.get('/crm/campaigns', { params }),
+  createCampaign: (data: any) => api.post('/crm/campaigns', data),
+  getCampaign: (id: string) => api.get(`/crm/campaigns/${id}`),
+  updateCampaign: (id: string, data: any) => api.put(`/crm/campaigns/${id}`, data),
+  launchCampaign: (id: string) => api.post(`/crm/campaigns/${id}/launch`),
+  pauseCampaign: (id: string) => api.patch(`/crm/campaigns/${id}/pause`),
+  getCampaignAnalytics: (id: string) => api.get(`/crm/campaigns/${id}/analytics`),
+
+  // Surveys
+  getSurveys: (params?: any) => api.get('/crm/surveys', { params }),
+  createSurvey: (data: any) => api.post('/crm/surveys', data),
+  getSurvey: (id: string) => api.get(`/crm/surveys/${id}`),
+  updateSurvey: (id: string, data: any) => api.put(`/crm/surveys/${id}`, data),
+  getSurveyResponses: (id: string, params?: any) =>
+    api.get(`/crm/surveys/${id}/responses`, { params }),
+  getSurveyAnalytics: (id: string) => api.get(`/crm/surveys/${id}/analytics`),
+
+  // Tags
+  getTags: () => api.get('/crm/tags'),
+  createTag: (data: any) => api.post('/crm/tags', data),
+  updateTag: (id: string, data: any) => api.put(`/crm/tags/${id}`, data),
+  deleteTag: (id: string) => api.delete(`/crm/tags/${id}`),
+
+  // Reports
+  getDashboard: (params?: any) => api.get('/crm/reports/dashboard', { params }),
+  getLeadConversionReport: (params?: any) =>
+    api.get('/crm/reports/lead-conversion', { params }),
+  getStaffPerformanceReport: (params?: any) =>
+    api.get('/crm/reports/staff-performance', { params }),
+
+  // Settings
+  getSettings: () => api.get('/crm/settings'),
+  updateSettings: (data: any) => api.put('/crm/settings', data),
+};
+
 export default api;

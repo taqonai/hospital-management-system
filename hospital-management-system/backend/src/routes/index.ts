@@ -51,6 +51,7 @@ import genomicRoutes from './genomicRoutes';
 import recommendationRoutes from './recommendationRoutes';
 import clinicianRoutes from './clinicianRoutes';
 import nutritionAiRoutes from './nutritionAiRoutes';
+import crmRoutes from './crmRoutes';
 
 const router = Router();
 
@@ -132,5 +133,8 @@ router.use('/genomics', genomicRoutes);
 router.use('/recommendations', recommendationRoutes);
 router.use('/clinician', clinicianRoutes);
 router.use('/nutrition-ai', nutritionAiRoutes);
+
+// CRM Module
+router.use('/crm', crmRoutes);
 
 export default router;

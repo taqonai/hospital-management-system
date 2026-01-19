@@ -146,6 +146,8 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'MAINTENANCE_STAFF'] },
       { name: 'Dietary', href: '/dietary', icon: CakeIcon, color: 'from-lime-500 to-green-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DIETARY_STAFF'] },
+      { name: 'CRM', href: '/crm', icon: UserGroupIcon, color: 'from-purple-500 to-violet-600',
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'RECEPTIONIST'] },
       { name: 'Access Control', href: '/rbac', icon: ShieldCheckIcon, color: 'from-indigo-500 to-purple-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN'] },
       { name: 'AI Settings', href: '/ai-settings', icon: CpuChipIcon, color: 'from-cyan-500 to-blue-600',

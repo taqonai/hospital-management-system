@@ -121,6 +121,9 @@ import AISettings from './pages/AISettings';
 // Insurance Coding (Admin only)
 import InsuranceCoding from './pages/InsuranceCoding';
 
+// CRM Module
+import CRM from './pages/CRM';
+
 // Clinician Dashboard (A'mad Precision Health Platform)
 import ClinicianDashboard from './pages/Clinician';
 import ClinicianPatientSummary from './pages/Clinician/PatientSummary';
@@ -238,6 +241,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'ACCOUNTANT']}>
               <InsuranceCoding />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/crm"
+          element={
+            <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'SUPER_ADMIN', 'RECEPTIONIST']}>
+              <CRM />
             </ProtectedRoute>
           }
         />

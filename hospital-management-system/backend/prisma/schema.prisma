@@ -69,6 +69,17 @@ model Hospital {
   foodItems            FoodItem[]
   clinicianHealthNotes ClinicianHealthNote[]
 
+  // CRM Module
+  crmLeads             CRMLead[]
+  crmCommunications    CRMCommunication[]
+  crmTemplates         CRMTemplate[]
+  crmActivities        CRMActivity[]
+  crmTasks             CRMTask[]
+  crmCampaigns         CRMCampaign[]
+  crmSurveys           CRMSurvey[]
+  crmTags              CRMTag[]
+  crmSettings          CRMSettings?
+
   @@map("hospitals")
 }
 
@@ -152,6 +163,16 @@ model User {
 
   // A'mad Precision Health Platform
   clinicianHealthNotes  ClinicianHealthNote[] @relation("ClinicianHealthNotes")
+
+  // CRM Module
+  assignedLeads         CRMLead[]           @relation("LeadAssignment")
+  crmCommunications     CRMCommunication[]  @relation("CRMCommunicationInitiator")
+  crmTemplatesCreated   CRMTemplate[]       @relation("CRMTemplateCreator")
+  crmActivities         CRMActivity[]       @relation("CRMActivityPerformer")
+  crmTasksAssigned      CRMTask[]           @relation("CRMTaskAssignee")
+  crmTasksCreated       CRMTask[]           @relation("CRMTaskAssigner")
+  crmCampaignsCreated   CRMCampaign[]       @relation("CRMCampaignCreator")
+  crmSurveysCreated     CRMSurvey[]         @relation("CRMSurveyCreator")
 
   @@unique([hospitalId, email])
   @@map("users")
@@ -425,6 +446,11 @@ model Patient {
   recommendations      Recommendation[]
   dailyHealthScores    DailyHealthScore[]
   clinicianHealthNotes ClinicianHealthNote[]
+
+  // CRM Module
+  crmLeadConversions   CRMLead[]
+  crmCommunications    CRMCommunication[]
+  crmSurveyResponses   CRMSurveyResponse[]
 
   @@unique([hospitalId, mrn])
   @@map("patients")
@@ -5424,4 +5450,444 @@ enum ClinicianNoteType {
   LAB_INTERPRETATION
   RECOMMENDATION_OVERRIDE
   CARE_PLAN
+}
+
+// ==================== CRM MODULE ====================
+
+model CRMLead {
+  id                  String          @id @default(uuid())
+  hospitalId          String
+  leadNumber          String          @unique
+  firstName           String
+  lastName            String
+  email               String?
+  phone               String
+  alternatePhone      String?
+  dateOfBirth         DateTime?
+  gender              Gender?
+  address             String?
+  city                String?
+  state               String?
+  zipCode             String?
+  source              LeadSource
+  sourceDetails       String?
+  interestedIn        String[]
+  preferredDoctor     String?
+  preferredDate       DateTime?
+  notes               String?         @db.Text
+  status              LeadStatus      @default(NEW)
+  priority            LeadPriority    @default(MEDIUM)
+  score               Int             @default(0)
+  assignedToId        String?
+  assignedAt          DateTime?
+  convertedToPatientId String?        @unique
+  convertedAt         DateTime?
+  conversionReason    String?
+  lostReason          String?
+  referredByPatientId String?
+  referredByDoctorId  String?
+  lastContactedAt     DateTime?
+  nextFollowUpAt      DateTime?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  hospital            Hospital        @relation(fields: [hospitalId], references: [id])
+  assignedTo          User?           @relation("LeadAssignment", fields: [assignedToId], references: [id])
+  convertedPatient    Patient?        @relation(fields: [convertedToPatientId], references: [id])
+  activities          CRMActivity[]
+  communications      CRMCommunication[]
+  tasks               CRMTask[]
+  tags                CRMLeadTag[]
+
+  @@unique([hospitalId, leadNumber])
+  @@index([hospitalId, status])
+  @@index([hospitalId, assignedToId])
+  @@map("crm_leads")
+}
+
+model CRMCommunication {
+  id                  String              @id @default(uuid())
+  hospitalId          String
+  leadId              String?
+  patientId           String?
+  channel             CommunicationChannel
+  direction           CommunicationDirection
+  subject             String?
+  content             String              @db.Text
+  templateId          String?
+  status              CommunicationStatus @default(PENDING)
+  scheduledAt         DateTime?
+  sentAt              DateTime?
+  deliveredAt         DateTime?
+  readAt              DateTime?
+  failedAt            DateTime?
+  failureReason       String?
+  externalMessageId   String?
+  initiatedById       String
+  campaignId          String?
+  metadata            Json?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  hospital            Hospital            @relation(fields: [hospitalId], references: [id])
+  lead                CRMLead?            @relation(fields: [leadId], references: [id])
+  patient             Patient?            @relation(fields: [patientId], references: [id])
+  initiatedBy         User                @relation("CRMCommunicationInitiator", fields: [initiatedById], references: [id])
+  template            CRMTemplate?        @relation(fields: [templateId], references: [id])
+  campaign            CRMCampaign?        @relation(fields: [campaignId], references: [id])
+
+  @@index([hospitalId, leadId])
+  @@index([hospitalId, patientId])
+  @@map("crm_communications")
+}
+
+model CRMTemplate {
+  id                  String          @id @default(uuid())
+  hospitalId          String
+  name                String
+  description         String?
+  channel             CommunicationChannel
+  category            TemplateCategory
+  subject             String?
+  content             String          @db.Text
+  variables           String[]
+  whatsappTemplateId  String?
+  isActive            Boolean         @default(true)
+  usageCount          Int             @default(0)
+  createdById         String
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  hospital            Hospital        @relation(fields: [hospitalId], references: [id])
+  createdBy           User            @relation("CRMTemplateCreator", fields: [createdById], references: [id])
+  communications      CRMCommunication[]
+  campaigns           CRMCampaign[]
+
+  @@unique([hospitalId, name])
+  @@map("crm_templates")
+}
+
+model CRMActivity {
+  id                  String          @id @default(uuid())
+  hospitalId          String
+  leadId              String?
+  patientId           String?
+  taskId              String?
+  activityType        CRMActivityType
+  title               String
+  description         String?         @db.Text
+  outcome             String?
+  activityDate        DateTime        @default(now())
+  duration            Int?
+  performedById       String
+  metadata            Json?
+  createdAt           DateTime        @default(now())
+
+  hospital            Hospital        @relation(fields: [hospitalId], references: [id])
+  lead                CRMLead?        @relation(fields: [leadId], references: [id])
+  performedBy         User            @relation("CRMActivityPerformer", fields: [performedById], references: [id])
+  task                CRMTask?        @relation(fields: [taskId], references: [id])
+
+  @@index([hospitalId, leadId])
+  @@index([hospitalId, activityDate])
+  @@map("crm_activities")
+}
+
+model CRMTask {
+  id                  String          @id @default(uuid())
+  hospitalId          String
+  leadId              String?
+  patientId           String?
+  taskType            CRMTaskType
+  title               String
+  description         String?         @db.Text
+  priority            TaskPriority    @default(NORMAL)
+  assignedToId        String
+  assignedById        String
+  dueDate             DateTime
+  reminderAt          DateTime?
+  completedAt         DateTime?
+  status              CRMTaskStatus   @default(PENDING)
+  outcome             String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  hospital            Hospital        @relation(fields: [hospitalId], references: [id])
+  lead                CRMLead?        @relation(fields: [leadId], references: [id])
+  assignedTo          User            @relation("CRMTaskAssignee", fields: [assignedToId], references: [id])
+  assignedBy          User            @relation("CRMTaskAssigner", fields: [assignedById], references: [id])
+  activities          CRMActivity[]
+
+  @@index([hospitalId, assignedToId, status])
+  @@index([hospitalId, dueDate])
+  @@map("crm_tasks")
+}
+
+model CRMCampaign {
+  id                  String          @id @default(uuid())
+  hospitalId          String
+  name                String
+  description         String?         @db.Text
+  campaignType        CampaignType
+  targetAudience      Json
+  targetCount         Int             @default(0)
+  channel             CommunicationChannel
+  templateId          String?
+  subject             String?
+  content             String?         @db.Text
+  status              CampaignStatus  @default(DRAFT)
+  scheduledAt         DateTime?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  totalRecipients     Int             @default(0)
+  sentCount           Int             @default(0)
+  deliveredCount      Int             @default(0)
+  openedCount         Int             @default(0)
+  clickedCount        Int             @default(0)
+  respondedCount      Int             @default(0)
+  failedCount         Int             @default(0)
+  convertedCount      Int             @default(0)
+  budget              Decimal?        @db.Decimal(10, 2)
+  actualCost          Decimal?        @db.Decimal(10, 2)
+  createdById         String
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  hospital            Hospital        @relation(fields: [hospitalId], references: [id])
+  createdBy           User            @relation("CRMCampaignCreator", fields: [createdById], references: [id])
+  template            CRMTemplate?    @relation(fields: [templateId], references: [id])
+  communications      CRMCommunication[]
+
+  @@unique([hospitalId, name])
+  @@map("crm_campaigns")
+}
+
+model CRMSurvey {
+  id                  String          @id @default(uuid())
+  hospitalId          String
+  name                String
+  description         String?
+  surveyType          SurveyType
+  questions           Json
+  isActive            Boolean         @default(true)
+  isAnonymous         Boolean         @default(false)
+  triggerEvent        String?
+  triggerDelay        Int?
+  responseCount       Int             @default(0)
+  avgRating           Decimal?        @db.Decimal(3, 2)
+  avgNPS              Decimal?        @db.Decimal(4, 2)
+  createdById         String
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  hospital            Hospital        @relation(fields: [hospitalId], references: [id])
+  createdBy           User            @relation("CRMSurveyCreator", fields: [createdById], references: [id])
+  responses           CRMSurveyResponse[]
+
+  @@map("crm_surveys")
+}
+
+model CRMSurveyResponse {
+  id                  String          @id @default(uuid())
+  surveyId            String
+  patientId           String?
+  appointmentId       String?
+  answers             Json
+  overallRating       Int?
+  npsScore            Int?
+  sentiment           String?
+  feedback            String?         @db.Text
+  requiresFollowUp    Boolean         @default(false)
+  followUpStatus      String?
+  followUpById        String?
+  followUpNotes       String?
+  submittedAt         DateTime        @default(now())
+
+  survey              CRMSurvey       @relation(fields: [surveyId], references: [id])
+  patient             Patient?        @relation(fields: [patientId], references: [id])
+
+  @@index([surveyId])
+  @@map("crm_survey_responses")
+}
+
+model CRMTag {
+  id                  String          @id @default(uuid())
+  hospitalId          String
+  name                String
+  color               String          @default("#6366f1")
+  category            String?
+
+  hospital            Hospital        @relation(fields: [hospitalId], references: [id])
+  leadTags            CRMLeadTag[]
+
+  @@unique([hospitalId, name])
+  @@map("crm_tags")
+}
+
+model CRMLeadTag {
+  leadId              String
+  tagId               String
+  lead                CRMLead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  tag                 CRMTag          @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([leadId, tagId])
+  @@map("crm_lead_tags")
+}
+
+model CRMSettings {
+  id                  String          @id @default(uuid())
+  hospitalId          String          @unique
+  autoAssignLeads     Boolean         @default(false)
+  leadScoreThreshold  Int             @default(70)
+  autoFollowUpDays    Int             @default(7)
+  reminderHoursBefore Int             @default(24)
+  autoSurveyEnabled   Boolean         @default(true)
+  postVisitSurveyId   String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  hospital            Hospital        @relation(fields: [hospitalId], references: [id])
+
+  @@map("crm_settings")
+}
+
+// CRM Enums
+enum LeadSource {
+  WEBSITE
+  PHONE_CALL
+  WALK_IN
+  REFERRAL_PATIENT
+  REFERRAL_DOCTOR
+  SOCIAL_MEDIA
+  GOOGLE_ADS
+  FACEBOOK
+  INSTAGRAM
+  WHATSAPP
+  EMAIL_INQUIRY
+  HEALTH_CAMP
+  CORPORATE
+  INSURANCE_PARTNER
+  OTHER
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  APPOINTMENT_SCHEDULED
+  CONSULTATION_DONE
+  CONVERTED
+  LOST
+  NURTURING
+  DO_NOT_CONTACT
+}
+
+enum LeadPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum CommunicationChannel {
+  PHONE_CALL
+  SMS
+  EMAIL
+  WHATSAPP
+  IN_PERSON
+  VIDEO_CALL
+}
+
+enum CommunicationDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum CommunicationStatus {
+  PENDING
+  SCHEDULED
+  SENT
+  DELIVERED
+  READ
+  RESPONDED
+  FAILED
+  CANCELLED
+}
+
+enum TemplateCategory {
+  APPOINTMENT_REMINDER
+  FOLLOW_UP
+  WELCOME
+  FEEDBACK_REQUEST
+  PROMOTION
+  HEALTH_TIP
+  BIRTHDAY
+  CUSTOM
+}
+
+enum CRMActivityType {
+  CALL_MADE
+  CALL_RECEIVED
+  EMAIL_SENT
+  EMAIL_RECEIVED
+  SMS_SENT
+  WHATSAPP_SENT
+  MEETING
+  APPOINTMENT_BOOKED
+  APPOINTMENT_COMPLETED
+  FOLLOW_UP_SCHEDULED
+  NOTE_ADDED
+  STATUS_CHANGED
+  TASK_COMPLETED
+}
+
+enum CRMTaskType {
+  FOLLOW_UP_CALL
+  FOLLOW_UP_EMAIL
+  FOLLOW_UP_VISIT
+  APPOINTMENT_SCHEDULING
+  DOCUMENT_COLLECTION
+  FEEDBACK_COLLECTION
+  PAYMENT_REMINDER
+  CUSTOM
+}
+
+
+enum CRMTaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  OVERDUE
+}
+
+enum CampaignType {
+  HEALTH_CAMP
+  PROMOTION
+  AWARENESS
+  SEASONAL
+  FOLLOW_UP
+  RE_ENGAGEMENT
+  BIRTHDAY
+  FEEDBACK
+  CUSTOM
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum SurveyType {
+  POST_VISIT
+  POST_DISCHARGE
+  NPS
+  CSAT
+  SERVICE_QUALITY
+  DOCTOR_FEEDBACK
+  CUSTOM
 }
