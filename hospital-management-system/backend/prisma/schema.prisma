@@ -196,6 +196,7 @@ enum UserRole {
   MAINTENANCE_STAFF
   SECURITY_STAFF
   DIETARY_STAFF
+  MARKETING
 }
 
 model UserPermission {

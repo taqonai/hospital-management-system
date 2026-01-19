@@ -18,7 +18,7 @@ const router = Router();
 
 // All CRM routes require authentication
 router.use(authenticate);
-router.use(authorize('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'RECEPTIONIST'));
+router.use(authorize('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'RECEPTIONIST', 'MARKETING'));
 
 // ==================== LEADS ====================
 
