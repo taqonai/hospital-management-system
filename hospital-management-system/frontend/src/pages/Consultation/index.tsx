@@ -29,7 +29,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { patientApi, aiApi, smartOrderApi, medSafetyApi, ipdApi, appointmentApi, opdApi, insuranceCodingApi } from '../../services/api';
 import { useAIHealth } from '../../hooks/useAI';
-import { useHybridVoice } from '../../hooks/useHybridVoice';
+import { useWhisperRecorder, formatDuration } from '../../hooks/useWhisperRecorder';
 import {
   CodeSuggestionPanel,
   ICD10Picker,
@@ -218,22 +218,22 @@ export default function Consultation() {
 
   // Voice-to-text for Chief Complaint using Whisper
   const {
-    isListening: isRecordingChiefComplaint,
+    isRecording: isRecordingChiefComplaint,
     isProcessing: isProcessingVoice,
-    interimTranscript,
+    isAvailable: whisperAvailable,
+    duration: recordingDuration,
     error: voiceError,
-    toggleListening: toggleChiefComplaintRecording,
-    whisperAvailable,
-  } = useHybridVoice({
-    alwaysUseWhisper: true,
-    language: 'en-US',
-    context: { field: 'chiefComplaint', type: 'medical' },
-    onResult: (result) => {
+    toggleRecording: toggleChiefComplaintRecording,
+    cancelRecording: cancelChiefComplaintRecording,
+  } = useWhisperRecorder({
+    maxDuration: 60000, // 60 seconds max
+    onTranscript: (transcript) => {
       // Append transcribed text to existing chief complaint
       setChiefComplaint((prev) => {
         const separator = prev.trim() ? ' ' : '';
-        return prev + separator + result.transcript;
+        return prev + separator + transcript;
       });
+      toast.success('Voice transcription complete');
     },
     onError: (error) => {
       toast.error(`Voice transcription failed: ${error}`);
@@ -1394,74 +1394,132 @@ export default function Consultation() {
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900">Chief Complaint</h3>
-          {whisperAvailable && (
-            <span className="text-xs text-gray-500 flex items-center gap-1">
+          {whisperAvailable === true && !isRecordingChiefComplaint && !isProcessingVoice && (
+            <span className="text-xs text-green-600 flex items-center gap-1 bg-green-50 px-2 py-1 rounded-full">
               <MicrophoneIcon className="h-3 w-3" />
-              Voice enabled
+              Voice ready
+            </span>
+          )}
+          {whisperAvailable === null && (
+            <span className="text-xs text-gray-400 flex items-center gap-1">
+              <ArrowPathIcon className="h-3 w-3 animate-spin" />
+              Checking...
             </span>
           )}
         </div>
+
+        {/* Recording Controls - Prominent when recording */}
+        {isRecordingChiefComplaint && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="relative flex h-4 w-4">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500"></span>
+                </span>
+                <div>
+                  <p className="font-medium text-red-700">Recording...</p>
+                  <p className="text-sm text-red-600">{formatDuration(recordingDuration)} / 1:00</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={cancelChiefComplaintRecording}
+                  className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleChiefComplaintRecording}
+                  className="px-4 py-1.5 text-sm bg-red-500 text-white hover:bg-red-600 rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <span className="w-2 h-2 bg-white rounded-sm"></span>
+                  Stop & Transcribe
+                </button>
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-red-600">Speak clearly into your microphone. Click "Stop & Transcribe" when done.</p>
+          </div>
+        )}
+
+        {/* Processing Indicator */}
+        {isProcessingVoice && (
+          <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+            <div className="flex items-center gap-3">
+              <ArrowPathIcon className="h-5 w-5 text-blue-500 animate-spin" />
+              <div>
+                <p className="font-medium text-blue-700">Transcribing with Whisper AI...</p>
+                <p className="text-sm text-blue-600">Converting your speech to text</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Textarea with mic button */}
         <div className="relative">
           <textarea
-            value={isRecordingChiefComplaint && interimTranscript ? chiefComplaint + (chiefComplaint.trim() ? ' ' : '') + interimTranscript : chiefComplaint}
+            value={chiefComplaint}
             onChange={(e) => setChiefComplaint(e.target.value)}
-            placeholder="Describe the patient's main concern..."
-            rows={3}
-            disabled={isRecordingChiefComplaint || isProcessingVoice}
+            placeholder="Type or use voice input to describe the patient's main concern..."
+            rows={4}
+            disabled={isProcessingVoice}
             className={clsx(
               "w-full px-4 py-3 pr-14 border rounded-xl focus:ring-2 focus:ring-blue-500 resize-none transition-colors",
-              isRecordingChiefComplaint ? "border-red-400 bg-red-50" : "border-gray-300",
-              (isRecordingChiefComplaint || isProcessingVoice) && "cursor-not-allowed"
+              isRecordingChiefComplaint && "border-red-300 bg-red-50/50",
+              isProcessingVoice && "bg-gray-50 cursor-wait",
+              !isRecordingChiefComplaint && !isProcessingVoice && "border-gray-300"
             )}
           />
-          {/* Microphone Button */}
-          <button
-            type="button"
-            onClick={toggleChiefComplaintRecording}
-            disabled={isProcessingVoice || whisperAvailable === false}
-            title={
-              whisperAvailable === null ? "Checking voice service..." :
-              whisperAvailable === false ? "Voice service unavailable" :
-              isRecordingChiefComplaint ? "Stop recording" : "Start voice input"
-            }
-            className={clsx(
-              "absolute right-3 top-3 p-2 rounded-lg transition-all",
-              isRecordingChiefComplaint
-                ? "bg-red-500 text-white hover:bg-red-600 animate-pulse"
-                : "bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-600",
-              isProcessingVoice && "opacity-50",
-              whisperAvailable === false && "opacity-30 cursor-not-allowed"
-            )}
-          >
-            {isProcessingVoice ? (
-              <ArrowPathIcon className="h-5 w-5 animate-spin" />
-            ) : whisperAvailable === null ? (
-              <ArrowPathIcon className="h-5 w-5 animate-spin text-gray-400" />
-            ) : (
-              <MicrophoneIcon className="h-5 w-5" />
-            )}
-          </button>
+          {/* Microphone Button - Only show when not recording */}
+          {!isRecordingChiefComplaint && (
+            <button
+              type="button"
+              onClick={toggleChiefComplaintRecording}
+              disabled={isProcessingVoice || whisperAvailable === false || whisperAvailable === null}
+              title={
+                whisperAvailable === null ? "Checking voice service..." :
+                whisperAvailable === false ? "Voice service unavailable" :
+                "Click to start voice recording"
+              }
+              className={clsx(
+                "absolute right-3 top-3 p-2.5 rounded-xl transition-all",
+                whisperAvailable === true && !isProcessingVoice
+                  ? "bg-blue-500 text-white hover:bg-blue-600 shadow-md hover:shadow-lg"
+                  : "bg-gray-200 text-gray-400",
+                (isProcessingVoice || whisperAvailable === null) && "cursor-wait",
+                whisperAvailable === false && "cursor-not-allowed opacity-50"
+              )}
+            >
+              {isProcessingVoice ? (
+                <ArrowPathIcon className="h-5 w-5 animate-spin" />
+              ) : whisperAvailable === null ? (
+                <ArrowPathIcon className="h-5 w-5 animate-spin" />
+              ) : (
+                <MicrophoneIcon className="h-5 w-5" />
+              )}
+            </button>
+          )}
         </div>
-        {/* Recording Indicator */}
-        {isRecordingChiefComplaint && (
-          <div className="mt-2 flex items-center gap-2 text-red-600 text-sm">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-            </span>
-            Recording... Speak clearly, then click the mic button to stop
-          </div>
-        )}
-        {isProcessingVoice && (
-          <div className="mt-2 flex items-center gap-2 text-blue-600 text-sm">
-            <ArrowPathIcon className="h-4 w-4 animate-spin" />
-            Transcribing with Whisper AI...
-          </div>
-        )}
-        {voiceError && (
-          <div className="mt-2 text-red-500 text-sm">
+
+        {/* Voice Error */}
+        {voiceError && !isRecordingChiefComplaint && !isProcessingVoice && (
+          <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
             {voiceError}
           </div>
+        )}
+
+        {/* Help text */}
+        {!isRecordingChiefComplaint && !isProcessingVoice && whisperAvailable === true && (
+          <p className="mt-2 text-xs text-gray-500">
+            Click the microphone button to record voice input, or type directly in the field above.
+          </p>
+        )}
+        {whisperAvailable === false && (
+          <p className="mt-2 text-xs text-amber-600">
+            Voice input unavailable. Please type the chief complaint.
+          </p>
         )}
       </div>
 
