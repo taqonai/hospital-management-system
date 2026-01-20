@@ -15,10 +15,14 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   ClipboardDocumentIcon,
+  MicrophoneIcon,
+  StopIcon,
 } from '@heroicons/react/24/outline';
 import { api, pharmacyApi } from '../../services/api';
 import LoadingSpinner from '../common/LoadingSpinner';
 import clsx from 'clsx';
+import { useWhisperRecorder, formatDuration } from '../../hooks/useWhisperRecorder';
+import toast from 'react-hot-toast';
 
 // Custom debounce hook
 function useDebouncedCallback<T extends (...args: any[]) => any>(
@@ -218,6 +222,88 @@ export default function PrescriptionSection({
   const [showDrugSuggestions, setShowDrugSuggestions] = useState<Record<string, boolean>>({});
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [isValidating, setIsValidating] = useState(false);
+
+  // Voice input state - tracks which medication and field is being recorded
+  const [activeVoiceField, setActiveVoiceField] = useState<{
+    medicationId: string;
+    field: 'name' | 'dosage' | 'instructions';
+  } | null>(null);
+
+  // Whisper voice recorder hook
+  const {
+    isRecording,
+    isProcessing: isVoiceProcessing,
+    isAvailable: whisperAvailable,
+    duration: recordingDuration,
+    error: voiceError,
+    startRecording,
+    stopRecording,
+    cancelRecording,
+  } = useWhisperRecorder({
+    maxDuration: 30000, // 30 seconds max for prescription fields
+    onTranscript: (transcript) => {
+      if (activeVoiceField) {
+        const { medicationId, field } = activeVoiceField;
+        setMedications((prev) =>
+          prev.map((m) => {
+            if (m.id === medicationId) {
+              const currentValue = m[field];
+              const separator = currentValue.trim() ? ' ' : '';
+              return { ...m, [field]: currentValue + separator + transcript };
+            }
+            return m;
+          })
+        );
+        // If it's the drug name field, trigger search
+        if (field === 'name') {
+          setDrugSearchQuery((prev) => ({ ...prev, [medicationId]: transcript }));
+          setShowDrugSuggestions((prev) => ({ ...prev, [medicationId]: transcript.length >= 2 }));
+        }
+        toast.success('Voice transcription complete');
+      }
+      setActiveVoiceField(null);
+    },
+    onError: (error) => {
+      toast.error(`Voice transcription failed: ${error}`);
+      setActiveVoiceField(null);
+    },
+  });
+
+  // Start voice recording for a specific field
+  const startVoiceInput = useCallback(
+    async (medicationId: string, field: 'name' | 'dosage' | 'instructions') => {
+      setActiveVoiceField({ medicationId, field });
+      await startRecording();
+    },
+    [startRecording]
+  );
+
+  // Stop voice recording
+  const stopVoiceInput = useCallback(async () => {
+    await stopRecording();
+  }, [stopRecording]);
+
+  // Cancel voice recording
+  const cancelVoiceInput = useCallback(() => {
+    cancelRecording();
+    setActiveVoiceField(null);
+  }, [cancelRecording]);
+
+  // Check if a specific field is currently recording
+  const isFieldRecording = useCallback(
+    (medicationId: string, field: 'name' | 'dosage' | 'instructions') => {
+      return isRecording && activeVoiceField?.medicationId === medicationId && activeVoiceField?.field === field;
+    },
+    [isRecording, activeVoiceField]
+  );
+
+  // Check if a specific field is currently processing
+  const isFieldProcessing = useCallback(
+    (medicationId: string, field: 'name' | 'dosage' | 'instructions') => {
+      return isVoiceProcessing && activeVoiceField?.medicationId === medicationId && activeVoiceField?.field === field;
+    },
+    [isVoiceProcessing, activeVoiceField]
+  );
 
   // Drug search query
   const activeDrugSearch = Object.entries(drugSearchQuery).find(([_, query]) => query.length >= 2);
@@ -672,39 +758,88 @@ export default function PrescriptionSection({
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Drug Name *
                     </label>
-                    <div className="relative">
-                      <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                      <input
-                        type="text"
-                        value={med.name}
-                        onChange={(e) => handleDrugNameChange(med.id, e.target.value)}
-                        onFocus={() =>
-                          setShowDrugSuggestions((prev) => ({
-                            ...prev,
-                            [med.id]: med.name.length >= 2,
-                          }))
-                        }
-                        onBlur={() =>
-                          setTimeout(
-                            () =>
-                              setShowDrugSuggestions((prev) => ({ ...prev, [med.id]: false })),
-                            200
-                          )
-                        }
-                        placeholder="Search medication..."
-                        className={clsx(
-                          'w-full pl-9 pr-4 py-2.5 text-sm rounded-xl border focus:outline-none focus:ring-2 transition-colors',
-                          hasCriticalWarning
-                            ? 'border-red-400 focus:ring-red-500/30 focus:border-red-500'
-                            : hasHighWarning
-                            ? 'border-orange-400 focus:ring-orange-500/30 focus:border-orange-500'
-                            : 'border-gray-300 focus:ring-blue-500/30 focus:border-blue-500'
+                    <div className="relative flex gap-2">
+                      <div className="relative flex-1">
+                        <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <input
+                          type="text"
+                          value={med.name}
+                          onChange={(e) => handleDrugNameChange(med.id, e.target.value)}
+                          onFocus={() =>
+                            setShowDrugSuggestions((prev) => ({
+                              ...prev,
+                              [med.id]: med.name.length >= 2,
+                            }))
+                          }
+                          onBlur={() =>
+                            setTimeout(
+                              () =>
+                                setShowDrugSuggestions((prev) => ({ ...prev, [med.id]: false })),
+                              200
+                            )
+                          }
+                          placeholder="Search medication..."
+                          className={clsx(
+                            'w-full pl-9 pr-4 py-2.5 text-sm rounded-xl border focus:outline-none focus:ring-2 transition-colors',
+                            isFieldRecording(med.id, 'name')
+                              ? 'border-red-400 bg-red-50 focus:ring-red-500/30 focus:border-red-500'
+                              : hasCriticalWarning
+                              ? 'border-red-400 focus:ring-red-500/30 focus:border-red-500'
+                              : hasHighWarning
+                              ? 'border-orange-400 focus:ring-orange-500/30 focus:border-orange-500'
+                              : 'border-gray-300 focus:ring-blue-500/30 focus:border-blue-500'
+                          )}
+                        />
+                        {drugSearchLoading && activeDrugSearch?.[0] === med.id && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <LoadingSpinner size="sm" />
+                          </div>
                         )}
-                      />
-                      {drugSearchLoading && activeDrugSearch?.[0] === med.id && (
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                          <LoadingSpinner size="sm" />
+                      </div>
+                      {/* Voice input button for drug name */}
+                      {isFieldRecording(med.id, 'name') ? (
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            onClick={cancelVoiceInput}
+                            className="px-2 py-2 rounded-xl border border-gray-300 text-gray-600 hover:bg-gray-100 transition-colors"
+                            title="Cancel"
+                          >
+                            <XMarkIcon className="h-5 w-5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={stopVoiceInput}
+                            className="px-3 py-2 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors flex items-center gap-1"
+                            title="Stop & Transcribe"
+                          >
+                            <StopIcon className="h-4 w-4" />
+                            <span className="text-xs font-medium">{formatDuration(recordingDuration)}</span>
+                          </button>
                         </div>
+                      ) : isFieldProcessing(med.id, 'name') ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="px-3 py-2 rounded-xl bg-blue-100 text-blue-600"
+                        >
+                          <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => startVoiceInput(med.id, 'name')}
+                          disabled={whisperAvailable === false || isRecording || isVoiceProcessing}
+                          className={clsx(
+                            'px-3 py-2 rounded-xl transition-colors',
+                            whisperAvailable === false || isRecording || isVoiceProcessing
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              : 'bg-blue-500 text-white hover:bg-blue-600'
+                          )}
+                          title={whisperAvailable === false ? 'Voice input unavailable' : 'Voice input'}
+                        >
+                          <MicrophoneIcon className="h-5 w-5" />
+                        </button>
                       )}
                     </div>
 
@@ -749,13 +884,64 @@ export default function PrescriptionSection({
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Dosage *
                     </label>
-                    <input
-                      type="text"
-                      value={med.dosage}
-                      onChange={(e) => updateMedication(med.id, 'dosage', e.target.value)}
-                      placeholder="e.g., 500mg"
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
-                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={med.dosage}
+                        onChange={(e) => updateMedication(med.id, 'dosage', e.target.value)}
+                        placeholder="e.g., 500mg"
+                        className={clsx(
+                          'flex-1 px-4 py-2.5 text-sm rounded-xl border focus:outline-none focus:ring-2 transition-colors',
+                          isFieldRecording(med.id, 'dosage')
+                            ? 'border-red-400 bg-red-50 focus:ring-red-500/30 focus:border-red-500'
+                            : 'border-gray-300 focus:ring-blue-500/30 focus:border-blue-500'
+                        )}
+                      />
+                      {/* Voice input button for dosage */}
+                      {isFieldRecording(med.id, 'dosage') ? (
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            onClick={cancelVoiceInput}
+                            className="px-2 py-2 rounded-xl border border-gray-300 text-gray-600 hover:bg-gray-100 transition-colors"
+                            title="Cancel"
+                          >
+                            <XMarkIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={stopVoiceInput}
+                            className="px-2 py-2 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors flex items-center gap-1"
+                            title="Stop & Transcribe"
+                          >
+                            <StopIcon className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ) : isFieldProcessing(med.id, 'dosage') ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="px-2 py-2 rounded-xl bg-blue-100 text-blue-600"
+                        >
+                          <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => startVoiceInput(med.id, 'dosage')}
+                          disabled={whisperAvailable === false || isRecording || isVoiceProcessing}
+                          className={clsx(
+                            'px-2 py-2 rounded-xl transition-colors',
+                            whisperAvailable === false || isRecording || isVoiceProcessing
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              : 'bg-blue-500 text-white hover:bg-blue-600'
+                          )}
+                          title={whisperAvailable === false ? 'Voice input unavailable' : 'Voice input'}
+                        >
+                          <MicrophoneIcon className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -814,13 +1000,64 @@ export default function PrescriptionSection({
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Special Instructions
                     </label>
-                    <input
-                      type="text"
-                      value={med.instructions}
-                      onChange={(e) => updateMedication(med.id, 'instructions', e.target.value)}
-                      placeholder="e.g., Take with food"
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
-                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={med.instructions}
+                        onChange={(e) => updateMedication(med.id, 'instructions', e.target.value)}
+                        placeholder="e.g., Take with food"
+                        className={clsx(
+                          'flex-1 px-4 py-2.5 text-sm rounded-xl border focus:outline-none focus:ring-2 transition-colors',
+                          isFieldRecording(med.id, 'instructions')
+                            ? 'border-red-400 bg-red-50 focus:ring-red-500/30 focus:border-red-500'
+                            : 'border-gray-300 focus:ring-blue-500/30 focus:border-blue-500'
+                        )}
+                      />
+                      {/* Voice input button for instructions */}
+                      {isFieldRecording(med.id, 'instructions') ? (
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            onClick={cancelVoiceInput}
+                            className="px-2 py-2 rounded-xl border border-gray-300 text-gray-600 hover:bg-gray-100 transition-colors"
+                            title="Cancel"
+                          >
+                            <XMarkIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={stopVoiceInput}
+                            className="px-2 py-2 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors flex items-center gap-1"
+                            title="Stop & Transcribe"
+                          >
+                            <StopIcon className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ) : isFieldProcessing(med.id, 'instructions') ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="px-2 py-2 rounded-xl bg-blue-100 text-blue-600"
+                        >
+                          <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => startVoiceInput(med.id, 'instructions')}
+                          disabled={whisperAvailable === false || isRecording || isVoiceProcessing}
+                          className={clsx(
+                            'px-2 py-2 rounded-xl transition-colors',
+                            whisperAvailable === false || isRecording || isVoiceProcessing
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              : 'bg-blue-500 text-white hover:bg-blue-600'
+                          )}
+                          title={whisperAvailable === false ? 'Voice input unavailable' : 'Voice input'}
+                        >
+                          <MicrophoneIcon className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 
