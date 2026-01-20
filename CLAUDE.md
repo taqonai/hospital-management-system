@@ -191,7 +191,7 @@ OpenAI models require `OPENAI_API_KEY`. SentenceTransformers and rule-based serv
 All entities include `hospitalId` for tenant isolation. Prisma schema (`backend/prisma/schema.prisma`, ~4600 lines) covers 80+ models.
 
 ### User Roles (UserRole enum)
-SUPER_ADMIN, HOSPITAL_ADMIN, DOCTOR, NURSE, RECEPTIONIST, LAB_TECHNICIAN, PHARMACIST, RADIOLOGIST, ACCOUNTANT, PATIENT, HR_MANAGER, HR_STAFF, HOUSEKEEPING_MANAGER, HOUSEKEEPING_STAFF, MAINTENANCE_STAFF, SECURITY_STAFF, DIETARY_STAFF
+SUPER_ADMIN, HOSPITAL_ADMIN, DOCTOR, NURSE, RECEPTIONIST, LAB_TECHNICIAN, PHARMACIST, RADIOLOGIST, ACCOUNTANT, PATIENT, HR_MANAGER, HR_STAFF, HOUSEKEEPING_MANAGER, HOUSEKEEPING_STAFF, MAINTENANCE_STAFF, SECURITY_STAFF, DIETARY_STAFF, MARKETING
 
 ### Backend Route Pattern
 Routes in `backend/src/routes/`, services in `backend/src/services/`. Each module follows:
