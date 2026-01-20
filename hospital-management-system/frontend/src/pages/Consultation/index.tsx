@@ -26,6 +26,7 @@ import {
   ChartBarIcon,
   CalendarIcon,
   MicrophoneIcon,
+  StopIcon,
 } from '@heroicons/react/24/outline';
 import { patientApi, aiApi, smartOrderApi, medSafetyApi, ipdApi, appointmentApi, opdApi, insuranceCodingApi } from '../../services/api';
 import { useAIHealth } from '../../hooks/useAI';
@@ -239,6 +240,110 @@ export default function Consultation() {
       toast.error(`Voice transcription failed: ${error}`);
     },
   });
+
+  // Voice-to-text for Prescription and Clinical Notes
+  const [activeVoiceField, setActiveVoiceField] = useState<{
+    type: 'prescription' | 'clinicalNotes';
+    prescriptionId?: string;
+    field?: 'medication' | 'dosage' | 'instructions';
+  } | null>(null);
+
+  const {
+    isRecording: isRecordingField,
+    isProcessing: isProcessingField,
+    duration: fieldRecordingDuration,
+    startRecording: startFieldRecording,
+    stopRecording: stopFieldRecording,
+    cancelRecording: cancelFieldRecording,
+  } = useWhisperRecorder({
+    maxDuration: 30000, // 30 seconds max for prescription/notes fields
+    onTranscript: (transcript) => {
+      if (activeVoiceField) {
+        if (activeVoiceField.type === 'prescription' && activeVoiceField.prescriptionId && activeVoiceField.field) {
+          // Update prescription field
+          setPrescriptions((prev) =>
+            prev.map((rx) => {
+              if (rx.id === activeVoiceField.prescriptionId) {
+                const field = activeVoiceField.field!;
+                const currentValue = rx[field] || '';
+                const separator = currentValue.trim() ? ' ' : '';
+                return { ...rx, [field]: currentValue + separator + transcript };
+              }
+              return rx;
+            })
+          );
+        } else if (activeVoiceField.type === 'clinicalNotes') {
+          // Update clinical notes
+          setClinicalNotes((prev) => {
+            const separator = prev.trim() ? ' ' : '';
+            return prev + separator + transcript;
+          });
+        }
+        toast.success('Voice transcription complete');
+      }
+      setActiveVoiceField(null);
+    },
+    onError: (error) => {
+      toast.error(`Voice transcription failed: ${error}`);
+      setActiveVoiceField(null);
+    },
+  });
+
+  // Start voice input for a prescription field
+  const startPrescriptionVoice = useCallback(
+    async (prescriptionId: string, field: 'medication' | 'dosage' | 'instructions') => {
+      setActiveVoiceField({ type: 'prescription', prescriptionId, field });
+      await startFieldRecording();
+    },
+    [startFieldRecording]
+  );
+
+  // Start voice input for clinical notes
+  const startClinicalNotesVoice = useCallback(async () => {
+    setActiveVoiceField({ type: 'clinicalNotes' });
+    await startFieldRecording();
+  }, [startFieldRecording]);
+
+  // Stop voice recording
+  const stopVoiceInput = useCallback(async () => {
+    await stopFieldRecording();
+  }, [stopFieldRecording]);
+
+  // Cancel voice recording
+  const cancelVoiceInput = useCallback(() => {
+    cancelFieldRecording();
+    setActiveVoiceField(null);
+  }, [cancelFieldRecording]);
+
+  // Check if a prescription field is recording
+  const isPrescriptionFieldRecording = useCallback(
+    (prescriptionId: string, field: 'medication' | 'dosage' | 'instructions') => {
+      return (
+        isRecordingField &&
+        activeVoiceField?.type === 'prescription' &&
+        activeVoiceField?.prescriptionId === prescriptionId &&
+        activeVoiceField?.field === field
+      );
+    },
+    [isRecordingField, activeVoiceField]
+  );
+
+  // Check if a prescription field is processing
+  const isPrescriptionFieldProcessing = useCallback(
+    (prescriptionId: string, field: 'medication' | 'dosage' | 'instructions') => {
+      return (
+        isProcessingField &&
+        activeVoiceField?.type === 'prescription' &&
+        activeVoiceField?.prescriptionId === prescriptionId &&
+        activeVoiceField?.field === field
+      );
+    },
+    [isProcessingField, activeVoiceField]
+  );
+
+  // Check if clinical notes is recording
+  const isClinicalNotesRecording = isRecordingField && activeVoiceField?.type === 'clinicalNotes';
+  const isClinicalNotesProcessing = isProcessingField && activeVoiceField?.type === 'clinicalNotes';
 
   const [selectedDiagnoses, setSelectedDiagnoses] = useState<Diagnosis[]>([]);
   // Insurance Coding State
@@ -1941,28 +2046,118 @@ export default function Consultation() {
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Medication Name</label>
-                  <input
-                    type="text"
-                    value={rx.medication}
-                    onChange={(e) => updatePrescription(rx.id, 'medication', e.target.value)}
-                    placeholder="e.g., Amoxicillin"
-                    className={clsx(
-                      "w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500",
-                      allergyConflicts.some(c => c.medication.toLowerCase() === rx.medication.toLowerCase())
-                        ? "border-red-500 bg-red-50"
-                        : "border-gray-300"
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={rx.medication}
+                      onChange={(e) => updatePrescription(rx.id, 'medication', e.target.value)}
+                      placeholder="e.g., Amoxicillin"
+                      className={clsx(
+                        "flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500",
+                        isPrescriptionFieldRecording(rx.id, 'medication')
+                          ? "border-red-400 bg-red-50"
+                          : allergyConflicts.some(c => c.medication.toLowerCase() === rx.medication.toLowerCase())
+                          ? "border-red-500 bg-red-50"
+                          : "border-gray-300"
+                      )}
+                    />
+                    {isPrescriptionFieldRecording(rx.id, 'medication') ? (
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={cancelVoiceInput}
+                          className="px-2 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100"
+                          title="Cancel"
+                        >
+                          <XMarkIcon className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={stopVoiceInput}
+                          className="px-2 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 flex items-center gap-1"
+                          title="Stop & Transcribe"
+                        >
+                          <StopIcon className="h-4 w-4" />
+                          <span className="text-xs">{formatDuration(fieldRecordingDuration)}</span>
+                        </button>
+                      </div>
+                    ) : isPrescriptionFieldProcessing(rx.id, 'medication') ? (
+                      <button type="button" disabled className="px-2 py-2 rounded-lg bg-blue-100 text-blue-600">
+                        <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => startPrescriptionVoice(rx.id, 'medication')}
+                        disabled={whisperAvailable === false || isRecordingField || isProcessingField || isRecordingChiefComplaint || isProcessingVoice}
+                        className={clsx(
+                          "px-2 py-2 rounded-lg transition-colors",
+                          whisperAvailable === false || isRecordingField || isProcessingField || isRecordingChiefComplaint || isProcessingVoice
+                            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                            : "bg-blue-500 text-white hover:bg-blue-600"
+                        )}
+                        title={whisperAvailable === false ? "Voice input unavailable" : "Voice input"}
+                      >
+                        <MicrophoneIcon className="h-4 w-4" />
+                      </button>
                     )}
-                  />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Dosage</label>
-                  <input
-                    type="text"
-                    value={rx.dosage}
-                    onChange={(e) => updatePrescription(rx.id, 'dosage', e.target.value)}
-                    placeholder="e.g., 500mg"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={rx.dosage}
+                      onChange={(e) => updatePrescription(rx.id, 'dosage', e.target.value)}
+                      placeholder="e.g., 500mg"
+                      className={clsx(
+                        "flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500",
+                        isPrescriptionFieldRecording(rx.id, 'dosage')
+                          ? "border-red-400 bg-red-50"
+                          : "border-gray-300"
+                      )}
+                    />
+                    {isPrescriptionFieldRecording(rx.id, 'dosage') ? (
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={cancelVoiceInput}
+                          className="px-2 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100"
+                          title="Cancel"
+                        >
+                          <XMarkIcon className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={stopVoiceInput}
+                          className="px-2 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 flex items-center gap-1"
+                          title="Stop & Transcribe"
+                        >
+                          <StopIcon className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : isPrescriptionFieldProcessing(rx.id, 'dosage') ? (
+                      <button type="button" disabled className="px-2 py-2 rounded-lg bg-blue-100 text-blue-600">
+                        <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => startPrescriptionVoice(rx.id, 'dosage')}
+                        disabled={whisperAvailable === false || isRecordingField || isProcessingField || isRecordingChiefComplaint || isProcessingVoice}
+                        className={clsx(
+                          "px-2 py-2 rounded-lg transition-colors",
+                          whisperAvailable === false || isRecordingField || isProcessingField || isRecordingChiefComplaint || isProcessingVoice
+                            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                            : "bg-blue-500 text-white hover:bg-blue-600"
+                        )}
+                        title={whisperAvailable === false ? "Voice input unavailable" : "Voice input"}
+                      >
+                        <MicrophoneIcon className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Route</label>
@@ -2000,13 +2195,59 @@ export default function Consultation() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Special Instructions</label>
-                  <input
-                    type="text"
-                    value={rx.instructions}
-                    onChange={(e) => updatePrescription(rx.id, 'instructions', e.target.value)}
-                    placeholder="e.g., Take with food"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={rx.instructions}
+                      onChange={(e) => updatePrescription(rx.id, 'instructions', e.target.value)}
+                      placeholder="e.g., Take with food"
+                      className={clsx(
+                        "flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500",
+                        isPrescriptionFieldRecording(rx.id, 'instructions')
+                          ? "border-red-400 bg-red-50"
+                          : "border-gray-300"
+                      )}
+                    />
+                    {isPrescriptionFieldRecording(rx.id, 'instructions') ? (
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={cancelVoiceInput}
+                          className="px-2 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100"
+                          title="Cancel"
+                        >
+                          <XMarkIcon className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={stopVoiceInput}
+                          className="px-2 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 flex items-center gap-1"
+                          title="Stop & Transcribe"
+                        >
+                          <StopIcon className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : isPrescriptionFieldProcessing(rx.id, 'instructions') ? (
+                      <button type="button" disabled className="px-2 py-2 rounded-lg bg-blue-100 text-blue-600">
+                        <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => startPrescriptionVoice(rx.id, 'instructions')}
+                        disabled={whisperAvailable === false || isRecordingField || isProcessingField || isRecordingChiefComplaint || isProcessingVoice}
+                        className={clsx(
+                          "px-2 py-2 rounded-lg transition-colors",
+                          whisperAvailable === false || isRecordingField || isProcessingField || isRecordingChiefComplaint || isProcessingVoice
+                            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                            : "bg-blue-500 text-white hover:bg-blue-600"
+                        )}
+                        title={whisperAvailable === false ? "Voice input unavailable" : "Voice input"}
+                      >
+                        <MicrophoneIcon className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -2057,14 +2298,96 @@ export default function Consultation() {
     <div className="space-y-6">
       {/* Clinical Notes */}
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Clinical Notes</h3>
-        <textarea
-          value={clinicalNotes}
-          onChange={(e) => setClinicalNotes(e.target.value)}
-          placeholder="Enter additional clinical observations and notes..."
-          rows={4}
-          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 resize-none"
-        />
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Clinical Notes</h3>
+          {whisperAvailable === true && !isClinicalNotesRecording && !isClinicalNotesProcessing && (
+            <span className="text-xs text-green-600 flex items-center gap-1 bg-green-50 px-2 py-1 rounded-full">
+              <MicrophoneIcon className="h-3 w-3" />
+              Voice ready
+            </span>
+          )}
+        </div>
+
+        {/* Recording indicator */}
+        {isClinicalNotesRecording && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="flex h-3 w-3 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                </span>
+                <div>
+                  <p className="font-medium text-red-700">Recording...</p>
+                  <p className="text-sm text-red-600">{formatDuration(fieldRecordingDuration)} / 0:30</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={cancelVoiceInput}
+                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={stopVoiceInput}
+                  className="px-3 py-1.5 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600 flex items-center gap-1"
+                >
+                  <StopIcon className="h-4 w-4" />
+                  Stop & Transcribe
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Processing indicator */}
+        {isClinicalNotesProcessing && (
+          <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+            <div className="flex items-center gap-3">
+              <ArrowPathIcon className="h-5 w-5 text-blue-500 animate-spin" />
+              <div>
+                <p className="font-medium text-blue-700">Transcribing with Whisper AI...</p>
+                <p className="text-sm text-blue-600">Converting your speech to text</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="relative">
+          <textarea
+            value={clinicalNotes}
+            onChange={(e) => setClinicalNotes(e.target.value)}
+            placeholder="Enter additional clinical observations and notes..."
+            rows={4}
+            className={clsx(
+              "w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 resize-none pr-12",
+              isClinicalNotesRecording
+                ? "border-red-400 bg-red-50"
+                : "border-gray-300"
+            )}
+          />
+          {/* Mic button */}
+          {!isClinicalNotesRecording && !isClinicalNotesProcessing && (
+            <button
+              type="button"
+              onClick={startClinicalNotesVoice}
+              disabled={whisperAvailable === false || isRecordingField || isProcessingField || isRecordingChiefComplaint || isProcessingVoice}
+              className={clsx(
+                "absolute right-3 top-3 p-2 rounded-lg transition-colors",
+                whisperAvailable === false || isRecordingField || isProcessingField || isRecordingChiefComplaint || isProcessingVoice
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  : "bg-blue-500 text-white hover:bg-blue-600"
+              )}
+              title={whisperAvailable === false ? "Voice input unavailable" : "Voice input"}
+            >
+              <MicrophoneIcon className="h-5 w-5" />
+            </button>
+          )}
+        </div>
+        <p className="mt-2 text-xs text-gray-500">
+          Click the microphone button to record voice input, or type directly.
+        </p>
       </div>
 
       {/* AI SOAP Notes Generator */}
