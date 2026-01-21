@@ -4,6 +4,7 @@ import { CreateDoctorDto, SearchParams } from '../types';
 import { NotFoundError, ConflictError, AppError, ValidationError } from '../middleware/errorHandler';
 import { DayOfWeek, AbsenceStatus, AbsenceType } from '@prisma/client';
 import { slotService } from './slotService';
+import { notificationService } from './notificationService';
 
 export interface CreateAbsenceDto {
   startDate: string;
@@ -354,10 +355,49 @@ export class DoctorService {
   }[]) {
     const doctor = await prisma.doctor.findFirst({
       where: { id: doctorId, user: { hospitalId } },
+      include: { user: { select: { firstName: true, lastName: true } } },
     });
 
     if (!doctor) {
       throw new NotFoundError('Doctor not found');
+    }
+
+    // Build a map of new schedule hours by day
+    const dayToHours = new Map<string, { start: string; end: string; active: boolean }>();
+    const dayNames = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+    for (const s of schedules) {
+      dayToHours.set(s.dayOfWeek, { start: s.startTime, end: s.endTime, active: s.isActive });
+    }
+
+    // Find future appointments that may be affected
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const futureAppointments = await prisma.appointment.findMany({
+      where: {
+        doctorId,
+        hospitalId,
+        appointmentDate: { gte: today },
+        status: { in: ['SCHEDULED', 'CONFIRMED'] },
+      },
+      include: {
+        patient: { select: { id: true, firstName: true, lastName: true, oderId: true } },
+      },
+    });
+
+    // Check which appointments fall outside new schedule
+    const affectedAppointments: typeof futureAppointments = [];
+    for (const appt of futureAppointments) {
+      const dayOfWeek = dayNames[appt.appointmentDate.getDay()];
+      const hours = dayToHours.get(dayOfWeek);
+
+      if (!hours || !hours.active) {
+        // Doctor no longer works on this day
+        affectedAppointments.push(appt);
+      } else if (appt.startTime < hours.start || appt.endTime > hours.end) {
+        // Appointment time outside new working hours
+        affectedAppointments.push(appt);
+      }
     }
 
     // Delete existing schedules and create new ones
@@ -384,7 +424,41 @@ export class DoctorService {
       console.error('Failed to regenerate slots after schedule update:', err);
     });
 
-    return updatedSchedules;
+    // Notify affected patients about schedule change
+    if (affectedAppointments.length > 0) {
+      const doctorName = `Dr. ${doctor.user.firstName} ${doctor.user.lastName}`;
+
+      for (const appt of affectedAppointments) {
+        try {
+          if (appt.patient.oderId) {
+            await notificationService.sendNotification(
+              appt.patient.oderId,
+              'APPOINTMENT',
+              {
+                title: 'Schedule Change - Action Required',
+                message: `${doctorName}'s schedule has changed. Your appointment on ${appt.appointmentDate.toISOString().split('T')[0]} at ${appt.startTime} may need to be rescheduled. Please contact us or rebook online.`,
+                priority: 'high',
+                metadata: {
+                  appointmentId: appt.id,
+                  type: 'SCHEDULE_CHANGE',
+                  requiresReschedule: true,
+                },
+              },
+              ['sms', 'in_app']
+            );
+          }
+        } catch (error) {
+          console.error(`Failed to notify patient ${appt.patientId} of schedule change:`, error);
+        }
+      }
+
+      console.log(`[SCHEDULE] ${affectedAppointments.length} appointments affected by schedule change for doctor ${doctorId}`);
+    }
+
+    return {
+      schedules: updatedSchedules,
+      affectedAppointments: affectedAppointments.length,
+    };
   }
 
   async getSchedule(doctorId: string, hospitalId: string) {
@@ -598,27 +672,60 @@ export class DoctorService {
       data.endTime
     );
 
-    // Create notifications for affected patients
+    // Handle affected appointments
     const notifiedPatients: string[] = [];
+    const cancelledAppointments: string[] = [];
+    const isEmergency = data.absenceType === 'EMERGENCY';
+
     if (affectedAppointments.length > 0) {
       const doctorName = affectedAppointments[0]?.doctor?.user
         ? `Dr. ${affectedAppointments[0].doctor.user.firstName} ${affectedAppointments[0].doctor.user.lastName}`
         : 'Your doctor';
 
       for (const appointment of affectedAppointments) {
+        // For emergency leave, auto-cancel appointments and release slots
+        if (isEmergency) {
+          try {
+            await prisma.appointment.update({
+              where: { id: appointment.id },
+              data: {
+                status: 'CANCELLED',
+                notes: `${appointment.notes || ''}\nAuto-cancelled due to doctor emergency leave`.trim(),
+              },
+            });
+
+            // Release the slot
+            await slotService.releaseSlot(appointment.id);
+            cancelledAppointments.push(appointment.id);
+          } catch (error) {
+            console.error('Failed to cancel appointment:', appointment.id, error);
+          }
+        }
+
+        // Create notification for patient
         if (appointment.patient?.oderId) {
           try {
+            const notificationTitle = isEmergency
+              ? 'Appointment Cancelled - Doctor Emergency'
+              : 'Appointment Affected by Doctor Absence';
+
+            const notificationMessage = isEmergency
+              ? `Your appointment with ${doctorName} on ${new Date(appointment.appointmentDate).toLocaleDateString()} at ${appointment.startTime} has been cancelled due to an emergency. Please rebook at your earliest convenience.`
+              : `${doctorName} will be unavailable on ${new Date(appointment.appointmentDate).toLocaleDateString()}. Please reschedule your appointment scheduled for ${appointment.startTime}.`;
+
             await prisma.notification.create({
               data: {
                 userId: appointment.patient.oderId,
                 type: 'APPOINTMENT',
-                title: 'Appointment Affected by Doctor Absence',
-                message: `${doctorName} will be unavailable on ${new Date(appointment.appointmentDate).toLocaleDateString()}. Please reschedule your appointment scheduled for ${appointment.startTime}.`,
+                title: notificationTitle,
+                message: notificationMessage,
                 data: JSON.stringify({
                   appointmentId: appointment.id,
                   absenceId: absence.id,
                   doctorId,
                   originalDate: appointment.appointmentDate,
+                  wasCancelled: isEmergency,
+                  priority: isEmergency ? 'HIGH' : 'NORMAL',
                 }),
               },
             });
@@ -630,10 +737,13 @@ export class DoctorService {
       }
     }
 
+    console.log(`[ABSENCE] Created ${isEmergency ? 'EMERGENCY' : 'regular'} absence for doctor ${doctorId}. Affected: ${affectedAppointments.length}, Cancelled: ${cancelledAppointments.length}, Notified: ${notifiedPatients.length}`);
+
     return {
       ...absence,
       blockedSlots,
       affectedAppointments: affectedAppointments.length,
+      cancelledAppointments: cancelledAppointments.length,
       notifiedPatients: notifiedPatients.length,
       affectedAppointmentDetails: affectedAppointments.map((apt) => ({
         id: apt.id,
@@ -641,6 +751,7 @@ export class DoctorService {
         time: apt.startTime,
         patientName: apt.patient ? `${apt.patient.firstName} ${apt.patient.lastName}` : 'Unknown',
         patientPhone: apt.patient?.phone,
+        wasCancelled: cancelledAppointments.includes(apt.id),
       })),
     };
   }

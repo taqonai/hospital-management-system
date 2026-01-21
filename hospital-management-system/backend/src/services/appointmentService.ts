@@ -635,7 +635,7 @@ export class AppointmentService {
       // Don't fail cancellation if slot release fails
     }
 
-    // Send cancellation notification
+    // Send cancellation notification to patient
     try {
       await notificationService.sendAppointmentNotification(
         {
@@ -653,7 +653,31 @@ export class AppointmentService {
       );
     } catch (error) {
       console.error('Failed to send cancellation notification:', error);
-      // Don't fail the cancellation if notification fails
+    }
+
+    // Notify doctor of cancellation (especially for last-minute cancellations)
+    try {
+      const hoursUntilAppointment = (appointment.appointmentDate.getTime() - Date.now()) / (1000 * 60 * 60);
+      const isLastMinute = hoursUntilAppointment <= 24 && hoursUntilAppointment >= 0;
+
+      await notificationService.sendNotification(
+        appointment.doctor.userId,
+        'APPOINTMENT',
+        {
+          title: isLastMinute ? 'Last-Minute Cancellation' : 'Appointment Cancelled',
+          message: `${appointment.patient.firstName} ${appointment.patient.lastName} cancelled their ${appointment.startTime} appointment on ${appointment.appointmentDate.toISOString().split('T')[0]}${reason ? `. Reason: ${reason}` : ''}`,
+          priority: isLastMinute ? 'high' : 'normal',
+          metadata: {
+            appointmentId: appointment.id,
+            patientId: appointment.patientId,
+            type: 'CANCELLATION',
+            isLastMinute,
+          },
+        },
+        ['in_app']
+      );
+    } catch (error) {
+      console.error('Failed to notify doctor of cancellation:', error);
     }
 
     return updated;

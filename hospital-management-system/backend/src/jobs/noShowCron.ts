@@ -1,7 +1,8 @@
 import cron from 'node-cron';
 import { noShowService } from '../services/noShowService';
 import { prisma } from '../config/database';
-import { notificationService, NotificationType, NotificationChannel } from '../services/notificationService';
+import { NotificationType } from '@prisma/client';
+import { notificationService, NotificationChannel } from '../services/notificationService';
 
 /**
  * NO_SHOW Cron Job
@@ -18,18 +19,30 @@ import { notificationService, NotificationType, NotificationChannel } from '../s
  */
 
 const JOB_NAME = 'NO_SHOW_CHECK';
+const PROCESSING_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes max processing time
 let isProcessing = false;
+let processingStartTime: number | null = null;
 let lastRunTime: Date | null = null;
 let lastRunStatus: 'success' | 'error' | null = null;
 let consecutiveFailures = 0;
 
 const processNoShows = async (source: 'cron' | 'manual' | 'external' = 'cron') => {
-  if (isProcessing) {
-    console.log('[CRON] NO_SHOW processing already in progress, skipping...');
-    return { skipped: true, reason: 'already_processing' };
+  // Check for stuck processing (timeout protection)
+  if (isProcessing && processingStartTime) {
+    const elapsed = Date.now() - processingStartTime;
+    if (elapsed > PROCESSING_TIMEOUT_MS) {
+      console.error(`[CRON] Previous run stuck for ${Math.round(elapsed / 1000)}s, resetting flag...`);
+      isProcessing = false;
+      processingStartTime = null;
+      consecutiveFailures++;
+    } else {
+      console.log('[CRON] NO_SHOW processing already in progress, skipping...');
+      return { skipped: true, reason: 'already_processing' };
+    }
   }
 
   isProcessing = true;
+  processingStartTime = Date.now();
   const startTime = Date.now();
   let runId: string | null = null;
 
@@ -155,6 +168,7 @@ const processNoShows = async (source: 'cron' | 'manual' | 'external' = 'cron') =
     };
   } finally {
     isProcessing = false;
+    processingStartTime = null;
   }
 };
 
