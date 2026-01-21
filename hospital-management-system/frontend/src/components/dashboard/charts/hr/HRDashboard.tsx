@@ -53,15 +53,16 @@ export default function HRDashboard() {
     }],
   };
 
-  // Employee type distribution
-  const typeData = {
-    labels: dashboardStats?.typeDistribution?.map((t: any) => t.type) || ['Doctors', 'Nurses', 'Staff'],
+  // Employee type distribution - only create when API data is available
+  const hasTypeData = dashboardStats?.typeDistribution && dashboardStats.typeDistribution.length > 0;
+  const typeData = hasTypeData ? {
+    labels: dashboardStats.typeDistribution.map((t: any) => t.type),
     datasets: [{
-      data: dashboardStats?.typeDistribution?.map((t: any) => t.count) || [0, 0, 0],
+      data: dashboardStats.typeDistribution.map((t: any) => t.count),
       backgroundColor: [chartColors.primary.main, chartColors.pink.main, chartColors.cyan.main],
       borderWidth: 0,
     }],
-  };
+  } : null;
 
   return (
     <div className="space-y-6">
@@ -134,7 +135,14 @@ export default function HRDashboard() {
           isLoading={isLoading}
           height="h-64"
         >
-          <Doughnut data={typeData} options={doughnutChartOptions} />
+          {typeData ? (
+            <Doughnut data={typeData} options={doughnutChartOptions} />
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-gray-400">
+              <UserGroupIcon className="h-12 w-12 mb-2" />
+              <p className="text-sm">No employee type data available</p>
+            </div>
+          )}
         </ChartCard>
       </div>
 

@@ -21,15 +21,16 @@ export default function RadiologyDashboard() {
     isLoading,
   } = useRadiologyDashboard();
 
-  // Modality distribution chart
-  const modalityData = {
-    labels: radiologyStats?.byModality?.map((m: any) => m.modality) || ['X-Ray', 'CT', 'MRI', 'Ultrasound'],
+  // Modality distribution chart - only create when API data is available
+  const hasModalityData = radiologyStats?.byModality && radiologyStats.byModality.length > 0;
+  const modalityData = hasModalityData ? {
+    labels: radiologyStats.byModality.map((m: any) => m.modality),
     datasets: [{
-      data: radiologyStats?.byModality?.map((m: any) => m.count) || [0, 0, 0, 0],
+      data: radiologyStats.byModality.map((m: any) => m.count),
       backgroundColor: chartColorPalette,
       borderWidth: 0,
     }],
-  };
+  } : null;
 
   const getPriorityBadge = (priority: string) => {
     switch (priority?.toUpperCase()) {
@@ -87,7 +88,14 @@ export default function RadiologyDashboard() {
           isLoading={isLoading}
           height="h-64"
         >
-          <Doughnut data={modalityData} options={doughnutChartOptions} />
+          {modalityData ? (
+            <Doughnut data={modalityData} options={doughnutChartOptions} />
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-gray-400">
+              <PhotoIcon className="h-12 w-12 mb-2" />
+              <p className="text-sm">No modality data available</p>
+            </div>
+          )}
         </ChartCard>
 
         {/* Worklist */}
