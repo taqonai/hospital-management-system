@@ -18,37 +18,6 @@ const validateUUID = (id: string, field: string) => {
 };
 
 /**
- * POST /no-show/:appointmentId
- * Manually mark an appointment as NO_SHOW
- */
-router.post(
-  '/:appointmentId',
-  authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR', 'RECEPTIONIST', 'NURSE'),
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    validateUUID(req.params.appointmentId, 'appointmentId');
-
-    const { reason, notes } = req.body;
-
-    // Validate reason
-    const validReasons = ['MANUAL_STAFF', 'MANUAL_DOCTOR', 'PATIENT_CALLED'];
-    if (!reason || !validReasons.includes(reason)) {
-      throw new ValidationError(`reason must be one of: ${validReasons.join(', ')}`);
-    }
-
-    const result = await noShowService.manualNoShow(
-      req.params.appointmentId,
-      req.user!.hospitalId,
-      req.user!.userId,
-      reason,
-      notes
-    );
-
-    sendSuccess(res, result, 'Appointment marked as NO_SHOW');
-  })
-);
-
-/**
  * GET /no-show/logs
  * Get NO_SHOW logs for reporting
  */
@@ -201,6 +170,38 @@ router.post(
 
     const result = await externalTriggerNoShowCheck();
     sendSuccess(res, result, 'External NO_SHOW check triggered');
+  })
+);
+
+/**
+ * POST /no-show/:appointmentId
+ * Manually mark an appointment as NO_SHOW
+ * NOTE: This wildcard route MUST be last to avoid matching specific routes
+ */
+router.post(
+  '/:appointmentId',
+  authenticate,
+  authorize('HOSPITAL_ADMIN', 'DOCTOR', 'RECEPTIONIST', 'NURSE'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    validateUUID(req.params.appointmentId, 'appointmentId');
+
+    const { reason, notes } = req.body;
+
+    // Validate reason
+    const validReasons = ['MANUAL_STAFF', 'MANUAL_DOCTOR', 'PATIENT_CALLED'];
+    if (!reason || !validReasons.includes(reason)) {
+      throw new ValidationError(`reason must be one of: ${validReasons.join(', ')}`);
+    }
+
+    const result = await noShowService.manualNoShow(
+      req.params.appointmentId,
+      req.user!.hospitalId,
+      req.user!.userId,
+      reason,
+      notes
+    );
+
+    sendSuccess(res, result, 'Appointment marked as NO_SHOW');
   })
 );
 
