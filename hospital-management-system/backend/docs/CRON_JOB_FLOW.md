@@ -10,7 +10,8 @@
 7. [Timeline Example](#7-timeline-example)
 8. [API Endpoints](#8-api-endpoints-summary)
 9. [Failure Recovery](#9-failure-recovery-flow)
-10. [Summary](#10-summary)
+10. [Edge Case Handling](#10-edge-case-handling)
+11. [Summary](#11-summary)
 
 ---
 
@@ -683,25 +684,404 @@ Time        Event                                    System Action
 
 ---
 
-## 10. Summary
+## 10. Edge Case Handling
+
+This section documents how the system handles various edge cases that can affect appointment slots and scheduling.
+
+### 10.1 Cron Job Stuck Processing (Timeout Protection)
+
+**File:** `backend/src/jobs/noShowCron.ts`
+
+**Problem:** If a cron job run hangs due to database issues or network problems, subsequent runs would be skipped indefinitely (due to `isProcessing` flag).
+
+**Solution:** Added 5-minute timeout mechanism that automatically resets the processing flag.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         Timeout Protection Flow                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     ▼
+                   ┌─────────────────────────────────┐
+                   │  Cron job triggered (every 5m)  │
+                   └─────────────────────────────────┘
+                                     │
+                                     ▼
+                   ┌─────────────────────────────────┐
+                   │  Check: isProcessing == true?   │
+                   └─────────────────────────────────┘
+                                     │
+                        ┌────────────┴────────────┐
+                       Yes                        No
+                        │                          │
+                        ▼                          ▼
+          ┌──────────────────────────┐    ┌─────────────────┐
+          │  Calculate elapsed time:  │    │ Proceed with    │
+          │  elapsed = now - startTime│    │ normal execution│
+          └──────────────────────────┘    └─────────────────┘
+                        │
+                        ▼
+          ┌──────────────────────────┐
+          │  Is elapsed > 5 minutes? │
+          └──────────────────────────┘
+                        │
+               ┌────────┴────────┐
+              Yes               No
+               │                 │
+               ▼                 ▼
+    ┌───────────────────┐  ┌───────────────────┐
+    │ TIMEOUT DETECTED: │  │ Skip: "Already    │
+    │ • Reset isProcessing│  │ processing"      │
+    │ • Reset startTime   │  │                   │
+    │ • consecutiveFailures++│  └───────────────────┘
+    │ • Log error         │
+    │ • Continue execution│
+    └───────────────────┘
+```
+
+**Example Scenario:**
+```
+Time        Event                                    System Action
+────────────────────────────────────────────────────────────────────────────────
+09:00       Cron run starts                          isProcessing = true
+                                                     processingStartTime = 09:00
+
+09:01       Database connection hangs                Query stuck waiting
+
+09:05       Next cron triggered                      Check: isProcessing = true
+            (processing for 5 min)                   Elapsed = 5 min
+                                                     SKIP: "Already processing"
+
+09:10       Next cron triggered                      Check: isProcessing = true
+            (processing for 10 min)                  Elapsed = 10 min > 5 min TIMEOUT!
+                                                     Reset flags, continue execution
+                                                     consecutiveFailures++
+```
+
+---
+
+### 10.2 Patient Cancels Last Minute
+
+**File:** `backend/src/services/appointmentService.ts`
+
+**Problem:** When a patient cancels within 24 hours of their appointment, the doctor may have blocked their schedule for that slot and needs to know immediately.
+
+**Solution:** Added doctor notification with last-minute flag detection.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    Patient Cancellation Flow                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     ▼
+                   ┌─────────────────────────────────┐
+                   │  Patient calls cancelAppointment│
+                   └─────────────────────────────────┘
+                                     │
+                                     ▼
+                   ┌─────────────────────────────────┐
+                   │  Update: status = CANCELLED     │
+                   │  Release slot (if applicable)   │
+                   └─────────────────────────────────┘
+                                     │
+                                     ▼
+                   ┌─────────────────────────────────┐
+                   │  Calculate hours until appt:    │
+                   │  hoursUntil = (apptDate - now)  │
+                   │              / (1000 * 60 * 60) │
+                   └─────────────────────────────────┘
+                                     │
+                                     ▼
+                   ┌─────────────────────────────────┐
+                   │  Is hoursUntil <= 24 hours      │
+                   │  AND hoursUntil >= 0?           │
+                   └─────────────────────────────────┘
+                                     │
+                        ┌────────────┴────────────┐
+                       Yes                        No
+                   (Last-minute)              (Advance notice)
+                        │                         │
+                        ▼                         ▼
+          ┌──────────────────────────┐  ┌──────────────────────────┐
+          │ Send HIGH priority       │  │ Send NORMAL priority     │
+          │ notification to doctor:  │  │ notification to doctor:  │
+          │                          │  │                          │
+          │ Title: "Last-Minute      │  │ Title: "Appointment      │
+          │         Cancellation"    │  │         Cancelled"       │
+          │                          │  │                          │
+          │ metadata.isLastMinute    │  │ metadata.isLastMinute    │
+          │ = true                   │  │ = false                  │
+          └──────────────────────────┘  └──────────────────────────┘
+```
+
+**Example Scenario:**
+```
+Time        Event                                    System Action
+────────────────────────────────────────────────────────────────────────────────
+Day 1
+10:00       Patient books appointment                Appointment created
+            for Day 2 at 09:00                       Slot booked
+
+Day 2
+07:30       Patient cancels (1.5 hours before)       • status = CANCELLED
+            "Emergency came up"                      • Slot released
+                                                     • hoursUntil = 1.5 (< 24)
+                                                     • isLastMinute = true
+
+            Doctor receives notification:            [HIGH PRIORITY]
+            "Last-Minute Cancellation               Title: Last-Minute Cancellation
+             John Smith cancelled their              Message: John Smith cancelled
+             09:00 appointment on Jan 22"            their 09:00 appointment...
+```
+
+---
+
+### 10.3 Doctor Takes Emergency Leave
+
+**File:** `backend/src/services/doctorService.ts`
+
+**Problem:** When a doctor takes emergency leave (e.g., personal emergency, sudden illness), patients with existing appointments need to be notified and slots should be released.
+
+**Solution:** Auto-cancel appointments when absence type is `EMERGENCY` and notify affected patients.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    Emergency Leave Flow                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     ▼
+                   ┌─────────────────────────────────┐
+                   │  Admin creates doctor absence   │
+                   │  type = 'EMERGENCY'             │
+                   │  dates = Jan 22 - Jan 24        │
+                   └─────────────────────────────────┘
+                                     │
+                                     ▼
+                   ┌─────────────────────────────────┐
+                   │  Query existing appointments    │
+                   │  in date range with status:     │
+                   │  SCHEDULED, CONFIRMED, CHECKED_IN│
+                   └─────────────────────────────────┘
+                                     │
+                                     ▼
+                   ┌─────────────────────────────────┐
+                   │  Is absenceType == 'EMERGENCY'? │
+                   └─────────────────────────────────┘
+                                     │
+                        ┌────────────┴────────────┐
+                       Yes                        No
+                        │                          │
+                        ▼                          ▼
+          ┌──────────────────────────┐  ┌──────────────────────────┐
+          │  For each appointment:   │  │  Only block slots        │
+          │                          │  │  (appointments remain,   │
+          │  1. Update status =      │  │   warn in response)      │
+          │     CANCELLED            │  │                          │
+          │                          │  └──────────────────────────┘
+          │  2. Add note:            │
+          │     "Auto-cancelled due  │
+          │      to doctor emergency │
+          │      leave"              │
+          │                          │
+          │  3. Release slot via     │
+          │     slotService          │
+          │                          │
+          │  4. Create notification  │
+          │     for patient          │
+          └──────────────────────────┘
+                        │
+                        ▼
+          ┌──────────────────────────┐
+          │  Block all slots in      │
+          │  date range              │
+          └──────────────────────────┘
+                        │
+                        ▼
+          ┌──────────────────────────┐
+          │  Return response with:   │
+          │  • absence record        │
+          │  • slotsBlocked count    │
+          │  • cancelledAppointments │
+          │  • patientNotifications  │
+          └──────────────────────────┘
+```
+
+**Example Scenario:**
+```
+Time        Event                                    System Action
+────────────────────────────────────────────────────────────────────────────────
+Day 1
+09:00       3 patients have appointments             Appointments exist:
+            with Dr. Smith on Day 2                  • Patient A - 09:00
+                                                     • Patient B - 10:00
+                                                     • Patient C - 11:00
+
+18:00       Dr. Smith has family emergency           Admin creates absence:
+            Admin marks emergency leave              • type = EMERGENCY
+            for Day 2 - Day 3                        • startDate = Day 2
+                                                     • endDate = Day 3
+
+            System automatically:                    • 3 appointments CANCELLED
+                                                     • Notes updated with reason
+                                                     • 3 slots released
+                                                     • 3 notifications sent
+
+            Patient A receives:                      [HIGH PRIORITY]
+            "Your appointment with Dr. Smith         "Appointment Cancelled -
+             on Jan 22 at 09:00 has been             Doctor Unavailable"
+             cancelled due to doctor
+             unavailability. Please reschedule."
+
+            Response to admin:                       {
+                                                       absence: {...},
+                                                       slotsBlocked: 24,
+                                                       cancelledAppointments: 3,
+                                                       patientNotifications: 3
+                                                     }
+```
+
+---
+
+### 10.4 Doctor Changes Working Hours
+
+**File:** `backend/src/services/doctorService.ts`
+
+**Problem:** When a doctor changes their working hours or available days, existing appointments might fall outside the new schedule.
+
+**Solution:** Detect affected appointments and notify patients when schedule changes impact their bookings.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    Schedule Change Flow                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     ▼
+                   ┌─────────────────────────────────┐
+                   │  Doctor/Admin updates schedule  │
+                   │  (via updateSchedule endpoint)  │
+                   └─────────────────────────────────┘
+                                     │
+                                     ▼
+                   ┌─────────────────────────────────┐
+                   │  Query future appointments      │
+                   │  status: SCHEDULED, CONFIRMED   │
+                   │  appointmentDate >= today       │
+                   └─────────────────────────────────┘
+                                     │
+                                     ▼
+                   ┌─────────────────────────────────┐
+                   │  For each appointment, check:   │
+                   │                                 │
+                   │  1. Is day still available?     │
+                   │     (e.g., Tuesday removed)     │
+                   │                                 │
+                   │  2. Is time still valid?        │
+                   │     (e.g., hours changed)       │
+                   └─────────────────────────────────┘
+                                     │
+                                     ▼
+                   ┌─────────────────────────────────┐
+                   │  Collect affected appointments  │
+                   └─────────────────────────────────┘
+                                     │
+                        ┌────────────┴────────────┐
+                    Has affected               No affected
+                    appointments               appointments
+                        │                          │
+                        ▼                          ▼
+          ┌──────────────────────────┐  ┌──────────────────────────┐
+          │  1. Include warning in   │  │  Update schedule         │
+          │     response             │  │  normally                │
+          │                          │  │                          │
+          │  2. Send notification    │  └──────────────────────────┘
+          │     to each affected     │
+          │     patient              │
+          │                          │
+          │  3. Proceed with         │
+          │     schedule update      │
+          └──────────────────────────┘
+```
+
+**Example Scenario:**
+```
+Time        Event                                    System Action
+────────────────────────────────────────────────────────────────────────────────
+Day 1
+Morning     Patient A books Tuesday 09:00            Appointment created for
+            Patient B books Tuesday 14:00            next Tuesday
+
+Day 2
+Admin       Doctor removes Tuesday from              updateSchedule called with
+            available days                           availableDays without Tuesday
+
+            System checks future appointments:       Query finds:
+                                                     • Patient A - Tuesday 09:00
+                                                     • Patient B - Tuesday 14:00
+
+            Both are affected (Tuesday removed)      affectedAppointments = [
+                                                       { id: ..., date: Tuesday,
+                                                         time: 09:00 },
+                                                       { id: ..., date: Tuesday,
+                                                         time: 14:00 }
+                                                     ]
+
+            Patients receive notifications:          [NORMAL PRIORITY]
+            "Dr. Smith's schedule has changed.       "Schedule Change Notification"
+             Your appointment on Tuesday at          Your appointment may be
+             09:00 may be affected. Please           affected by a schedule change.
+             contact the clinic to confirm           Please contact us to confirm.
+             or reschedule."
+
+            Response includes warning:               {
+                                                       success: true,
+                                                       data: { ...doctor },
+                                                       warning: {
+                                                         message: "2 existing
+                                                           appointments affected",
+                                                         affectedAppointments: [...]
+                                                       }
+                                                     }
+```
+
+---
+
+### Edge Case Summary Table
+
+| Edge Case | Handler Location | Action Taken | Notification |
+|-----------|-----------------|--------------|--------------|
+| Cron stuck > 5 min | `noShowCron.ts` | Reset flags, continue | Admin (3+ failures) |
+| Patient cancels < 24h | `appointmentService.ts` | Release slot | Doctor (high priority) |
+| Patient cancels > 24h | `appointmentService.ts` | Release slot | Doctor (normal priority) |
+| Emergency leave | `doctorService.ts` | Auto-cancel appointments | Patients (high priority) |
+| Planned leave | `doctorService.ts` | Block slots only | Warning in response |
+| Schedule change | `doctorService.ts` | Detect affected | Patients (normal priority) |
+
+---
+
+## 11. Summary
 
 ### Components Overview
 
 | Component | Frequency | Purpose |
 |-----------|-----------|---------|
 | **node-cron** | Every 5 min (7AM-10PM) | Primary NO_SHOW processor |
+| **Timeout Protection** | Every cron run | Reset stuck processing after 5 min |
 | **CloudWatch Lambda** | Every 5 min (24/7) | Backup trigger + health monitoring |
 | **CloudWatch Alarm** | Continuous | Alert if unhealthy for 10 min |
 | **Database Tracking** | Every run | Audit trail + debugging |
 | **Admin Notifications** | On 3+ failures | Internal alerting |
 | **Email Alerts** | On alarm trigger | External alerting |
+| **Cancellation Notifications** | On patient cancel | Alert doctor (high priority if < 24h) |
+| **Emergency Leave Handler** | On absence create | Auto-cancel appointments + notify patients |
 
 ### Key Files
 
 | File | Purpose |
 |------|---------|
-| `backend/src/jobs/noShowCron.ts` | Cron job initialization and execution |
+| `backend/src/jobs/noShowCron.ts` | Cron job initialization, execution, timeout protection |
 | `backend/src/services/noShowService.ts` | NO_SHOW and alert business logic |
+| `backend/src/services/appointmentService.ts` | Appointment CRUD, cancellation notifications |
+| `backend/src/services/doctorService.ts` | Doctor schedule, absence management, emergency handling |
 | `backend/src/routes/noShowRoutes.ts` | API endpoints |
 | `backend/prisma/schema.prisma` | Database models |
 | `infrastructure/terraform/monitoring.tf` | CloudWatch infrastructure |
