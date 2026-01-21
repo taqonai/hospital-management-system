@@ -290,3 +290,257 @@ export interface ApiResponse<T> {
   errors?: any[];
   pagination?: PaginationInfo;
 }
+
+// =============================================================================
+// Dashboard Types
+// =============================================================================
+
+// Executive/Admin Dashboard Types
+export interface ExecutiveSummary {
+  totalPatients: number;
+  todayAppointments: number;
+  todayRevenue: number;
+  bedOccupancy: number;
+  trends: {
+    patients: number;
+    appointments: number;
+    revenue: number;
+    occupancy: number;
+  };
+}
+
+export interface RevenueAnalysis {
+  totalRevenue: number;
+  monthlyTrends: Array<{
+    month: string;
+    billed: number;
+    collected: number;
+  }>;
+  byCategory: Array<{
+    category: string;
+    amount: number;
+    percentage: number;
+  }>;
+}
+
+export interface DepartmentPerformance {
+  departments: Array<{
+    id: string;
+    name: string;
+    appointmentsTotal: number;
+    appointmentsCompleted: number;
+    completionRate: number;
+    avgWaitTime: number;
+    revenue: number;
+  }>;
+}
+
+export interface PatientDemographics {
+  ageDistribution: Array<{
+    range: string;
+    count: number;
+    percentage: number;
+  }>;
+  genderDistribution: Array<{
+    gender: string;
+    count: number;
+    percentage: number;
+  }>;
+  total: number;
+}
+
+export interface BedOccupancy {
+  totalBeds: number;
+  occupiedBeds: number;
+  availableBeds: number;
+  occupancyRate: number;
+  byWard: Array<{
+    wardName: string;
+    total: number;
+    occupied: number;
+    available: number;
+  }>;
+}
+
+// Doctor Dashboard Types
+export interface DoctorDashboardStats {
+  todayAppointments: number;
+  monthlyAppointments: number;
+  totalPatients: number;
+  pendingConsultations: number;
+  completedToday: number;
+  avgConsultationTime: number;
+  upcomingAppointments: Array<{
+    id: string;
+    patientName: string;
+    time: string;
+    type: string;
+    status: string;
+  }>;
+  recentConsultations: Array<{
+    id: string;
+    patientName: string;
+    date: string;
+    diagnosis: string;
+  }>;
+}
+
+// Nurse Dashboard Types
+export interface OPDStats {
+  totalAppointments: number;
+  checkedIn: number;
+  completed: number;
+  noShow: number;
+  waiting: number;
+  inProgress: number;
+  vitalsDone: number;
+  vitalsPerding: number;
+}
+
+export interface DeteriorationDashboard {
+  summary: {
+    totalPatients: number;
+    highRisk: number;
+    vitalsOverdue: number;
+    worsening: number;
+    stable: number;
+    improving: number;
+  };
+  patients: PatientRiskData[];
+}
+
+export interface PatientRiskData {
+  id: string;
+  admissionId: string;
+  patientName: string;
+  mrn: string;
+  ward: string;
+  bedNumber: string;
+  news2Score: number;
+  riskLevel: 'LOW' | 'LOW_MEDIUM' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  trend: 'improving' | 'stable' | 'worsening';
+  lastVitalsTime: string;
+  vitalsOverdue: boolean;
+}
+
+// Receptionist Dashboard Types
+export interface QueueAnalytics {
+  avgWaitTime: number;
+  avgServiceTime: number;
+  peakHour: string;
+  completionRate: number;
+  noShowRate: number;
+  hourlyStats: Array<{
+    hour: string;
+    waiting: number;
+    avgWait: number;
+  }>;
+}
+
+// Marketing Dashboard Types
+export interface CRMLeadStats {
+  totalLeads: number;
+  newLeads: number;
+  contactedLeads: number;
+  qualifiedLeads: number;
+  convertedLeads: number;
+  lostLeads: number;
+  conversionRate: number;
+  bySource: Array<{
+    source: string;
+    count: number;
+    converted: number;
+  }>;
+  byPriority: Array<{
+    priority: string;
+    count: number;
+  }>;
+}
+
+export interface CampaignAnalytics {
+  id: string;
+  name: string;
+  sent: number;
+  delivered: number;
+  opened: number;
+  clicked: number;
+  responded: number;
+  openRate: number;
+  clickRate: number;
+}
+
+// Lab Dashboard Types
+export interface LabStats {
+  totalOrders: number;
+  pendingOrders: number;
+  completedToday: number;
+  criticalResults: number;
+  samplesPending: number;
+  avgTurnaroundTime: number;
+  byStatus: Array<{
+    status: string;
+    count: number;
+  }>;
+}
+
+// Pharmacy Dashboard Types
+export interface PharmacyStats {
+  pendingPrescriptions: number;
+  dispensedToday: number;
+  lowStockCount: number;
+  expiringCount: number;
+  totalDrugs: number;
+  byStatus: Array<{
+    status: string;
+    count: number;
+  }>;
+}
+
+// Radiology Dashboard Types
+export interface RadiologyStats {
+  totalOrders: number;
+  pendingOrders: number;
+  completedToday: number;
+  pendingReports: number;
+  aiAnalyzed: number;
+  byModality: Array<{
+    modality: string;
+    count: number;
+    pending: number;
+  }>;
+}
+
+// HR Dashboard Types
+export interface HRDashboardStats {
+  totalEmployees: number;
+  activeEmployees: number;
+  todayPresent: number;
+  todayAbsent: number;
+  pendingLeaves: number;
+  attendanceRate: number;
+  departmentWise: Array<{
+    department: string;
+    count: number;
+  }>;
+  typeDistribution: Array<{
+    type: string;
+    count: number;
+  }>;
+}
+
+// Billing/Accountant Dashboard Types
+export interface BillingStats {
+  totalRevenue: number;
+  todayRevenue: number;
+  monthRevenue: number;
+  pendingPayments: number;
+  overdueAmount: number;
+  claimsSubmitted: number;
+  claimsDenied: number;
+  collectionRate: number;
+  byPaymentStatus: Array<{
+    status: string;
+    count: number;
+    amount: number;
+  }>;
+}
