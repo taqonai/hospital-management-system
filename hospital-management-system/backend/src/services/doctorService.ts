@@ -557,7 +557,7 @@ export class DoctorService {
             lastName: true,
             email: true,
             phone: true,
-            userId: true,
+            oderId: true, // This links to User for portal notifications
           },
         },
         doctor: {
@@ -606,11 +606,11 @@ export class DoctorService {
         : 'Your doctor';
 
       for (const appointment of affectedAppointments) {
-        if (appointment.patient?.userId) {
+        if (appointment.patient?.oderId) {
           try {
             await prisma.notification.create({
               data: {
-                userId: appointment.patient.userId,
+                userId: appointment.patient.oderId,
                 type: 'APPOINTMENT',
                 title: 'Appointment Affected by Doctor Absence',
                 message: `${doctorName} will be unavailable on ${new Date(appointment.appointmentDate).toLocaleDateString()}. Please reschedule your appointment scheduled for ${appointment.startTime}.`,
