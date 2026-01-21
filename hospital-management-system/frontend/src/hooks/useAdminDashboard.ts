@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { reportsApi, appointmentApi } from '../services/api';
+import { reportsApi, appointmentApi, departmentApi } from '../services/api';
 
 export function useAdminDashboard() {
   // Executive summary
@@ -11,6 +11,39 @@ export function useAdminDashboard() {
     },
     staleTime: 60000, // 1 minute
     refetchInterval: 60000,
+  });
+
+  // Weekly activity (appointments per day)
+  const weeklyActivity = useQuery({
+    queryKey: ['admin', 'weeklyActivity'],
+    queryFn: async () => {
+      const response = await reportsApi.getPatientTrends('daily', 7);
+      return response.data.data;
+    },
+    staleTime: 60000,
+    refetchInterval: 60000,
+  });
+
+  // Today's appointments list
+  const todayAppointments = useQuery({
+    queryKey: ['admin', 'todayAppointments'],
+    queryFn: async () => {
+      const today = new Date().toISOString().split('T')[0];
+      const response = await appointmentApi.getAll({ date: today, limit: 10 });
+      return response.data.data;
+    },
+    staleTime: 30000,
+    refetchInterval: 30000,
+  });
+
+  // Department stats for patient distribution
+  const departmentStats = useQuery({
+    queryKey: ['admin', 'departmentStats'],
+    queryFn: async () => {
+      const response = await departmentApi.getAll();
+      return response.data.data;
+    },
+    staleTime: 300000,
   });
 
   // Patient trends (6 months)
@@ -90,7 +123,8 @@ export function useAdminDashboard() {
     patientTrends.isLoading ||
     revenueTrends.isLoading ||
     departmentPerformance.isLoading ||
-    todayStats.isLoading;
+    todayStats.isLoading ||
+    weeklyActivity.isLoading;
 
   const refetchAll = () => {
     executiveSummary.refetch();
@@ -101,6 +135,9 @@ export function useAdminDashboard() {
     patientDemographics.refetch();
     bedOccupancy.refetch();
     todayStats.refetch();
+    weeklyActivity.refetch();
+    todayAppointments.refetch();
+    departmentStats.refetch();
   };
 
   return {
@@ -112,6 +149,9 @@ export function useAdminDashboard() {
     patientDemographics: patientDemographics.data,
     bedOccupancy: bedOccupancy.data,
     todayStats: todayStats.data,
+    weeklyActivity: weeklyActivity.data,
+    todayAppointments: todayAppointments.data,
+    departmentStats: departmentStats.data,
     isLoading,
     errors: {
       executiveSummary: executiveSummary.error,
@@ -122,6 +162,8 @@ export function useAdminDashboard() {
       patientDemographics: patientDemographics.error,
       bedOccupancy: bedOccupancy.error,
       todayStats: todayStats.error,
+      weeklyActivity: weeklyActivity.error,
+      todayAppointments: todayAppointments.error,
     },
     refetchAll,
   };

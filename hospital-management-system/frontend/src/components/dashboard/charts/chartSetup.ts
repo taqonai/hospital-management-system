@@ -28,7 +28,7 @@ ChartJS.register(
   RadialLinearScale
 );
 
-// Default chart options
+// Default chart options - Modern light theme
 export const defaultChartOptions = {
   responsive: true,
   maintainAspectRatio: false,
@@ -38,18 +38,25 @@ export const defaultChartOptions = {
       position: 'bottom' as const,
       labels: {
         usePointStyle: true,
-        padding: 20,
+        padding: 16,
         font: {
-          size: 12,
+          size: 13,
+          family: "'Inter', 'Segoe UI', sans-serif",
         },
+        color: '#374151',
       },
     },
     tooltip: {
-      backgroundColor: 'rgba(17, 24, 39, 0.9)',
-      titleFont: { size: 13 },
+      backgroundColor: '#ffffff',
+      titleColor: '#111827',
+      bodyColor: '#374151',
+      borderColor: '#e5e7eb',
+      borderWidth: 1,
+      titleFont: { size: 13, weight: 'bold' as const },
       bodyFont: { size: 12 },
       padding: 12,
       cornerRadius: 8,
+      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
     },
   },
 };
@@ -87,7 +94,7 @@ export const lineChartOptions = {
   },
 };
 
-// Bar chart specific options
+// Bar chart specific options - Modern light theme with dotted grid
 export const barChartOptions = {
   ...defaultChartOptions,
   scales: {
@@ -96,17 +103,35 @@ export const barChartOptions = {
         display: false,
       },
       ticks: {
-        font: { size: 11 },
+        font: { size: 12, family: "'Inter', 'Segoe UI', sans-serif" },
+        color: '#6b7280',
+      },
+      border: {
+        display: false,
       },
     },
     y: {
       beginAtZero: true,
       grid: {
-        color: 'rgba(156, 163, 175, 0.1)',
+        color: '#e5e7eb',
+        lineWidth: 1,
+        drawBorder: false,
       },
       ticks: {
-        font: { size: 11 },
+        font: { size: 11, family: "'Inter', 'Segoe UI', sans-serif" },
+        color: '#9ca3af',
+        padding: 8,
       },
+      border: {
+        display: false,
+        dash: [4, 4],
+      },
+    },
+  },
+  plugins: {
+    ...defaultChartOptions.plugins,
+    legend: {
+      display: false,
     },
   },
 };
@@ -122,6 +147,32 @@ export const doughnutChartOptions = {
       position: 'right' as const,
     },
   },
+};
+
+// Pie chart options - Modern design with labels outside
+export const pieChartOptions = {
+  ...defaultChartOptions,
+  plugins: {
+    ...defaultChartOptions.plugins,
+    legend: {
+      display: false,
+    },
+  },
+};
+
+// Modern department colors matching screenshot
+export const departmentColors = {
+  neurology: '#22c55e',    // Green
+  cardiology: '#3b82f6',   // Blue
+  orthopedics: '#f59e0b',  // Orange
+  pediatrics: '#a855f7',   // Purple
+  general: '#ec4899',      // Pink
+};
+
+// Weekly activity colors
+export const weeklyActivityColors = {
+  appointments: '#3b82f6', // Blue
+  completed: '#22c55e',    // Green
 };
 
 // Color palettes
