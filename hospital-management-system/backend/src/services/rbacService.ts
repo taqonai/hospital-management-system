@@ -201,6 +201,12 @@ export const PERMISSIONS = {
   PATIENT_PORTAL_APPOINTMENTS: 'patient_portal:appointments',
   PATIENT_PORTAL_RECORDS: 'patient_portal:records',
   PATIENT_PORTAL_BILLING: 'patient_portal:billing',
+
+  // CRM / Marketing
+  CRM_READ: 'crm:read',
+  CRM_WRITE: 'crm:write',
+  CRM_CAMPAIGNS: 'crm:campaigns',
+  CRM_SURVEYS: 'crm:surveys',
 } as const;
 
 export type Permission = typeof PERMISSIONS[keyof typeof PERMISSIONS];
@@ -528,6 +534,19 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     PERMISSIONS.DIETARY_MEAL_PLANS,
     // IPD
     PERMISSIONS.IPD_ADMISSIONS_READ,
+    // Notifications
+    PERMISSIONS.NOTIFICATIONS_READ,
+  ],
+
+  MARKETING: [
+    // CRM
+    PERMISSIONS.CRM_READ,
+    PERMISSIONS.CRM_WRITE,
+    PERMISSIONS.CRM_CAMPAIGNS,
+    PERMISSIONS.CRM_SURVEYS,
+    // Reports
+    PERMISSIONS.REPORTS_VIEW,
+    PERMISSIONS.REPORTS_EXPORT,
     // Notifications
     PERMISSIONS.NOTIFICATIONS_READ,
   ],
@@ -994,6 +1013,11 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   [PERMISSIONS.PATIENT_PORTAL_APPOINTMENTS]: 'Book appointments via portal',
   [PERMISSIONS.PATIENT_PORTAL_RECORDS]: 'View own medical records',
   [PERMISSIONS.PATIENT_PORTAL_BILLING]: 'View and pay bills online',
+
+  [PERMISSIONS.CRM_READ]: 'View CRM data and contacts',
+  [PERMISSIONS.CRM_WRITE]: 'Create and update CRM records',
+  [PERMISSIONS.CRM_CAMPAIGNS]: 'Manage marketing campaigns',
+  [PERMISSIONS.CRM_SURVEYS]: 'Create and manage surveys',
 };
 
 // ==================== INTERFACES ====================

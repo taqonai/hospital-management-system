@@ -1,6 +1,6 @@
 import prisma from '../config/database';
 import { NotFoundError, AppError } from '../middleware/errorHandler';
-import { LabOrderStatus } from '@prisma/client';
+import { LabOrderStatus, AppointmentType } from '@prisma/client';
 
 /**
  * Patient Portal Service
@@ -36,7 +36,7 @@ export class PatientPortalService {
     const upcomingFilter = {
       patientId,
       hospitalId,
-      status: { in: ['SCHEDULED', 'CONFIRMED'] as const },
+      status: { in: ['SCHEDULED', 'CONFIRMED'] as ('SCHEDULED' | 'CONFIRMED')[] },
       appointmentDate: { gte: startOfToday },
     };
 
@@ -80,7 +80,7 @@ export class PatientPortalService {
         lastName: patient.lastName,
         mrn: patient.mrn,
       },
-      upcomingAppointments: upcomingAppointments.map(apt => ({
+      upcomingAppointments: upcomingAppointments.map((apt: any) => ({
         id: apt.id,
         date: apt.appointmentDate,
         appointmentDate: apt.appointmentDate,
@@ -99,9 +99,9 @@ export class PatientPortalService {
       // Include total count for accurate display on dashboard
       totalUpcomingAppointments,
       nextAppointment: nextAppointment ? {
-        date: nextAppointment.appointmentDate,
-        time: nextAppointment.startTime,
-        doctorName: nextAppointment.doctor ? `Dr. ${nextAppointment.doctor.user.firstName} ${nextAppointment.doctor.user.lastName}` : 'TBD',
+        date: (nextAppointment as any).appointmentDate,
+        time: (nextAppointment as any).startTime,
+        doctorName: (nextAppointment as any).doctor ? `Dr. ${(nextAppointment as any).doctor.user.firstName} ${(nextAppointment as any).doctor.user.lastName}` : 'TBD',
       } : null,
       activePrescriptions,
       pendingLabResults,
@@ -333,7 +333,7 @@ export class PatientPortalService {
           appointmentDate: normalizedDate,
           startTime: data.startTime,
           endTime,
-          type: data.type || 'CONSULTATION',
+          type: (data.type || 'CONSULTATION') as AppointmentType,
           reason: data.reason || 'Patient portal booking',
           status: 'SCHEDULED',
           tokenNumber: nextTokenNumber,
