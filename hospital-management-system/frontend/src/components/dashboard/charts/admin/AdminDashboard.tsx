@@ -5,27 +5,38 @@ import {
   ClockIcon,
   BellAlertIcon,
   BuildingOffice2Icon,
+  ChartPieIcon,
   SparklesIcon,
   BeakerIcon,
   DocumentTextIcon,
   ShieldCheckIcon,
   EyeDropperIcon,
   VideoCameraIcon,
+  ArrowRightIcon,
   BoltIcon,
 } from '@heroicons/react/24/outline';
 import { Bar, Pie } from 'react-chartjs-2';
 import { useAdminDashboard } from '../../../../hooks/useAdminDashboard';
 import KPICard from '../shared/KPICard';
+import OccupancyGauge from '../shared/OccupancyGauge';
+import RevenueTrendsChart from './RevenueTrendsChart';
+import DepartmentPerformanceChart from './DepartmentPerformanceChart';
+import PatientDemographicsChart from './PatientDemographicsChart';
+import AppointmentTrendsChart from '../shared/AppointmentTrendsChart';
 import ChartCard from '../ChartCard';
 import { barChartOptions, pieChartOptions, weeklyActivityColors, departmentColors } from '../chartSetup';
 
 export default function AdminDashboard() {
   const {
     todayStats,
+    patientTrends,
+    revenueTrends,
+    departmentPerformance,
+    patientDemographics,
+    bedOccupancy,
     weeklyActivity,
     departmentStats,
     todayAppointments,
-    bedOccupancy,
     isLoading,
     errors,
     refetchAll,
@@ -40,7 +51,13 @@ export default function AdminDashboard() {
     { name: 'Telemedicine', href: '/telemedicine', icon: VideoCameraIcon, description: 'Virtual consultations', gradient: 'bg-gradient-to-br from-blue-500 to-indigo-600' },
   ];
 
-  // Weekly Activity Chart Data
+  // Format trends data for chart
+  const appointmentTrendsData = patientTrends?.trends?.map((t: any) => ({
+    label: t.period || t.month,
+    value: t.appointments || t.count || 0,
+  })) || [];
+
+  // Weekly Activity Chart Data (NEW)
   const weeklyActivityData = {
     labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
     datasets: [
@@ -63,8 +80,8 @@ export default function AdminDashboard() {
     ],
   };
 
-  // Patient Distribution by Department Pie Chart
-  const departmentDistribution = departmentStats?.departments || [
+  // Patient Distribution by Department Pie Chart (NEW)
+  const departmentDistribution = departmentStats?.departments || departmentStats || [
     { name: 'Neurology', count: 16 },
     { name: 'Cardiology', count: 21 },
     { name: 'Orthopedics', count: 13 },
@@ -161,7 +178,47 @@ export default function AdminDashboard() {
         />
       </div>
 
-      {/* Charts Row - Weekly Activity & Patient Distribution */}
+      {/* Secondary Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="bg-white rounded-xl border border-gray-100 p-4 flex items-center gap-4 shadow-sm">
+          <div className="p-3 rounded-xl bg-indigo-500">
+            <BuildingOffice2Icon className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{bedOccupancy?.occupiedBeds || 0}</p>
+            <p className="text-sm text-gray-500">IPD Patients</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-100 p-4 flex items-center gap-4 shadow-sm">
+          <div className="p-3 rounded-xl bg-emerald-500">
+            <ChartPieIcon className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{bedOccupancy?.occupancyRate?.toFixed(0) || 0}%</p>
+            <p className="text-sm text-gray-500">Bed Occupancy</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-100 p-4 flex items-center gap-4 shadow-sm">
+          <div className="p-3 rounded-xl bg-blue-500">
+            <CalendarDaysIcon className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{todayStats?.weeklyTotal || 0}</p>
+            <p className="text-sm text-gray-500">Weekly Appointments</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-100 p-4 flex items-center gap-4 shadow-sm">
+          <div className="p-3 rounded-xl bg-purple-500">
+            <BuildingOffice2Icon className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{bedOccupancy?.totalBeds || 0}</p>
+            <p className="text-sm text-gray-500">Total Beds</p>
+          </div>
+        </div>
+      </div>
+
+      {/* NEW: Weekly Activity & Patient Distribution Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Weekly Activity Bar Chart */}
         <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
@@ -195,7 +252,7 @@ export default function AdminDashboard() {
               <Pie data={pieChartData} options={pieChartOptions} />
             </div>
             <div className="space-y-3">
-              {departmentDistribution.map((dept: any, index: number) => {
+              {departmentDistribution.slice(0, 5).map((dept: any, index: number) => {
                 const colors = [
                   departmentColors.neurology,
                   departmentColors.cardiology,
@@ -207,7 +264,7 @@ export default function AdminDashboard() {
                   ? Math.round(((dept.count || dept.patientCount || 0) / totalPatients) * 100)
                   : 0;
                 return (
-                  <div key={dept.name} className="flex items-center gap-2">
+                  <div key={dept.name || index} className="flex items-center gap-2">
                     <span
                       className="w-3 h-3 rounded-full"
                       style={{ backgroundColor: colors[index % colors.length] }}
@@ -223,7 +280,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Today's Appointments Table */}
+      {/* NEW: Today's Appointments Table */}
       <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-bold text-gray-900">Today's Appointments</h3>
@@ -286,47 +343,68 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* Secondary Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-gray-100 p-4 flex items-center gap-4 shadow-sm">
-          <div className="p-3 rounded-xl bg-indigo-500">
-            <BuildingOffice2Icon className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-gray-900">{bedOccupancy?.occupiedBeds || 0}</p>
-            <p className="text-sm text-gray-500">IPD Patients</p>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 p-4 flex items-center gap-4 shadow-sm">
-          <div className="p-3 rounded-xl bg-emerald-500">
-            <CheckCircleIcon className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-gray-900">{bedOccupancy?.occupancyRate?.toFixed(0) || 0}%</p>
-            <p className="text-sm text-gray-500">Bed Occupancy</p>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 p-4 flex items-center gap-4 shadow-sm">
-          <div className="p-3 rounded-xl bg-blue-500">
-            <CalendarDaysIcon className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-gray-900">{todayStats?.weeklyTotal || 0}</p>
-            <p className="text-sm text-gray-500">Weekly Appointments</p>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 p-4 flex items-center gap-4 shadow-sm">
-          <div className="p-3 rounded-xl bg-purple-500">
-            <BuildingOffice2Icon className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-gray-900">{bedOccupancy?.totalBeds || 0}</p>
-            <p className="text-sm text-gray-500">Total Beds</p>
-          </div>
-        </div>
+      {/* EXISTING: Appointment Trends & Revenue Trends */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ChartCard
+          title="Appointment Trends"
+          subtitle="6-month appointment volume"
+          isLoading={!patientTrends}
+          error={errors.patientTrends ? 'Failed to load trends' : null}
+          onRetry={refetchAll}
+        >
+          <AppointmentTrendsChart
+            data={appointmentTrendsData}
+            primaryLabel="Appointments"
+          />
+        </ChartCard>
+
+        <RevenueTrendsChart
+          data={revenueTrends}
+          isLoading={!revenueTrends && !errors.revenueTrends}
+          error={errors.revenueTrends ? 'Failed to load revenue data' : null}
+          onRetry={refetchAll}
+        />
       </div>
 
-      {/* AI Features Section */}
+      {/* EXISTING: Department Performance & Patient Demographics */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <DepartmentPerformanceChart
+          data={departmentPerformance}
+          isLoading={!departmentPerformance && !errors.departmentPerformance}
+          error={errors.departmentPerformance ? 'Failed to load department data' : null}
+          onRetry={refetchAll}
+        />
+
+        <PatientDemographicsChart
+          data={patientDemographics}
+          isLoading={!patientDemographics && !errors.patientDemographics}
+          error={errors.patientDemographics ? 'Failed to load demographics' : null}
+          onRetry={refetchAll}
+        />
+      </div>
+
+      {/* EXISTING: Bed Occupancy by Ward */}
+      {bedOccupancy?.byWard && bedOccupancy.byWard.length > 0 && (
+        <ChartCard
+          title="Bed Occupancy by Ward"
+          subtitle="Real-time bed availability"
+          height="h-48"
+        >
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 h-full items-center justify-center">
+            {bedOccupancy.byWard.slice(0, 6).map((ward: any) => (
+              <OccupancyGauge
+                key={ward.wardName}
+                percentage={ward.total > 0 ? (ward.occupied / ward.total) * 100 : 0}
+                label={ward.wardName}
+                sublabel={`${ward.occupied}/${ward.total} beds`}
+                size="sm"
+              />
+            ))}
+          </div>
+        </ChartCard>
+      )}
+
+      {/* EXISTING: AI Features Section */}
       <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
