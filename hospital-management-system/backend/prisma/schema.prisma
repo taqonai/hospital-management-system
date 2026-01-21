@@ -742,6 +742,29 @@ model StageAlert {
   @@map("stage_alerts")
 }
 
+// Cron Job Health Tracking
+model CronJobRun {
+  id            String   @id @default(uuid())
+  jobName       String                     // "NO_SHOW_CHECK", "SLOT_GENERATION", etc.
+  status        CronJobStatus @default(RUNNING)
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  durationMs    Int?
+  itemsProcessed Int     @default(0)       // Number of items processed
+  errorMessage  String?                    // Error details if failed
+  metadata      Json?                      // Additional run details
+
+  @@index([jobName, startedAt])
+  @@index([status])
+  @@map("cron_job_runs")
+}
+
+enum CronJobStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
 // ==================== CLINICAL ====================
 
 model Consultation {

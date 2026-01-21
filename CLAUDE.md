@@ -171,6 +171,10 @@ Located in `ai-services/`:
 | `entity_extraction/` | EntityExtractionAI | Medical entity extraction from text |
 | `pdf_analysis/` | PDFAnalysisService | Medical PDF extraction and analysis |
 | `health_assistant/` | HealthAssistantAI | Patient-facing health chat assistant |
+| `genomic/` | GenomicAI | Genetic risk analysis, pharmacogenomics |
+| `nutrition_ai/` | NutritionAI | Diet analysis, meal recommendations |
+| `recommendation/` | RecommendationAI | Health recommendations engine |
+| `insurance_coding/` | InsuranceCodingAI | ICD-10/CPT code suggestions |
 
 ### AI Models in Use
 
@@ -188,7 +192,7 @@ OpenAI models require `OPENAI_API_KEY`. SentenceTransformers and rule-based serv
 
 ### Multi-Tenant Data Model
 
-All entities include `hospitalId` for tenant isolation. Prisma schema (`backend/prisma/schema.prisma`, ~4600 lines) covers 80+ models.
+All entities include `hospitalId` for tenant isolation. Prisma schema (`backend/prisma/schema.prisma`, ~5900 lines) covers 80+ models.
 
 ### User Roles (UserRole enum)
 SUPER_ADMIN, HOSPITAL_ADMIN, DOCTOR, NURSE, RECEPTIONIST, LAB_TECHNICIAN, PHARMACIST, RADIOLOGIST, ACCOUNTANT, PATIENT, HR_MANAGER, HR_STAFF, HOUSEKEEPING_MANAGER, HOUSEKEEPING_STAFF, MAINTENANCE_STAFF, SECURITY_STAFF, DIETARY_STAFF, MARKETING
@@ -210,6 +214,9 @@ Key routes (`/api/v1/`):
 - `/medical-records`, `/dietary`, `/assets`, `/ambulance` - Ancillary services
 - `/cssd`, `/mortuary`, `/housekeeping`, `/quality`, `/reports` - Operations
 - `/early-warning`, `/med-safety`, `/smart-orders` - Clinical safety AI
+- `/crm` - Marketing campaigns, surveys, leads
+- `/genomic`, `/health-platform`, `/wellness`, `/nutrition` - A'mad precision health platform
+- `/insurance-coding` - ICD-10/CPT code integration
 - `/public` - Unauthenticated endpoints
 
 ### Authentication

@@ -4,7 +4,7 @@ import { authenticate, authorize } from '../middleware/auth';
 import { asyncHandler, ValidationError } from '../middleware/errorHandler';
 import { sendSuccess } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
-import { triggerNoShowCheck } from '../jobs';
+import { triggerNoShowCheck, externalTriggerNoShowCheck, getCronHealth } from '../jobs';
 
 const router = Router();
 
@@ -159,8 +159,48 @@ router.post(
   authenticate,
   authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    await triggerNoShowCheck();
-    sendSuccess(res, null, 'NO_SHOW check triggered');
+    const result = await triggerNoShowCheck();
+    sendSuccess(res, result, 'NO_SHOW check triggered');
+  })
+);
+
+/**
+ * GET /no-show/cron-health
+ * Get cron job health status (Admin only)
+ */
+router.get(
+  '/cron-health',
+  authenticate,
+  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const health = await getCronHealth();
+    sendSuccess(res, health);
+  })
+);
+
+/**
+ * POST /no-show/external-trigger
+ * External trigger for backup cron (CloudWatch, system cron)
+ * Uses API key authentication instead of JWT
+ */
+router.post(
+  '/external-trigger',
+  asyncHandler(async (req, res: Response) => {
+    // Validate API key for external systems
+    const apiKey = req.headers['x-cron-api-key'];
+    const expectedKey = process.env.CRON_API_KEY;
+
+    if (!expectedKey) {
+      throw new ValidationError('External cron trigger not configured');
+    }
+
+    if (apiKey !== expectedKey) {
+      res.status(401).json({ success: false, message: 'Invalid API key' });
+      return;
+    }
+
+    const result = await externalTriggerNoShowCheck();
+    sendSuccess(res, result, 'External NO_SHOW check triggered');
   })
 );
 

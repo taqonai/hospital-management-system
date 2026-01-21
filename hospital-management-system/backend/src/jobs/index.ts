@@ -13,4 +13,4 @@ export const initCronJobs = () => {
   console.log('[JOBS] All cron jobs initialized');
 };
 
-export { triggerNoShowCheck } from './noShowCron';
+export { triggerNoShowCheck, externalTriggerNoShowCheck, getCronHealth } from './noShowCron';
