@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   CalendarDaysIcon,
   CheckCircleIcon,
@@ -14,6 +14,7 @@ import {
   VideoCameraIcon,
   ArrowRightIcon,
   BoltIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { Bar, Pie } from 'react-chartjs-2';
 import { useAdminDashboard } from '../../../../hooks/useAdminDashboard';
@@ -24,9 +25,11 @@ import DepartmentPerformanceChart from './DepartmentPerformanceChart';
 import PatientDemographicsChart from './PatientDemographicsChart';
 import AppointmentTrendsChart from '../shared/AppointmentTrendsChart';
 import ChartCard from '../ChartCard';
-import { barChartOptions, pieChartOptions, weeklyActivityColors, departmentColors } from '../chartSetup';
+import ChartSkeleton from '../ChartSkeleton';
+import { barChartOptions, pieChartOptions, weeklyActivityColors, chartColorPalette } from '../chartSetup';
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
   const {
     todayStats,
     patientTrends,
@@ -35,7 +38,6 @@ export default function AdminDashboard() {
     patientDemographics,
     bedOccupancy,
     weeklyActivity,
-    departmentStats,
     todayAppointments,
     isLoading,
     errors,
@@ -54,57 +56,143 @@ export default function AdminDashboard() {
   // Format trends data for chart
   const appointmentTrendsData = patientTrends?.trends?.map((t: any) => ({
     label: t.period || t.month,
-    value: t.appointments || t.count || 0,
+    value: t.appointments || t.count || t.total || 0,
   })) || [];
 
-  // Weekly Activity Chart Data (NEW)
-  const weeklyActivityData = {
-    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-    datasets: [
-      {
-        label: 'Appointments',
-        data: weeklyActivity?.trends?.map((t: any) => t.appointments || t.count || 0) || [45, 52, 48, 61, 55, 38, 28],
-        backgroundColor: weeklyActivityColors.appointments,
-        borderRadius: 4,
-        barPercentage: 0.6,
-        categoryPercentage: 0.7,
-      },
-      {
-        label: 'Completed',
-        data: weeklyActivity?.trends?.map((t: any) => t.completed || Math.floor((t.appointments || t.count || 0) * 0.75)) || [32, 41, 38, 45, 42, 28, 21],
-        backgroundColor: weeklyActivityColors.completed,
-        borderRadius: 4,
-        barPercentage: 0.6,
-        categoryPercentage: 0.7,
-      },
-    ],
-  };
+  // Transform Weekly Activity API data to chart format
+  const getWeeklyActivityData = () => {
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-  // Patient Distribution by Department Pie Chart (NEW)
-  const departmentDistribution = departmentStats?.departments || departmentStats || [
-    { name: 'Neurology', count: 16 },
-    { name: 'Cardiology', count: 21 },
-    { name: 'Orthopedics', count: 13 },
-    { name: 'Pediatrics', count: 26 },
-    { name: 'General', count: 24 },
-  ];
+    // If we have trends data from API
+    if (weeklyActivity?.trends && Array.isArray(weeklyActivity.trends)) {
+      const labels = weeklyActivity.trends.map((t: any) => {
+        if (t.period) {
+          const date = new Date(t.period);
+          return dayNames[date.getDay()];
+        }
+        return t.day || t.label || '';
+      });
 
-  const totalPatients = departmentDistribution.reduce((sum: number, d: any) => sum + (d.count || d.patientCount || 0), 0) || 100;
+      return {
+        labels: labels.length > 0 ? labels : dayNames.slice(1).concat(dayNames[0]), // Mon-Sun
+        datasets: [
+          {
+            label: 'Appointments',
+            data: weeklyActivity.trends.map((t: any) => t.total || t.appointments || t.count || 0),
+            backgroundColor: weeklyActivityColors.appointments,
+            borderRadius: 4,
+            barPercentage: 0.6,
+            categoryPercentage: 0.7,
+          },
+          {
+            label: 'Completed',
+            data: weeklyActivity.trends.map((t: any) => t.completed || 0),
+            backgroundColor: weeklyActivityColors.completed,
+            borderRadius: 4,
+            barPercentage: 0.6,
+            categoryPercentage: 0.7,
+          },
+        ],
+      };
+    }
 
-  const pieChartData = {
-    labels: departmentDistribution.map((d: any) => d.name),
-    datasets: [{
-      data: departmentDistribution.map((d: any) => d.count || d.patientCount || 0),
-      backgroundColor: [
-        departmentColors.neurology,
-        departmentColors.cardiology,
-        departmentColors.orthopedics,
-        departmentColors.pediatrics,
-        departmentColors.general,
+    // If trends is an object with date keys
+    if (weeklyActivity?.trends && typeof weeklyActivity.trends === 'object') {
+      const entries = Object.entries(weeklyActivity.trends);
+      const last7 = entries.slice(-7);
+
+      return {
+        labels: last7.map(([date]) => {
+          const d = new Date(date);
+          return dayNames[d.getDay()];
+        }),
+        datasets: [
+          {
+            label: 'Appointments',
+            data: last7.map(([, data]: [string, any]) => data.total || 0),
+            backgroundColor: weeklyActivityColors.appointments,
+            borderRadius: 4,
+            barPercentage: 0.6,
+            categoryPercentage: 0.7,
+          },
+          {
+            label: 'Completed',
+            data: last7.map(([, data]: [string, any]) => data.completed || 0),
+            backgroundColor: weeklyActivityColors.completed,
+            borderRadius: 4,
+            barPercentage: 0.6,
+            categoryPercentage: 0.7,
+          },
+        ],
+      };
+    }
+
+    // Empty state
+    return {
+      labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      datasets: [
+        {
+          label: 'Appointments',
+          data: [0, 0, 0, 0, 0, 0, 0],
+          backgroundColor: weeklyActivityColors.appointments,
+          borderRadius: 4,
+          barPercentage: 0.6,
+          categoryPercentage: 0.7,
+        },
+        {
+          label: 'Completed',
+          data: [0, 0, 0, 0, 0, 0, 0],
+          backgroundColor: weeklyActivityColors.completed,
+          borderRadius: 4,
+          barPercentage: 0.6,
+          categoryPercentage: 0.7,
+        },
       ],
-      borderWidth: 0,
-    }],
+    };
   };
+
+  // Transform Department Performance API data to pie chart format
+  const getDepartmentDistributionData = () => {
+    // departmentPerformance from API returns: { [departmentName]: { total, completed, cancelled, noShow } }
+    if (departmentPerformance && typeof departmentPerformance === 'object') {
+      const entries = Object.entries(departmentPerformance);
+
+      if (entries.length > 0) {
+        const departments = entries.slice(0, 5).map(([name, data]: [string, any]) => ({
+          name,
+          count: data.total || 0,
+        }));
+
+        const total = departments.reduce((sum, d) => sum + d.count, 0);
+
+        return {
+          departments,
+          total,
+          chartData: {
+            labels: departments.map(d => d.name),
+            datasets: [{
+              data: departments.map(d => d.count),
+              backgroundColor: chartColorPalette.slice(0, departments.length),
+              borderWidth: 0,
+            }],
+          },
+        };
+      }
+    }
+
+    // Empty state
+    return {
+      departments: [],
+      total: 0,
+      chartData: {
+        labels: [],
+        datasets: [{ data: [], backgroundColor: [], borderWidth: 0 }],
+      },
+    };
+  };
+
+  const weeklyActivityData = getWeeklyActivityData();
+  const departmentData = getDepartmentDistributionData();
 
   // Format time for appointments
   const formatTime = (dateString: string) => {
@@ -136,6 +224,30 @@ export default function AdminDashboard() {
     if (!status) return 'Pending';
     return status.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
   };
+
+  // Handle appointment row click
+  const handleAppointmentClick = (appointmentId: string) => {
+    navigate(`/appointments/${appointmentId}`);
+  };
+
+  // Get appointments array from API response
+  const getAppointmentsList = () => {
+    if (Array.isArray(todayAppointments)) {
+      return todayAppointments;
+    }
+    if (todayAppointments?.appointments) {
+      return todayAppointments.appointments;
+    }
+    if (todayAppointments?.data) {
+      return todayAppointments.data;
+    }
+    return [];
+  };
+
+  const appointmentsList = getAppointmentsList();
+  const isWeeklyLoading = !weeklyActivity && !errors.weeklyActivity;
+  const isDeptLoading = !departmentPerformance && !errors.departmentPerformance;
+  const isAppointmentsLoading = !todayAppointments && !errors.todayAppointments;
 
   return (
     <div className="space-y-6">
@@ -218,137 +330,185 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* NEW: Weekly Activity & Patient Distribution Charts */}
+      {/* Weekly Activity & Patient Distribution Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Weekly Activity Bar Chart */}
         <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-          <h3 className="text-lg font-bold text-gray-900 mb-6">Weekly Activity</h3>
-          <div className="h-64">
-            <Bar
-              data={weeklyActivityData}
-              options={{
-                ...barChartOptions,
-                scales: {
-                  ...barChartOptions.scales,
-                  y: {
-                    ...barChartOptions.scales.y,
-                    max: 80,
-                    ticks: {
-                      ...barChartOptions.scales.y.ticks,
-                      stepSize: 20,
-                    },
-                  },
-                },
-              }}
-            />
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-bold text-gray-900">Weekly Activity</h3>
+            {isWeeklyLoading && (
+              <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            )}
           </div>
+          {isWeeklyLoading ? (
+            <ChartSkeleton type="bar" height="h-64" />
+          ) : errors.weeklyActivity ? (
+            <div className="h-64 flex flex-col items-center justify-center text-gray-500">
+              <ExclamationTriangleIcon className="h-10 w-10 text-amber-400 mb-2" />
+              <p className="text-sm">Failed to load weekly activity</p>
+              <button onClick={refetchAll} className="mt-2 text-blue-600 hover:underline text-sm">
+                Retry
+              </button>
+            </div>
+          ) : (
+            <div className="h-64">
+              <Bar data={weeklyActivityData} options={barChartOptions} />
+            </div>
+          )}
         </div>
 
         {/* Patient Distribution by Department Pie Chart */}
         <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-          <h3 className="text-lg font-bold text-gray-900 mb-6">Patient Distribution by Department</h3>
-          <div className="flex items-center justify-center gap-8">
-            <div className="h-56 w-56 relative">
-              <Pie data={pieChartData} options={pieChartOptions} />
-            </div>
-            <div className="space-y-3">
-              {departmentDistribution.slice(0, 5).map((dept: any, index: number) => {
-                const colors = [
-                  departmentColors.neurology,
-                  departmentColors.cardiology,
-                  departmentColors.orthopedics,
-                  departmentColors.pediatrics,
-                  departmentColors.general,
-                ];
-                const percentage = totalPatients > 0
-                  ? Math.round(((dept.count || dept.patientCount || 0) / totalPatients) * 100)
-                  : 0;
-                return (
-                  <div key={dept.name || index} className="flex items-center gap-2">
-                    <span
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: colors[index % colors.length] }}
-                    />
-                    <span className="text-sm" style={{ color: colors[index % colors.length] }}>
-                      {dept.name} {percentage}%
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-bold text-gray-900">Patient Distribution by Department</h3>
+            {isDeptLoading && (
+              <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            )}
           </div>
+          {isDeptLoading ? (
+            <ChartSkeleton type="pie" height="h-56" />
+          ) : errors.departmentPerformance ? (
+            <div className="h-56 flex flex-col items-center justify-center text-gray-500">
+              <ExclamationTriangleIcon className="h-10 w-10 text-amber-400 mb-2" />
+              <p className="text-sm">Failed to load department data</p>
+              <button onClick={refetchAll} className="mt-2 text-blue-600 hover:underline text-sm">
+                Retry
+              </button>
+            </div>
+          ) : departmentData.departments.length === 0 ? (
+            <div className="h-56 flex items-center justify-center text-gray-500">
+              <p className="text-sm">No department data available</p>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center gap-8">
+              <div className="h-56 w-56 relative">
+                <Pie data={departmentData.chartData} options={pieChartOptions} />
+              </div>
+              <div className="space-y-3">
+                {departmentData.departments.map((dept: any, index: number) => {
+                  const percentage = departmentData.total > 0
+                    ? Math.round((dept.count / departmentData.total) * 100)
+                    : 0;
+                  return (
+                    <div key={dept.name || index} className="flex items-center gap-2">
+                      <span
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: chartColorPalette[index % chartColorPalette.length] }}
+                      />
+                      <span className="text-sm" style={{ color: chartColorPalette[index % chartColorPalette.length] }}>
+                        {dept.name} {percentage}%
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* NEW: Today's Appointments Table */}
+      {/* Today's Appointments Table */}
       <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-bold text-gray-900">Today's Appointments</h3>
-          <ClockIcon className="h-5 w-5 text-gray-400" />
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-100">
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Patient</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Doctor</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Time</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(todayAppointments?.appointments || todayAppointments || []).slice(0, 5).map((apt: any, index: number) => (
-                <tr key={apt.id || index} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                  <td className="py-4 px-4">
-                    <span className="text-sm text-gray-900">
-                      {apt.patient?.firstName || apt.patientName?.split(' ')[0] || 'Patient'} {apt.patient?.lastName || apt.patientName?.split(' ')[1] || ''}
-                    </span>
-                  </td>
-                  <td className="py-4 px-4">
-                    <span className="text-sm text-gray-900">
-                      Dr. {apt.doctor?.lastName || apt.doctorName?.split(' ').pop() || 'Doctor'}
-                    </span>
-                  </td>
-                  <td className="py-4 px-4">
-                    <span className="text-sm text-gray-600">
-                      {formatTime(apt.appointmentTime || apt.scheduledTime || apt.time)}
-                    </span>
-                  </td>
-                  <td className="py-4 px-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(apt.status)}`}>
-                      {formatStatus(apt.status)}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {(!todayAppointments || (todayAppointments?.appointments || todayAppointments || []).length === 0) && (
-                <tr>
-                  <td colSpan={4} className="py-8 text-center text-gray-500">
-                    No appointments scheduled for today
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        {(todayAppointments?.appointments || todayAppointments || []).length > 0 && (
-          <div className="mt-4 pt-4 border-t border-gray-100">
-            <Link
-              to="/appointments"
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-            >
-              View all appointments →
-            </Link>
+          <div className="flex items-center gap-3">
+            {isAppointmentsLoading && (
+              <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            )}
+            <ClockIcon className="h-5 w-5 text-gray-400" />
           </div>
+        </div>
+
+        {isAppointmentsLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="animate-pulse flex items-center gap-4 py-3">
+                <div className="h-4 bg-gray-200 rounded w-1/4" />
+                <div className="h-4 bg-gray-200 rounded w-1/4" />
+                <div className="h-4 bg-gray-200 rounded w-1/6" />
+                <div className="h-6 bg-gray-200 rounded-full w-20" />
+              </div>
+            ))}
+          </div>
+        ) : errors.todayAppointments ? (
+          <div className="py-8 flex flex-col items-center justify-center text-gray-500">
+            <ExclamationTriangleIcon className="h-10 w-10 text-amber-400 mb-2" />
+            <p className="text-sm">Failed to load appointments</p>
+            <button onClick={refetchAll} className="mt-2 text-blue-600 hover:underline text-sm">
+              Retry
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Patient</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Doctor</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Time</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {appointmentsList.slice(0, 5).map((apt: any, index: number) => (
+                    <tr
+                      key={apt.id || index}
+                      className="border-b border-gray-50 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                      onClick={() => handleAppointmentClick(apt.id)}
+                    >
+                      <td className="py-4 px-4">
+                        <span className="text-sm text-gray-900">
+                          {apt.patient?.firstName || apt.patientName?.split(' ')[0] || 'N/A'} {apt.patient?.lastName || apt.patientName?.split(' ')[1] || ''}
+                        </span>
+                      </td>
+                      <td className="py-4 px-4">
+                        <span className="text-sm text-gray-900">
+                          Dr. {apt.doctor?.lastName || apt.doctor?.firstName || apt.doctorName?.split(' ').pop() || 'N/A'}
+                        </span>
+                      </td>
+                      <td className="py-4 px-4">
+                        <span className="text-sm text-gray-600">
+                          {formatTime(apt.appointmentTime || apt.scheduledTime || apt.time || apt.appointmentDate)}
+                        </span>
+                      </td>
+                      <td className="py-4 px-4">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(apt.status)}`}>
+                          {formatStatus(apt.status)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {appointmentsList.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="py-8 text-center text-gray-500">
+                        No appointments scheduled for today
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {appointmentsList.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <Link
+                  to="/appointments"
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                >
+                  View all appointments <ArrowRightIcon className="h-4 w-4" />
+                </Link>
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {/* EXISTING: Appointment Trends & Revenue Trends */}
+      {/* Appointment Trends & Revenue Trends */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ChartCard
           title="Appointment Trends"
           subtitle="6-month appointment volume"
-          isLoading={!patientTrends}
+          isLoading={!patientTrends && !errors.patientTrends}
           error={errors.patientTrends ? 'Failed to load trends' : null}
           onRetry={refetchAll}
         >
@@ -366,7 +526,7 @@ export default function AdminDashboard() {
         />
       </div>
 
-      {/* EXISTING: Department Performance & Patient Demographics */}
+      {/* Department Performance & Patient Demographics */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <DepartmentPerformanceChart
           data={departmentPerformance}
@@ -383,7 +543,7 @@ export default function AdminDashboard() {
         />
       </div>
 
-      {/* EXISTING: Bed Occupancy by Ward */}
+      {/* Bed Occupancy by Ward */}
       {bedOccupancy?.byWard && bedOccupancy.byWard.length > 0 && (
         <ChartCard
           title="Bed Occupancy by Ward"
@@ -404,7 +564,7 @@ export default function AdminDashboard() {
         </ChartCard>
       )}
 
-      {/* EXISTING: AI Features Section */}
+      {/* AI Features Section */}
       <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">

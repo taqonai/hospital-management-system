@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { reportsApi, appointmentApi, departmentApi } from '../services/api';
+import { reportsApi, appointmentApi } from '../services/api';
 
 export function useAdminDashboard() {
   // Executive summary
@@ -13,11 +13,11 @@ export function useAdminDashboard() {
     refetchInterval: 60000,
   });
 
-  // Weekly activity (appointments per day)
+  // Weekly activity (appointments per day for last 7 days)
   const weeklyActivity = useQuery({
     queryKey: ['admin', 'weeklyActivity'],
     queryFn: async () => {
-      const response = await reportsApi.getPatientTrends('daily', 7);
+      const response = await reportsApi.getPatientTrends('daily', 1); // Last 7 days
       return response.data.data;
     },
     staleTime: 60000,
@@ -34,16 +34,6 @@ export function useAdminDashboard() {
     },
     staleTime: 30000,
     refetchInterval: 30000,
-  });
-
-  // Department stats for patient distribution
-  const departmentStats = useQuery({
-    queryKey: ['admin', 'departmentStats'],
-    queryFn: async () => {
-      const response = await departmentApi.getAll();
-      return response.data.data;
-    },
-    staleTime: 300000,
   });
 
   // Patient trends (6 months)
@@ -137,7 +127,6 @@ export function useAdminDashboard() {
     todayStats.refetch();
     weeklyActivity.refetch();
     todayAppointments.refetch();
-    departmentStats.refetch();
   };
 
   return {
@@ -151,7 +140,6 @@ export function useAdminDashboard() {
     todayStats: todayStats.data,
     weeklyActivity: weeklyActivity.data,
     todayAppointments: todayAppointments.data,
-    departmentStats: departmentStats.data,
     isLoading,
     errors: {
       executiveSummary: executiveSummary.error,

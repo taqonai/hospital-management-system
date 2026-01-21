@@ -1,10 +1,10 @@
 interface ChartSkeletonProps {
   height?: string;
-  type?: 'line' | 'bar' | 'doughnut' | 'default';
+  type?: 'line' | 'bar' | 'doughnut' | 'pie' | 'default';
 }
 
 export default function ChartSkeleton({ height = 'h-80', type = 'default' }: ChartSkeletonProps) {
-  if (type === 'doughnut') {
+  if (type === 'doughnut' || type === 'pie') {
     return (
       <div className={`${height} flex items-center justify-center animate-pulse`}>
         <div className="relative">
