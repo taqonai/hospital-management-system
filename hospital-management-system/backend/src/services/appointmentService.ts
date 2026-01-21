@@ -5,7 +5,16 @@ import { AppointmentStatus } from '@prisma/client';
 import { notificationService } from './notificationService';
 import { slotService } from './slotService';
 
+// Booking constraints
+const MAX_ADVANCE_BOOKING_DAYS = 30;
+
 export class AppointmentService {
+  // Helper to parse time string to minutes
+  private parseTime(time: string): number {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
+  }
+
   // Helper method to validate slot availability
   private async validateSlotAvailability(
     doctorId: string,
@@ -35,6 +44,45 @@ export class AppointmentService {
     startOfDay.setUTCHours(0, 0, 0, 0);
     const endOfDay = new Date(startOfDay);
     endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
+
+    // Check if appointment date is in the past
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (startOfDay < today) {
+      throw new AppError('Cannot book appointments in the past');
+    }
+
+    // Check max advance booking limit
+    const maxAdvanceDate = new Date(today);
+    maxAdvanceDate.setDate(maxAdvanceDate.getDate() + MAX_ADVANCE_BOOKING_DAYS);
+    if (startOfDay > maxAdvanceDate) {
+      throw new AppError(`Cannot book appointments more than ${MAX_ADVANCE_BOOKING_DAYS} days in advance`);
+    }
+
+    // Check for doctor absence on this date
+    const absence = await prisma.doctorAbsence.findFirst({
+      where: {
+        doctorId,
+        status: 'ACTIVE',
+        startDate: { lte: startOfDay },
+        endDate: { gte: startOfDay },
+      },
+    });
+
+    if (absence) {
+      if (absence.isFullDay) {
+        throw new AppError('Doctor is on leave on this date');
+      }
+      // Check partial day absence
+      if (absence.startTime && absence.endTime) {
+        const slotMinutes = this.parseTime(startTime);
+        const absenceStartMinutes = this.parseTime(absence.startTime);
+        const absenceEndMinutes = this.parseTime(absence.endTime);
+        if (slotMinutes >= absenceStartMinutes && slotMinutes < absenceEndMinutes) {
+          throw new AppError('Doctor is unavailable during this time');
+        }
+      }
+    }
 
     // Get day of week
     const dayOfWeek = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'][normalizedDate.getUTCDay()];
@@ -124,6 +172,40 @@ export class AppointmentService {
       throw new NotFoundError('Patient not found');
     }
 
+    // Normalize the date and create date range for consistent comparison
+    const appointmentDate = new Date(data.appointmentDate);
+    const startOfDay = new Date(appointmentDate);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
+
+    // Check for patient duplicate booking at the same time
+    const patientConflict = await prisma.appointment.findFirst({
+      where: {
+        patientId: data.patientId,
+        appointmentDate: {
+          gte: startOfDay,
+          lt: endOfDay,
+        },
+        startTime: data.startTime,
+        status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+      },
+      include: {
+        doctor: {
+          include: {
+            user: { select: { firstName: true, lastName: true } },
+          },
+        },
+      },
+    });
+
+    if (patientConflict) {
+      const doctorName = `Dr. ${patientConflict.doctor.user.firstName} ${patientConflict.doctor.user.lastName}`;
+      throw new ConflictError(
+        `Patient already has an appointment at ${data.startTime} with ${doctorName}`
+      );
+    }
+
     // Validate slot availability (includes doctor verification, schedule check, conflict check)
     const { doctor } = await this.validateSlotAvailability(
       data.doctorId,
@@ -131,13 +213,6 @@ export class AppointmentService {
       new Date(data.appointmentDate),
       data.startTime
     );
-
-    // Normalize the date and create date range for consistent comparison
-    const appointmentDate = new Date(data.appointmentDate);
-    const startOfDay = new Date(appointmentDate);
-    startOfDay.setUTCHours(0, 0, 0, 0);
-    const endOfDay = new Date(startOfDay);
-    endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
 
     // Get token number for the day - use date range for consistent matching
     const todayAppointments = await prisma.appointment.count({

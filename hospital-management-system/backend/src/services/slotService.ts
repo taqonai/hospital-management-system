@@ -17,6 +17,10 @@ const dayIndexToEnum: Record<number, DayOfWeek> = {
 const TIME_REGEX = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
+// Booking constraints
+const MAX_ADVANCE_BOOKING_DAYS = 30; // Maximum days in advance a slot can be booked
+const MIN_BOOKING_BUFFER_MINUTES = 15; // Minimum minutes before appointment start
+
 export class SlotService {
   /**
    * Parse time string "HH:MM" to minutes since midnight
@@ -278,6 +282,7 @@ export class SlotService {
 
   /**
    * Get available slots for a specific date
+   * Returns slots with availability status and reason if unavailable
    */
   async getAvailableSlotsByDate(
     doctorId: string,
@@ -295,7 +300,38 @@ export class SlotService {
     today.setHours(0, 0, 0, 0);
 
     if (slotDate < today) {
-      return [];
+      return { slots: [], unavailableReason: 'past_date', message: 'Cannot book appointments in the past' };
+    }
+
+    // Check max advance booking limit
+    const maxAdvanceDate = new Date(today);
+    maxAdvanceDate.setDate(maxAdvanceDate.getDate() + MAX_ADVANCE_BOOKING_DAYS);
+    if (slotDate > maxAdvanceDate) {
+      return {
+        slots: [],
+        unavailableReason: 'too_far_ahead',
+        message: `Cannot book more than ${MAX_ADVANCE_BOOKING_DAYS} days in advance`
+      };
+    }
+
+    // Check for doctor absence on this date
+    const absence = await prisma.doctorAbsence.findFirst({
+      where: {
+        doctorId,
+        status: 'ACTIVE',
+        startDate: { lte: slotDate },
+        endDate: { gte: slotDate },
+      },
+    });
+
+    // If full day absence, return empty with reason
+    if (absence?.isFullDay) {
+      return {
+        slots: [],
+        unavailableReason: 'doctor_leave',
+        message: 'Doctor is on leave on this date',
+        absenceType: absence.absenceType,
+      };
     }
 
     // Get doctor to check maxPatientsPerDay
@@ -376,20 +412,48 @@ export class SlotService {
       });
     }
 
+    // For partial-day absence, mark affected time slots as unavailable
+    if (absence && !absence.isFullDay && absence.startTime && absence.endTime) {
+      const absenceStartMinutes = this.parseTime(absence.startTime);
+      const absenceEndMinutes = this.parseTime(absence.endTime);
+
+      slots = slots.map(slot => {
+        const slotStartMinutes = this.parseTime(slot.startTime);
+        const slotEndMinutes = this.parseTime(slot.endTime);
+        // Check if slot overlaps with absence
+        if (slotStartMinutes < absenceEndMinutes && slotEndMinutes > absenceStartMinutes) {
+          return {
+            ...slot,
+            isAvailable: false,
+            isBlocked: true,
+            _unavailableReason: 'doctor_leave',
+          };
+        }
+        return slot;
+      });
+    }
+
     // Check max patients per day - count booked slots
     const bookedCount = slots.filter(s => !s.isAvailable).length;
     const maxPatients = doctor.maxPatientsPerDay || 30;
+    const remainingCapacity = Math.max(0, maxPatients - bookedCount);
 
     // If max reached, mark remaining slots as unavailable in response
     if (bookedCount >= maxPatients) {
       slots = slots.map(slot => ({
         ...slot,
         isAvailable: false,
-        _maxReached: true, // Flag for frontend to show appropriate message
+        _unavailableReason: slot.isAvailable ? 'max_patients_reached' : (slot as any)._unavailableReason,
       }));
     }
 
-    return slots;
+    return {
+      slots,
+      maxPatientsPerDay: maxPatients,
+      bookedCount,
+      remainingCapacity,
+      maxAdvanceBookingDays: MAX_ADVANCE_BOOKING_DAYS,
+    };
   }
 
   /**
@@ -423,6 +487,7 @@ export class SlotService {
 
   /**
    * Find and book a slot by doctor, date, and time
+   * Uses transaction with locking to prevent race conditions
    */
   async bookSlotByDateTime(
     doctorId: string,
@@ -448,13 +513,46 @@ export class SlotService {
       throw new AppError('Cannot book appointments in the past', 400);
     }
 
+    // Check max advance booking limit
+    const maxAdvanceDate = new Date(today);
+    maxAdvanceDate.setDate(maxAdvanceDate.getDate() + MAX_ADVANCE_BOOKING_DAYS);
+    if (normalizedDate > maxAdvanceDate) {
+      throw new AppError(`Cannot book appointments more than ${MAX_ADVANCE_BOOKING_DAYS} days in advance`, 400);
+    }
+
     // For today, check if the time slot has already passed
     if (this.isToday(normalizedDate)) {
       const slotStartMinutes = this.parseTime(startTime);
       const currentMinutes = this.getCurrentTimeMinutes();
-      // Add 15 minute buffer
-      if (slotStartMinutes < currentMinutes + 15) {
+      // Add buffer time
+      if (slotStartMinutes < currentMinutes + MIN_BOOKING_BUFFER_MINUTES) {
         throw new AppError('This time slot has already passed or is too soon', 400);
+      }
+    }
+
+    // Check for active doctor absence on this date
+    const absence = await prisma.doctorAbsence.findFirst({
+      where: {
+        doctorId,
+        status: 'ACTIVE',
+        startDate: { lte: normalizedDate },
+        endDate: { gte: normalizedDate },
+      },
+    });
+
+    if (absence) {
+      // Check if the absence applies to this time slot
+      if (absence.isFullDay) {
+        throw new AppError('Doctor is on leave on this date', 400);
+      }
+      // For partial day absence, check time overlap
+      if (absence.startTime && absence.endTime) {
+        const slotStartMinutes = this.parseTime(startTime);
+        const absenceStartMinutes = this.parseTime(absence.startTime);
+        const absenceEndMinutes = this.parseTime(absence.endTime);
+        if (slotStartMinutes >= absenceStartMinutes && slotStartMinutes < absenceEndMinutes) {
+          throw new AppError('Doctor is unavailable during this time', 400);
+        }
       }
     }
 
@@ -467,66 +565,75 @@ export class SlotService {
       throw new NotFoundError('Doctor not found');
     }
 
-    // Check max patients per day
-    const bookedSlotsToday = await prisma.doctorSlot.count({
-      where: {
-        doctorId,
-        slotDate: normalizedDate,
-        isAvailable: false,
-      },
-    });
-
-    const maxPatients = doctor.maxPatientsPerDay || 30;
-    if (bookedSlotsToday >= maxPatients) {
-      throw new AppError(`Maximum appointments (${maxPatients}) reached for this day`, 400);
-    }
-
-    const slot = await prisma.doctorSlot.findUnique({
-      where: {
-        doctorId_slotDate_startTime: {
+    // Use transaction with locking to prevent race conditions
+    await prisma.$transaction(async (tx) => {
+      // Check max patients per day (within transaction)
+      const bookedSlotsToday = await tx.doctorSlot.count({
+        where: {
           doctorId,
           slotDate: normalizedDate,
-          startTime,
+          isAvailable: false,
         },
-      },
-    });
+      });
 
-    if (!slot) {
-      // Create the slot if it doesn't exist (for backward compatibility)
-      // Calculate end time
-      const [hours, mins] = startTime.split(':').map(Number);
-      const startMinutes = hours * 60 + mins;
-      const endMinutes = startMinutes + doctor.slotDuration;
-      const endTime = this.formatTime(endMinutes);
+      const maxPatients = doctor.maxPatientsPerDay || 30;
+      if (bookedSlotsToday >= maxPatients) {
+        throw new AppError(`Maximum appointments (${maxPatients}) reached for this day`, 400);
+      }
 
-      await prisma.doctorSlot.create({
+      // Find and lock the slot (SELECT FOR UPDATE equivalent)
+      const slot = await tx.doctorSlot.findUnique({
+        where: {
+          doctorId_slotDate_startTime: {
+            doctorId,
+            slotDate: normalizedDate,
+            startTime,
+          },
+        },
+      });
+
+      if (!slot) {
+        // Create the slot if it doesn't exist (for backward compatibility)
+        // Calculate end time
+        const [hours, mins] = startTime.split(':').map(Number);
+        const startMinutes = hours * 60 + mins;
+        const endMinutes = startMinutes + doctor.slotDuration;
+        const endTime = this.formatTime(endMinutes);
+
+        await tx.doctorSlot.create({
+          data: {
+            doctorId,
+            hospitalId,
+            slotDate: normalizedDate,
+            startTime,
+            endTime,
+            isAvailable: false,
+            appointmentId,
+          },
+        });
+        return;
+      }
+
+      // Re-check availability within transaction (prevents race condition)
+      if (!slot.isAvailable) {
+        throw new AppError('This time slot is already booked', 400);
+      }
+
+      if (slot.isBlocked) {
+        throw new AppError('This time slot is blocked by the doctor', 400);
+      }
+
+      // Book the slot
+      await tx.doctorSlot.update({
+        where: { id: slot.id },
         data: {
-          doctorId,
-          hospitalId,
-          slotDate: normalizedDate,
-          startTime,
-          endTime,
           isAvailable: false,
           appointmentId,
         },
       });
-      return;
-    }
-
-    if (!slot.isAvailable) {
-      throw new AppError('This time slot is already booked', 400);
-    }
-
-    if (slot.isBlocked) {
-      throw new AppError('This time slot is blocked by the doctor', 400);
-    }
-
-    await prisma.doctorSlot.update({
-      where: { id: slot.id },
-      data: {
-        isAvailable: false,
-        appointmentId,
-      },
+    }, {
+      isolationLevel: 'Serializable', // Highest isolation to prevent race conditions
+      timeout: 10000, // 10 second timeout
     });
   }
 

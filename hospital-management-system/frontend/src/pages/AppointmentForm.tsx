@@ -60,6 +60,18 @@ interface Slot {
   endTime: string;
   isAvailable: boolean;
   isBlocked: boolean;
+  _unavailableReason?: string;
+}
+
+interface SlotsResponse {
+  slots: Slot[];
+  maxPatientsPerDay?: number;
+  bookedCount?: number;
+  remainingCapacity?: number;
+  maxAdvanceBookingDays?: number;
+  unavailableReason?: 'past_date' | 'too_far_ahead' | 'doctor_leave';
+  message?: string;
+  absenceType?: string;
 }
 
 export default function AppointmentForm() {
@@ -97,14 +109,22 @@ export default function AppointmentForm() {
   });
 
   // Fetch available slots for selected doctor and date
-  const { data: slotsData, isLoading: loadingSlots, isError: slotsError } = useQuery({
+  const { data: slotsResponse, isLoading: loadingSlots, isError: slotsError } = useQuery<SlotsResponse>({
     queryKey: ['slots', formData.doctorId, formData.appointmentDate],
     queryFn: async () => {
       const response = await slotApi.getByDoctorAndDate(formData.doctorId, formData.appointmentDate);
-      return response.data.data || [];
+      // Handle both old array format and new object format for backward compatibility
+      const data = response.data.data;
+      if (Array.isArray(data)) {
+        return { slots: data };
+      }
+      return data || { slots: [] };
     },
     enabled: !!formData.doctorId && !!formData.appointmentDate,
   });
+
+  // Extract slots from response
+  const slotsData = slotsResponse?.slots || [];
 
   // Fetch appointment data if editing
   const { data: appointmentData, isLoading: loadingAppointment } = useQuery({
@@ -186,7 +206,7 @@ export default function AppointmentForm() {
     if (!validate()) return;
 
     // Get end time from the selected slot or calculate fallback
-    const selectedSlot = (slotsData || []).find((s: Slot) => s.startTime === formData.appointmentTime);
+    const selectedSlot = slotsData.find((s: Slot) => s.startTime === formData.appointmentTime);
     let endTime: string;
 
     if (selectedSlot) {
@@ -376,10 +396,14 @@ export default function AppointmentForm() {
                   value={formData.appointmentDate}
                   onChange={handleChange}
                   min={format(new Date(), 'yyyy-MM-dd')}
+                  max={format(new Date(Date.now() + (slotsResponse?.maxAdvanceBookingDays || 30) * 24 * 60 * 60 * 1000), 'yyyy-MM-dd')}
                   className={`w-full pl-10 pr-4 py-3 rounded-lg border ${errors.appointmentDate ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
                 />
               </div>
               {errors.appointmentDate && <p className="mt-1 text-sm text-red-500">{errors.appointmentDate}</p>}
+              <p className="mt-1 text-xs text-gray-500">
+                You can book up to {slotsResponse?.maxAdvanceBookingDays || 30} days in advance
+              </p>
             </div>
 
             <div>
@@ -400,7 +424,22 @@ export default function AppointmentForm() {
                   <ExclamationCircleIcon className="h-4 w-4" />
                   Failed to load slots
                 </div>
-              ) : (slotsData || []).length === 0 ? (
+              ) : slotsResponse?.unavailableReason === 'doctor_leave' ? (
+                <div className="px-4 py-3 rounded-lg border border-red-200 bg-red-50 text-red-600 text-sm flex items-center gap-2">
+                  <ExclamationCircleIcon className="h-4 w-4" />
+                  {slotsResponse.message || 'Doctor is on leave on this date'}
+                </div>
+              ) : slotsResponse?.unavailableReason === 'too_far_ahead' ? (
+                <div className="px-4 py-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-sm flex items-center gap-2">
+                  <ExclamationCircleIcon className="h-4 w-4" />
+                  {slotsResponse.message || 'Cannot book this far in advance'}
+                </div>
+              ) : slotsResponse?.unavailableReason === 'past_date' ? (
+                <div className="px-4 py-3 rounded-lg border border-gray-200 bg-gray-50 text-gray-500 text-sm flex items-center gap-2">
+                  <ExclamationCircleIcon className="h-4 w-4" />
+                  {slotsResponse.message || 'Cannot book appointments in the past'}
+                </div>
+              ) : slotsData.length === 0 ? (
                 <div className="px-4 py-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-sm flex items-center gap-2">
                   <ExclamationCircleIcon className="h-4 w-4" />
                   No slots available for this date
@@ -415,25 +454,40 @@ export default function AppointmentForm() {
                     className={`w-full pl-10 pr-4 py-3 rounded-lg border ${errors.appointmentTime ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
                   >
                     <option value="">Select a time slot</option>
-                    {(slotsData || []).map((slot: Slot) => (
-                      <option
-                        key={slot.id || slot.startTime}
-                        value={slot.startTime}
-                        disabled={!slot.isAvailable || slot.isBlocked}
-                      >
-                        {slot.startTime} - {slot.endTime}
-                        {!slot.isAvailable && ' (Booked)'}
-                        {slot.isBlocked && ' (Blocked)'}
-                      </option>
-                    ))}
+                    {slotsData.map((slot: Slot) => {
+                      const isUnavailable = !slot.isAvailable || slot.isBlocked;
+                      let statusText = '';
+                      if (!slot.isAvailable) statusText = ' (Booked)';
+                      else if (slot.isBlocked) statusText = ' (Blocked)';
+                      else if (slot._unavailableReason === 'doctor_leave') statusText = ' (Doctor on leave)';
+                      else if (slot._unavailableReason === 'max_patients_reached') statusText = ' (Max capacity)';
+
+                      return (
+                        <option
+                          key={slot.id || slot.startTime}
+                          value={slot.startTime}
+                          disabled={isUnavailable}
+                        >
+                          {slot.startTime} - {slot.endTime}{statusText}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               )}
               {errors.appointmentTime && <p className="mt-1 text-sm text-red-500">{errors.appointmentTime}</p>}
-              {(slotsData || []).length > 0 && (
-                <p className="mt-1 text-xs text-gray-500">
-                  {(slotsData || []).filter((s: Slot) => s.isAvailable && !s.isBlocked).length} slots available
-                </p>
+              {slotsData.length > 0 && (
+                <div className="mt-1 text-xs text-gray-500 space-y-0.5">
+                  <p>
+                    {slotsData.filter((s: Slot) => s.isAvailable && !s.isBlocked).length} slots available
+                    {slotsResponse?.remainingCapacity !== undefined && slotsResponse.remainingCapacity > 0 && (
+                      <span className="ml-2">({slotsResponse.remainingCapacity} remaining capacity)</span>
+                    )}
+                  </p>
+                  {slotsResponse?.remainingCapacity === 0 && (
+                    <p className="text-amber-600">Maximum daily appointments reached</p>
+                  )}
+                </div>
               )}
             </div>
 
