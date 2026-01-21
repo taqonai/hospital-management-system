@@ -464,7 +464,7 @@ export default function AdminDashboard() {
                       </td>
                       <td className="py-4 px-4">
                         <span className="text-sm text-gray-900">
-                          Dr. {apt.doctor?.lastName || apt.doctor?.firstName || apt.doctorName?.split(' ').pop() || 'N/A'}
+                          Dr. {apt.doctor?.user?.lastName || apt.doctor?.user?.firstName || apt.doctor?.lastName || apt.doctor?.firstName || apt.doctorName?.split(' ').pop() || 'N/A'}
                         </span>
                       </td>
                       <td className="py-4 px-4">
