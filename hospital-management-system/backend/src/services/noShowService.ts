@@ -43,12 +43,28 @@ export class NoShowService {
 
   /**
    * Check if a slot time is still valid for rebooking
-   * A slot is valid if it hasn't passed yet (with a small buffer)
+   * A slot is valid if it's in the future (considering both date and time)
    */
-  private isSlotStillValid(slotTime: string, bufferMinutes: number = 5): boolean {
-    const slotMinutes = this.parseTime(slotTime);
-    const currentMinutes = this.getCurrentTimeMinutes();
-    return slotMinutes > currentMinutes + bufferMinutes;
+  private isSlotStillValid(appointmentDate: Date, slotTime: string, bufferMinutes: number = 5): boolean {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const slotDate = new Date(appointmentDate);
+    slotDate.setHours(0, 0, 0, 0);
+
+    // Future dates are always valid for rebooking
+    if (slotDate > today) {
+      return true;
+    }
+
+    // Same day: check if slot time hasn't passed yet
+    if (slotDate.getTime() === today.getTime()) {
+      const slotMinutes = this.parseTime(slotTime);
+      const currentMinutes = this.getCurrentTimeMinutes();
+      return slotMinutes > currentMinutes + bufferMinutes;
+    }
+
+    // Past dates are never valid
+    return false;
   }
 
   /**
@@ -123,7 +139,7 @@ export class NoShowService {
           });
 
           // Check if slot can be released for rebooking
-          const canReleaseSlot = this.isSlotStillValid(appointment.startTime);
+          const canReleaseSlot = this.isSlotStillValid(appointment.appointmentDate, appointment.startTime);
           let slotReleased = false;
 
           if (canReleaseSlot) {
@@ -452,7 +468,7 @@ export class NoShowService {
     });
 
     // Check if slot can be released
-    const canReleaseSlot = this.isSlotStillValid(appointment.startTime);
+    const canReleaseSlot = this.isSlotStillValid(appointment.appointmentDate, appointment.startTime);
     let slotReleased = false;
 
     if (canReleaseSlot) {
