@@ -358,8 +358,9 @@ export default function Appointments() {
                         >
                           <EyeIcon className="h-5 w-5" />
                         </button>
-                        {/* Edit - hidden for receptionist/nurse after check-in */}
-                        {!(isReceptionistOrNurse && ['CHECKED_IN', 'IN_PROGRESS', 'COMPLETED'].includes(appointment.status)) && (
+                        {/* Edit - hidden for ALL roles after COMPLETED, and for receptionist/nurse after check-in */}
+                        {appointment.status !== 'COMPLETED' &&
+                         !(isReceptionistOrNurse && ['CHECKED_IN', 'IN_PROGRESS'].includes(appointment.status)) && (
                           <Link
                             to={`/appointments/${appointment.id}/edit`}
                             className="p-2 rounded-lg text-gray-500 hover:text-purple-600 hover:bg-purple-50 transition-colors"

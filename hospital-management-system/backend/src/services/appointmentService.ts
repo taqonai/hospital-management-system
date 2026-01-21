@@ -5,6 +5,114 @@ import { AppointmentStatus } from '@prisma/client';
 import { notificationService } from './notificationService';
 
 export class AppointmentService {
+  // Helper method to validate slot availability
+  private async validateSlotAvailability(
+    doctorId: string,
+    hospitalId: string,
+    appointmentDate: Date,
+    startTime: string,
+    excludeAppointmentId?: string
+  ): Promise<{ doctor: any; schedule: any }> {
+    // Verify doctor exists and belongs to hospital
+    const doctor = await prisma.doctor.findFirst({
+      where: { id: doctorId },
+      include: { user: true, schedules: true },
+    });
+
+    if (!doctor || doctor.user.hospitalId !== hospitalId) {
+      throw new NotFoundError('Doctor not found');
+    }
+
+    // Check if doctor is available
+    if (!doctor.isAvailable) {
+      throw new AppError('Doctor is currently not available for appointments');
+    }
+
+    // Normalize the date
+    const normalizedDate = new Date(appointmentDate);
+    const startOfDay = new Date(normalizedDate);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
+
+    // Get day of week
+    const dayOfWeek = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'][normalizedDate.getUTCDay()];
+
+    // Check if doctor has schedule for this day
+    const schedule = doctor.schedules.find((s: any) => s.dayOfWeek === dayOfWeek && s.isActive);
+    if (!schedule) {
+      throw new AppError(`Doctor is not available on ${dayOfWeek.toLowerCase()}s`);
+    }
+
+    // Validate time is within doctor's schedule
+    const [slotHour, slotMin] = startTime.split(':').map(Number);
+    const [schedStartHour, schedStartMin] = schedule.startTime.split(':').map(Number);
+    const [schedEndHour, schedEndMin] = schedule.endTime.split(':').map(Number);
+
+    const slotMinutes = slotHour * 60 + slotMin;
+    const schedStartMinutes = schedStartHour * 60 + schedStartMin;
+    const schedEndMinutes = schedEndHour * 60 + schedEndMin;
+
+    if (slotMinutes < schedStartMinutes || slotMinutes + doctor.slotDuration > schedEndMinutes) {
+      throw new AppError(`Selected time is outside doctor's working hours (${schedule.startTime} - ${schedule.endTime})`);
+    }
+
+    // Check if slot falls during break time
+    if (schedule.breakStart && schedule.breakEnd) {
+      const [breakStartHour, breakStartMin] = schedule.breakStart.split(':').map(Number);
+      const [breakEndHour, breakEndMin] = schedule.breakEnd.split(':').map(Number);
+      const breakStartMinutes = breakStartHour * 60 + breakStartMin;
+      const breakEndMinutes = breakEndHour * 60 + breakEndMin;
+
+      if (slotMinutes >= breakStartMinutes && slotMinutes < breakEndMinutes) {
+        throw new AppError(`Selected time falls during doctor's break (${schedule.breakStart} - ${schedule.breakEnd})`);
+      }
+    }
+
+    // Check for conflicting appointments
+    const conflictWhere: any = {
+      doctorId,
+      appointmentDate: {
+        gte: startOfDay,
+        lt: endOfDay,
+      },
+      startTime,
+      status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+    };
+
+    // Exclude current appointment if updating
+    if (excludeAppointmentId) {
+      conflictWhere.id = { not: excludeAppointmentId };
+    }
+
+    const existingAppointment = await prisma.appointment.findFirst({
+      where: conflictWhere,
+    });
+
+    if (existingAppointment) {
+      throw new ConflictError('This time slot is already booked');
+    }
+
+    // Check max patients per day limit
+    const todayAppointmentsCount = await prisma.appointment.count({
+      where: {
+        doctorId,
+        appointmentDate: {
+          gte: startOfDay,
+          lt: endOfDay,
+        },
+        status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+        ...(excludeAppointmentId ? { id: { not: excludeAppointmentId } } : {}),
+      },
+    });
+
+    if (todayAppointmentsCount >= doctor.maxPatientsPerDay) {
+      throw new AppError(`Doctor has reached maximum patients (${doctor.maxPatientsPerDay}) for this day`);
+    }
+
+    return { doctor, schedule };
+  }
+
   async create(hospitalId: string, data: CreateAppointmentDto) {
     // Verify patient exists
     const patient = await prisma.patient.findFirst({
@@ -15,15 +123,13 @@ export class AppointmentService {
       throw new NotFoundError('Patient not found');
     }
 
-    // Verify doctor exists and belongs to hospital
-    const doctor = await prisma.doctor.findFirst({
-      where: { id: data.doctorId },
-      include: { user: true },
-    });
-
-    if (!doctor || doctor.user.hospitalId !== hospitalId) {
-      throw new NotFoundError('Doctor not found');
-    }
+    // Validate slot availability (includes doctor verification, schedule check, conflict check)
+    const { doctor } = await this.validateSlotAvailability(
+      data.doctorId,
+      hospitalId,
+      new Date(data.appointmentDate),
+      data.startTime
+    );
 
     // Normalize the date and create date range for consistent comparison
     const appointmentDate = new Date(data.appointmentDate);
@@ -31,23 +137,6 @@ export class AppointmentService {
     startOfDay.setUTCHours(0, 0, 0, 0);
     const endOfDay = new Date(startOfDay);
     endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
-
-    // Check for conflicting appointments
-    const existingAppointment = await prisma.appointment.findFirst({
-      where: {
-        doctorId: data.doctorId,
-        appointmentDate: {
-          gte: startOfDay,
-          lt: endOfDay,
-        },
-        startTime: data.startTime,
-        status: { notIn: ['CANCELLED', 'NO_SHOW'] },
-      },
-    });
-
-    if (existingAppointment) {
-      throw new ConflictError('This time slot is already booked');
-    }
 
     // Get token number for the day - use date range for consistent matching
     const todayAppointments = await prisma.appointment.count({
@@ -248,25 +337,48 @@ export class AppointmentService {
       throw new NotFoundError('Appointment not found');
     }
 
+    // Prevent editing completed appointments
+    if (appointment.status === 'COMPLETED') {
+      throw new AppError('Cannot edit a completed appointment');
+    }
+
+    // Prevent editing cancelled appointments
+    if (appointment.status === 'CANCELLED') {
+      throw new AppError('Cannot edit a cancelled appointment');
+    }
+
     // Store old date/time for reschedule notification
     const oldDate = appointment.appointmentDate;
     const oldTime = appointment.startTime;
-    const isRescheduling = data.appointmentDate || data.startTime;
+    const isRescheduling = data.appointmentDate || data.startTime || data.doctorId;
 
-    // If rescheduling, check for conflicts
+    // If rescheduling (changing date, time, or doctor), validate the new slot
     if (isRescheduling) {
-      const conflictCheck = await prisma.appointment.findFirst({
-        where: {
-          id: { not: id },
-          doctorId: data.doctorId || appointment.doctorId,
-          appointmentDate: data.appointmentDate ? new Date(data.appointmentDate) : appointment.appointmentDate,
-          startTime: data.startTime || appointment.startTime,
-          status: { notIn: ['CANCELLED', 'NO_SHOW'] },
-        },
-      });
+      const newDoctorId = data.doctorId || appointment.doctorId;
+      const newDate = data.appointmentDate ? new Date(data.appointmentDate) : appointment.appointmentDate;
+      const newTime = data.startTime || appointment.startTime;
 
-      if (conflictCheck) {
-        throw new ConflictError('This time slot is already booked');
+      // Validate the new slot availability
+      // This checks: doctor schedule, working hours, break time, conflicts, max patients
+      await this.validateSlotAvailability(
+        newDoctorId,
+        hospitalId,
+        newDate,
+        newTime,
+        id // Exclude current appointment from conflict check
+      );
+
+      // Calculate new end time based on doctor's slot duration
+      if (data.startTime && !data.endTime) {
+        const doctor = await prisma.doctor.findUnique({
+          where: { id: newDoctorId },
+          select: { slotDuration: true },
+        });
+        if (doctor) {
+          const [hour, min] = data.startTime.split(':').map(Number);
+          const endMinutes = hour * 60 + min + doctor.slotDuration;
+          data.endTime = `${Math.floor(endMinutes / 60).toString().padStart(2, '0')}:${(endMinutes % 60).toString().padStart(2, '0')}`;
+        }
       }
     }
 
