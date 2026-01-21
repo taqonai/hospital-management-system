@@ -278,11 +278,51 @@ export class DoctorService {
           },
           department: true,
           specializationRef: true,
+          schedules: {
+            orderBy: { dayOfWeek: 'asc' },
+          },
         },
       });
 
       return updatedDoctor;
     });
+
+    // Handle schedules if provided (update or create)
+    if (schedules && Array.isArray(schedules) && schedules.length > 0) {
+      // Delete existing schedules and create new ones
+      await prisma.$transaction(async (tx) => {
+        await tx.doctorSchedule.deleteMany({
+          where: { doctorId: id },
+        });
+
+        await tx.doctorSchedule.createMany({
+          data: schedules
+            .filter((s: any) => s.isActive) // Only create active schedules
+            .map((s: any) => ({
+              doctorId: id,
+              dayOfWeek: s.dayOfWeek,
+              startTime: s.startTime,
+              endTime: s.endTime,
+              breakStart: s.breakStart || null,
+              breakEnd: s.breakEnd || null,
+              isActive: s.isActive !== false,
+            })),
+        });
+      });
+
+      // Regenerate future slots based on new schedule
+      slotService.regenerateSlots(id, hospitalId).catch((err) => {
+        console.error('Failed to regenerate slots after doctor update:', err);
+      });
+
+      // Fetch updated schedules
+      const updatedSchedules = await prisma.doctorSchedule.findMany({
+        where: { doctorId: id },
+        orderBy: { dayOfWeek: 'asc' },
+      });
+
+      return { ...result, schedules: updatedSchedules };
+    }
 
     return result;
   }
