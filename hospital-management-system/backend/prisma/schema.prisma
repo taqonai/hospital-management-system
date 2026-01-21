@@ -54,6 +54,8 @@ model Hospital {
   rbacAuditLogs    RBACauditLog[]
   doctorSlots      DoctorSlot[]
   doctorAbsences   DoctorAbsence[]
+  noShowLogs       NoShowLog[]
+  stageAlerts      StageAlert[]
 
   // Insurance Coding
   icd10Codes       ICD10Code[]
@@ -326,6 +328,8 @@ model Doctor {
   surgeries          Surgery[]
   aiDiagnoses        AIDiagnosis[]
   absences           DoctorAbsence[]
+  noShowLogs         NoShowLog[]
+  stageAlerts        StageAlert[]
 
   @@map("doctors")
 }
@@ -479,6 +483,10 @@ model Patient {
   crmLeadConversions   CRMLead[]
   crmCommunications    CRMCommunication[]
   crmSurveyResponses   CRMSurveyResponse[]
+
+  // No-Show Tracking
+  noShowLogs           NoShowLog[]
+  stageAlerts          StageAlert[]
 
   @@unique([hospitalId, mrn])
   @@map("patients")
@@ -634,6 +642,8 @@ model Appointment {
   clinicalNotes  ClinicalNote[] @relation("ClinicalNoteAppointment")
   vitals         Vital[]       // Pre-consultation vitals recorded for this appointment
   slot           DoctorSlot?
+  noShowLogs     NoShowLog[]
+  stageAlerts    StageAlert[]
 
   @@map("appointments")
 }
@@ -654,6 +664,82 @@ enum AppointmentStatus {
   COMPLETED
   CANCELLED
   NO_SHOW
+}
+
+// ==================== NO-SHOW TRACKING ====================
+
+enum NoShowReason {
+  AUTO_TIMEOUT        // Automatic - exceeded slot interval
+  MANUAL_STAFF        // Manually marked by staff
+  MANUAL_DOCTOR       // Manually marked by doctor
+  PATIENT_CALLED      // Patient called to cancel late
+}
+
+enum StageAlertType {
+  NO_VITALS           // Checked in but no vitals recorded
+  NO_DOCTOR           // Vitals done but doctor not seen
+  WAITING_TOO_LONG    // General long wait alert
+}
+
+enum StageAlertStatus {
+  ACTIVE
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+model NoShowLog {
+  id              String       @id @default(uuid())
+  hospitalId      String
+  appointmentId   String
+  patientId       String
+  doctorId        String
+  reason          NoShowReason
+  slotTime        String       // Original slot time (HH:MM)
+  timeoutMinutes  Int          // Doctor's slot interval used
+  triggeredAt     DateTime     @default(now())
+  slotReleased    Boolean      @default(false)
+  slotReleasedAt  DateTime?
+  notificationSent Boolean     @default(false)
+  notes           String?
+  createdBy       String?      // null for auto, userId for manual
+
+  // Relations
+  hospital    Hospital    @relation(fields: [hospitalId], references: [id])
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+  patient     Patient     @relation(fields: [patientId], references: [id])
+  doctor      Doctor      @relation(fields: [doctorId], references: [id])
+
+  @@index([hospitalId, triggeredAt])
+  @@index([appointmentId])
+  @@index([patientId])
+  @@map("no_show_logs")
+}
+
+model StageAlert {
+  id              String           @id @default(uuid())
+  hospitalId      String
+  appointmentId   String
+  patientId       String
+  doctorId        String
+  alertType       StageAlertType
+  status          StageAlertStatus @default(ACTIVE)
+  message         String
+  triggeredAt     DateTime         @default(now())
+  acknowledgedAt  DateTime?
+  acknowledgedBy  String?
+  resolvedAt      DateTime?
+  resolvedBy      String?
+
+  // Relations
+  hospital    Hospital    @relation(fields: [hospitalId], references: [id])
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+  patient     Patient     @relation(fields: [patientId], references: [id])
+  doctor      Doctor      @relation(fields: [doctorId], references: [id])
+
+  @@index([hospitalId, status])
+  @@index([appointmentId])
+  @@index([doctorId, status])
+  @@map("stage_alerts")
 }
 
 // ==================== CLINICAL ====================

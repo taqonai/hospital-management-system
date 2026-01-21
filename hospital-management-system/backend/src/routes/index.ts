@@ -53,6 +53,7 @@ import recommendationRoutes from './recommendationRoutes';
 import clinicianRoutes from './clinicianRoutes';
 import nutritionAiRoutes from './nutritionAiRoutes';
 import crmRoutes from './crmRoutes';
+import noShowRoutes from './noShowRoutes';
 
 const router = Router();
 
@@ -138,5 +139,8 @@ router.use('/nutrition-ai', nutritionAiRoutes);
 
 // CRM Module
 router.use('/crm', crmRoutes);
+
+// NO_SHOW Management
+router.use('/no-show', noShowRoutes);
 
 export default router;

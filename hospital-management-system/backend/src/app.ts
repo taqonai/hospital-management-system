@@ -7,6 +7,7 @@ import { connectDatabase, disconnectDatabase } from './config/database';
 import { logger } from './utils/logger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import routes from './routes';
+import { initCronJobs } from './jobs';
 
 const app: Application = express();
 
@@ -83,6 +84,9 @@ const startServer = async () => {
       logger.info(`Server running on port ${config.port}`);
       logger.info(`API available at http://localhost:${config.port}/api/${config.apiVersion}`);
       logger.info(`Environment: ${config.env}`);
+
+      // Initialize cron jobs after server starts
+      initCronJobs();
     });
   } catch (error) {
     logger.error('Failed to start server:', error);
