@@ -223,6 +223,27 @@ export const doctorApi = {
   toggleAvailability: (id: string, isAvailable: boolean) =>
     api.patch(`/doctors/${id}/availability`, { isAvailable }),
   getDashboard: (id: string) => api.get(`/doctors/${id}/dashboard`),
+
+  // Absence management
+  getAbsences: (doctorId: string, params?: { upcoming?: boolean; status?: string }) =>
+    api.get(`/doctors/${doctorId}/absences`, { params }),
+  getAbsenceSummary: (doctorId: string) =>
+    api.get(`/doctors/${doctorId}/absences/summary`),
+  createAbsence: (doctorId: string, data: {
+    startDate: string;
+    endDate: string;
+    reason: string;
+    notes?: string;
+    isFullDay?: boolean;
+    startTime?: string;
+    endTime?: string;
+  }) => api.post(`/doctors/${doctorId}/absences`, data),
+  updateAbsence: (doctorId: string, absenceId: string, data: {
+    reason?: string;
+    notes?: string;
+  }) => api.patch(`/doctors/${doctorId}/absences/${absenceId}`, data),
+  cancelAbsence: (doctorId: string, absenceId: string) =>
+    api.delete(`/doctors/${doctorId}/absences/${absenceId}`),
 };
 
 // Slot APIs (Doctor appointment slots)

@@ -610,6 +610,183 @@ export class SlotService {
 
     return slotsByDate;
   }
+
+  /**
+   * Block all slots for a doctor within a date range
+   * Used when creating a doctor absence
+   */
+  async blockSlotsForDateRange(
+    doctorId: string,
+    hospitalId: string,
+    startDate: Date,
+    endDate: Date,
+    isFullDay: boolean = true,
+    startTime?: string,
+    endTime?: string
+  ): Promise<number> {
+    // Normalize dates to midnight
+    const normalizedStart = new Date(startDate);
+    normalizedStart.setHours(0, 0, 0, 0);
+    const normalizedEnd = new Date(endDate);
+    normalizedEnd.setHours(23, 59, 59, 999);
+
+    // Build the where clause
+    const where: any = {
+      doctorId,
+      hospitalId,
+      slotDate: {
+        gte: normalizedStart,
+        lte: normalizedEnd,
+      },
+      isAvailable: true, // Only block available slots (not already booked)
+    };
+
+    // For partial day blocking, filter by time
+    if (!isFullDay && startTime && endTime) {
+      const startMinutes = this.parseTime(startTime);
+      const endMinutes = this.parseTime(endTime);
+
+      // Get all slots in date range, then filter by time in application layer
+      const slots = await prisma.doctorSlot.findMany({
+        where: {
+          ...where,
+          isAvailable: true,
+        },
+        select: { id: true, startTime: true, endTime: true },
+      });
+
+      // Filter slots that overlap with the absence time range
+      const slotIdsToBlock = slots
+        .filter((slot) => {
+          const slotStart = this.parseTime(slot.startTime);
+          const slotEnd = this.parseTime(slot.endTime);
+          // Slot overlaps if it starts during absence or ends during absence
+          return slotStart >= startMinutes && slotEnd <= endMinutes;
+        })
+        .map((slot) => slot.id);
+
+      if (slotIdsToBlock.length === 0) {
+        return 0;
+      }
+
+      const result = await prisma.doctorSlot.updateMany({
+        where: { id: { in: slotIdsToBlock } },
+        data: { isBlocked: true },
+      });
+
+      return result.count;
+    }
+
+    // Full day blocking - block all available slots in date range
+    const result = await prisma.doctorSlot.updateMany({
+      where,
+      data: { isBlocked: true },
+    });
+
+    return result.count;
+  }
+
+  /**
+   * Unblock all slots for a doctor within a date range
+   * Used when cancelling a doctor absence
+   */
+  async unblockSlotsForDateRange(
+    doctorId: string,
+    hospitalId: string,
+    startDate: Date,
+    endDate: Date,
+    isFullDay: boolean = true,
+    startTime?: string,
+    endTime?: string
+  ): Promise<number> {
+    // Normalize dates
+    const normalizedStart = new Date(startDate);
+    normalizedStart.setHours(0, 0, 0, 0);
+    const normalizedEnd = new Date(endDate);
+    normalizedEnd.setHours(23, 59, 59, 999);
+
+    // Build the where clause
+    const where: any = {
+      doctorId,
+      hospitalId,
+      slotDate: {
+        gte: normalizedStart,
+        lte: normalizedEnd,
+      },
+      isBlocked: true,
+    };
+
+    // For partial day unblocking, filter by time
+    if (!isFullDay && startTime && endTime) {
+      const startMinutes = this.parseTime(startTime);
+      const endMinutes = this.parseTime(endTime);
+
+      const slots = await prisma.doctorSlot.findMany({
+        where: {
+          ...where,
+          isBlocked: true,
+        },
+        select: { id: true, startTime: true, endTime: true },
+      });
+
+      const slotIdsToUnblock = slots
+        .filter((slot) => {
+          const slotStart = this.parseTime(slot.startTime);
+          const slotEnd = this.parseTime(slot.endTime);
+          return slotStart >= startMinutes && slotEnd <= endMinutes;
+        })
+        .map((slot) => slot.id);
+
+      if (slotIdsToUnblock.length === 0) {
+        return 0;
+      }
+
+      const result = await prisma.doctorSlot.updateMany({
+        where: { id: { in: slotIdsToUnblock } },
+        data: { isBlocked: false },
+      });
+
+      return result.count;
+    }
+
+    // Full day unblocking
+    const result = await prisma.doctorSlot.updateMany({
+      where,
+      data: { isBlocked: false },
+    });
+
+    return result.count;
+  }
+
+  /**
+   * Count existing appointments in a date range for a doctor
+   * Used to warn when creating an absence
+   */
+  async countAppointmentsInDateRange(
+    doctorId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<number> {
+    const normalizedStart = new Date(startDate);
+    normalizedStart.setHours(0, 0, 0, 0);
+    const normalizedEnd = new Date(endDate);
+    normalizedEnd.setHours(23, 59, 59, 999);
+
+    const count = await prisma.appointment.count({
+      where: {
+        doctorId,
+        appointmentDate: {
+          gte: normalizedStart,
+          lte: normalizedEnd,
+        },
+        status: {
+          notIn: ['CANCELLED', 'NO_SHOW'],
+        },
+      },
+    });
+
+    return count;
+  }
 }
 
 export const slotService = new SlotService();

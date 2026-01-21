@@ -13,10 +13,12 @@ import {
   CurrencyDollarIcon,
   StarIcon,
   DocumentTextIcon,
+  NoSymbolIcon,
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import { doctorApi } from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+import DoctorAbsenceList from '../components/doctors/DoctorAbsenceList';
 import { format } from 'date-fns';
 import clsx from 'clsx';
 
@@ -54,6 +56,7 @@ export default function DoctorDetail() {
   const tabs = [
     { name: 'Overview', icon: DocumentTextIcon },
     { name: 'Schedule', icon: CalendarDaysIcon },
+    { name: 'Absences', icon: NoSymbolIcon },
     { name: 'Appointments', icon: UserGroupIcon },
   ];
 
@@ -342,6 +345,14 @@ export default function DoctorDetail() {
                   No schedule set. Please configure the doctor's working hours.
                 </p>
               )}
+            </div>
+          </Tab.Panel>
+
+          {/* Absences Tab */}
+          <Tab.Panel>
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Leave & Absences</h3>
+              <DoctorAbsenceList doctorId={doctor.id} />
             </div>
           </Tab.Panel>
 

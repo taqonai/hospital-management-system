@@ -53,6 +53,7 @@ model Hospital {
   customRoles      CustomRole[]
   rbacAuditLogs    RBACauditLog[]
   doctorSlots      DoctorSlot[]
+  doctorAbsences   DoctorAbsence[]
 
   // Insurance Coding
   icd10Codes       ICD10Code[]
@@ -324,6 +325,7 @@ model Doctor {
   prescriptions      Prescription[]
   surgeries          Surgery[]
   aiDiagnoses        AIDiagnosis[]
+  absences           DoctorAbsence[]
 
   @@map("doctors")
 }
@@ -5917,4 +5919,35 @@ enum SurveyType {
   SERVICE_QUALITY
   DOCTOR_FEEDBACK
   CUSTOM
+}
+
+// ==================== DOCTOR ABSENCE MANAGEMENT ====================
+
+enum AbsenceStatus {
+  ACTIVE
+  CANCELLED
+}
+
+model DoctorAbsence {
+  id          String        @id @default(uuid())
+  doctorId    String
+  hospitalId  String
+  startDate   DateTime      @db.Date
+  endDate     DateTime      @db.Date
+  reason      String                        // "Annual Leave", "Conference", "Personal"
+  notes       String?                       // Additional details
+  isFullDay   Boolean       @default(true)  // Full day or partial
+  startTime   String?                       // If partial: "14:00"
+  endTime     String?                       // If partial: "18:00"
+  status      AbsenceStatus @default(ACTIVE)
+  createdBy   String                        // User who created
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  doctor      Doctor   @relation(fields: [doctorId], references: [id])
+  hospital    Hospital @relation(fields: [hospitalId], references: [id])
+
+  @@index([doctorId, startDate, endDate])
+  @@index([hospitalId, startDate])
+  @@map("doctor_absences")
 }

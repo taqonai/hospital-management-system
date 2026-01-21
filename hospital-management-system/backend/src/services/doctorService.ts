@@ -1,9 +1,24 @@
 import prisma from '../config/database';
 import bcrypt from 'bcryptjs';
 import { CreateDoctorDto, SearchParams } from '../types';
-import { NotFoundError, ConflictError, AppError } from '../middleware/errorHandler';
-import { DayOfWeek } from '@prisma/client';
+import { NotFoundError, ConflictError, AppError, ValidationError } from '../middleware/errorHandler';
+import { DayOfWeek, AbsenceStatus } from '@prisma/client';
 import { slotService } from './slotService';
+
+export interface CreateAbsenceDto {
+  startDate: string;
+  endDate: string;
+  reason: string;
+  notes?: string;
+  isFullDay?: boolean;
+  startTime?: string;
+  endTime?: string;
+}
+
+export interface UpdateAbsenceDto {
+  reason?: string;
+  notes?: string;
+}
 
 export class DoctorService {
   async create(hospitalId: string, data: CreateDoctorDto & { specializationId?: string }) {
@@ -463,6 +478,263 @@ export class DoctorService {
       totalPatients: totalPatients.length,
       pendingConsultations,
       recentConsultations,
+    };
+  }
+
+  // ==================== ABSENCE MANAGEMENT ====================
+
+  async createAbsence(
+    doctorId: string,
+    hospitalId: string,
+    userId: string,
+    data: CreateAbsenceDto
+  ) {
+    // Validate doctor exists
+    const doctor = await prisma.doctor.findFirst({
+      where: { id: doctorId, user: { hospitalId } },
+    });
+
+    if (!doctor) {
+      throw new NotFoundError('Doctor not found');
+    }
+
+    // Parse and validate dates
+    const startDate = new Date(data.startDate);
+    const endDate = new Date(data.endDate);
+
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      throw new ValidationError('Invalid date format');
+    }
+
+    if (endDate < startDate) {
+      throw new ValidationError('End date must be on or after start date');
+    }
+
+    // Check for past dates
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (startDate < today) {
+      throw new ValidationError('Cannot create absence in the past');
+    }
+
+    // Check for overlapping active absences
+    const overlapping = await prisma.doctorAbsence.findFirst({
+      where: {
+        doctorId,
+        status: AbsenceStatus.ACTIVE,
+        OR: [
+          {
+            startDate: { lte: endDate },
+            endDate: { gte: startDate },
+          },
+        ],
+      },
+    });
+
+    if (overlapping) {
+      throw new AppError('An absence already exists for this date range', 400);
+    }
+
+    // Count existing appointments in the date range (for warning)
+    const appointmentCount = await slotService.countAppointmentsInDateRange(
+      doctorId,
+      startDate,
+      endDate
+    );
+
+    // Create the absence record
+    const absence = await prisma.doctorAbsence.create({
+      data: {
+        doctorId,
+        hospitalId,
+        startDate,
+        endDate,
+        reason: data.reason,
+        notes: data.notes,
+        isFullDay: data.isFullDay !== false,
+        startTime: data.isFullDay === false ? data.startTime : null,
+        endTime: data.isFullDay === false ? data.endTime : null,
+        createdBy: userId,
+      },
+    });
+
+    // Block slots for the date range
+    const blockedSlots = await slotService.blockSlotsForDateRange(
+      doctorId,
+      hospitalId,
+      startDate,
+      endDate,
+      data.isFullDay !== false,
+      data.startTime,
+      data.endTime
+    );
+
+    return {
+      ...absence,
+      blockedSlots,
+      existingAppointments: appointmentCount,
+    };
+  }
+
+  async getAbsences(
+    doctorId: string,
+    hospitalId: string,
+    params?: { upcoming?: boolean; status?: AbsenceStatus }
+  ) {
+    // Validate doctor exists
+    const doctor = await prisma.doctor.findFirst({
+      where: { id: doctorId, user: { hospitalId } },
+    });
+
+    if (!doctor) {
+      throw new NotFoundError('Doctor not found');
+    }
+
+    const where: any = {
+      doctorId,
+      hospitalId,
+    };
+
+    // Filter by status if provided
+    if (params?.status) {
+      where.status = params.status;
+    }
+
+    // Filter for upcoming absences if requested
+    if (params?.upcoming) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      where.endDate = { gte: today };
+    }
+
+    const absences = await prisma.doctorAbsence.findMany({
+      where,
+      orderBy: { startDate: 'asc' },
+    });
+
+    return absences;
+  }
+
+  async getAbsenceById(absenceId: string, hospitalId: string) {
+    const absence = await prisma.doctorAbsence.findFirst({
+      where: {
+        id: absenceId,
+        hospitalId,
+      },
+    });
+
+    if (!absence) {
+      throw new NotFoundError('Absence not found');
+    }
+
+    return absence;
+  }
+
+  async updateAbsence(
+    absenceId: string,
+    hospitalId: string,
+    data: UpdateAbsenceDto
+  ) {
+    const absence = await prisma.doctorAbsence.findFirst({
+      where: {
+        id: absenceId,
+        hospitalId,
+        status: AbsenceStatus.ACTIVE,
+      },
+    });
+
+    if (!absence) {
+      throw new NotFoundError('Active absence not found');
+    }
+
+    // Only allow updating reason and notes, not dates
+    const updated = await prisma.doctorAbsence.update({
+      where: { id: absenceId },
+      data: {
+        reason: data.reason ?? absence.reason,
+        notes: data.notes ?? absence.notes,
+      },
+    });
+
+    return updated;
+  }
+
+  async cancelAbsence(absenceId: string, hospitalId: string) {
+    const absence = await prisma.doctorAbsence.findFirst({
+      where: {
+        id: absenceId,
+        hospitalId,
+        status: AbsenceStatus.ACTIVE,
+      },
+    });
+
+    if (!absence) {
+      throw new NotFoundError('Active absence not found');
+    }
+
+    // Update status to CANCELLED
+    const updated = await prisma.doctorAbsence.update({
+      where: { id: absenceId },
+      data: { status: AbsenceStatus.CANCELLED },
+    });
+
+    // Unblock the slots
+    const unblockedSlots = await slotService.unblockSlotsForDateRange(
+      absence.doctorId,
+      hospitalId,
+      absence.startDate,
+      absence.endDate,
+      absence.isFullDay,
+      absence.startTime || undefined,
+      absence.endTime || undefined
+    );
+
+    return {
+      ...updated,
+      unblockedSlots,
+    };
+  }
+
+  async getUpcomingAbsenceSummary(doctorId: string, hospitalId: string) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [upcomingAbsences, totalDaysBlocked] = await Promise.all([
+      prisma.doctorAbsence.count({
+        where: {
+          doctorId,
+          hospitalId,
+          status: AbsenceStatus.ACTIVE,
+          endDate: { gte: today },
+        },
+      }),
+      prisma.doctorAbsence.findMany({
+        where: {
+          doctorId,
+          hospitalId,
+          status: AbsenceStatus.ACTIVE,
+          endDate: { gte: today },
+        },
+        select: {
+          startDate: true,
+          endDate: true,
+        },
+      }),
+    ]);
+
+    // Calculate total days
+    let totalDays = 0;
+    for (const absence of totalDaysBlocked) {
+      const start = new Date(Math.max(absence.startDate.getTime(), today.getTime()));
+      const end = absence.endDate;
+      const diffTime = Math.abs(end.getTime() - start.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      totalDays += diffDays;
+    }
+
+    return {
+      upcomingAbsences,
+      totalDaysBlocked: totalDays,
     };
   }
 }

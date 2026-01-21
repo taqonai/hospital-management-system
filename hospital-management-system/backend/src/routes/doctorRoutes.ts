@@ -119,4 +119,87 @@ router.get(
   })
 );
 
+// ==================== ABSENCE MANAGEMENT ====================
+
+// Get all absences for a doctor
+router.get(
+  '/:id/absences',
+  authenticate,
+  validate(uuidParamSchema),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { upcoming, status } = req.query;
+    const absences = await doctorService.getAbsences(
+      req.params.id,
+      req.user!.hospitalId,
+      {
+        upcoming: upcoming === 'true',
+        status: status as any,
+      }
+    );
+    sendSuccess(res, absences);
+  })
+);
+
+// Get absence summary for a doctor
+router.get(
+  '/:id/absences/summary',
+  authenticate,
+  validate(uuidParamSchema),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const summary = await doctorService.getUpcomingAbsenceSummary(
+      req.params.id,
+      req.user!.hospitalId
+    );
+    sendSuccess(res, summary);
+  })
+);
+
+// Create absence for a doctor
+router.post(
+  '/:id/absences',
+  authenticate,
+  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  validate(uuidParamSchema),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const absence = await doctorService.createAbsence(
+      req.params.id,
+      req.user!.hospitalId,
+      req.user!.userId,
+      req.body
+    );
+    sendCreated(res, absence, 'Absence created successfully');
+  })
+);
+
+// Update absence
+router.patch(
+  '/:id/absences/:absenceId',
+  authenticate,
+  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  validate(uuidParamSchema),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const absence = await doctorService.updateAbsence(
+      req.params.absenceId,
+      req.user!.hospitalId,
+      req.body
+    );
+    sendSuccess(res, absence, 'Absence updated successfully');
+  })
+);
+
+// Cancel (delete) absence
+router.delete(
+  '/:id/absences/:absenceId',
+  authenticate,
+  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  validate(uuidParamSchema),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const result = await doctorService.cancelAbsence(
+      req.params.absenceId,
+      req.user!.hospitalId
+    );
+    sendSuccess(res, result, 'Absence cancelled successfully');
+  })
+);
+
 export default router;
