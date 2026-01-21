@@ -24,6 +24,8 @@ import { Appointment } from '../types';
 import { format, addDays, subDays } from 'date-fns';
 import toast from 'react-hot-toast';
 import { useAuth } from '../hooks/useAuth';
+import { useBookingData } from '../hooks/useBookingData';
+import { BookingTicket } from '../components/booking/BookingTicket';
 
 const statusConfig: Record<string, { bg: string; text: string; dot: string }> = {
   SCHEDULED: { bg: 'bg-blue-100', text: 'text-blue-700', dot: 'bg-blue-500' },
@@ -39,6 +41,7 @@ export default function Appointments() {
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [statusFilter, setStatusFilter] = useState('');
   const [cancelConfirm, setCancelConfirm] = useState<string | null>(null);
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { isDoctor, hasRole } = useAuth();
 
@@ -47,6 +50,12 @@ export default function Appointments() {
 
   // Only doctors and admins can start consultations
   const canStartConsultation = hasRole(['DOCTOR', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']);
+
+  // Receptionist and Nurse can only view (not edit/delete) after check-in
+  const isReceptionistOrNurse = hasRole(['RECEPTIONIST', 'NURSE']) && !hasRole(['HOSPITAL_ADMIN', 'SUPER_ADMIN', 'DOCTOR']);
+
+  // Fetch booking ticket data when an appointment is selected for viewing
+  const { data: bookingData, isLoading: bookingLoading, refetch: refetchBooking } = useBookingData(selectedBookingId);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['appointments', { date: selectedDate, status: statusFilter }],
@@ -341,21 +350,27 @@ export default function Appointments() {
 
                       {/* Quick Actions */}
                       <div className="flex items-center gap-1 ml-2 pl-2 border-l border-gray-200">
-                        <Link
-                          to={`/appointments/${appointment.id}`}
+                        {/* View Booking - always available */}
+                        <button
+                          onClick={() => setSelectedBookingId(appointment.id)}
                           className="p-2 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                          title="View"
+                          title="View Booking"
                         >
                           <EyeIcon className="h-5 w-5" />
-                        </Link>
-                        <Link
-                          to={`/appointments/${appointment.id}/edit`}
-                          className="p-2 rounded-lg text-gray-500 hover:text-purple-600 hover:bg-purple-50 transition-colors"
-                          title="Edit"
-                        >
-                          <PencilIcon className="h-5 w-5" />
-                        </Link>
-                        {!['COMPLETED', 'CANCELLED'].includes(appointment.status) && (
+                        </button>
+                        {/* Edit - hidden for receptionist/nurse after check-in */}
+                        {!(isReceptionistOrNurse && ['CHECKED_IN', 'IN_PROGRESS', 'COMPLETED'].includes(appointment.status)) && (
+                          <Link
+                            to={`/appointments/${appointment.id}/edit`}
+                            className="p-2 rounded-lg text-gray-500 hover:text-purple-600 hover:bg-purple-50 transition-colors"
+                            title="Edit"
+                          >
+                            <PencilIcon className="h-5 w-5" />
+                          </Link>
+                        )}
+                        {/* Cancel/Delete - hidden for completed/cancelled, and for receptionist/nurse after check-in */}
+                        {!['COMPLETED', 'CANCELLED'].includes(appointment.status) &&
+                         !(isReceptionistOrNurse && ['CHECKED_IN', 'IN_PROGRESS'].includes(appointment.status)) && (
                           <button
                             onClick={() => setCancelConfirm(appointment.id)}
                             className="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
@@ -397,6 +412,36 @@ export default function Appointments() {
                 {updateStatusMutation.isPending ? 'Cancelling...' : 'Cancel Appointment'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Booking Modal */}
+      {selectedBookingId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            {bookingLoading ? (
+              <div className="bg-white rounded-xl p-8 flex items-center justify-center">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600" />
+              </div>
+            ) : bookingData ? (
+              <BookingTicket
+                data={bookingData}
+                isLoading={bookingLoading}
+                onRefresh={() => refetchBooking()}
+                onClose={() => setSelectedBookingId(null)}
+              />
+            ) : (
+              <div className="bg-white rounded-xl p-8 text-center">
+                <p className="text-gray-500 mb-4">Unable to load booking details</p>
+                <button
+                  onClick={() => setSelectedBookingId(null)}
+                  className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200"
+                >
+                  Close
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
