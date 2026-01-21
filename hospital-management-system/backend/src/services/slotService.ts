@@ -1,5 +1,5 @@
 import prisma from '../config/database';
-import { NotFoundError, AppError } from '../middleware/errorHandler';
+import { NotFoundError, AppError, ValidationError } from '../middleware/errorHandler';
 import { DayOfWeek } from '@prisma/client';
 
 // Map JavaScript Date.getDay() (0=Sunday, 6=Saturday) to DayOfWeek enum
@@ -12,6 +12,10 @@ const dayIndexToEnum: Record<number, DayOfWeek> = {
   5: DayOfWeek.FRIDAY,
   6: DayOfWeek.SATURDAY,
 };
+
+// Validation helpers
+const TIME_REGEX = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 export class SlotService {
   /**
@@ -194,6 +198,37 @@ export class SlotService {
   }
 
   /**
+   * Validate date string format
+   */
+  private validateDateFormat(date: string): void {
+    if (!DATE_REGEX.test(date)) {
+      throw new ValidationError('Invalid date format. Use YYYY-MM-DD');
+    }
+    const parsed = new Date(date);
+    if (isNaN(parsed.getTime())) {
+      throw new ValidationError('Invalid date');
+    }
+  }
+
+  /**
+   * Get current time in minutes since midnight
+   */
+  private getCurrentTimeMinutes(): number {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  }
+
+  /**
+   * Check if a date is today
+   */
+  private isToday(date: Date): boolean {
+    const today = new Date();
+    return date.getFullYear() === today.getFullYear() &&
+           date.getMonth() === today.getMonth() &&
+           date.getDate() === today.getDate();
+  }
+
+  /**
    * Get available slots for a specific date
    */
   async getAvailableSlotsByDate(
@@ -201,6 +236,9 @@ export class SlotService {
     date: string,
     hospitalId: string
   ) {
+    // Validate date format
+    this.validateDateFormat(date);
+
     const slotDate = new Date(date);
     slotDate.setHours(0, 0, 0, 0);
 
@@ -212,7 +250,19 @@ export class SlotService {
       return [];
     }
 
-    const slots = await prisma.doctorSlot.findMany({
+    // Get doctor to check maxPatientsPerDay
+    const doctor = await prisma.doctor.findFirst({
+      where: { id: doctorId, user: { hospitalId } },
+      include: {
+        schedules: { where: { isActive: true } },
+      },
+    });
+
+    if (!doctor) {
+      throw new NotFoundError('Doctor not found');
+    }
+
+    let slots = await prisma.doctorSlot.findMany({
       where: {
         doctorId,
         hospitalId,
@@ -221,16 +271,9 @@ export class SlotService {
       orderBy: { startTime: 'asc' },
     });
 
-    // If no slots exist for this date, try to generate them
+    // If no slots exist for this date, try to generate them on-demand
     if (slots.length === 0) {
-      const doctor = await prisma.doctor.findFirst({
-        where: { id: doctorId, user: { hospitalId } },
-        include: {
-          schedules: { where: { isActive: true } },
-        },
-      });
-
-      if (doctor && doctor.schedules.length > 0) {
+      if (doctor.schedules.length > 0) {
         const dayOfWeek = dayIndexToEnum[slotDate.getDay()];
         const schedule = doctor.schedules.find((s) => s.dayOfWeek === dayOfWeek);
 
@@ -261,7 +304,7 @@ export class SlotService {
           }
 
           // Fetch newly created slots
-          return prisma.doctorSlot.findMany({
+          slots = await prisma.doctorSlot.findMany({
             where: {
               doctorId,
               hospitalId,
@@ -271,6 +314,31 @@ export class SlotService {
           });
         }
       }
+    }
+
+    // For today's date, filter out past time slots
+    if (this.isToday(slotDate)) {
+      const currentMinutes = this.getCurrentTimeMinutes();
+      // Add 15 minute buffer - don't show slots that start in less than 15 mins
+      const bufferMinutes = currentMinutes + 15;
+
+      slots = slots.filter(slot => {
+        const slotStartMinutes = this.parseTime(slot.startTime);
+        return slotStartMinutes >= bufferMinutes;
+      });
+    }
+
+    // Check max patients per day - count booked slots
+    const bookedCount = slots.filter(s => !s.isAvailable).length;
+    const maxPatients = doctor.maxPatientsPerDay || 30;
+
+    // If max reached, mark remaining slots as unavailable in response
+    if (bookedCount >= maxPatients) {
+      slots = slots.map(slot => ({
+        ...slot,
+        isAvailable: false,
+        _maxReached: true, // Flag for frontend to show appropriate message
+      }));
     }
 
     return slots;
@@ -315,9 +383,55 @@ export class SlotService {
     startTime: string,
     appointmentId: string
   ): Promise<void> {
+    // Validate time format
+    if (!TIME_REGEX.test(startTime)) {
+      throw new ValidationError('Invalid time format. Use HH:MM');
+    }
+
     // Normalize the date to midnight
     const normalizedDate = new Date(slotDate);
     normalizedDate.setHours(0, 0, 0, 0);
+
+    // Check if the date is not in the past
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (normalizedDate < today) {
+      throw new AppError('Cannot book appointments in the past', 400);
+    }
+
+    // For today, check if the time slot has already passed
+    if (this.isToday(normalizedDate)) {
+      const slotStartMinutes = this.parseTime(startTime);
+      const currentMinutes = this.getCurrentTimeMinutes();
+      // Add 15 minute buffer
+      if (slotStartMinutes < currentMinutes + 15) {
+        throw new AppError('This time slot has already passed or is too soon', 400);
+      }
+    }
+
+    // Get doctor to check maxPatientsPerDay
+    const doctor = await prisma.doctor.findFirst({
+      where: { id: doctorId },
+    });
+
+    if (!doctor) {
+      throw new NotFoundError('Doctor not found');
+    }
+
+    // Check max patients per day
+    const bookedSlotsToday = await prisma.doctorSlot.count({
+      where: {
+        doctorId,
+        slotDate: normalizedDate,
+        isAvailable: false,
+      },
+    });
+
+    const maxPatients = doctor.maxPatientsPerDay || 30;
+    if (bookedSlotsToday >= maxPatients) {
+      throw new AppError(`Maximum appointments (${maxPatients}) reached for this day`, 400);
+    }
 
     const slot = await prisma.doctorSlot.findUnique({
       where: {
@@ -331,14 +445,6 @@ export class SlotService {
 
     if (!slot) {
       // Create the slot if it doesn't exist (for backward compatibility)
-      const doctor = await prisma.doctor.findFirst({
-        where: { id: doctorId },
-      });
-
-      if (!doctor) {
-        throw new NotFoundError('Doctor not found');
-      }
-
       // Calculate end time
       const [hours, mins] = startTime.split(':').map(Number);
       const startMinutes = hours * 60 + mins;
@@ -360,11 +466,11 @@ export class SlotService {
     }
 
     if (!slot.isAvailable) {
-      throw new AppError('Slot is not available', 400);
+      throw new AppError('This time slot is already booked', 400);
     }
 
     if (slot.isBlocked) {
-      throw new AppError('Slot is blocked by the doctor', 400);
+      throw new AppError('This time slot is blocked by the doctor', 400);
     }
 
     await prisma.doctorSlot.update({
