@@ -12,6 +12,16 @@ import { format, isAfter, isBefore, startOfDay } from 'date-fns';
 import DoctorAbsenceForm from './DoctorAbsenceForm';
 import LoadingSpinner from '../common/LoadingSpinner';
 
+const ABSENCE_TYPE_LABELS: Record<string, string> = {
+  ANNUAL_LEAVE: 'Annual Leave',
+  SICK_LEAVE: 'Sick Leave',
+  CONFERENCE: 'Conference',
+  TRAINING: 'Training',
+  PERSONAL: 'Personal',
+  EMERGENCY: 'Emergency',
+  OTHER: 'Other',
+};
+
 interface DoctorAbsenceListProps {
   doctorId: string;
 }
@@ -205,10 +215,15 @@ export default function DoctorAbsenceList({ doctorId }: DoctorAbsenceListProps) 
                     {getStatusBadge(absence)}
                   </div>
                   <div className="flex items-center gap-3 text-sm text-gray-600">
-                    <span className="font-medium text-emerald-600">{absence.reason}</span>
+                    <span className="font-medium text-emerald-600">
+                      {ABSENCE_TYPE_LABELS[absence.absenceType] || absence.absenceType}
+                    </span>
+                    {absence.reason && (
+                      <span className="text-gray-500">- {absence.reason}</span>
+                    )}
                     {!absence.isFullDay && absence.startTime && absence.endTime && (
                       <span className="text-gray-500">
-                        {absence.startTime} - {absence.endTime}
+                        ({absence.startTime} - {absence.endTime})
                       </span>
                     )}
                   </div>

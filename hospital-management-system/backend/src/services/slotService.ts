@@ -83,6 +83,7 @@ export class SlotService {
 
   /**
    * Generate slots for a doctor for the next N days
+   * Automatically blocks slots that fall within active absences
    */
   async generateSlotsForDoctor(
     doctorId: string,
@@ -107,16 +108,61 @@ export class SlotService {
       return 0; // No schedules defined
     }
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const endDate = new Date(today);
+    endDate.setDate(endDate.getDate() + daysAhead);
+
+    // Fetch active absences for this doctor in the date range
+    const absences = await prisma.doctorAbsence.findMany({
+      where: {
+        doctorId,
+        status: 'ACTIVE',
+        startDate: { lte: endDate },
+        endDate: { gte: today },
+      },
+    });
+
+    // Helper to check if a slot should be blocked due to absence
+    const isSlotInAbsence = (slotDate: Date, startTime: string, endTime: string): boolean => {
+      const slotDateStr = slotDate.toISOString().split('T')[0];
+
+      for (const absence of absences) {
+        const absenceStart = new Date(absence.startDate);
+        const absenceEnd = new Date(absence.endDate);
+
+        // Check if slot date is within absence range
+        if (slotDate >= absenceStart && slotDate <= absenceEnd) {
+          if (absence.isFullDay) {
+            return true; // Full day absence blocks all slots
+          }
+
+          // Partial day - check time overlap
+          if (absence.startTime && absence.endTime) {
+            const slotStartMinutes = this.parseTime(startTime);
+            const slotEndMinutes = this.parseTime(endTime);
+            const absenceStartMinutes = this.parseTime(absence.startTime);
+            const absenceEndMinutes = this.parseTime(absence.endTime);
+
+            // Check for overlap
+            if (slotStartMinutes < absenceEndMinutes && slotEndMinutes > absenceStartMinutes) {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    };
+
     const slotsToCreate: Array<{
       doctorId: string;
       hospitalId: string;
       slotDate: Date;
       startTime: string;
       endTime: string;
+      isBlocked: boolean;
     }> = [];
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
 
     // Generate slots for each day
     for (let i = 0; i < daysAhead; i++) {
@@ -138,12 +184,14 @@ export class SlotService {
       );
 
       for (const slot of timeSlots) {
+        const shouldBlock = isSlotInAbsence(date, slot.startTime, slot.endTime);
         slotsToCreate.push({
           doctorId,
           hospitalId,
           slotDate: date,
           startTime: slot.startTime,
           endTime: slot.endTime,
+          isBlocked: shouldBlock,
         });
       }
     }
@@ -165,7 +213,7 @@ export class SlotService {
             },
           },
           create: slot,
-          update: {}, // Don't update if exists
+          update: { isBlocked: slot.isBlocked }, // Update blocked status if absence was added
         });
         createdCount++;
       } catch (error) {

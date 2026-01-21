@@ -232,13 +232,15 @@ export const doctorApi = {
   createAbsence: (doctorId: string, data: {
     startDate: string;
     endDate: string;
-    reason: string;
+    absenceType: 'ANNUAL_LEAVE' | 'SICK_LEAVE' | 'CONFERENCE' | 'TRAINING' | 'PERSONAL' | 'EMERGENCY' | 'OTHER';
+    reason?: string;
     notes?: string;
     isFullDay?: boolean;
     startTime?: string;
     endTime?: string;
   }) => api.post(`/doctors/${doctorId}/absences`, data),
   updateAbsence: (doctorId: string, absenceId: string, data: {
+    absenceType?: 'ANNUAL_LEAVE' | 'SICK_LEAVE' | 'CONFERENCE' | 'TRAINING' | 'PERSONAL' | 'EMERGENCY' | 'OTHER';
     reason?: string;
     notes?: string;
   }) => api.patch(`/doctors/${doctorId}/absences/${absenceId}`, data),

@@ -2,13 +2,14 @@ import prisma from '../config/database';
 import bcrypt from 'bcryptjs';
 import { CreateDoctorDto, SearchParams } from '../types';
 import { NotFoundError, ConflictError, AppError, ValidationError } from '../middleware/errorHandler';
-import { DayOfWeek, AbsenceStatus } from '@prisma/client';
+import { DayOfWeek, AbsenceStatus, AbsenceType } from '@prisma/client';
 import { slotService } from './slotService';
 
 export interface CreateAbsenceDto {
   startDate: string;
   endDate: string;
-  reason: string;
+  absenceType: AbsenceType;
+  reason?: string;
   notes?: string;
   isFullDay?: boolean;
   startTime?: string;
@@ -16,6 +17,7 @@ export interface CreateAbsenceDto {
 }
 
 export interface UpdateAbsenceDto {
+  absenceType?: AbsenceType;
   reason?: string;
   notes?: string;
 }
@@ -535,12 +537,38 @@ export class DoctorService {
       throw new AppError('An absence already exists for this date range', 400);
     }
 
-    // Count existing appointments in the date range (for warning)
-    const appointmentCount = await slotService.countAppointmentsInDateRange(
-      doctorId,
-      startDate,
-      endDate
-    );
+    // Find affected appointments with patient details
+    const affectedAppointments = await prisma.appointment.findMany({
+      where: {
+        doctorId,
+        appointmentDate: {
+          gte: startDate,
+          lte: endDate,
+        },
+        status: {
+          notIn: ['CANCELLED', 'NO_SHOW', 'COMPLETED'],
+        },
+      },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+            userId: true,
+          },
+        },
+        doctor: {
+          include: {
+            user: {
+              select: { firstName: true, lastName: true },
+            },
+          },
+        },
+      },
+    });
 
     // Create the absence record
     const absence = await prisma.doctorAbsence.create({
@@ -549,6 +577,7 @@ export class DoctorService {
         hospitalId,
         startDate,
         endDate,
+        absenceType: data.absenceType || 'OTHER',
         reason: data.reason,
         notes: data.notes,
         isFullDay: data.isFullDay !== false,
@@ -569,10 +598,50 @@ export class DoctorService {
       data.endTime
     );
 
+    // Create notifications for affected patients
+    const notifiedPatients: string[] = [];
+    if (affectedAppointments.length > 0) {
+      const doctorName = affectedAppointments[0]?.doctor?.user
+        ? `Dr. ${affectedAppointments[0].doctor.user.firstName} ${affectedAppointments[0].doctor.user.lastName}`
+        : 'Your doctor';
+
+      for (const appointment of affectedAppointments) {
+        if (appointment.patient?.userId) {
+          try {
+            await prisma.notification.create({
+              data: {
+                userId: appointment.patient.userId,
+                type: 'APPOINTMENT',
+                title: 'Appointment Affected by Doctor Absence',
+                message: `${doctorName} will be unavailable on ${new Date(appointment.appointmentDate).toLocaleDateString()}. Please reschedule your appointment scheduled for ${appointment.startTime}.`,
+                data: JSON.stringify({
+                  appointmentId: appointment.id,
+                  absenceId: absence.id,
+                  doctorId,
+                  originalDate: appointment.appointmentDate,
+                }),
+              },
+            });
+            notifiedPatients.push(appointment.patient.id);
+          } catch (error) {
+            console.error('Failed to create notification for patient:', appointment.patient.id, error);
+          }
+        }
+      }
+    }
+
     return {
       ...absence,
       blockedSlots,
-      existingAppointments: appointmentCount,
+      affectedAppointments: affectedAppointments.length,
+      notifiedPatients: notifiedPatients.length,
+      affectedAppointmentDetails: affectedAppointments.map((apt) => ({
+        id: apt.id,
+        date: apt.appointmentDate,
+        time: apt.startTime,
+        patientName: apt.patient ? `${apt.patient.firstName} ${apt.patient.lastName}` : 'Unknown',
+        patientPhone: apt.patient?.phone,
+      })),
     };
   }
 
@@ -647,10 +716,11 @@ export class DoctorService {
       throw new NotFoundError('Active absence not found');
     }
 
-    // Only allow updating reason and notes, not dates
+    // Only allow updating absenceType, reason and notes, not dates
     const updated = await prisma.doctorAbsence.update({
       where: { id: absenceId },
       data: {
+        absenceType: data.absenceType ?? absence.absenceType,
         reason: data.reason ?? absence.reason,
         notes: data.notes ?? absence.notes,
       },

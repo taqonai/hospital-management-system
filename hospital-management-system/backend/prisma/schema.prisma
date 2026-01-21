@@ -5928,13 +5928,24 @@ enum AbsenceStatus {
   CANCELLED
 }
 
+enum AbsenceType {
+  ANNUAL_LEAVE
+  SICK_LEAVE
+  CONFERENCE
+  TRAINING
+  PERSONAL
+  EMERGENCY
+  OTHER
+}
+
 model DoctorAbsence {
   id          String        @id @default(uuid())
   doctorId    String
   hospitalId  String
   startDate   DateTime      @db.Date
   endDate     DateTime      @db.Date
-  reason      String                        // "Annual Leave", "Conference", "Personal"
+  absenceType AbsenceType   @default(OTHER)
+  reason      String?                       // Additional reason text
   notes       String?                       // Additional details
   isFullDay   Boolean       @default(true)  // Full day or partial
   startTime   String?                       // If partial: "14:00"

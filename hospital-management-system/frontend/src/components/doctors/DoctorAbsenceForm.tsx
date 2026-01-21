@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { XMarkIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { doctorApi } from '../../services/api';
 import { format } from 'date-fns';
 
@@ -11,14 +11,17 @@ interface DoctorAbsenceFormProps {
   onClose: () => void;
 }
 
-const ABSENCE_REASONS = [
-  'Annual Leave',
-  'Sick Leave',
-  'Conference',
-  'Training',
-  'Personal',
-  'Other',
-];
+const ABSENCE_TYPES = [
+  { value: 'ANNUAL_LEAVE', label: 'Annual Leave' },
+  { value: 'SICK_LEAVE', label: 'Sick Leave' },
+  { value: 'CONFERENCE', label: 'Conference' },
+  { value: 'TRAINING', label: 'Training' },
+  { value: 'PERSONAL', label: 'Personal' },
+  { value: 'EMERGENCY', label: 'Emergency' },
+  { value: 'OTHER', label: 'Other' },
+] as const;
+
+type AbsenceType = typeof ABSENCE_TYPES[number]['value'];
 
 export default function DoctorAbsenceForm({
   doctorId,
@@ -32,7 +35,8 @@ export default function DoctorAbsenceForm({
   const [formData, setFormData] = useState({
     startDate: '',
     endDate: '',
-    reason: 'Annual Leave',
+    absenceType: 'ANNUAL_LEAVE' as AbsenceType,
+    reason: '',
     notes: '',
     isFullDay: true,
     startTime: '09:00',
@@ -40,13 +44,15 @@ export default function DoctorAbsenceForm({
   });
 
   const [error, setError] = useState<string | null>(null);
+  const [affectedAppointments, setAffectedAppointments] = useState<any[]>([]);
 
   useEffect(() => {
     if (absence) {
       setFormData({
         startDate: format(new Date(absence.startDate), 'yyyy-MM-dd'),
         endDate: format(new Date(absence.endDate), 'yyyy-MM-dd'),
-        reason: absence.reason,
+        absenceType: absence.absenceType || 'OTHER',
+        reason: absence.reason || '',
         notes: absence.notes || '',
         isFullDay: absence.isFullDay,
         startTime: absence.startTime || '09:00',
@@ -58,7 +64,8 @@ export default function DoctorAbsenceForm({
       setFormData({
         startDate: today,
         endDate: today,
-        reason: 'Annual Leave',
+        absenceType: 'ANNUAL_LEAVE',
+        reason: '',
         notes: '',
         isFullDay: true,
         startTime: '09:00',
@@ -66,16 +73,26 @@ export default function DoctorAbsenceForm({
       });
     }
     setError(null);
+    setAffectedAppointments([]);
   }, [absence, isOpen]);
 
   const createMutation = useMutation({
-    mutationFn: (data: typeof formData) => doctorApi.createAbsence(doctorId, data),
+    mutationFn: (data: typeof formData) => doctorApi.createAbsence(doctorId, {
+      startDate: data.startDate,
+      endDate: data.endDate,
+      absenceType: data.absenceType,
+      reason: data.reason || undefined,
+      notes: data.notes || undefined,
+      isFullDay: data.isFullDay,
+      startTime: data.isFullDay ? undefined : data.startTime,
+      endTime: data.isFullDay ? undefined : data.endTime,
+    }),
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['doctor-absences', doctorId] });
       queryClient.invalidateQueries({ queryKey: ['doctor-absence-summary', doctorId] });
       const data = response.data?.data;
-      if (data?.existingAppointments > 0) {
-        alert(`Warning: There are ${data.existingAppointments} existing appointments during this absence period. Please reschedule them manually.`);
+      if (data?.affectedAppointments > 0) {
+        alert(`${data.affectedAppointments} appointment(s) are affected by this absence. ${data.notifiedPatients} patient(s) have been notified.`);
       }
       onClose();
     },
@@ -85,7 +102,7 @@ export default function DoctorAbsenceForm({
   });
 
   const updateMutation = useMutation({
-    mutationFn: (data: { reason?: string; notes?: string }) =>
+    mutationFn: (data: { absenceType?: AbsenceType; reason?: string; notes?: string }) =>
       doctorApi.updateAbsence(doctorId, absence?.id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['doctor-absences', doctorId] });
@@ -102,8 +119,9 @@ export default function DoctorAbsenceForm({
 
     if (isEditing) {
       updateMutation.mutate({
-        reason: formData.reason,
-        notes: formData.notes,
+        absenceType: formData.absenceType,
+        reason: formData.reason || undefined,
+        notes: formData.notes || undefined,
       });
     } else {
       createMutation.mutate(formData);
@@ -175,24 +193,40 @@ export default function DoctorAbsenceForm({
               </div>
             )}
 
-            {/* Reason */}
+            {/* Absence Type */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Reason
+                Absence Type
               </label>
               <select
+                value={formData.absenceType}
+                onChange={(e) =>
+                  setFormData({ ...formData, absenceType: e.target.value as AbsenceType })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              >
+                {ABSENCE_TYPES.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Reason (optional text) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Reason (optional)
+              </label>
+              <input
+                type="text"
                 value={formData.reason}
                 onChange={(e) =>
                   setFormData({ ...formData, reason: e.target.value })
                 }
+                placeholder="e.g., Medical AI Summit 2026"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-              >
-                {ABSENCE_REASONS.map((reason) => (
-                  <option key={reason} value={reason}>
-                    {reason}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
             {/* Full Day Toggle - only shown when creating */}
@@ -261,6 +295,16 @@ export default function DoctorAbsenceForm({
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
               />
             </div>
+
+            {/* Warning about affected appointments */}
+            {!isEditing && formData.absenceType === 'EMERGENCY' && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+                <ExclamationTriangleIcon className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-amber-700">
+                  Emergency absences may affect scheduled appointments. Affected patients will be notified automatically.
+                </p>
+              </div>
+            )}
 
             {/* Actions */}
             <div className="flex justify-end gap-3 pt-4">
