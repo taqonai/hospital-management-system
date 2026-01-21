@@ -10,9 +10,10 @@ import {
   DocumentTextIcon,
   CheckCircleIcon,
 } from '@heroicons/react/24/outline';
-import { appointmentApi, patientApi, doctorApi } from '../services/api';
+import { appointmentApi, patientApi, doctorApi, slotApi } from '../services/api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
+import { ExclamationCircleIcon } from '@heroicons/react/24/outline';
 
 interface AppointmentFormData {
   patientId: string;
@@ -29,7 +30,7 @@ const initialFormData: AppointmentFormData = {
   patientId: '',
   doctorId: '',
   appointmentDate: format(new Date(), 'yyyy-MM-dd'),
-  appointmentTime: '09:00',
+  appointmentTime: '',
   type: 'CONSULTATION',
   reason: '',
   notes: '',
@@ -53,11 +54,13 @@ const priorities = [
   { value: 'URGENT', label: 'Urgent', color: 'bg-red-100 text-red-700' },
 ];
 
-const timeSlots = [
-  '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-  '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30',
-  '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30',
-];
+interface Slot {
+  id: string;
+  startTime: string;
+  endTime: string;
+  isAvailable: boolean;
+  isBlocked: boolean;
+}
 
 export default function AppointmentForm() {
   const navigate = useNavigate();
@@ -91,6 +94,16 @@ export default function AppointmentForm() {
       const response = await doctorApi.getAll({ search: doctorSearch, limit: 10 });
       return response.data;
     },
+  });
+
+  // Fetch available slots for selected doctor and date
+  const { data: slotsData, isLoading: loadingSlots, isError: slotsError } = useQuery({
+    queryKey: ['slots', formData.doctorId, formData.appointmentDate],
+    queryFn: async () => {
+      const response = await slotApi.getByDoctorAndDate(formData.doctorId, formData.appointmentDate);
+      return response.data.data || [];
+    },
+    enabled: !!formData.doctorId && !!formData.appointmentDate,
   });
 
   // Fetch appointment data if editing
@@ -172,11 +185,19 @@ export default function AppointmentForm() {
     e.preventDefault();
     if (!validate()) return;
 
-    // Calculate end time (30 minutes after start)
-    const [hours, minutes] = formData.appointmentTime.split(':').map(Number);
-    const endHours = hours + Math.floor((minutes + 30) / 60);
-    const endMinutes = (minutes + 30) % 60;
-    const endTime = `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`;
+    // Get end time from the selected slot or calculate fallback
+    const selectedSlot = (slotsData || []).find((s: Slot) => s.startTime === formData.appointmentTime);
+    let endTime: string;
+
+    if (selectedSlot) {
+      endTime = selectedSlot.endTime;
+    } else {
+      // Fallback: calculate end time (30 minutes after start)
+      const [hours, minutes] = formData.appointmentTime.split(':').map(Number);
+      const endHours = hours + Math.floor((minutes + 30) / 60);
+      const endMinutes = (minutes + 30) % 60;
+      endTime = `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`;
+    }
 
     // Format date as ISO datetime
     const appointmentDate = new Date(`${formData.appointmentDate}T${formData.appointmentTime}:00`);
@@ -365,20 +386,55 @@ export default function AppointmentForm() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Time <span className="text-red-500">*</span>
               </label>
-              <div className="relative">
-                <ClockIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <select
-                  name="appointmentTime"
-                  value={formData.appointmentTime}
-                  onChange={handleChange}
-                  className={`w-full pl-10 pr-4 py-3 rounded-lg border ${errors.appointmentTime ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
-                >
-                  {timeSlots.map(slot => (
-                    <option key={slot} value={slot}>{slot}</option>
-                  ))}
-                </select>
-              </div>
+              {!formData.doctorId ? (
+                <div className="px-4 py-3 rounded-lg border border-gray-200 bg-gray-50 text-gray-500 text-sm">
+                  Please select a doctor first
+                </div>
+              ) : loadingSlots ? (
+                <div className="px-4 py-3 rounded-lg border border-gray-200 bg-gray-50 text-gray-500 text-sm flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
+                  Loading available slots...
+                </div>
+              ) : slotsError ? (
+                <div className="px-4 py-3 rounded-lg border border-red-200 bg-red-50 text-red-600 text-sm flex items-center gap-2">
+                  <ExclamationCircleIcon className="h-4 w-4" />
+                  Failed to load slots
+                </div>
+              ) : (slotsData || []).length === 0 ? (
+                <div className="px-4 py-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-sm flex items-center gap-2">
+                  <ExclamationCircleIcon className="h-4 w-4" />
+                  No slots available for this date
+                </div>
+              ) : (
+                <div className="relative">
+                  <ClockIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <select
+                    name="appointmentTime"
+                    value={formData.appointmentTime}
+                    onChange={handleChange}
+                    className={`w-full pl-10 pr-4 py-3 rounded-lg border ${errors.appointmentTime ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
+                  >
+                    <option value="">Select a time slot</option>
+                    {(slotsData || []).map((slot: Slot) => (
+                      <option
+                        key={slot.id || slot.startTime}
+                        value={slot.startTime}
+                        disabled={!slot.isAvailable || slot.isBlocked}
+                      >
+                        {slot.startTime} - {slot.endTime}
+                        {!slot.isAvailable && ' (Booked)'}
+                        {slot.isBlocked && ' (Blocked)'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {errors.appointmentTime && <p className="mt-1 text-sm text-red-500">{errors.appointmentTime}</p>}
+              {(slotsData || []).length > 0 && (
+                <p className="mt-1 text-xs text-gray-500">
+                  {(slotsData || []).filter((s: Slot) => s.isAvailable && !s.isBlocked).length} slots available
+                </p>
+              )}
             </div>
 
             <div>

@@ -11,9 +11,11 @@ import {
   ClockIcon,
   CheckCircleIcon,
   CurrencyDollarIcon,
+  CalendarDaysIcon,
 } from '@heroicons/react/24/outline';
 import { doctorApi, departmentApi } from '../services/api';
 import toast from 'react-hot-toast';
+import ScheduleTable, { Schedule } from '../components/doctors/ScheduleTable';
 
 interface Specialization {
   id: string;
@@ -36,6 +38,9 @@ interface DoctorFormData {
   departmentId: string;
   consultationFee: number;
   bio: string;
+  slotDuration: number;
+  maxPatientsPerDay: number;
+  schedules: Schedule[];
 }
 
 const initialFormData: DoctorFormData = {
@@ -52,6 +57,9 @@ const initialFormData: DoctorFormData = {
   departmentId: '',
   consultationFee: 0,
   bio: '',
+  slotDuration: 30,
+  maxPatientsPerDay: 30,
+  schedules: [],
 };
 
 // Fallback specializations for backward compatibility
@@ -123,6 +131,16 @@ export default function DoctorForm() {
   // Populate form when editing
   useEffect(() => {
     if (doctorData) {
+      // Transform schedules from API format if present
+      const schedules: Schedule[] = (doctorData.schedules || []).map((s: any) => ({
+        dayOfWeek: s.dayOfWeek,
+        startTime: s.startTime || '09:00',
+        endTime: s.endTime || '17:00',
+        breakStart: s.breakStart || '12:00',
+        breakEnd: s.breakEnd || '13:00',
+        isActive: s.isActive !== false,
+      }));
+
       setFormData({
         firstName: doctorData.user?.firstName || doctorData.firstName || '',
         lastName: doctorData.user?.lastName || doctorData.lastName || '',
@@ -137,6 +155,9 @@ export default function DoctorForm() {
         departmentId: doctorData.departmentId || doctorData.department?.id || '',
         consultationFee: doctorData.consultationFee || 0,
         bio: doctorData.bio || '',
+        slotDuration: doctorData.slotDuration || 30,
+        maxPatientsPerDay: doctorData.maxPatientsPerDay || 30,
+        schedules,
       });
     }
   }, [doctorData]);
@@ -524,6 +545,66 @@ export default function DoctorForm() {
               placeholder="Brief description about the doctor..."
             />
           </div>
+        </div>
+
+        {/* Slot Configuration */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <CalendarDaysIcon className="h-5 w-5 text-purple-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Appointment Slot Configuration</h2>
+              <p className="text-sm text-gray-500">Configure appointment slots and working schedule</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Slot Duration (minutes)
+              </label>
+              <select
+                name="slotDuration"
+                value={formData.slotDuration}
+                onChange={handleChange}
+                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value={15}>15 minutes</option>
+                <option value={20}>20 minutes</option>
+                <option value={30}>30 minutes</option>
+                <option value={45}>45 minutes</option>
+                <option value={60}>60 minutes</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Duration of each appointment slot
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Max Patients Per Day
+              </label>
+              <input
+                type="number"
+                name="maxPatientsPerDay"
+                value={formData.maxPatientsPerDay}
+                onChange={handleChange}
+                min={1}
+                max={100}
+                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Maximum appointments per day"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Maximum number of appointments allowed per day
+              </p>
+            </div>
+          </div>
+
+          <ScheduleTable
+            schedules={formData.schedules}
+            onChange={(schedules) => setFormData(prev => ({ ...prev, schedules }))}
+          />
         </div>
 
         {/* Form Actions */}

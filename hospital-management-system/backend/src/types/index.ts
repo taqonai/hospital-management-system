@@ -45,6 +45,15 @@ export interface CreatePatientDto {
   nationality?: string;
 }
 
+export interface DoctorScheduleInput {
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  breakStart?: string;
+  breakEnd?: string;
+  isActive?: boolean;
+}
+
 export interface CreateDoctorDto {
   email: string;
   password: string;
@@ -61,6 +70,7 @@ export interface CreateDoctorDto {
   availableDays: string[];
   slotDuration?: number;
   maxPatientsPerDay?: number;
+  schedules?: DoctorScheduleInput[];
 }
 
 export interface CreateAppointmentDto {

@@ -3,6 +3,7 @@ import { CreateAppointmentDto, SearchParams } from '../types';
 import { NotFoundError, ConflictError, AppError } from '../middleware/errorHandler';
 import { AppointmentStatus } from '@prisma/client';
 import { notificationService } from './notificationService';
+import { slotService } from './slotService';
 
 export class AppointmentService {
   // Helper method to validate slot availability
@@ -186,6 +187,21 @@ export class AppointmentService {
         },
       },
     });
+
+    // Book the slot in DoctorSlot table
+    try {
+      await slotService.bookSlotByDateTime(
+        data.doctorId,
+        hospitalId,
+        startOfDay,
+        data.startTime,
+        appointment.id
+      );
+    } catch (error) {
+      console.error('Failed to book slot:', error);
+      // Don't fail appointment creation if slot booking fails
+      // The existing appointment conflict check provides backup validation
+    }
 
     // Send appointment confirmation notification
     try {
@@ -401,8 +417,28 @@ export class AppointmentService {
       },
     });
 
-    // Send reschedule notification if date or time changed
+    // Handle slot changes when rescheduling
     if (isRescheduling) {
+      try {
+        // Release the old slot
+        await slotService.releaseSlot(id);
+
+        // Book the new slot
+        const newDate = new Date(updated.appointmentDate);
+        newDate.setHours(0, 0, 0, 0);
+        await slotService.bookSlotByDateTime(
+          updated.doctorId,
+          hospitalId,
+          newDate,
+          updated.startTime,
+          updated.id
+        );
+      } catch (error) {
+        console.error('Failed to update slots during reschedule:', error);
+        // Don't fail the update if slot management fails
+      }
+
+      // Send reschedule notification
       try {
         await notificationService.sendAppointmentNotification(
           {
@@ -515,6 +551,14 @@ export class AppointmentService {
         notes: reason ? `${appointment.notes || ''}\nCancellation reason: ${reason}`.trim() : appointment.notes,
       },
     });
+
+    // Release the slot so it can be booked again
+    try {
+      await slotService.releaseSlot(id);
+    } catch (error) {
+      console.error('Failed to release slot:', error);
+      // Don't fail cancellation if slot release fails
+    }
 
     // Send cancellation notification
     try {

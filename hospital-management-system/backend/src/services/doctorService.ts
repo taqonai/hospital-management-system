@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { CreateDoctorDto, SearchParams } from '../types';
 import { NotFoundError, ConflictError, AppError } from '../middleware/errorHandler';
 import { DayOfWeek } from '@prisma/client';
+import { slotService } from './slotService';
 
 export class DoctorService {
   async create(hospitalId: string, data: CreateDoctorDto & { specializationId?: string }) {
@@ -92,6 +93,28 @@ export class DoctorService {
 
       return doctor;
     });
+
+    // Generate slots for the next 30 days if schedules are provided
+    // This is done asynchronously after doctor creation
+    if (data.schedules && data.schedules.length > 0) {
+      // First create the schedules
+      await prisma.doctorSchedule.createMany({
+        data: data.schedules.map((s: any) => ({
+          doctorId: result.id,
+          dayOfWeek: s.dayOfWeek,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          breakStart: s.breakStart || null,
+          breakEnd: s.breakEnd || null,
+          isActive: s.isActive !== false,
+        })),
+      });
+
+      // Generate slots asynchronously
+      slotService.generateSlotsForDoctor(result.id, hospitalId, 30).catch((err) => {
+        console.error('Failed to generate slots for doctor:', err);
+      });
+    }
 
     return result;
   }
@@ -219,7 +242,7 @@ export class DoctorService {
       }
     }
 
-    const { email, password, firstName, lastName, phone, ...doctorData } = data;
+    const { email, password, firstName, lastName, phone, schedules, ...doctorData } = data;
 
     // Convert empty specializationId to undefined to avoid FK constraint error
     if (doctorData.specializationId === '') {
@@ -297,6 +320,11 @@ export class DoctorService {
     const updatedSchedules = await prisma.doctorSchedule.findMany({
       where: { doctorId },
       orderBy: { dayOfWeek: 'asc' },
+    });
+
+    // Regenerate future slots based on new schedule
+    slotService.regenerateSlots(doctorId, hospitalId).catch((err) => {
+      console.error('Failed to regenerate slots after schedule update:', err);
     });
 
     return updatedSchedules;

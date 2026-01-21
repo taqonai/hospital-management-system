@@ -225,6 +225,21 @@ export const doctorApi = {
   getDashboard: (id: string) => api.get(`/doctors/${id}/dashboard`),
 };
 
+// Slot APIs (Doctor appointment slots)
+export const slotApi = {
+  getByDoctor: (doctorId: string) => api.get(`/slots/doctor/${doctorId}`),
+  getByDoctorAndDate: (doctorId: string, date: string) =>
+    api.get(`/slots/doctor/${doctorId}/date/${date}`),
+  getByDateRange: (doctorId: string, startDate: string, endDate: string) =>
+    api.get(`/slots/doctor/${doctorId}/range`, { params: { startDate, endDate } }),
+  regenerate: (doctorId: string, daysAhead?: number) =>
+    api.post(`/slots/generate/${doctorId}`, { daysAhead }),
+  regenerateFromSchedule: (doctorId: string) =>
+    api.post(`/slots/regenerate/${doctorId}`),
+  toggleBlock: (slotId: string, isBlocked: boolean) =>
+    api.patch(`/slots/${slotId}/block`, { isBlocked }),
+};
+
 // Department APIs
 export const departmentApi = {
   getAll: (includeInactive = false) => api.get(`/departments${includeInactive ? '?includeInactive=true' : ''}`),

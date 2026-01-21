@@ -52,6 +52,7 @@ model Hospital {
   aiScribeSessions AiScribeSession[]
   customRoles      CustomRole[]
   rbacAuditLogs    RBACauditLog[]
+  doctorSlots      DoctorSlot[]
 
   // Insurance Coding
   icd10Codes       ICD10Code[]
@@ -317,6 +318,7 @@ model Doctor {
   department         Department        @relation(fields: [departmentId], references: [id])
   specializationRef  Specialization?   @relation(fields: [specializationId], references: [id])
   schedules          DoctorSchedule[]
+  slots              DoctorSlot[]
   appointments       Appointment[]
   consultations      Consultation[]
   prescriptions      Prescription[]
@@ -352,6 +354,29 @@ enum DayOfWeek {
   FRIDAY
   SATURDAY
   SUNDAY
+}
+
+model DoctorSlot {
+  id            String    @id @default(uuid())
+  doctorId      String
+  hospitalId    String
+  slotDate      DateTime  @db.Date           // The date of the slot
+  startTime     String                       // "09:00"
+  endTime       String                       // "09:30"
+  isAvailable   Boolean   @default(true)     // False when booked
+  isBlocked     Boolean   @default(false)    // Doctor manually blocked
+  appointmentId String?   @unique            // Link to appointment when booked
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  doctor      Doctor       @relation(fields: [doctorId], references: [id])
+  hospital    Hospital     @relation(fields: [hospitalId], references: [id])
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
+
+  @@unique([doctorId, slotDate, startTime])  // One slot per doctor per time
+  @@index([doctorId, slotDate, isAvailable])
+  @@index([hospitalId, slotDate])
+  @@map("doctor_slots")
 }
 
 model Nurse {
@@ -606,6 +631,7 @@ model Appointment {
   consultation   Consultation?
   clinicalNotes  ClinicalNote[] @relation("ClinicalNoteAppointment")
   vitals         Vital[]       // Pre-consultation vitals recorded for this appointment
+  slot           DoctorSlot?
 
   @@map("appointments")
 }
