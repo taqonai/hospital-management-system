@@ -153,13 +153,13 @@ async function main() {
             hospitalId: hospital.id,
             patientId: patient.id,
             doctorId: doctor.id,
-            departmentId: doctor.departmentId,
             appointmentDate,
             startTime: `${appointmentDate.getHours().toString().padStart(2, '0')}:${appointmentDate.getMinutes().toString().padStart(2, '0')}`,
             endTime: `${(appointmentDate.getHours() + 1).toString().padStart(2, '0')}:${appointmentDate.getMinutes().toString().padStart(2, '0')}`,
             type: randomElement(appointmentTypes),
             status,
             notes: status === AppointmentStatus.COMPLETED ? 'Patient visit completed successfully' : undefined,
+            tokenNumber: appointmentCount + 1,
           },
         });
         appointments.push(appointment);
