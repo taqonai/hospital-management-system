@@ -44,8 +44,8 @@ export const reportsService = {
         },
         _sum: { paidAmount: true },
       }),
-      prisma.doctor.count({ where: { hospitalId } }),
-      prisma.doctor.count({ where: { hospitalId, status: 'ACTIVE' } }),
+      prisma.doctor.count({ where: { user: { hospitalId } } }),
+      prisma.doctor.count({ where: { user: { hospitalId }, isAvailable: true } }),
       this.calculateBedOccupancy(hospitalId),
     ]);
 
