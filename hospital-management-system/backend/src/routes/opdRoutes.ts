@@ -136,6 +136,11 @@ router.post(
       painLevel,
       notes,
       isEmergencyOverride, // Flag when doctor records vitals (bypassing normal nurse workflow)
+      // Patient details (pregnancy, medications, treatment)
+      isPregnant,
+      expectedDueDate,
+      currentMedications,
+      currentTreatment,
     } = req.body;
 
     const result = await opdService.recordVitals(
@@ -153,6 +158,11 @@ router.post(
         bloodSugar,
         painLevel,
         notes,
+        // Patient details
+        isPregnant,
+        expectedDueDate,
+        currentMedications,
+        currentTreatment,
       },
       req.user!.userId,
       req.user!.role, // Pass role for tracking
