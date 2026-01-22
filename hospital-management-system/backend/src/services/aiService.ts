@@ -142,10 +142,16 @@ export class AIService {
       };
     } catch (error) {
       logger.error('AI diagnosis service error:', error);
-      // If AI service is unavailable, use fallback logic
-      if (axios.isAxiosError(error) && !error.response) {
-        logger.warn('AI service unreachable, using fallback diagnosis');
-        return this.fallbackDiagnosisAnalysis(data, patient);
+      if (axios.isAxiosError(error)) {
+        // If AI service is not reachable (no response), use fallback logic
+        if (!error.response) {
+          logger.warn('AI service unreachable, using fallback diagnosis');
+          return this.fallbackDiagnosisAnalysis(data, patient);
+        }
+        // AI service returned an error - pass through the actual error message
+        const errorDetail = error.response?.data?.detail || error.message;
+        logger.error(`AI service returned error: ${error.response?.status} - ${errorDetail}`);
+        throw new AppError(`AI diagnosis service error: ${errorDetail}`, error.response?.status || 500);
       }
       throw new AppError('AI diagnosis service temporarily unavailable', 503);
     }
