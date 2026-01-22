@@ -58,7 +58,7 @@ function getTodayRangeGST(): { today: Date; tomorrow: Date } {
 }
 
 export class OPDService {
-  // Queue Management
+  // Queue Management - Live Queue (only checked-in patients)
   async getTodayQueue(hospitalId: string, doctorId?: string) {
     const { today, tomorrow } = getTodayRangeGST();
 
@@ -76,6 +76,46 @@ export class OPDService {
         { status: 'asc' },
         { tokenNumber: 'asc' },
         { startTime: 'asc' },
+      ],
+      select: {
+        id: true,
+        tokenNumber: true,
+        status: true,
+        vitalsRecordedAt: true,
+        appointmentDate: true,
+        startTime: true,
+        endTime: true,
+        type: true,
+        reason: true,
+        notes: true,
+        checkedInAt: true,
+        patient: { select: { id: true, firstName: true, lastName: true, mrn: true, phone: true } },
+        doctor: {
+          include: {
+            user: { select: { firstName: true, lastName: true } },
+            department: { select: { name: true } },
+          },
+        },
+      },
+    });
+  }
+
+  // Today's Appointments - ALL appointments for today (full schedule)
+  async getTodayAppointments(hospitalId: string, doctorId?: string) {
+    const { today, tomorrow } = getTodayRangeGST();
+
+    const where: any = {
+      hospitalId,
+      appointmentDate: { gte: today, lt: tomorrow },
+      // Include all statuses for full schedule view
+    };
+    if (doctorId) where.doctorId = doctorId;
+
+    return prisma.appointment.findMany({
+      where,
+      orderBy: [
+        { startTime: 'asc' },
+        { status: 'asc' },
       ],
       select: {
         id: true,

@@ -1206,6 +1206,7 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
 export default function OPD() {
   const [activeTab, setActiveTab] = useState<'queue' | 'appointments' | 'noshow'>('queue');
   const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [todayAppointments, setTodayAppointments] = useState<QueueItem[]>([]);
   const [stats, setStats] = useState<OPDStats>({
     inQueue: 0,
     inConsultation: 0,
@@ -1281,6 +1282,24 @@ export default function OPD() {
     fetchStats();
   }, []);
 
+  // Fetch today's appointments (all statuses)
+  useEffect(() => {
+    const fetchTodayAppointments = async () => {
+      try {
+        const response = await opdApi.getTodayAppointments();
+        setTodayAppointments(response.data.data || []);
+      } catch (error) {
+        console.error('Failed to fetch today appointments:', error);
+      }
+    };
+
+    fetchTodayAppointments();
+
+    // Poll every 30 seconds
+    const interval = setInterval(fetchTodayAppointments, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   const handleCallNext = async (doctorId: string) => {
     try {
       const response = await opdApi.callNext(doctorId);
@@ -1332,7 +1351,7 @@ export default function OPD() {
 
   const tabs = [
     { id: 'queue', label: 'Live Queue', count: queue.length },
-    { id: 'appointments', label: 'Today\'s Appointments', count: stats.seenToday + queue.length },
+    { id: 'appointments', label: 'Today\'s Appointments', count: todayAppointments.length },
     { id: 'noshow', label: 'No-Show Risk' },
   ];
 
@@ -1605,15 +1624,130 @@ export default function OPD() {
       )}
 
       {activeTab === 'appointments' && (
-        <div
-          className="relative rounded-2xl bg-white/70 backdrop-blur-xl border border-white/50 p-8 text-center shadow-lg animate-fade-in"
-          style={{ animationDelay: '0ms' }}
-        >
-          {/* Shine line */}
-          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" />
-          <ClipboardDocumentListIcon className="h-12 w-12 mx-auto text-gray-300 mb-4" />
-          <h3 className="font-semibold text-gray-900">Today's Appointments</h3>
-          <p className="text-sm text-gray-500 mt-1">View and manage scheduled appointments</p>
+        <div className="space-y-4">
+          {todayAppointments.length === 0 ? (
+            <div
+              className="relative rounded-2xl bg-white/70 backdrop-blur-xl border border-white/50 p-8 text-center shadow-lg animate-fade-in"
+              style={{ animationDelay: '0ms' }}
+            >
+              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" />
+              <ClipboardDocumentListIcon className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+              <h3 className="font-semibold text-gray-900">No Appointments Today</h3>
+              <p className="text-sm text-gray-500 mt-1">There are no scheduled appointments for today</p>
+            </div>
+          ) : (
+            <div
+              className="relative rounded-2xl bg-white/70 backdrop-blur-xl border border-white/50 shadow-lg overflow-hidden animate-fade-in"
+              style={{ animationDelay: '0ms' }}
+            >
+              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" />
+              <div className="p-5 border-b border-gray-200/50">
+                <h3 className="font-semibold text-gray-900">Today's Appointments ({todayAppointments.length})</h3>
+                <p className="text-sm text-gray-500">All scheduled appointments for today</p>
+              </div>
+              <div className="divide-y divide-gray-200/50">
+                {todayAppointments.map((appointment, index) => (
+                  <div
+                    key={appointment.id}
+                    className={clsx(
+                      'p-4 flex items-center justify-between transition-colors duration-200',
+                      appointment.status === 'IN_PROGRESS' || appointment.status === 'IN_CONSULTATION'
+                        ? 'bg-emerald-50/50'
+                        : appointment.status === 'COMPLETED'
+                        ? 'bg-gray-50/50'
+                        : 'hover:bg-white/50'
+                    )}
+                    style={{ animationDelay: `${index * 50}ms` }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={clsx(
+                        'w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-md',
+                        appointment.status === 'COMPLETED'
+                          ? 'bg-gradient-to-br from-gray-300 to-gray-400 text-white'
+                          : appointment.status === 'IN_PROGRESS' || appointment.status === 'IN_CONSULTATION'
+                          ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 text-white'
+                          : appointment.status === 'CHECKED_IN'
+                          ? 'bg-gradient-to-br from-cyan-400 to-cyan-600 text-white'
+                          : 'bg-gradient-to-br from-gray-100 to-gray-200 text-gray-700'
+                      )}>
+                        {appointment.tokenNumber || '#'}
+                      </div>
+                      <div>
+                        <h4 className="font-medium text-gray-900">
+                          {appointment.patient?.firstName} {appointment.patient?.lastName}
+                        </h4>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm text-gray-500">
+                            Dr. {appointment.doctor?.user?.firstName} {appointment.doctor?.user?.lastName}
+                          </span>
+                          <span className="text-gray-300">|</span>
+                          <span className="text-sm text-gray-500">{appointment.doctor?.specialization}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {/* Status Badge */}
+                      <span className={clsx(
+                        'inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full',
+                        appointment.status === 'COMPLETED'
+                          ? 'bg-gray-100 text-gray-600'
+                          : appointment.status === 'IN_PROGRESS' || appointment.status === 'IN_CONSULTATION'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : appointment.status === 'CHECKED_IN'
+                          ? 'bg-cyan-100 text-cyan-700'
+                          : appointment.status === 'CONFIRMED'
+                          ? 'bg-blue-100 text-blue-700'
+                          : appointment.status === 'NO_SHOW'
+                          ? 'bg-red-100 text-red-700'
+                          : appointment.status === 'CANCELLED'
+                          ? 'bg-orange-100 text-orange-700'
+                          : 'bg-gray-100 text-gray-600'
+                      )}>
+                        {appointment.status === 'IN_PROGRESS' || appointment.status === 'IN_CONSULTATION' ? (
+                          <>
+                            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                            In Consultation
+                          </>
+                        ) : appointment.status === 'CHECKED_IN' ? (
+                          'Checked In'
+                        ) : appointment.status === 'CONFIRMED' ? (
+                          'Confirmed'
+                        ) : appointment.status === 'SCHEDULED' ? (
+                          'Scheduled'
+                        ) : appointment.status === 'COMPLETED' ? (
+                          'Completed'
+                        ) : appointment.status === 'NO_SHOW' ? (
+                          'No Show'
+                        ) : appointment.status === 'CANCELLED' ? (
+                          'Cancelled'
+                        ) : (
+                          appointment.status
+                        )}
+                      </span>
+                      {/* View Button */}
+                      <button
+                        onClick={() => setSelectedBookingId(appointment.id)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-all duration-300"
+                      >
+                        <EyeIcon className="h-3.5 w-3.5" />
+                        View
+                      </button>
+                      {/* Check-in Button for SCHEDULED/CONFIRMED */}
+                      {(appointment.status === 'SCHEDULED' || appointment.status === 'CONFIRMED') && canCheckIn && (
+                        <button
+                          onClick={() => handleCheckIn(appointment.id)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-md hover:scale-105 transition-all duration-300"
+                        >
+                          <CheckIcon className="h-3.5 w-3.5" />
+                          Check In
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

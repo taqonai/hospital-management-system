@@ -7,7 +7,7 @@ import { AuthenticatedRequest } from '../types';
 
 const router = Router();
 
-// Get today's queue
+// Get today's queue (Live Queue - only CHECKED_IN and IN_PROGRESS)
 router.get(
   '/queue',
   authenticate,
@@ -15,6 +15,17 @@ router.get(
     const { doctorId } = req.query;
     const queue = await opdService.getTodayQueue(req.user!.hospitalId, doctorId as string);
     sendSuccess(res, queue);
+  })
+);
+
+// Get all today's appointments (full schedule for the day)
+router.get(
+  '/appointments/today',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { doctorId } = req.query;
+    const appointments = await opdService.getTodayAppointments(req.user!.hospitalId, doctorId as string);
+    sendSuccess(res, appointments);
   })
 );
 

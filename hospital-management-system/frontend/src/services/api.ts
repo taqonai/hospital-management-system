@@ -646,6 +646,7 @@ export const ipdApi = {
 // OPD APIs
 export const opdApi = {
   getQueue: (doctorId?: string) => api.get('/opd/queue', { params: { doctorId } }),
+  getTodayAppointments: (doctorId?: string) => api.get('/opd/appointments/today', { params: { doctorId } }),
   checkIn: (appointmentId: string) => api.post(`/opd/check-in/${appointmentId}`),
   callNext: (doctorId: string) => api.post('/opd/call-next', { doctorId }),
   getCurrentToken: (doctorId: string) => api.get(`/opd/current-token/${doctorId}`),
