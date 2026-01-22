@@ -335,7 +335,7 @@ export class EarlyWarningService {
 
     // NEWS2 Risk Classification (per NHS guidelines):
     // - Score 0-4: LOW risk (routine monitoring)
-    // - Score 5-6 OR single parameter = 3: MEDIUM risk (urgent response)
+    // - Score 5-6 OR single parameter = 3: MODERATE risk (urgent response)
     // - Score >= 7: HIGH/CRITICAL risk (emergency response)
     if (totalScore >= 7) {
       riskLevel = 'CRITICAL';
@@ -343,8 +343,8 @@ export class EarlyWarningService {
       clinicalResponse = 'Emergency response - continuous monitoring, immediate senior review, consider ICU';
       timeToReassessment = 'Continuous';
     } else if (totalScore >= 5 || hasExtremeScore) {
-      // Score 5-6 OR any single parameter scoring 3 requires urgent response (MEDIUM risk)
-      riskLevel = 'MEDIUM';
+      // Score 5-6 OR any single parameter scoring 3 requires urgent response (MODERATE risk)
+      riskLevel = 'MODERATE';
       severity = 'medium';
       clinicalResponse = 'Urgent response - increase monitoring to at least hourly, urgent clinical review within 30 minutes';
       timeToReassessment = '1 hour';
@@ -696,7 +696,7 @@ export class EarlyWarningService {
         'Notify nurse-in-charge and primary physician',
         'Review current treatment plan',
       ],
-      MEDIUM: [
+      MODERATE: [
         'Increase monitoring frequency to at least hourly',
         'Urgent clinical review within 30 minutes',
         'Notify nurse-in-charge and primary physician',
@@ -834,6 +834,7 @@ export class EarlyWarningService {
 
     const severityMap: Record<string, string> = {
       LOW: 'LOW',
+      MODERATE: 'MEDIUM',
       MEDIUM: 'MEDIUM',
       HIGH: 'HIGH',
       CRITICAL: 'CRITICAL',
@@ -1167,7 +1168,7 @@ export class EarlyWarningService {
 
     // Sort by risk level and NEWS2 score
     patients.sort((a, b) => {
-      const riskOrder: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+      const riskOrder: Record<string, number> = { CRITICAL: 0, HIGH: 1, MODERATE: 2, MEDIUM: 2, LOW: 3 };
       const aRisk = riskOrder[a.riskLevel] ?? 4;
       const bRisk = riskOrder[b.riskLevel] ?? 4;
       if (aRisk !== bRisk) return aRisk - bRisk;
@@ -1179,7 +1180,7 @@ export class EarlyWarningService {
       totalPatients: patients.length,
       criticalCount: patients.filter(p => p.riskLevel === 'CRITICAL').length,
       highCount: patients.filter(p => p.riskLevel === 'HIGH').length,
-      mediumCount: patients.filter(p => p.riskLevel === 'MEDIUM').length,
+      mediumCount: patients.filter(p => p.riskLevel === 'MODERATE' || p.riskLevel === 'MEDIUM').length,
       lowCount: patients.filter(p => p.riskLevel === 'LOW').length,
       vitalsOverdueCount: patients.filter(p => p.vitalsOverdue).length,
       worseningCount: patients.filter(p => p.trend === 'worsening').length,
