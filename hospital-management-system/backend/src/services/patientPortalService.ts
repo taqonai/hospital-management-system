@@ -844,8 +844,11 @@ export class PatientPortalService {
     const todayUAE = getTodayInUAE();
     const requestedDateStr = slotDate.toISOString().split('T')[0];
 
+    console.log('[SLOTS DEBUG] dateStr:', dateStr, 'slotDate:', slotDate.toISOString(), 'requestedDateStr:', requestedDateStr, 'todayUAE:', todayUAE);
+
     // Check if date is in the past
     if (requestedDateStr < todayUAE) {
+      console.log('[SLOTS DEBUG] Date in past, returning empty');
       return [];
     }
 
@@ -857,6 +860,8 @@ export class PatientPortalService {
         user: { select: { firstName: true, lastName: true } },
       },
     });
+
+    console.log('[SLOTS DEBUG] Doctor found:', doctor ? `${doctor.user.firstName} with ${doctor.schedules.length} schedules` : 'null');
 
     if (!doctor) {
       return [];
@@ -874,6 +879,7 @@ export class PatientPortalService {
     });
 
     if (absence) {
+      console.log('[SLOTS DEBUG] Doctor on leave');
       return []; // Doctor is on full-day leave
     }
 
@@ -881,6 +887,9 @@ export class PatientPortalService {
     const dayNames = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
     const dayOfWeek = dayNames[slotDate.getDay()];
     const schedule = doctor.schedules.find(s => s.dayOfWeek === dayOfWeek);
+
+    console.log('[SLOTS DEBUG] dayOfWeek:', dayOfWeek, 'slotDate.getDay():', slotDate.getDay(), 'schedule found:', schedule ? 'yes' : 'no');
+    console.log('[SLOTS DEBUG] available schedules:', doctor.schedules.map(s => s.dayOfWeek).join(', '));
 
     if (!schedule) {
       return []; // No schedule for this day
