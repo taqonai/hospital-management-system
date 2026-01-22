@@ -481,13 +481,24 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
           }
         }
 
+        // Helper to format date to YYYY-MM-DD for date input
+        const formatDateForInput = (dateValue: string | Date | null | undefined): string => {
+          if (!dateValue) return '';
+          try {
+            const date = new Date(dateValue);
+            if (isNaN(date.getTime())) return '';
+            return date.toISOString().split('T')[0]; // Returns YYYY-MM-DD
+          } catch {
+            return '';
+          }
+        };
+
         // 3. Merge the data - use current vitals for measurements, but fall back to
-        // previous patient status for pregnancy/medications/treatment if not set
-        const hasCurrentPatientStatus = existingVitals && (
-          existingVitals.isPregnant !== null && existingVitals.isPregnant !== undefined ||
-          (existingVitals.currentMedications && existingVitals.currentMedications.length > 0) ||
-          existingVitals.currentTreatment
-        );
+        // previous patient status for pregnancy/medications/treatment if not set in current
+        // Check each field individually for proper carry-over
+        const hasCurrentPregnancy = existingVitals?.isPregnant !== null && existingVitals?.isPregnant !== undefined;
+        const hasCurrentMedications = existingVitals?.currentMedications && existingVitals.currentMedications.length > 0;
+        const hasCurrentTreatment = existingVitals?.currentTreatment;
 
         setVitals({
           // Vital measurements from current appointment
@@ -502,17 +513,17 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
           bloodSugar: existingVitals?.bloodSugar?.toString() || '',
           painLevel: existingVitals?.painLevel?.toString() || '',
           notes: existingVitals?.notes || '',
-          // Patient status - use current if available, otherwise use previous
-          isPregnant: hasCurrentPatientStatus
+          // Patient status - check each field individually for carry-over
+          isPregnant: hasCurrentPregnancy
             ? existingVitals?.isPregnant
             : patientStatus?.isPregnant ?? undefined,
-          expectedDueDate: hasCurrentPatientStatus
-            ? (existingVitals?.expectedDueDate || '')
-            : (patientStatus?.expectedDueDate || ''),
-          currentMedications: hasCurrentPatientStatus
+          expectedDueDate: hasCurrentPregnancy
+            ? formatDateForInput(existingVitals?.expectedDueDate)
+            : formatDateForInput(patientStatus?.expectedDueDate),
+          currentMedications: hasCurrentMedications
             ? (existingVitals?.currentMedications || [])
             : (patientStatus?.currentMedications || []),
-          currentTreatment: hasCurrentPatientStatus
+          currentTreatment: hasCurrentTreatment
             ? (existingVitals?.currentTreatment || '')
             : (patientStatus?.currentTreatment || ''),
         });
