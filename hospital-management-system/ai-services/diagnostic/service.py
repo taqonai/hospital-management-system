@@ -555,6 +555,9 @@ class DiagnosticAI:
         Analyze symptoms using GPT-4/Ollama clinical reasoning with ML/rule-based fallback.
         Three-tier fallback: GPT-4/Ollama → SentenceTransformers → Rule-based
         """
+        # Ensure patient_age is an integer (defensive - handle string/float inputs)
+        patient_age = int(patient_age) if patient_age is not None else 30
+
         # Normalize input symptoms
         normalized_symptoms = self._normalize_symptoms(symptoms)
 
