@@ -940,6 +940,14 @@ export default function Consultation() {
       return;
     }
 
+    // Validation: Require at least one diagnosis before completing
+    if (selectedDiagnoses.length === 0 && customDiagnoses.length === 0) {
+      toast.error('Cannot complete consultation without a diagnosis. Please add at least one diagnosis.');
+      // Navigate to diagnosis step
+      setCurrentStep(4);
+      return;
+    }
+
     // Check for unacknowledged allergy conflicts
     const unacknowledged = allergyConflicts.filter(
       c => !acknowledgedConflicts.some(m => m.toLowerCase() === c.medication.toLowerCase())
@@ -3218,17 +3226,6 @@ export default function Consultation() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {currentStep === 6 && (
-            <button
-              onClick={completeConsultation}
-              className="px-6 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-medium hover:shadow-lg transition-all flex items-center gap-2"
-            >
-              <CheckCircleIcon className="h-5 w-5" />
-              Complete Consultation
-            </button>
-          )}
-        </div>
       </div>
 
       {/* Step Indicator */}
@@ -3269,14 +3266,25 @@ export default function Consultation() {
               ))}
             </div>
 
-            <button
-              onClick={() => setCurrentStep(Math.min(6, currentStep + 1))}
-              disabled={currentStep === 6 || !canProceed}
-              className="px-6 py-2.5 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-medium hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              Next
-              <ChevronRightIcon className="h-5 w-5" />
-            </button>
+            {currentStep === 6 ? (
+              <button
+                onClick={completeConsultation}
+                disabled={selectedDiagnoses.length === 0 && customDiagnoses.length === 0}
+                className="px-6 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-medium hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <CheckCircleIcon className="h-5 w-5" />
+                Complete Consultation
+              </button>
+            ) : (
+              <button
+                onClick={() => setCurrentStep(Math.min(6, currentStep + 1))}
+                disabled={!canProceed}
+                className="px-6 py-2.5 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-medium hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                Next
+                <ChevronRightIcon className="h-5 w-5" />
+              </button>
+            )}
           </div>
         </div>
 

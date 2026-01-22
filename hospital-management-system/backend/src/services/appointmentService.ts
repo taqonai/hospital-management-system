@@ -571,11 +571,27 @@ export class AppointmentService {
             department: true,
           },
         },
+        consultation: {
+          select: { id: true, diagnosis: true, icdCodes: true },
+        },
       },
     });
 
     if (!appointment) {
       throw new NotFoundError('Appointment not found');
+    }
+
+    // Validation: Cannot complete consultation without diagnosis
+    if (status === 'COMPLETED') {
+      const consultation = appointment.consultation;
+      const hasDiagnosis = consultation && (
+        (Array.isArray(consultation.diagnosis) && consultation.diagnosis.length > 0) ||
+        (Array.isArray(consultation.icdCodes) && consultation.icdCodes.length > 0)
+      );
+
+      if (!hasDiagnosis) {
+        throw new AppError('Cannot complete consultation without a diagnosis. Please add at least one diagnosis before completing.');
+      }
     }
 
     const updateData: any = { status };
