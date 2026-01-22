@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { DocumentDuplicateIcon } from '@heroicons/react/24/outline';
+import { useState, useEffect, useCallback } from 'react';
+import { DocumentDuplicateIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline';
 
 export interface Schedule {
   dayOfWeek: string;
@@ -9,6 +9,108 @@ export interface Schedule {
   breakEnd: string;
   isActive: boolean;
 }
+
+export interface ScheduleValidationError {
+  dayOfWeek: string;
+  field: string;
+  message: string;
+}
+
+// Convert time string (HH:mm) to minutes for comparison
+const timeToMinutes = (time: string): number => {
+  if (!time) return -1;
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+};
+
+// Validate a single schedule
+export const validateSchedule = (schedule: Schedule): ScheduleValidationError[] => {
+  const errors: ScheduleValidationError[] = [];
+
+  if (!schedule.isActive) return errors;
+
+  const startMinutes = timeToMinutes(schedule.startTime);
+  const endMinutes = timeToMinutes(schedule.endTime);
+  const breakStartMinutes = timeToMinutes(schedule.breakStart);
+  const breakEndMinutes = timeToMinutes(schedule.breakEnd);
+
+  // Start Time must be < End Time
+  if (startMinutes >= endMinutes) {
+    errors.push({
+      dayOfWeek: schedule.dayOfWeek,
+      field: 'endTime',
+      message: 'End time must be after start time',
+    });
+  }
+
+  // Break time validations (only if at least one break field is filled)
+  const hasBreakStart = schedule.breakStart && schedule.breakStart !== '';
+  const hasBreakEnd = schedule.breakEnd && schedule.breakEnd !== '';
+
+  if (hasBreakStart || hasBreakEnd) {
+    // Both break times required if one is filled
+    if (hasBreakStart && !hasBreakEnd) {
+      errors.push({
+        dayOfWeek: schedule.dayOfWeek,
+        field: 'breakEnd',
+        message: 'Break end time is required when break start is set',
+      });
+    }
+    if (hasBreakEnd && !hasBreakStart) {
+      errors.push({
+        dayOfWeek: schedule.dayOfWeek,
+        field: 'breakStart',
+        message: 'Break start time is required when break end is set',
+      });
+    }
+
+    if (hasBreakStart && hasBreakEnd) {
+      // Break Start must be < Break End
+      if (breakStartMinutes >= breakEndMinutes) {
+        errors.push({
+          dayOfWeek: schedule.dayOfWeek,
+          field: 'breakEnd',
+          message: 'Break end must be after break start',
+        });
+      }
+
+      // Break Start must be > Start Time
+      if (breakStartMinutes <= startMinutes) {
+        errors.push({
+          dayOfWeek: schedule.dayOfWeek,
+          field: 'breakStart',
+          message: 'Break must start after work begins',
+        });
+      }
+
+      // Break End must be < End Time
+      if (breakEndMinutes >= endMinutes) {
+        errors.push({
+          dayOfWeek: schedule.dayOfWeek,
+          field: 'breakEnd',
+          message: 'Break must end before work ends',
+        });
+      }
+
+      // Break duration check (max 2 hours = 120 minutes)
+      const breakDuration = breakEndMinutes - breakStartMinutes;
+      if (breakDuration > 120) {
+        errors.push({
+          dayOfWeek: schedule.dayOfWeek,
+          field: 'breakEnd',
+          message: 'Break duration cannot exceed 2 hours',
+        });
+      }
+    }
+  }
+
+  return errors;
+};
+
+// Validate all schedules
+export const validateAllSchedules = (schedules: Schedule[]): ScheduleValidationError[] => {
+  return schedules.flatMap(schedule => validateSchedule(schedule));
+};
 
 const DAYS_OF_WEEK = [
   { value: 'MONDAY', label: 'Monday' },
@@ -32,10 +134,41 @@ const DEFAULT_SCHEDULE: Schedule = {
 interface ScheduleTableProps {
   schedules: Schedule[];
   onChange: (schedules: Schedule[]) => void;
+  onValidationChange?: (errors: ScheduleValidationError[]) => void;
 }
 
-export default function ScheduleTable({ schedules, onChange }: ScheduleTableProps) {
+export default function ScheduleTable({ schedules, onChange, onValidationChange }: ScheduleTableProps) {
   const [copyFromDay, setCopyFromDay] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<ScheduleValidationError[]>([]);
+
+  // Validate schedules whenever they change
+  const runValidation = useCallback(() => {
+    const allSchedules = DAYS_OF_WEEK.map(day =>
+      schedules.find(s => s.dayOfWeek === day.value) || {
+        ...DEFAULT_SCHEDULE,
+        dayOfWeek: day.value,
+        isActive: false,
+      }
+    );
+    const errors = validateAllSchedules(allSchedules);
+    setValidationErrors(errors);
+    onValidationChange?.(errors);
+  }, [schedules, onValidationChange]);
+
+  useEffect(() => {
+    runValidation();
+  }, [runValidation]);
+
+  // Check if a specific field has an error
+  const getFieldError = (dayOfWeek: string, field: string): string | undefined => {
+    const error = validationErrors.find(e => e.dayOfWeek === dayOfWeek && e.field === field);
+    return error?.message;
+  };
+
+  // Check if any field for a day has errors
+  const dayHasErrors = (dayOfWeek: string): boolean => {
+    return validationErrors.some(e => e.dayOfWeek === dayOfWeek);
+  };
 
   // Initialize schedules for all days if not provided
   const getScheduleForDay = (day: string): Schedule => {
@@ -153,12 +286,21 @@ export default function ScheduleTable({ schedules, onChange }: ScheduleTableProp
           <tbody className="bg-white divide-y divide-gray-200">
             {DAYS_OF_WEEK.map((day) => {
               const schedule = getScheduleForDay(day.value);
+              const hasErrors = dayHasErrors(day.value);
+              const startTimeError = getFieldError(day.value, 'startTime');
+              const endTimeError = getFieldError(day.value, 'endTime');
+              const breakStartError = getFieldError(day.value, 'breakStart');
+              const breakEndError = getFieldError(day.value, 'breakEnd');
+
               return (
-                <tr key={day.value} className={!schedule.isActive ? 'bg-gray-50' : ''}>
+                <tr key={day.value} className={`${!schedule.isActive ? 'bg-gray-50' : ''} ${hasErrors ? 'bg-red-50' : ''}`}>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <span className={`text-sm font-medium ${schedule.isActive ? 'text-gray-900' : 'text-gray-400'}`}>
-                      {day.label}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {hasErrors && <ExclamationCircleIcon className="h-4 w-4 text-red-500" />}
+                      <span className={`text-sm font-medium ${schedule.isActive ? (hasErrors ? 'text-red-700' : 'text-gray-900') : 'text-gray-400'}`}>
+                        {day.label}
+                      </span>
+                    </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-center">
                     <input
@@ -169,40 +311,60 @@ export default function ScheduleTable({ schedules, onChange }: ScheduleTableProp
                     />
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <input
-                      type="time"
-                      value={schedule.startTime}
-                      onChange={(e) => handleScheduleChange(day.value, 'startTime', e.target.value)}
-                      disabled={!schedule.isActive}
-                      className="text-sm px-2 py-1.5 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
-                    />
+                    <div className="relative">
+                      <input
+                        type="time"
+                        value={schedule.startTime}
+                        onChange={(e) => handleScheduleChange(day.value, 'startTime', e.target.value)}
+                        disabled={!schedule.isActive}
+                        className={`text-sm px-2 py-1.5 border rounded-md focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 ${
+                          startTimeError ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                        }`}
+                        title={startTimeError}
+                      />
+                    </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <input
-                      type="time"
-                      value={schedule.endTime}
-                      onChange={(e) => handleScheduleChange(day.value, 'endTime', e.target.value)}
-                      disabled={!schedule.isActive}
-                      className="text-sm px-2 py-1.5 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
-                    />
+                    <div className="relative">
+                      <input
+                        type="time"
+                        value={schedule.endTime}
+                        onChange={(e) => handleScheduleChange(day.value, 'endTime', e.target.value)}
+                        disabled={!schedule.isActive}
+                        className={`text-sm px-2 py-1.5 border rounded-md focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 ${
+                          endTimeError ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                        }`}
+                        title={endTimeError}
+                      />
+                    </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <input
-                      type="time"
-                      value={schedule.breakStart}
-                      onChange={(e) => handleScheduleChange(day.value, 'breakStart', e.target.value)}
-                      disabled={!schedule.isActive}
-                      className="text-sm px-2 py-1.5 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
-                    />
+                    <div className="relative">
+                      <input
+                        type="time"
+                        value={schedule.breakStart}
+                        onChange={(e) => handleScheduleChange(day.value, 'breakStart', e.target.value)}
+                        disabled={!schedule.isActive}
+                        className={`text-sm px-2 py-1.5 border rounded-md focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 ${
+                          breakStartError ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                        }`}
+                        title={breakStartError}
+                      />
+                    </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <input
-                      type="time"
-                      value={schedule.breakEnd}
-                      onChange={(e) => handleScheduleChange(day.value, 'breakEnd', e.target.value)}
-                      disabled={!schedule.isActive}
-                      className="text-sm px-2 py-1.5 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
-                    />
+                    <div className="relative">
+                      <input
+                        type="time"
+                        value={schedule.breakEnd}
+                        onChange={(e) => handleScheduleChange(day.value, 'breakEnd', e.target.value)}
+                        disabled={!schedule.isActive}
+                        className={`text-sm px-2 py-1.5 border rounded-md focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 ${
+                          breakEndError ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                        }`}
+                        title={breakEndError}
+                      />
+                    </div>
                   </td>
                 </tr>
               );
@@ -210,6 +372,25 @@ export default function ScheduleTable({ schedules, onChange }: ScheduleTableProp
           </tbody>
         </table>
       </div>
+      {/* Validation Errors Summary */}
+      {validationErrors.length > 0 && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-start gap-2">
+            <ExclamationCircleIcon className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-red-800">Please fix the following errors:</p>
+              <ul className="mt-1 text-sm text-red-700 list-disc list-inside">
+                {validationErrors.map((error, index) => (
+                  <li key={index}>
+                    <span className="font-medium">{DAYS_OF_WEEK.find(d => d.value === error.dayOfWeek)?.label}:</span> {error.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
       <p className="text-xs text-gray-500">
         Configure which days the doctor is available for appointments. Break time slots will be excluded from booking.
       </p>

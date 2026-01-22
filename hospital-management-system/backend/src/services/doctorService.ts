@@ -23,6 +23,85 @@ export interface UpdateAbsenceDto {
   notes?: string;
 }
 
+// Helper function to validate schedule times
+const validateScheduleTimes = (schedules: {
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  breakStart?: string | null;
+  breakEnd?: string | null;
+  isActive?: boolean;
+}[]): string[] => {
+  const validationErrors: string[] = [];
+  const dayNames: Record<string, string> = {
+    MONDAY: 'Monday', TUESDAY: 'Tuesday', WEDNESDAY: 'Wednesday',
+    THURSDAY: 'Thursday', FRIDAY: 'Friday', SATURDAY: 'Saturday', SUNDAY: 'Sunday',
+  };
+
+  // Convert time string (HH:mm) to minutes for comparison
+  const toMinutes = (time: string | null | undefined): number => {
+    if (!time) return -1;
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
+  };
+
+  for (const schedule of schedules) {
+    // Default isActive to true if not specified
+    const isActive = schedule.isActive !== false;
+    if (!isActive) continue;
+
+    const dayName = dayNames[schedule.dayOfWeek] || schedule.dayOfWeek;
+    const startMinutes = toMinutes(schedule.startTime);
+    const endMinutes = toMinutes(schedule.endTime);
+    const breakStartMinutes = toMinutes(schedule.breakStart);
+    const breakEndMinutes = toMinutes(schedule.breakEnd);
+
+    // Start Time must be < End Time
+    if (startMinutes >= endMinutes) {
+      validationErrors.push(`${dayName}: End time must be after start time`);
+    }
+
+    // Break time validations
+    const hasBreakStart = schedule.breakStart && schedule.breakStart !== '';
+    const hasBreakEnd = schedule.breakEnd && schedule.breakEnd !== '';
+
+    if (hasBreakStart || hasBreakEnd) {
+      // Both break times required if one is filled
+      if (hasBreakStart && !hasBreakEnd) {
+        validationErrors.push(`${dayName}: Break end time is required when break start is set`);
+      }
+      if (hasBreakEnd && !hasBreakStart) {
+        validationErrors.push(`${dayName}: Break start time is required when break end is set`);
+      }
+
+      if (hasBreakStart && hasBreakEnd) {
+        // Break Start must be < Break End
+        if (breakStartMinutes >= breakEndMinutes) {
+          validationErrors.push(`${dayName}: Break end must be after break start`);
+        }
+
+        // Break Start must be > Start Time
+        if (breakStartMinutes <= startMinutes) {
+          validationErrors.push(`${dayName}: Break must start after work begins`);
+        }
+
+        // Break End must be < End Time
+        if (breakEndMinutes >= endMinutes) {
+          validationErrors.push(`${dayName}: Break must end before work ends`);
+        }
+
+        // Break duration check (max 2 hours = 120 minutes)
+        const breakDuration = breakEndMinutes - breakStartMinutes;
+        if (breakDuration > 120) {
+          validationErrors.push(`${dayName}: Break duration cannot exceed 2 hours`);
+        }
+      }
+    }
+  }
+
+  return validationErrors;
+};
+
 export class DoctorService {
   async create(hospitalId: string, data: CreateDoctorDto & { specializationId?: string }) {
     // Check if user already exists
@@ -115,6 +194,12 @@ export class DoctorService {
     // Generate slots for the next 30 days if schedules are provided
     // This is done asynchronously after doctor creation
     if (data.schedules && data.schedules.length > 0) {
+      // Validate schedules before creating
+      const scheduleValidationErrors = validateScheduleTimes(data.schedules);
+      if (scheduleValidationErrors.length > 0) {
+        throw new ValidationError('Schedule validation failed: ' + scheduleValidationErrors.join('; '));
+      }
+
       // First create the schedules
       await prisma.doctorSchedule.createMany({
         data: data.schedules.map((s: any) => ({
@@ -360,6 +445,12 @@ export class DoctorService {
 
     if (!doctor) {
       throw new NotFoundError('Doctor not found');
+    }
+
+    // Validate schedules using helper function
+    const validationErrors = validateScheduleTimes(schedules);
+    if (validationErrors.length > 0) {
+      throw new ValidationError('Schedule validation failed: ' + validationErrors.join('; '));
     }
 
     // Build a map of new schedule hours by day

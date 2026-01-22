@@ -15,7 +15,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { doctorApi, departmentApi } from '../services/api';
 import toast from 'react-hot-toast';
-import ScheduleTable, { Schedule } from '../components/doctors/ScheduleTable';
+import ScheduleTable, { Schedule, ScheduleValidationError } from '../components/doctors/ScheduleTable';
 
 interface Specialization {
   id: string;
@@ -96,6 +96,7 @@ export default function DoctorForm() {
 
   const [formData, setFormData] = useState<DoctorFormData>(initialFormData);
   const [errors, setErrors] = useState<Partial<DoctorFormData>>({});
+  const [scheduleErrors, setScheduleErrors] = useState<ScheduleValidationError[]>([]);
 
   // Fetch departments
   const { data: departmentsData } = useQuery({
@@ -254,6 +255,13 @@ export default function DoctorForm() {
     if (!formData.departmentId) newErrors.departmentId = 'Department is required';
     if (!isEditMode && !formData.password.trim()) {
       newErrors.password = 'Password is required for new doctors';
+    }
+
+    // Check for schedule validation errors
+    if (scheduleErrors.length > 0) {
+      toast.error('Please fix the schedule errors before submitting');
+      setErrors(newErrors as unknown as Partial<DoctorFormData>);
+      return false;
     }
 
     setErrors(newErrors as unknown as Partial<DoctorFormData>);
@@ -604,6 +612,7 @@ export default function DoctorForm() {
           <ScheduleTable
             schedules={formData.schedules}
             onChange={(schedules) => setFormData(prev => ({ ...prev, schedules }))}
+            onValidationChange={setScheduleErrors}
           />
         </div>
 
@@ -618,8 +627,9 @@ export default function DoctorForm() {
           </button>
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || scheduleErrors.length > 0}
             className="px-6 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+            title={scheduleErrors.length > 0 ? 'Fix schedule errors to enable submission' : undefined}
           >
             {isLoading ? (
               <>
