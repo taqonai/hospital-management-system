@@ -106,7 +106,7 @@ export default function VitalsForm({
   };
 
   const getRiskColor = (level: string) => {
-    switch (level) {
+    switch (level.toLowerCase()) {
       case 'critical':
         return 'bg-red-600 text-white';
       case 'high':

@@ -220,7 +220,7 @@ export default function EWSCalculator({
   };
 
   const getRiskColor = (level: string) => {
-    switch (level) {
+    switch (level?.toLowerCase()) {
       case 'critical':
         return 'bg-red-600 text-white';
       case 'high':
@@ -233,7 +233,7 @@ export default function EWSCalculator({
   };
 
   const getRiskBorderColor = (level: string) => {
-    switch (level) {
+    switch (level?.toLowerCase()) {
       case 'critical':
         return 'border-red-500';
       case 'high':

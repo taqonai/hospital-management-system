@@ -92,7 +92,7 @@ export default function AlertPanel({
   };
 
   const getSeverityStyles = (severity: string) => {
-    switch (severity) {
+    switch (severity?.toLowerCase()) {
       case 'critical':
         return {
           border: 'border-l-4 border-l-red-600',

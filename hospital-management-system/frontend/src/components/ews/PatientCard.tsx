@@ -61,7 +61,7 @@ export default function PatientCard({
   }, [calculateTimeSince]);
 
   const getRiskStyles = () => {
-    switch (patient.riskLevel) {
+    switch (patient.riskLevel?.toLowerCase()) {
       case 'critical':
         return {
           border: 'border-red-500',

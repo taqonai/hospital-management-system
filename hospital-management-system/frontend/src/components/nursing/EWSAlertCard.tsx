@@ -48,7 +48,7 @@ export default function EWSAlertCard({
   const [showAcknowledgeForm, setShowAcknowledgeForm] = useState(false);
 
   const getSeverityStyles = () => {
-    switch (alert.severity) {
+    switch (alert.severity?.toLowerCase()) {
       case 'critical':
         return {
           border: 'border-red-500 border-l-4',
