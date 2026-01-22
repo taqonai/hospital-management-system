@@ -4,6 +4,7 @@ import { NotFoundError, ConflictError, AppError } from '../middleware/errorHandl
 import { AppointmentStatus } from '@prisma/client';
 import { notificationService } from './notificationService';
 import { slotService } from './slotService';
+import { holidayService } from './holidayService';
 
 // Booking constraints
 const MAX_ADVANCE_BOOKING_DAYS = 30;
@@ -38,6 +39,11 @@ export class AppointmentService {
       throw new AppError('Doctor is currently not available for appointments');
     }
 
+    // Check if doctor's user account is active
+    if (!doctor.user.isActive) {
+      throw new AppError('Doctor is no longer active in the system');
+    }
+
     // Normalize the date
     const normalizedDate = new Date(appointmentDate);
     const startOfDay = new Date(normalizedDate);
@@ -57,6 +63,12 @@ export class AppointmentService {
     maxAdvanceDate.setDate(maxAdvanceDate.getDate() + MAX_ADVANCE_BOOKING_DAYS);
     if (startOfDay > maxAdvanceDate) {
       throw new AppError(`Cannot book appointments more than ${MAX_ADVANCE_BOOKING_DAYS} days in advance`);
+    }
+
+    // Check for hospital holidays
+    const holidayName = await holidayService.getHolidayName(hospitalId, startOfDay);
+    if (holidayName) {
+      throw new AppError(`Cannot book appointments on ${holidayName} (hospital holiday)`);
     }
 
     // Check for doctor absence on this date
@@ -170,6 +182,14 @@ export class AppointmentService {
 
     if (!patient) {
       throw new NotFoundError('Patient not found');
+    }
+
+    // Check if patient is blocked due to repeated no-shows
+    if (patient.status === 'BLOCKED') {
+      throw new AppError(
+        `Patient is blocked from booking appointments due to repeated no-shows (${patient.noShowCount} no-shows). Please contact administration.`,
+        403
+      );
     }
 
     // Normalize the date and create date range for consistent comparison

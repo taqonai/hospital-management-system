@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { NotFoundError, AppError, ValidationError } from '../middleware/errorHandler';
 import { DayOfWeek } from '@prisma/client';
+import { holidayService } from './holidayService';
 
 // Map JavaScript Date.getDay() (0=Sunday, 6=Saturday) to DayOfWeek enum
 const dayIndexToEnum: Record<number, DayOfWeek> = {
@@ -168,10 +169,20 @@ export class SlotService {
       isBlocked: boolean;
     }> = [];
 
+    // Fetch hospital holidays in the date range
+    const holidays = await holidayService.getHolidaysInRange(hospitalId, today, endDate);
+    const holidayDates = new Set(holidays.map(h => h.date.toISOString().split('T')[0]));
+
     // Generate slots for each day
     for (let i = 0; i < daysAhead; i++) {
       const date = new Date(today);
       date.setDate(date.getDate() + i);
+
+      // Skip hospital holidays
+      const dateStr = date.toISOString().split('T')[0];
+      if (holidayDates.has(dateStr)) {
+        continue;
+      }
 
       const dayOfWeek = dayIndexToEnum[date.getDay()];
       const schedule = doctor.schedules.find((s) => s.dayOfWeek === dayOfWeek);

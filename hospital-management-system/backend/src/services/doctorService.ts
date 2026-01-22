@@ -481,10 +481,85 @@ export class DoctorService {
   async toggleAvailability(id: string, hospitalId: string, isAvailable: boolean) {
     const doctor = await prisma.doctor.findFirst({
       where: { id, user: { hospitalId } },
+      include: {
+        user: { select: { id: true, firstName: true, lastName: true } },
+      },
     });
 
     if (!doctor) {
       throw new NotFoundError('Doctor not found');
+    }
+
+    // If deactivating doctor (resignation/leave), handle existing appointments
+    let cancelledAppointments: string[] = [];
+    let notifiedPatients = 0;
+
+    if (!isAvailable) {
+      // Find all future appointments
+      const futureAppointments = await prisma.appointment.findMany({
+        where: {
+          doctorId: id,
+          appointmentDate: { gte: new Date() },
+          status: { in: ['SCHEDULED', 'CONFIRMED'] },
+        },
+        include: {
+          patient: { select: { id: true, firstName: true, lastName: true } },
+        },
+      });
+
+      if (futureAppointments.length > 0) {
+        // Cancel all future appointments
+        await prisma.appointment.updateMany({
+          where: {
+            doctorId: id,
+            appointmentDate: { gte: new Date() },
+            status: { in: ['SCHEDULED', 'CONFIRMED'] },
+          },
+          data: {
+            status: 'CANCELLED',
+            notes: 'Cancelled due to doctor unavailability',
+          },
+        });
+
+        cancelledAppointments = futureAppointments.map(a => a.id);
+
+        // Release all slots (isAvailable: false means it's booked)
+        await prisma.doctorSlot.updateMany({
+          where: {
+            doctorId: id,
+            slotDate: { gte: new Date() },
+            isAvailable: false,
+          },
+          data: {
+            isAvailable: true,
+            appointmentId: null,
+          },
+        });
+
+        // Notify all affected patients
+        for (const appointment of futureAppointments) {
+          try {
+            await notificationService.sendNotification(
+              appointment.patient.id,
+              'APPOINTMENT',
+              {
+                title: 'Appointment Cancelled - Doctor Unavailable',
+                message: `Your appointment with Dr. ${doctor.user.firstName} ${doctor.user.lastName} on ${appointment.appointmentDate.toDateString()} at ${appointment.startTime} has been cancelled. The doctor is no longer available. Please reschedule with another doctor.`,
+                priority: 'high',
+                metadata: {
+                  appointmentId: appointment.id,
+                  doctorId: id,
+                  reason: 'DOCTOR_UNAVAILABLE',
+                },
+              },
+              ['in_app', 'sms']
+            );
+            notifiedPatients++;
+          } catch (error) {
+            console.error(`Failed to notify patient ${appointment.patient.id}:`, error);
+          }
+        }
+      }
     }
 
     const updated = await prisma.doctor.update({
@@ -492,7 +567,12 @@ export class DoctorService {
       data: { isAvailable },
     });
 
-    return updated;
+    return {
+      ...updated,
+      cancelledAppointments: cancelledAppointments.length,
+      notifiedPatients,
+      affectedAppointmentIds: cancelledAppointments,
+    };
   }
 
   async getDashboardStats(doctorId: string) {

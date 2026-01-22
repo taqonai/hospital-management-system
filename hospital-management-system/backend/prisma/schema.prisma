@@ -56,6 +56,7 @@ model Hospital {
   doctorAbsences   DoctorAbsence[]
   noShowLogs       NoShowLog[]
   stageAlerts      StageAlert[]
+  holidays         HospitalHoliday[]
 
   // Insurance Coding
   icd10Codes       ICD10Code[]
@@ -327,9 +328,10 @@ model Doctor {
   prescriptions      Prescription[]
   surgeries          Surgery[]
   aiDiagnoses        AIDiagnosis[]
-  absences           DoctorAbsence[]
-  noShowLogs         NoShowLog[]
-  stageAlerts        StageAlert[]
+  absences                  DoctorAbsence[]
+  noShowLogs                NoShowLog[]
+  stageAlerts               StageAlert[]
+  consultationParticipants  ConsultationParticipant[]
 
   @@map("doctors")
 }
@@ -434,6 +436,11 @@ model Patient {
   nationality      String?
   photo            String?
   isActive         Boolean       @default(true)
+  status           PatientStatus @default(ACTIVE)
+  noShowCount      Int           @default(0)
+  lastNoShowAt     DateTime?
+  blockedAt        DateTime?
+  blockedReason    String?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
@@ -666,6 +673,20 @@ enum AppointmentStatus {
   NO_SHOW
 }
 
+enum ConsultationStatus {
+  STARTED       // Doctor opened consultation
+  IN_PROGRESS   // Doctor actively entering data
+  COMPLETED     // Doctor finished and signed off
+  ABANDONED     // Doctor left without completing
+}
+
+enum PatientStatus {
+  ACTIVE        // Normal patient
+  FLAGGED       // Has issues but can book
+  BLOCKED       // Cannot book appointments (repeat no-shows)
+  SUSPENDED     // Temporarily suspended
+}
+
 // ==================== NO-SHOW TRACKING ====================
 
 enum NoShowReason {
@@ -768,8 +789,8 @@ enum CronJobStatus {
 // ==================== CLINICAL ====================
 
 model Consultation {
-  id                String   @id @default(uuid())
-  appointmentId     String   @unique
+  id                String             @id @default(uuid())
+  appointmentId     String             @unique
   patientId         String
   doctorId          String
   chiefComplaint    String
@@ -781,17 +802,23 @@ model Consultation {
   advice            String?
   followUpDate      DateTime?
   notes             String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  status            ConsultationStatus @default(STARTED)
+  startedAt         DateTime           @default(now())
+  completedAt       DateTime?
+  abandonedAt       DateTime?
+  completedBy       String?            // Doctor who completed
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   // Relations
-  appointment   Appointment    @relation(fields: [appointmentId], references: [id])
-  patient       Patient        @relation(fields: [patientId], references: [id])
-  doctor        Doctor         @relation(fields: [doctorId], references: [id])
-  prescriptions Prescription[]
-  labOrders     LabOrder[]
-  imagingOrders ImagingOrder[]
-  clinicalNotes ClinicalNote[]
+  appointment    Appointment               @relation(fields: [appointmentId], references: [id])
+  patient        Patient                   @relation(fields: [patientId], references: [id])
+  doctor         Doctor                    @relation(fields: [doctorId], references: [id])
+  prescriptions  Prescription[]
+  labOrders      LabOrder[]
+  imagingOrders  ImagingOrder[]
+  clinicalNotes  ClinicalNote[]
+  participants   ConsultationParticipant[] // Multi-doctor support
 
   // Insurance Coding
   consultationDiagnoses  ConsultationDiagnosis[]
@@ -6070,4 +6097,52 @@ model DoctorAbsence {
   @@index([doctorId, startDate, endDate])
   @@index([hospitalId, startDate])
   @@map("doctor_absences")
+}
+
+// ==================== HOSPITAL HOLIDAYS ====================
+
+model HospitalHoliday {
+  id          String   @id @default(uuid())
+  hospitalId  String
+  name        String                        // "Christmas", "National Day"
+  date        DateTime @db.Date
+  isRecurring Boolean  @default(false)      // Repeats yearly
+  description String?
+  isActive    Boolean  @default(true)
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hospital    Hospital @relation(fields: [hospitalId], references: [id])
+
+  @@unique([hospitalId, date])
+  @@index([hospitalId, date])
+  @@map("hospital_holidays")
+}
+
+// ==================== MULTI-DOCTOR CONSULTATION ====================
+
+enum ParticipantRole {
+  PRIMARY           // Main treating doctor
+  CONSULTING        // Called for opinion
+  ASSISTING         // Assisting in procedure
+  SUPERVISING       // Supervising resident
+}
+
+model ConsultationParticipant {
+  id              String          @id @default(uuid())
+  consultationId  String
+  doctorId        String
+  role            ParticipantRole @default(CONSULTING)
+  notes           String?                           // Contribution notes
+  joinedAt        DateTime        @default(now())
+  leftAt          DateTime?
+
+  consultation    Consultation    @relation(fields: [consultationId], references: [id])
+  doctor          Doctor          @relation(fields: [doctorId], references: [id])
+
+  @@unique([consultationId, doctorId])
+  @@index([consultationId])
+  @@index([doctorId])
+  @@map("consultation_participants")
 }
