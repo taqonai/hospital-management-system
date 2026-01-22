@@ -223,13 +223,15 @@ export const reportsService = {
     invoices.forEach(invoice => {
       invoice.items.forEach(item => {
         const category = item.category || 'Other';
-        revenueByCategory[category] = (revenueByCategory[category] || 0) + item.amount;
+        revenueByCategory[category] = (revenueByCategory[category] || 0) + (Number(item.amount) || 0);
       });
 
-      revenueByStatus[invoice.status] = (revenueByStatus[invoice.status] || 0) + invoice.totalAmount;
-      totalRevenue += invoice.totalAmount;
-      totalCollected += invoice.paidAmount;
-      totalOutstanding += invoice.totalAmount - invoice.paidAmount;
+      const invoiceTotal = Number(invoice.totalAmount) || 0;
+      const invoicePaid = Number(invoice.paidAmount) || 0;
+      revenueByStatus[invoice.status] = (revenueByStatus[invoice.status] || 0) + invoiceTotal;
+      totalRevenue += invoiceTotal;
+      totalCollected += invoicePaid;
+      totalOutstanding += invoiceTotal - invoicePaid;
     });
 
     return {
@@ -275,8 +277,8 @@ export const reportsService = {
       if (!trends[month]) {
         trends[month] = { billed: 0, collected: 0, count: 0 };
       }
-      trends[month].billed += invoice.totalAmount;
-      trends[month].collected += invoice.paidAmount;
+      trends[month].billed += Number(invoice.totalAmount) || 0;
+      trends[month].collected += Number(invoice.paidAmount) || 0;
       trends[month].count++;
     });
 
