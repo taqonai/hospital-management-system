@@ -443,6 +443,12 @@ export default function Consultation() {
   const [aiInsights, setAiInsights] = useState<AIInsight[]>([]);
   const [drugInteractions, setDrugInteractions] = useState<DrugInteraction[]>([]);
   const [recommendedTests, setRecommendedTests] = useState<string[]>([]);
+  const [newTestInput, setNewTestInput] = useState('');
+
+  // Custom Diagnosis State
+  const [customDiagnoses, setCustomDiagnoses] = useState<Array<{ id: string; name: string; icd10?: string; isPrimary?: boolean }>>([]);
+  const [customDiagnosisInput, setCustomDiagnosisInput] = useState('');
+  const [customDiagnosisIcd, setCustomDiagnosisIcd] = useState('');
 
   // Consultant Referral State
   const [needsConsultantReferral, setNeedsConsultantReferral] = useState(false);
@@ -707,7 +713,9 @@ export default function Consultation() {
       const objective = vitals ?
         `Vitals: BP ${vitals.bloodPressureSys || '-'}/${vitals.bloodPressureDia || '-'} mmHg, HR ${vitals.heartRate || '-'} bpm, Temp ${vitals.temperature || '-'}C, SpO2 ${vitals.oxygenSaturation || '-'}%, RR ${vitals.respiratoryRate || '-'}/min` +
         (news2Result ? `\nNEWS2 Score: ${news2Result.score} (${news2Result.riskLevel})` : '') : '';
-      const assessment = selectedDiagnoses.map(d => `${d.name} (${d.icd10}) - ${Math.round(d.confidence * 100)}% confidence`).join('\n');
+      const aiDiagnoses = selectedDiagnoses.map(d => `${d.name} (${d.icd10}) - ${Math.round(d.confidence * 100)}% confidence${d.isPrimary ? ' [PRIMARY]' : ''}`);
+      const customDx = customDiagnoses.map(d => `${d.name}${d.icd10 ? ` (${d.icd10})` : ''}${d.isPrimary ? ' [PRIMARY]' : ''} [Custom]`);
+      const assessment = [...aiDiagnoses, ...customDx].join('\n');
       const plan = prescriptions.map(p => `${p.medication} ${p.dosage} ${p.route} ${p.frequency} for ${p.duration}`).join('\n') +
         (recommendedTests.length > 0 ? `\n\nRecommended Tests: ${recommendedTests.join(', ')}` : '');
 
@@ -916,7 +924,13 @@ export default function Consultation() {
       if (exists) {
         return prev.filter(d => d.icd10 !== diagnosis.icd10);
       }
-      return [...prev, { ...diagnosis, isPrimary: prev.length === 0 }];
+      // If this is the first AI diagnosis and no custom diagnoses, set as primary
+      const isPrimary = prev.length === 0 && customDiagnoses.length === 0;
+      if (isPrimary) {
+        // Clear any existing primary from custom diagnoses
+        setCustomDiagnoses(current => current.map(cd => ({ ...cd, isPrimary: false })));
+      }
+      return [...prev, { ...diagnosis, isPrimary }];
     });
   };
 
@@ -979,12 +993,12 @@ export default function Consultation() {
       case 1: return !!selectedPatientId;
       case 2: return Object.keys(vitals).length > 0;
       case 3: return symptoms.length > 0 || chiefComplaint.length > 0;
-      case 4: return selectedDiagnoses.length > 0;
+      case 4: return selectedDiagnoses.length > 0 || customDiagnoses.length > 0;
       case 5: return true; // Prescriptions are optional
       case 6: return true;
       default: return false;
     }
-  }, [currentStep, selectedPatientId, vitals, symptoms, chiefComplaint, selectedDiagnoses]);
+  }, [currentStep, selectedPatientId, vitals, symptoms, chiefComplaint, selectedDiagnoses, customDiagnoses]);
 
   // =============== Render Functions ===============
 
@@ -1343,6 +1357,68 @@ export default function Consultation() {
                 Override Active
               </span>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Patient Status - Pregnancy, Current Medications, Ongoing Treatment (from nurse entry) */}
+      {vitalsPrefilledByNurse && bookingData?.vitals && (
+        bookingData.vitals.isPregnant !== null ||
+        (bookingData.vitals.currentMedications && bookingData.vitals.currentMedications.length > 0) ||
+        bookingData.vitals.currentTreatment
+      ) && (
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <ClipboardDocumentListIcon className="h-5 w-5 text-purple-500" />
+            Patient Status (Recorded by Nurse)
+          </h3>
+          <div className="grid md:grid-cols-3 gap-4">
+            {/* Pregnancy Status */}
+            <div className="bg-pink-50 rounded-xl p-4 border border-pink-200">
+              <h4 className="text-sm font-medium text-pink-700 mb-2">Pregnancy Status</h4>
+              {bookingData.vitals.isPregnant ? (
+                <div className="space-y-1">
+                  <p className="text-lg font-semibold text-pink-800">Pregnant</p>
+                  {bookingData.vitals.expectedDueDate && (
+                    <p className="text-sm text-pink-600">
+                      Due: {new Date(bookingData.vitals.expectedDueDate).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+              ) : bookingData.vitals.isPregnant === false ? (
+                <p className="text-lg font-semibold text-gray-600">Not Pregnant</p>
+              ) : (
+                <p className="text-gray-400 italic">Not recorded</p>
+              )}
+            </div>
+
+            {/* Current Medications */}
+            <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+              <h4 className="text-sm font-medium text-blue-700 mb-2">Current Medications</h4>
+              {bookingData.vitals.currentMedications && bookingData.vitals.currentMedications.length > 0 ? (
+                <ul className="space-y-1">
+                  {bookingData.vitals.currentMedications.map((med, index) => (
+                    <li key={index} className="text-sm text-blue-800">
+                      <span className="font-medium">{med.name}</span>
+                      {med.dosage && <span className="text-blue-600"> - {med.dosage}</span>}
+                      {med.frequency && <span className="text-blue-500 text-xs ml-1">({med.frequency})</span>}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-gray-400 italic">None recorded</p>
+              )}
+            </div>
+
+            {/* Ongoing Treatment */}
+            <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
+              <h4 className="text-sm font-medium text-amber-700 mb-2">Ongoing Treatment</h4>
+              {bookingData.vitals.currentTreatment ? (
+                <p className="text-sm text-amber-800">{bookingData.vitals.currentTreatment}</p>
+              ) : (
+                <p className="text-gray-400 italic">None recorded</p>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -1918,42 +1994,210 @@ export default function Consultation() {
       )}
 
       {/* Recommended Tests */}
-      {recommendedTests.length > 0 && (
-        <div className="bg-green-50 border border-green-200 rounded-2xl p-6">
-          <h3 className="text-lg font-semibold text-green-800 mb-4 flex items-center gap-2">
-            <BeakerIcon className="h-5 w-5" />
-            Recommended Tests
-          </h3>
-          <div className="flex flex-wrap gap-2">
+      <div className="bg-green-50 border border-green-200 rounded-2xl p-6">
+        <h3 className="text-lg font-semibold text-green-800 mb-4 flex items-center gap-2">
+          <BeakerIcon className="h-5 w-5" />
+          Recommended Tests
+          <span className="text-sm font-normal text-green-600 ml-2">
+            ({recommendedTests.length} test{recommendedTests.length !== 1 ? 's' : ''})
+          </span>
+        </h3>
+
+        {/* Test List with Remove Buttons */}
+        {recommendedTests.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-4">
             {recommendedTests.map((test) => (
               <span
                 key={test}
-                className="px-3 py-1.5 bg-white text-green-700 rounded-lg text-sm border border-green-300"
+                className="px-3 py-1.5 bg-white text-green-700 rounded-lg text-sm border border-green-300 flex items-center gap-2"
               >
                 {test}
+                <button
+                  type="button"
+                  onClick={() => setRecommendedTests(prev => prev.filter(t => t !== test))}
+                  className="text-green-500 hover:text-red-500 transition-colors"
+                  title="Remove test"
+                >
+                  <XMarkIcon className="h-4 w-4" />
+                </button>
               </span>
             ))}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Selected Diagnoses Summary */}
+        {recommendedTests.length === 0 && (
+          <p className="text-green-600 text-sm mb-4 italic">No tests added yet. Run AI analysis or add manually.</p>
+        )}
+
+        {/* Add New Test Input */}
+        <div className="flex gap-2 mt-4 pt-4 border-t border-green-200">
+          <input
+            type="text"
+            value={newTestInput}
+            onChange={(e) => setNewTestInput(e.target.value)}
+            placeholder="Add a test (e.g., Complete Blood Count)"
+            className="flex-1 px-3 py-2 border border-green-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && newTestInput.trim()) {
+                e.preventDefault();
+                if (!recommendedTests.includes(newTestInput.trim())) {
+                  setRecommendedTests(prev => [...prev, newTestInput.trim()]);
+                }
+                setNewTestInput('');
+              }
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              if (newTestInput.trim() && !recommendedTests.includes(newTestInput.trim())) {
+                setRecommendedTests(prev => [...prev, newTestInput.trim()]);
+                setNewTestInput('');
+              }
+            }}
+            disabled={!newTestInput.trim()}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+          >
+            <PlusIcon className="h-4 w-4" />
+            Add
+          </button>
+        </div>
+      </div>
+
+      {/* Custom Diagnosis Input */}
+      <div className="bg-purple-50 border border-purple-200 rounded-2xl p-6">
+        <h3 className="text-lg font-semibold text-purple-800 mb-4 flex items-center gap-2">
+          <PlusIcon className="h-5 w-5" />
+          Add Custom Diagnosis
+        </h3>
+        <p className="text-sm text-purple-600 mb-4">
+          Add a diagnosis not suggested by AI. You can optionally include the ICD-10 code.
+        </p>
+        <div className="flex flex-col md:flex-row gap-3">
+          <input
+            type="text"
+            value={customDiagnosisInput}
+            onChange={(e) => setCustomDiagnosisInput(e.target.value)}
+            placeholder="Diagnosis name (e.g., Type 2 Diabetes Mellitus)"
+            className="flex-1 px-4 py-2.5 border border-purple-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+          />
+          <input
+            type="text"
+            value={customDiagnosisIcd}
+            onChange={(e) => setCustomDiagnosisIcd(e.target.value)}
+            placeholder="ICD-10 Code (optional)"
+            className="w-full md:w-40 px-4 py-2.5 border border-purple-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              if (customDiagnosisInput.trim()) {
+                const newDiagnosis = {
+                  id: `custom-${Date.now()}`,
+                  name: customDiagnosisInput.trim(),
+                  icd10: customDiagnosisIcd.trim() || undefined,
+                  isPrimary: selectedDiagnoses.length === 0 && customDiagnoses.length === 0,
+                };
+                setCustomDiagnoses(prev => [...prev, newDiagnosis]);
+                setCustomDiagnosisInput('');
+                setCustomDiagnosisIcd('');
+              }
+            }}
+            disabled={!customDiagnosisInput.trim()}
+            className="px-6 py-2.5 bg-purple-600 text-white rounded-xl font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 whitespace-nowrap"
+          >
+            <PlusIcon className="h-4 w-4" />
+            Add Diagnosis
+          </button>
+        </div>
+
+        {/* Custom Diagnoses List */}
+        {customDiagnoses.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-purple-200">
+            <h4 className="text-sm font-medium text-purple-700 mb-2">Custom Diagnoses Added:</h4>
+            <div className="space-y-2">
+              {customDiagnoses.map((d) => (
+                <div key={d.id} className="flex items-center justify-between p-3 bg-white rounded-xl border border-purple-200">
+                  <div className="flex-1">
+                    <span className="font-medium text-gray-900">{d.name}</span>
+                    {d.icd10 && <span className="ml-2 text-sm text-gray-500">({d.icd10})</span>}
+                    <span className="ml-2 text-xs px-2 py-0.5 bg-purple-100 text-purple-600 rounded">Custom</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Set this custom diagnosis as primary
+                        setCustomDiagnoses(prev => prev.map(cd => ({ ...cd, isPrimary: cd.id === d.id })));
+                        setSelectedDiagnoses(prev => prev.map(sd => ({ ...sd, isPrimary: false })));
+                      }}
+                      className={clsx(
+                        'text-xs font-medium px-2 py-1 rounded transition-colors',
+                        d.isPrimary
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-purple-100 hover:text-purple-700'
+                      )}
+                    >
+                      {d.isPrimary ? 'Primary' : 'Set Primary'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCustomDiagnoses(prev => prev.filter(cd => cd.id !== d.id))}
+                      className="text-gray-400 hover:text-red-500 transition-colors p-1"
+                      title="Remove diagnosis"
+                    >
+                      <XMarkIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Selected AI Diagnoses Summary */}
       {selectedDiagnoses.length > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6">
-          <h3 className="text-lg font-semibold text-blue-800 mb-4">Selected Diagnoses</h3>
+          <h3 className="text-lg font-semibold text-blue-800 mb-4 flex items-center gap-2">
+            <SparklesIcon className="h-5 w-5" />
+            Selected AI Diagnoses
+            <span className="text-sm font-normal text-blue-600">(from AI analysis)</span>
+          </h3>
           <div className="space-y-2">
-            {selectedDiagnoses.map((d, index) => (
-              <div key={d.icd10} className="flex items-center justify-between p-3 bg-white rounded-xl">
-                <div>
+            {selectedDiagnoses.map((d) => (
+              <div key={d.icd10} className="flex items-center justify-between p-3 bg-white rounded-xl border border-blue-200">
+                <div className="flex-1">
                   <span className="font-medium text-gray-900">{d.name}</span>
                   <span className="ml-2 text-sm text-gray-500">({d.icd10})</span>
+                  <span className="ml-2 text-xs px-2 py-0.5 bg-blue-100 text-blue-600 rounded">AI</span>
                 </div>
-                <span className={clsx(
-                  'text-xs font-medium px-2 py-0.5 rounded',
-                  index === 0 ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-600'
-                )}>
-                  {index === 0 ? 'Primary' : 'Secondary'}
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Set this AI diagnosis as primary
+                      setSelectedDiagnoses(prev => prev.map(sd => ({ ...sd, isPrimary: sd.icd10 === d.icd10 })));
+                      setCustomDiagnoses(prev => prev.map(cd => ({ ...cd, isPrimary: false })));
+                    }}
+                    className={clsx(
+                      'text-xs font-medium px-2 py-1 rounded transition-colors',
+                      d.isPrimary
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-700'
+                    )}
+                  >
+                    {d.isPrimary ? 'Primary' : 'Set Primary'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDiagnoses(prev => prev.filter(sd => sd.icd10 !== d.icd10))}
+                    className="text-gray-400 hover:text-red-500 transition-colors p-1"
+                    title="Remove diagnosis"
+                  >
+                    <XMarkIcon className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -2153,7 +2397,7 @@ export default function Consultation() {
 
               {/* AI Code Suggestions Panel */}
               <CodeSuggestionPanel
-                clinicalText={`${chiefComplaint}\n${symptoms.map(s => s.name).join(', ')}\n${selectedDiagnoses.map(d => d.name).join(', ')}`}
+                clinicalText={`${chiefComplaint}\n${symptoms.map(s => s.name).join(', ')}\n${[...selectedDiagnoses.map(d => d.name), ...customDiagnoses.map(d => d.name)].join(', ')}`}
                 patientAge={patientData?.dateOfBirth ? calculateAge(patientData.dateOfBirth) : undefined}
                 patientGender={patientData?.gender}
                 encounterType="outpatient"
@@ -2740,11 +2984,25 @@ export default function Consultation() {
           <div>
             <h4 className="text-sm font-medium text-gray-500 mb-2">Diagnoses</h4>
             <div className="space-y-1">
+              {/* AI Diagnoses */}
               {selectedDiagnoses.map((d, i) => (
-                <p key={d.icd10} className="text-gray-900">
-                  {i + 1}. {d.name} ({d.icd10})
+                <p key={d.icd10} className="text-gray-900 flex items-center gap-2">
+                  <span>{i + 1}. {d.name} ({d.icd10})</span>
+                  {d.isPrimary && <span className="text-xs px-1.5 py-0.5 bg-blue-500 text-white rounded">Primary</span>}
+                  <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded">AI</span>
                 </p>
               ))}
+              {/* Custom Diagnoses */}
+              {customDiagnoses.map((d, i) => (
+                <p key={d.id} className="text-gray-900 flex items-center gap-2">
+                  <span>{selectedDiagnoses.length + i + 1}. {d.name}{d.icd10 ? ` (${d.icd10})` : ''}</span>
+                  {d.isPrimary && <span className="text-xs px-1.5 py-0.5 bg-purple-500 text-white rounded">Primary</span>}
+                  <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded">Custom</span>
+                </p>
+              ))}
+              {selectedDiagnoses.length === 0 && customDiagnoses.length === 0 && (
+                <p className="text-gray-400">None</p>
+              )}
             </div>
           </div>
           <div>
