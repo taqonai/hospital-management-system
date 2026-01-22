@@ -51,18 +51,20 @@ async function main() {
     process.exit(1);
   }
 
-  // Get doctors
+  // Get doctors via their user relation
   const doctors = await prisma.doctor.findMany({
-    where: { hospitalId: hospital.id },
-    include: { user: true },
+    include: { user: true, department: true },
   });
 
-  if (doctors.length === 0) {
-    console.error('❌ No doctors found. Please run the main seed first.');
+  // Filter doctors by hospital through their user
+  const hospitalDoctors = doctors.filter(d => d.user?.hospitalId === hospital.id);
+
+  if (hospitalDoctors.length === 0) {
+    console.error('❌ No doctors found for this hospital. Please run the main seed first.');
     process.exit(1);
   }
 
-  console.log(`👨‍⚕️ Found ${doctors.length} doctors`);
+  console.log(`👨‍⚕️ Found ${hospitalDoctors.length} doctors`);
 
   // ==================== CREATE PATIENTS ====================
   console.log('\n📋 Creating patients...');
@@ -87,7 +89,7 @@ async function main() {
           gender,
           bloodGroup: randomElement([BloodGroup.A_POSITIVE, BloodGroup.A_NEGATIVE, BloodGroup.B_POSITIVE, BloodGroup.B_NEGATIVE, BloodGroup.AB_POSITIVE, BloodGroup.AB_NEGATIVE, BloodGroup.O_POSITIVE, BloodGroup.O_NEGATIVE]),
           phone: generatePhone(),
-          email: `${firstName.toLowerCase()}.${randomInt(1, 999)}@email.com`,
+          email: `${firstName.toLowerCase()}.${randomInt(1, 9999)}@email.com`,
           address: `${randomInt(100, 9999)} Main Street`,
           city: randomElement(['New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix']),
           state: randomElement(['NY', 'CA', 'IL', 'TX', 'AZ']),
@@ -124,9 +126,9 @@ async function main() {
     const appointmentsForDay = isWeekend ? randomInt(3, 10) : randomInt(15, 35);
 
     for (let i = 0; i < appointmentsForDay; i++) {
-      const doctor = randomElement(doctors);
+      const doctor = randomElement(hospitalDoctors);
       const patient = randomElement(patients);
-      if (!patient) continue;
+      if (!patient || !doctor) continue;
 
       const appointmentDate = new Date(currentDate);
       appointmentDate.setHours(randomInt(8, 17), randomInt(0, 59), 0, 0);
@@ -158,7 +160,6 @@ async function main() {
             type: randomElement(appointmentTypes),
             status,
             notes: status === AppointmentStatus.COMPLETED ? 'Patient visit completed successfully' : undefined,
-            tokenNumber: `T${appointmentCount + 1}`,
           },
         });
         appointments.push(appointment);
@@ -225,128 +226,6 @@ async function main() {
 
   console.log(`✅ Created ${invoiceCount} invoices`);
 
-  // ==================== CREATE LAB ORDERS ====================
-  console.log('\n🔬 Creating lab orders...');
-
-  // Get lab tests
-  const labTests = await prisma.labTest.findMany({
-    where: { hospitalId: hospital.id },
-    take: 10,
-  });
-
-  if (labTests.length > 0) {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-    let labOrderCount = 0;
-    for (let day = 0; day < 30; day++) {
-      const orderDate = new Date(thirtyDaysAgo);
-      orderDate.setDate(orderDate.getDate() + day);
-
-      const ordersPerDay = randomInt(10, 25);
-      for (let i = 0; i < ordersPerDay; i++) {
-        const patient = randomElement(patients);
-        const doctor = randomElement(doctors);
-        const test = randomElement(labTests);
-        if (!patient || !test) continue;
-
-        // Status based on age
-        const daysAgo = 30 - day;
-        let status: string;
-        if (daysAgo > 3) {
-          status = randomElement(['COMPLETED', 'COMPLETED', 'COMPLETED', 'CANCELLED']);
-        } else if (daysAgo > 1) {
-          status = randomElement(['COMPLETED', 'IN_PROGRESS', 'SAMPLE_COLLECTED']);
-        } else {
-          status = randomElement(['ORDERED', 'SAMPLE_COLLECTED', 'IN_PROGRESS', 'COMPLETED']);
-        }
-
-        const isCritical = Math.random() < 0.1 && status === 'COMPLETED';
-
-        try {
-          await prisma.labOrder.create({
-            data: {
-              hospitalId: hospital.id,
-              patientId: patient.id,
-              labTestId: test.id,
-              orderNumber: `LAB-${Date.now().toString().slice(-6)}-${labOrderCount}`,
-              status: status as any,
-              priority: isCritical ? 'URGENT' : randomElement(['ROUTINE', 'ROUTINE', 'ROUTINE', 'URGENT']),
-              isCritical,
-              notes: isCritical ? 'Critical value - requires immediate attention' : undefined,
-              orderedAt: orderDate,
-              collectedAt: status !== 'ORDERED' ? new Date(orderDate.getTime() + randomInt(1, 4) * 60 * 60 * 1000) : undefined,
-              completedAt: status === 'COMPLETED' ? new Date(orderDate.getTime() + randomInt(4, 24) * 60 * 60 * 1000) : undefined,
-            },
-          });
-          labOrderCount++;
-        } catch (e) {
-          // Skip errors
-        }
-      }
-    }
-
-    console.log(`✅ Created ${labOrderCount} lab orders`);
-  } else {
-    console.log('⚠️ No lab tests found, skipping lab orders');
-  }
-
-  // ==================== CREATE IMAGING ORDERS ====================
-  console.log('\n📷 Creating radiology orders...');
-
-  const imagingTypes = ['X_RAY', 'CT_SCAN', 'MRI', 'ULTRASOUND'];
-  const bodyParts = ['Chest', 'Head', 'Abdomen', 'Spine', 'Knee', 'Shoulder', 'Hand', 'Pelvis'];
-
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-  let radiologyCount = 0;
-  for (let day = 0; day < 30; day++) {
-    const orderDate = new Date(thirtyDaysAgo);
-    orderDate.setDate(orderDate.getDate() + day);
-
-    const ordersPerDay = randomInt(5, 15);
-    for (let i = 0; i < ordersPerDay; i++) {
-      const patient = randomElement(patients);
-      const doctor = randomElement(doctors);
-      if (!patient) continue;
-
-      const daysAgo = 30 - day;
-      let status: string;
-      if (daysAgo > 3) {
-        status = randomElement(['COMPLETED', 'COMPLETED', 'COMPLETED', 'CANCELLED']);
-      } else if (daysAgo > 1) {
-        status = randomElement(['COMPLETED', 'REPORTING', 'IMAGING_DONE']);
-      } else {
-        status = randomElement(['SCHEDULED', 'IN_PROGRESS', 'IMAGING_DONE', 'REPORTING']);
-      }
-
-      try {
-        await prisma.imagingOrder.create({
-          data: {
-            hospitalId: hospital.id,
-            patientId: patient.id,
-            doctorId: doctor.id,
-            orderNumber: `RAD-${Date.now().toString().slice(-6)}-${radiologyCount}`,
-            modality: randomElement(imagingTypes) as any,
-            bodyPart: randomElement(bodyParts),
-            status: status as any,
-            priority: randomElement(['ROUTINE', 'ROUTINE', 'ROUTINE', 'URGENT', 'STAT']),
-            clinicalHistory: 'Patient presents with symptoms requiring imaging',
-            orderedAt: orderDate,
-            scheduledAt: new Date(orderDate.getTime() + randomInt(1, 24) * 60 * 60 * 1000),
-            completedAt: status === 'COMPLETED' ? new Date(orderDate.getTime() + randomInt(24, 72) * 60 * 60 * 1000) : undefined,
-          },
-        });
-        radiologyCount++;
-      } catch (e) {
-        // Skip errors
-      }
-    }
-  }
-
-  console.log(`✅ Created ${radiologyCount} radiology orders`);
-
   // ==================== SUMMARY ====================
   console.log('\n' + '='.repeat(60));
   console.log('✨ Dashboard data seeding completed successfully!');
@@ -356,8 +235,6 @@ async function main() {
    • Patients: ${patients.length}
    • Appointments: ${appointmentCount} (6 months of data)
    • Invoices: ${invoiceCount}
-   • Lab Orders: Created
-   • Radiology Orders: ${radiologyCount}
   `);
 }
 
