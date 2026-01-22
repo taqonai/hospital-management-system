@@ -3,6 +3,7 @@ import {
   BeakerIcon,
   ArrowTrendingUpIcon,
   ExclamationTriangleIcon,
+  UserIcon,
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
@@ -20,6 +21,11 @@ interface VitalsData {
   painLevel: number | null;
   recordedBy: string;
   recordedAt: string;
+  // Patient status from nurse entry
+  isPregnant?: boolean | null;
+  expectedDueDate?: string | null;
+  currentMedications?: Array<{ name: string; dosage?: string; frequency?: string }> | null;
+  currentTreatment?: string | null;
 }
 
 interface RiskPrediction {
@@ -204,6 +210,68 @@ export function VitalsSummaryCard({ vitals, riskPrediction, className }: VitalsS
             )}
           </div>
         )}
+
+        {/* Patient Status - Pregnancy, Medications, Treatment */}
+        {(vitals.isPregnant !== null && vitals.isPregnant !== undefined) ||
+         (vitals.currentMedications && vitals.currentMedications.length > 0) ||
+         vitals.currentTreatment ? (
+          <div className="mt-3 p-3 rounded-lg border border-purple-200 bg-purple-50">
+            <div className="flex items-center gap-2 mb-3">
+              <UserIcon className="w-4 h-4 text-purple-600" />
+              <span className="font-medium text-sm text-purple-800">Patient Status</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Pregnancy Status */}
+              {vitals.isPregnant !== null && vitals.isPregnant !== undefined && (
+                <div className={clsx(
+                  'p-2 rounded-lg border',
+                  vitals.isPregnant ? 'bg-pink-50 border-pink-200' : 'bg-gray-50 border-gray-200'
+                )}>
+                  <div className="text-xs font-medium text-gray-500 mb-1">Pregnancy Status</div>
+                  {vitals.isPregnant ? (
+                    <>
+                      <div className="flex items-center gap-1">
+                        <span className="text-pink-600 font-semibold">Pregnant</span>
+                        <span className="text-pink-400">🤰</span>
+                      </div>
+                      {vitals.expectedDueDate && (
+                        <div className="text-xs text-pink-600 mt-1">
+                          Due: {new Date(vitals.expectedDueDate).toLocaleDateString()}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-gray-600 text-sm">Not Pregnant</span>
+                  )}
+                </div>
+              )}
+
+              {/* Current Medications */}
+              {vitals.currentMedications && vitals.currentMedications.length > 0 && (
+                <div className="p-2 rounded-lg bg-blue-50 border border-blue-200">
+                  <div className="text-xs font-medium text-gray-500 mb-1">Current Medications</div>
+                  <div className="space-y-1">
+                    {vitals.currentMedications.map((med, idx) => (
+                      <div key={idx} className="text-sm text-blue-800">
+                        <span className="font-medium">{med.name}</span>
+                        {med.dosage && <span className="text-blue-600"> - {med.dosage}</span>}
+                        {med.frequency && <span className="text-blue-500 text-xs"> ({med.frequency})</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Ongoing Treatment */}
+              {vitals.currentTreatment && (
+                <div className="p-2 rounded-lg bg-amber-50 border border-amber-200">
+                  <div className="text-xs font-medium text-gray-500 mb-1">Ongoing Treatment</div>
+                  <div className="text-sm text-amber-800">{vitals.currentTreatment}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
