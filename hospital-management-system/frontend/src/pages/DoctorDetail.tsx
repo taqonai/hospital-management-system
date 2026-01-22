@@ -424,12 +424,12 @@ export default function DoctorDetail() {
                               <div className="flex items-center">
                                 <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
                                   <span className="text-xs font-medium text-gray-600">
-                                    {apt.patient?.user?.firstName?.[0] || 'P'}{apt.patient?.user?.lastName?.[0] || ''}
+                                    {apt.patient?.firstName?.[0] || 'P'}{apt.patient?.lastName?.[0] || ''}
                                   </span>
                                 </div>
                                 <div className="ml-3">
                                   <p className="text-sm font-medium text-gray-900">
-                                    {apt.patient?.user?.firstName} {apt.patient?.user?.lastName}
+                                    {apt.patient?.firstName} {apt.patient?.lastName}
                                   </p>
                                   <p className="text-xs text-gray-500">{apt.patient?.mrn || 'No MRN'}</p>
                                 </div>
@@ -462,12 +462,18 @@ export default function DoctorDetail() {
                                 {apt.status?.replace(/_/g, ' ')}
                               </span>
                             </td>
-                            <td className="px-4 py-3 whitespace-nowrap">
+                            <td className="px-4 py-3 whitespace-nowrap flex gap-2">
                               <Link
-                                to={`/appointments/${apt.id}`}
+                                to={`/patients/${apt.patientId}`}
                                 className="text-emerald-600 hover:text-emerald-800 text-sm font-medium"
                               >
-                                View
+                                Patient
+                              </Link>
+                              <Link
+                                to={`/appointments/${apt.id}/edit`}
+                                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                              >
+                                Edit
                               </Link>
                             </td>
                           </tr>
