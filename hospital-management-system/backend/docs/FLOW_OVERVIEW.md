@@ -179,7 +179,7 @@ GET /slots/doctor/:doctorId/date/:date
 
 ## 4. Doctor Absence System
 
-**File:** `backend/src/services/doctorService.ts:640-800`
+**File:** `backend/src/services/doctorService.ts:783-1029`
 
 ### Absence Types (AbsenceType enum)
 - `ANNUAL_LEAVE`
@@ -187,8 +187,10 @@ GET /slots/doctor/:doctorId/date/:date
 - `CONFERENCE`
 - `TRAINING`
 - `PERSONAL`
-- `EMERGENCY` - **Special handling** (see below)
+- `EMERGENCY` - **Higher priority notifications** (see below)
 - `OTHER`
+
+> **Note:** All absence types auto-cancel affected appointments. Emergency absences trigger HIGH priority notifications.
 
 ### Absence Status
 - `ACTIVE` - Currently in effect
@@ -200,32 +202,51 @@ POST /doctors/:id/absences
          │
          ▼
 ┌────────────────────────────┐
-│ Validate dates             │  doctorService.ts:658-674
+│ Validate dates             │  doctorService.ts:798-815
 │ - endDate >= startDate     │
 │ - startDate >= today       │
 └────────────────────────────┘
          │
          ▼
 ┌────────────────────────────┐
-│ Check overlapping absences │  doctorService.ts:676-692
+│ Check overlapping absences │  doctorService.ts:817-833
 │ (error if overlap)         │
 └────────────────────────────┘
          │
          ▼
 ┌────────────────────────────┐
-│ Find affected appointments │  doctorService.ts:694-710
-│ Return warning count       │
+│ Find affected appointments │  doctorService.ts:835-866
+│ with patient details       │
 └────────────────────────────┘
          │
          ▼
 ┌────────────────────────────┐
-│ Block slots in date range  │  slotService.ts:784-853
-└────────────────────────────┘
-         │
-         ▼
-┌────────────────────────────┐
-│ Create DoctorAbsence       │
+│ Create DoctorAbsence       │  doctorService.ts:869-883
 │ status: ACTIVE             │
+└────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────┐
+│ Block slots in date range  │  slotService.ts:blockSlotsForDateRange
+└────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────┐
+│ For EACH affected appt:    │  doctorService.ts:907-1009
+│ • Update status → CANCELLED│
+│ • Add note with reason     │
+│ • Release slot for reuse   │
+│ • Create in-app notification│
+│ • Send email to patient    │
+└────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────┐
+│ Return summary:            │
+│ • blockedSlots count       │
+│ • cancelledAppointments    │
+│ • notifiedPatients         │
+│ • affectedAppointmentDetails│
 └────────────────────────────┘
 ```
 
@@ -241,14 +262,14 @@ POST /doctors/:id/absences
 // Only afternoon slots are blocked
 ```
 
-### Emergency Leave (Special Handling)
+### Appointment Auto-Cancellation (All Absence Types)
 
-**File:** `backend/src/services/doctorService.ts:758-820`
+**File:** `backend/src/services/doctorService.ts:896-1013`
 
-When `absenceType: 'EMERGENCY'`, the system performs additional actions:
+When any absence is created, **all affected appointments are automatically cancelled**:
 
 ```
-POST /doctors/:id/absences { absenceType: 'EMERGENCY', ... }
+POST /doctors/:id/absences { absenceType: any, ... }
          │
          ▼
 ┌────────────────────────────┐
@@ -258,39 +279,41 @@ POST /doctors/:id/absences { absenceType: 'EMERGENCY', ... }
          │
          ▼
 ┌────────────────────────────┐
-│ Is absenceType EMERGENCY?  │  doctorService.ts:758
-└────────────────────────────┘
-         │ YES
-         ▼
-┌────────────────────────────┐
-│ For each affected appt:    │  doctorService.ts:767-783
+│ For EACH affected appt:    │  doctorService.ts:907-927
 │ • Update status → CANCELLED│
 │ • Add note: "Auto-cancelled│
-│   due to doctor emergency" │
-│ • Release slot             │
+│   due to doctor [type]"    │
+│ • Release slot for rebooking│
 └────────────────────────────┘
          │
          ▼
 ┌────────────────────────────┐
-│ Create HIGH priority       │  doctorService.ts:788-811
-│ notification to patient:   │
-│ • Title: "Appointment      │
-│   Cancelled - Doctor       │
-│   Emergency"               │
-│ • priority: HIGH           │
+│ Create notification:       │  doctorService.ts:929-958
+│ • In-app notification      │
+│ • priority: based on type  │
+└────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────┐
+│ Send email notification:   │  doctorService.ts:961-1008
+│ • HTML formatted email     │
+│ • Appointment details      │
+│ • Rebooking instructions   │
 └────────────────────────────┘
 ```
 
-**Emergency vs Regular Leave Comparison:**
+### Emergency vs Regular Leave Comparison
 
 | Behavior | Regular Leave | Emergency Leave |
 |----------|---------------|-----------------|
 | Slots | Blocked | Blocked |
-| Appointments | Remain active | **Auto-cancelled** |
-| Slot after cancel | N/A | **Released for rebooking** |
-| Notification | "Appointment Affected..." | **"Appointment Cancelled - Doctor Emergency"** |
-| Priority | NORMAL | **HIGH** |
-| Patient action | Must reschedule | Informed, can rebook |
+| Appointments | Auto-cancelled | Auto-cancelled |
+| Slot after cancel | Released for rebooking | Released for rebooking |
+| In-app Notification | "Appointment Cancelled - Doctor [Leave Type]" | "Appointment Cancelled - Doctor Emergency" |
+| Notification Priority | NORMAL | **HIGH** |
+| Email Subject | "Your Appointment Has Been Cancelled" | **"URGENT: Your Appointment Has Been Cancelled"** |
+| Email Content | Standard cancellation notice | Includes emergency contact info |
+| Patient action | Rebook at convenience | Rebook or contact emergency dept |
 
 ---
 
@@ -978,3 +1001,4 @@ Backend unreachable → Lambda POST fails
 |---------|------|--------|---------|
 | 1.0 | 2026-01-22 | System | Initial documentation |
 | 2.0 | 2026-01-22 | System | Complete rewrite based on code audit |
+| 2.1 | 2026-01-22 | System | Updated Section 4: All absence types now auto-cancel appointments (not just EMERGENCY). Added email notification flow. Updated comparison table. |
