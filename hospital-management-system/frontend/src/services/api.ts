@@ -674,6 +674,8 @@ export const opdApi = {
   getBookingTicket: (appointmentId: string) => api.get(`/opd/booking-ticket/${appointmentId}`),
   getPatientHistory: (patientId: string, limit?: number) =>
     api.get(`/opd/patient-history/${patientId}`, { params: { limit } }),
+  // Get patient's latest patient status (pregnancy, medications, treatment) from previous vitals
+  getPatientStatus: (patientId: string) => api.get(`/opd/patient-status/${patientId}`),
 };
 
 // Emergency APIs

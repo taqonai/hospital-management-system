@@ -932,6 +932,50 @@ export class OPDService {
       })),
     };
   }
+
+  // Get patient's latest patient status (pregnancy, medications, treatment) from any previous vitals
+  async getPatientLatestStatus(patientId: string, hospitalId: string) {
+    // Verify patient belongs to hospital
+    const patient = await prisma.patient.findFirst({
+      where: { id: patientId, hospitalId },
+    });
+
+    if (!patient) {
+      throw new NotFoundError('Patient not found');
+    }
+
+    // Find the most recent vitals with patient status data (where at least one field is set)
+    const latestVitalsWithStatus = await prisma.vital.findFirst({
+      where: {
+        patientId,
+        OR: [
+          { isPregnant: { not: null } },
+          { currentMedications: { not: { equals: null } } },
+          { AND: [{ currentTreatment: { not: null } }, { currentTreatment: { not: '' } }] },
+        ],
+      },
+      orderBy: { recordedAt: 'desc' },
+      select: {
+        isPregnant: true,
+        expectedDueDate: true,
+        currentMedications: true,
+        currentTreatment: true,
+        recordedAt: true,
+      },
+    });
+
+    if (!latestVitalsWithStatus) {
+      return null;
+    }
+
+    return {
+      isPregnant: latestVitalsWithStatus.isPregnant,
+      expectedDueDate: latestVitalsWithStatus.expectedDueDate,
+      currentMedications: latestVitalsWithStatus.currentMedications,
+      currentTreatment: latestVitalsWithStatus.currentTreatment,
+      recordedAt: latestVitalsWithStatus.recordedAt,
+    };
+  }
 }
 
 export const opdService = new OPDService();

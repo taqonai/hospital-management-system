@@ -209,4 +209,16 @@ router.get(
   })
 );
 
+// Get patient's latest patient status (pregnancy, medications, treatment) from previous vitals
+router.get(
+  '/patient-status/:patientId',
+  authenticate,
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { patientId } = req.params;
+    const result = await opdService.getPatientLatestStatus(patientId, req.user!.hospitalId);
+    sendSuccess(res, result);
+  })
+);
+
 export default router;

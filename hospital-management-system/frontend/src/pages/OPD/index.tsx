@@ -455,47 +455,76 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
     fetchPatientData();
   }, [appointment.patient?.id]);
 
-  // Fetch existing vitals to pre-populate the form when updating
+  // Fetch existing vitals and patient status from previous appointments
   useEffect(() => {
-    const fetchExistingVitals = async () => {
-      console.log('[VitalsModal] fetchExistingVitals called, vitalsRecordedAt:', appointment.vitalsRecordedAt);
-      if (!appointment.vitalsRecordedAt) return; // Only fetch if vitals were previously recorded
-
+    const fetchVitalsData = async () => {
       setLoadingExisting(true);
       try {
-        const response = await opdApi.getBookingTicket(appointment.id);
-        console.log('[VitalsModal] Booking ticket response:', response.data);
-        const existingVitals = response.data?.data?.vitals;
-        console.log('[VitalsModal] existingVitals:', existingVitals);
-        console.log('[VitalsModal] isPregnant:', existingVitals?.isPregnant, 'currentMedications:', existingVitals?.currentMedications);
-        if (existingVitals) {
-          setVitals({
-            temperature: existingVitals.temperature?.toString() || '',
-            bloodPressureSys: existingVitals.bloodPressureSys?.toString() || '',
-            bloodPressureDia: existingVitals.bloodPressureDia?.toString() || '',
-            heartRate: existingVitals.heartRate?.toString() || '',
-            respiratoryRate: existingVitals.respiratoryRate?.toString() || '',
-            oxygenSaturation: existingVitals.oxygenSaturation?.toString() || '',
-            weight: existingVitals.weight?.toString() || '',
-            height: existingVitals.height?.toString() || '',
-            bloodSugar: existingVitals.bloodSugar?.toString() || '',
-            painLevel: existingVitals.painLevel?.toString() || '',
-            notes: existingVitals.notes || '',
-            isPregnant: existingVitals.isPregnant,
-            expectedDueDate: existingVitals.expectedDueDate || '',
-            currentMedications: existingVitals.currentMedications || [],
-            currentTreatment: existingVitals.currentTreatment || '',
-          });
+        let existingVitals = null;
+        let patientStatus = null;
+
+        // 1. Fetch current appointment's vitals if they exist
+        if (appointment.vitalsRecordedAt) {
+          const response = await opdApi.getBookingTicket(appointment.id);
+          existingVitals = response.data?.data?.vitals;
         }
+
+        // 2. Fetch patient's latest status from previous appointments
+        // This will be used if current vitals don't have patient status data
+        if (appointment.patient?.id) {
+          try {
+            const statusResponse = await opdApi.getPatientStatus(appointment.patient.id);
+            patientStatus = statusResponse.data?.data;
+          } catch (err) {
+            // Patient may not have previous status, that's okay
+            console.log('No previous patient status found');
+          }
+        }
+
+        // 3. Merge the data - use current vitals for measurements, but fall back to
+        // previous patient status for pregnancy/medications/treatment if not set
+        const hasCurrentPatientStatus = existingVitals && (
+          existingVitals.isPregnant !== null && existingVitals.isPregnant !== undefined ||
+          (existingVitals.currentMedications && existingVitals.currentMedications.length > 0) ||
+          existingVitals.currentTreatment
+        );
+
+        setVitals({
+          // Vital measurements from current appointment
+          temperature: existingVitals?.temperature?.toString() || '',
+          bloodPressureSys: existingVitals?.bloodPressureSys?.toString() || '',
+          bloodPressureDia: existingVitals?.bloodPressureDia?.toString() || '',
+          heartRate: existingVitals?.heartRate?.toString() || '',
+          respiratoryRate: existingVitals?.respiratoryRate?.toString() || '',
+          oxygenSaturation: existingVitals?.oxygenSaturation?.toString() || '',
+          weight: existingVitals?.weight?.toString() || '',
+          height: existingVitals?.height?.toString() || '',
+          bloodSugar: existingVitals?.bloodSugar?.toString() || '',
+          painLevel: existingVitals?.painLevel?.toString() || '',
+          notes: existingVitals?.notes || '',
+          // Patient status - use current if available, otherwise use previous
+          isPregnant: hasCurrentPatientStatus
+            ? existingVitals?.isPregnant
+            : patientStatus?.isPregnant ?? undefined,
+          expectedDueDate: hasCurrentPatientStatus
+            ? (existingVitals?.expectedDueDate || '')
+            : (patientStatus?.expectedDueDate || ''),
+          currentMedications: hasCurrentPatientStatus
+            ? (existingVitals?.currentMedications || [])
+            : (patientStatus?.currentMedications || []),
+          currentTreatment: hasCurrentPatientStatus
+            ? (existingVitals?.currentTreatment || '')
+            : (patientStatus?.currentTreatment || ''),
+        });
       } catch (error) {
-        console.error('Failed to fetch existing vitals:', error);
+        console.error('Failed to fetch vitals data:', error);
       } finally {
         setLoadingExisting(false);
       }
     };
 
-    fetchExistingVitals();
-  }, [appointment.id, appointment.vitalsRecordedAt]);
+    fetchVitalsData();
+  }, [appointment.id, appointment.vitalsRecordedAt, appointment.patient?.id]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
