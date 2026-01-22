@@ -65,7 +65,8 @@ export class OPDService {
     const where: any = {
       hospitalId,
       appointmentDate: { gte: today, lt: tomorrow },
-      status: { in: ['SCHEDULED', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS'] },
+      // Live Queue only shows patients who are physically present (checked in or being seen)
+      status: { in: ['CHECKED_IN', 'IN_PROGRESS'] },
     };
     if (doctorId) where.doctorId = doctorId;
 
