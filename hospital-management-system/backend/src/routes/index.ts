@@ -54,6 +54,7 @@ import clinicianRoutes from './clinicianRoutes';
 import nutritionAiRoutes from './nutritionAiRoutes';
 import crmRoutes from './crmRoutes';
 import noShowRoutes from './noShowRoutes';
+import referralRoutes from './referralRoutes';
 
 const router = Router();
 
@@ -142,5 +143,8 @@ router.use('/crm', crmRoutes);
 
 // NO_SHOW Management
 router.use('/no-show', noShowRoutes);
+
+// Consultant Referrals
+router.use('/referrals', referralRoutes);
 
 export default router;

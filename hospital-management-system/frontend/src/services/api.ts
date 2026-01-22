@@ -2285,4 +2285,77 @@ export const crmApi = {
   updateSettings: (data: any) => api.put('/crm/settings', data),
 };
 
+// =============================================================================
+// Consultant Referral API
+// =============================================================================
+
+export const referralApi = {
+  // Create a new referral
+  create: (data: {
+    sourceConsultationId?: string;
+    sourceAppointmentId: string;
+    referringDoctorId?: string;
+    patientId: string;
+    targetDepartmentId: string;
+    targetDoctorId?: string;
+    reason: string;
+    urgency: 'EMERGENCY' | 'URGENT' | 'ROUTINE';
+    clinicalNotes?: string;
+  }) => api.post('/referrals', data),
+
+  // Get referrals created by the logged-in doctor
+  getMyReferrals: (params?: { page?: number; limit?: number }) =>
+    api.get('/referrals', { params }),
+
+  // Get referral queue for receptionists
+  getQueue: (params?: {
+    urgency?: 'EMERGENCY' | 'URGENT' | 'ROUTINE';
+    departmentId?: string;
+    status?: 'PENDING' | 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
+    page?: number;
+    limit?: number;
+  }) => api.get('/referrals/queue', { params }),
+
+  // Get referral statistics
+  getStatistics: (params?: { startDate?: string; endDate?: string }) =>
+    api.get('/referrals/statistics', { params }),
+
+  // Get referrals for a specific patient
+  getPatientReferrals: (patientId: string) =>
+    api.get(`/referrals/patient/${patientId}`),
+
+  // Get a specific referral by ID
+  getById: (id: string) => api.get(`/referrals/${id}`),
+
+  // Get available slots for a referral (EMERGENCY flow)
+  getSlots: (id: string, date?: string) =>
+    api.get(`/referrals/${id}/slots`, { params: { date } }),
+
+  // Schedule appointment for a referral (URGENT flow - by receptionist)
+  schedule: (id: string, data: {
+    appointmentDate: string;
+    startTime: string;
+    endTime: string;
+    notes?: string;
+  }) => api.post(`/referrals/${id}/schedule`, data),
+
+  // Book appointment from patient portal (ROUTINE flow)
+  bookFromPortal: (id: string, data: {
+    appointmentDate: string;
+    startTime: string;
+    endTime: string;
+  }) => api.post(`/referrals/${id}/book`, data),
+
+  // Mark referral as completed
+  complete: (id: string, notes?: string) =>
+    api.patch(`/referrals/${id}/complete`, { notes }),
+
+  // Cancel a referral
+  cancel: (id: string, reason: string) =>
+    api.patch(`/referrals/${id}/cancel`, { reason }),
+
+  // Expire old referrals (admin)
+  expireOld: () => api.post('/referrals/expire'),
+};
+
 export default api;

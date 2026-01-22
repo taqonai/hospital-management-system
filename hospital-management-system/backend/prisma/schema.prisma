@@ -85,6 +85,9 @@ model Hospital {
   crmTags              CRMTag[]
   crmSettings          CRMSettings?
 
+  // Consultant Referrals
+  referrals            ConsultantReferral[]
+
   @@map("hospitals")
 }
 
@@ -108,6 +111,7 @@ model Department {
   nurses          Nurse[]
   beds            Bed[]
   specializations Specialization[]
+  referrals       ConsultantReferral[]
 
   @@unique([hospitalId, code])
   @@map("departments")
@@ -332,6 +336,8 @@ model Doctor {
   noShowLogs                NoShowLog[]
   stageAlerts               StageAlert[]
   consultationParticipants  ConsultationParticipant[]
+  referralsMade             ConsultantReferral[] @relation("ReferringDoctor")
+  referralsReceived         ConsultantReferral[] @relation("TargetDoctor")
 
   @@map("doctors")
 }
@@ -495,6 +501,9 @@ model Patient {
   noShowLogs           NoShowLog[]
   stageAlerts          StageAlert[]
 
+  // Consultant Referrals
+  referrals            ConsultantReferral[]
+
   @@unique([hospitalId, mrn])
   @@map("patients")
 }
@@ -657,6 +666,8 @@ model Appointment {
   slot           DoctorSlot?
   noShowLogs     NoShowLog[]
   stageAlerts    StageAlert[]
+  sourceReferrals    ConsultantReferral[] @relation("SourceAppointment")
+  referralAppointment ConsultantReferral? @relation("ReferralAppointment")
 
   @@map("appointments")
 }
@@ -829,6 +840,9 @@ model Consultation {
   // Insurance Coding
   consultationDiagnoses  ConsultationDiagnosis[]
   consultationProcedures ConsultationProcedure[]
+
+  // Consultant Referrals
+  referrals              ConsultantReferral[]
 
   @@map("consultations")
 }
@@ -6151,4 +6165,77 @@ model ConsultationParticipant {
   @@index([consultationId])
   @@index([doctorId])
   @@map("consultation_participants")
+}
+
+// ==================== CONSULTANT REFERRAL ====================
+
+enum ReferralUrgency {
+  EMERGENCY  // Doctor books immediately
+  URGENT     // Receptionist schedules within 24hrs
+  ROUTINE    // Patient books via portal
+}
+
+enum ReferralStatus {
+  PENDING     // Awaiting scheduling
+  SCHEDULED   // Appointment booked
+  COMPLETED   // Consultation completed
+  CANCELLED   // Referral cancelled
+  EXPIRED     // Not scheduled in time
+}
+
+model ConsultantReferral {
+  id                    String          @id @default(uuid())
+  hospitalId            String
+
+  // Source
+  sourceConsultationId  String?         // Link to originating consultation
+  sourceAppointmentId   String          // Link to originating appointment
+  referringDoctorId     String          // Doctor making referral
+  patientId             String
+
+  // Target
+  targetDepartmentId    String          // Department being referred to
+  targetDoctorId        String?         // Specific consultant (optional for ROUTINE)
+
+  // Referral Details
+  reason                String          // Reason for referral (text from voice/input)
+  urgency               ReferralUrgency // EMERGENCY, URGENT, ROUTINE
+  clinicalNotes         String?         // Additional clinical context
+
+  // Status Tracking
+  status                ReferralStatus  @default(PENDING)
+
+  // Scheduling (filled when appointment created)
+  scheduledAppointmentId String?        @unique
+  scheduledAt           DateTime?       // When appointment was scheduled
+  scheduledBy           String?         // User who scheduled (receptionist/patient/doctor)
+
+  // Completion
+  completedAt           DateTime?
+  completionNotes       String?
+
+  // Priority Flag (for patient portal booking)
+  priorityBooking       Boolean         @default(false)
+  priorityExpiresAt     DateTime?       // Priority expires after X days
+
+  // Timestamps
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  expiresAt             DateTime?       // Referral expires if not scheduled
+
+  // Relations
+  hospital              Hospital        @relation(fields: [hospitalId], references: [id])
+  sourceConsultation    Consultation?   @relation(fields: [sourceConsultationId], references: [id])
+  sourceAppointment     Appointment     @relation("SourceAppointment", fields: [sourceAppointmentId], references: [id])
+  referringDoctor       Doctor          @relation("ReferringDoctor", fields: [referringDoctorId], references: [id])
+  patient               Patient         @relation(fields: [patientId], references: [id])
+  targetDepartment      Department      @relation(fields: [targetDepartmentId], references: [id])
+  targetDoctor          Doctor?         @relation("TargetDoctor", fields: [targetDoctorId], references: [id])
+  scheduledAppointment  Appointment?    @relation("ReferralAppointment", fields: [scheduledAppointmentId], references: [id])
+
+  @@index([hospitalId, status])
+  @@index([hospitalId, urgency, status])
+  @@index([patientId])
+  @@index([targetDepartmentId, status])
+  @@map("consultant_referrals")
 }
