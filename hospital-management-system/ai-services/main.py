@@ -125,6 +125,25 @@ class Diagnosis(BaseModel):
     severity: Optional[str] = None
 
 
+class AgeAdjustedWarning(BaseModel):
+    symptom: str
+    ageGroup: str
+    severityMultiplier: float
+    warnings: List[str]
+    priority: str
+
+class UrgencyAssessment(BaseModel):
+    level: Optional[str] = None
+    score: Optional[float] = None
+    ageMultiplier: Optional[float] = None
+    patientAgeCategory: Optional[str] = None
+    ageConsiderations: Optional[List[str]] = None
+    source: Optional[str] = None
+    recommendations: Optional[List[str]] = None
+
+    class Config:
+        extra = "allow"
+
 class DiagnosisResponse(BaseModel):
     diagnoses: List[Diagnosis]
     recommendedTests: List[str]
@@ -133,6 +152,15 @@ class DiagnosisResponse(BaseModel):
     riskFactors: List[RiskFactor]
     confidence: float
     modelVersion: str
+    # Additional fields returned by the service
+    ageAdjustedWarnings: Optional[List[AgeAdjustedWarning]] = None
+    urgencyAssessment: Optional[UrgencyAssessment] = None
+    analysisSource: Optional[str] = None
+    clinicalReasoning: Optional[str] = None
+    redFlags: Optional[List[str]] = None
+
+    class Config:
+        extra = "allow"
 
 
 class RiskPredictionRequest(BaseModel):
