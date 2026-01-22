@@ -1,1278 +1,819 @@
 # HMS Slot & Appointment System - Flow Overview
 
+> **Audited:** 2026-01-22 | Based on actual code implementation
+
 ## Table of Contents
-1. [System Architecture Overview](#1-system-architecture-overview)
-2. [Doctor Slot Configuration Flow](#2-doctor-slot-configuration-flow)
-3. [Patient Online Booking Flow](#3-patient-online-booking-flow)
-4. [Appointment Journey Flow](#4-appointment-journey-flow)
-5. [NO_SHOW Detection Flow](#5-no_show-detection-flow)
-6. [Slot Release Flow](#6-slot-release-flow)
-7. [Doctor Absence Flow](#7-doctor-absence-flow)
-8. [Hospital Holiday Flow](#8-hospital-holiday-flow)
-9. [Multi-Doctor Visit Flow](#9-multi-doctor-visit-flow)
-10. [Consultation Completion Flow](#10-consultation-completion-flow)
-11. [No-Show Blocking Flow](#11-no-show-blocking-flow)
-12. [Doctor Resignation Flow](#12-doctor-resignation-flow)
-13. [Patient Cancellation Flow](#13-patient-cancellation-flow)
-14. [Cron Job & Notification Flow](#14-cron-job--notification-flow)
-15. [CloudWatch Monitoring Flow](#15-cloudwatch-monitoring-flow)
+1. [System Architecture](#1-system-architecture)
+2. [Doctor Slot Configuration](#2-doctor-slot-configuration)
+3. [Dynamic Slot Generation](#3-dynamic-slot-generation)
+4. [Doctor Absence System](#4-doctor-absence-system)
+5. [Hospital Holiday Calendar](#5-hospital-holiday-calendar)
+6. [Booking Validations](#6-booking-validations)
+7. [Auto NO_SHOW Detection](#7-auto-no_show-detection)
+8. [Stage Alerts](#8-stage-alerts)
+9. [No-Show Patient Blocking](#9-no-show-patient-blocking)
+10. [Doctor Resignation/Unavailability](#10-doctor-resignationunavailability)
+11. [Consultation Tracking](#11-consultation-tracking)
+12. [Multi-Doctor Visits](#12-multi-doctor-visits)
+13. [Cron Jobs](#13-cron-jobs)
+14. [API Reference](#14-api-reference)
 
 ---
 
-## 1. System Architecture Overview
+## 1. System Architecture
 
+### File Structure
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                              HMS SLOT & APPOINTMENT SYSTEM                               │
-├─────────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                          │
-│   ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐      │
-│   │   DOCTORS    │     │   PATIENTS   │     │    SLOTS     │     │ APPOINTMENTS │      │
-│   ├──────────────┤     ├──────────────┤     ├──────────────┤     ├──────────────┤      │
-│   │ • Schedules  │────▶│ • Booking    │────▶│ • Available  │────▶│ • Scheduled  │      │
-│   │ • Absences   │     │ • Check-in   │     │ • Blocked    │     │ • Confirmed  │      │
-│   │ • Holidays   │     │ • History    │     │ • Booked     │     │ • Checked-in │      │
-│   └──────────────┘     └──────────────┘     └──────────────┘     │ • Completed  │      │
-│                                                                   │ • NO_SHOW    │      │
-│   ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     └──────────────┘      │
-│   │  CRON JOBS   │     │NOTIFICATIONS │     │CONSULTATIONS │                           │
-│   ├──────────────┤     ├──────────────┤     ├──────────────┤                           │
-│   │ • NO_SHOW    │────▶│ • SMS        │     │ • Primary    │                           │
-│   │ • Alerts     │     │ • Email      │     │ • Multi-doc  │                           │
-│   │ • Reminders  │     │ • In-app     │     │ • Status     │                           │
-│   └──────────────┘     └──────────────┘     └──────────────┘                           │
-│                                                                                          │
-└─────────────────────────────────────────────────────────────────────────────────────────┘
+backend/src/
+├── services/
+│   ├── slotService.ts          # Slot generation, booking, blocking
+│   ├── appointmentService.ts   # Appointment CRUD, validations
+│   ├── noShowService.ts        # NO_SHOW detection, stage alerts
+│   ├── doctorService.ts        # Doctor CRUD, schedules, absences
+│   ├── holidayService.ts       # Hospital holiday management
+│   └── consultationService.ts  # Consultation lifecycle
+├── routes/
+│   ├── slotRoutes.ts           # /api/v1/slots/*
+│   ├── appointmentRoutes.ts    # /api/v1/appointments/*
+│   ├── noShowRoutes.ts         # /api/v1/no-show/*
+│   └── doctorRoutes.ts         # /api/v1/doctors/*
+├── jobs/
+│   └── noShowCron.ts           # Cron job for NO_SHOW & alerts
+└── prisma/schema.prisma        # Database models
 ```
 
-### Key Entities & Relationships
-
-```
-Doctor ─────────────┬───────────────────┬──────────────────┬─────────────────┐
-                    │                   │                  │                 │
-                    ▼                   ▼                  ▼                 ▼
-            DoctorSchedule        DoctorSlot         DoctorAbsence      Appointment
-            (Working hours)    (Bookable slots)    (Leave/Absence)    (Patient visit)
-                    │                   │                  │                 │
-                    │                   ▼                  │                 ▼
-                    │              SlotConfig              │           Consultation
-                    │            (Duration, max)           │          (Clinical data)
-                    │                   │                  │                 │
-                    └───────────────────┴──────────────────┴─────────────────┘
-                                        │
-                                        ▼
-                              Hospital (Multi-tenant)
-                                        │
-                                        ▼
-                              HospitalHoliday
-                             (System-wide holidays)
-```
+### Database Models
+| Model | File Location | Purpose |
+|-------|---------------|---------|
+| `Doctor` | schema.prisma | Doctor profile with slotDuration, maxPatientsPerDay |
+| `DoctorSchedule` | schema.prisma | Weekly schedule (dayOfWeek, startTime, endTime, break) |
+| `DoctorSlot` | schema.prisma | Individual bookable slots |
+| `DoctorAbsence` | schema.prisma | Leave/absence periods |
+| `HospitalHoliday` | schema.prisma | Hospital-wide holidays |
+| `Appointment` | schema.prisma | Booked appointments |
+| `Consultation` | schema.prisma | Consultation records with status tracking |
+| `ConsultationParticipant` | schema.prisma | Multi-doctor support |
+| `NoShowLog` | schema.prisma | NO_SHOW tracking records |
+| `StageAlert` | schema.prisma | Alerts for waiting patients |
+| `CronJobRun` | schema.prisma | Cron execution history |
+| `Patient` | schema.prisma | Patient with noShowCount, status |
 
 ---
 
-## 2. Doctor Slot Configuration Flow
+## 2. Doctor Slot Configuration
 
-### 2.1 Doctor Creation with Slot Config
+**File:** `backend/src/services/doctorService.ts:27-138`
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      DOCTOR CREATION FLOW                                    │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-                    ┌───────────────────────────────┐
-                    │     Admin Creates Doctor      │
-                    │                               │
-                    │  • Name, Specialization       │
-                    │  • Department                 │
-                    │  • Slot Duration (15/20/30)   │
-                    │  • Max Patients Per Day       │
-                    │  • Consultation Fee           │
-                    └───────────────────────────────┘
-                                    │
-                                    ▼
-                    ┌───────────────────────────────┐
-                    │   Create Doctor Schedules     │
-                    │                               │
-                    │  Per day of week:             │
-                    │  • Start Time (e.g., 09:00)   │
-                    │  • End Time (e.g., 17:00)     │
-                    │  • Break Start (e.g., 13:00)  │
-                    │  • Break End (e.g., 14:00)    │
-                    └───────────────────────────────┘
-                                    │
-                                    ▼
-                    ┌───────────────────────────────┐
-                    │   Auto-Generate Slots         │
-                    │                               │
-                    │  For next 30 days:            │
-                    │  • Check schedule for day     │
-                    │  • Generate time slots        │
-                    │  • Skip break times           │
-                    │  • Skip holidays              │
-                    │  • Mark blocked if absence    │
-                    └───────────────────────────────┘
-                                    │
-                                    ▼
-                    ┌───────────────────────────────┐
-                    │       Slots Available         │
-                    │       for Booking             │
-                    └───────────────────────────────┘
-```
-
-### 2.2 Slot Generation Algorithm
-
-```
-INPUT: Doctor Schedule + Slot Duration + Date Range
-OUTPUT: DoctorSlot records
-
-ALGORITHM:
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ FOR each day in next 30 days:                                                │
-│   │                                                                          │
-│   ├─► IF day is hospital holiday → SKIP                                      │
-│   │                                                                          │
-│   ├─► IF no schedule for this weekday → SKIP                                 │
-│   │                                                                          │
-│   ├─► GET schedule (startTime, endTime, breakStart, breakEnd)                │
-│   │                                                                          │
-│   ├─► SET currentTime = startTime                                            │
-│   │                                                                          │
-│   └─► WHILE currentTime + slotDuration <= endTime:                           │
-│         │                                                                    │
-│         ├─► IF currentTime overlaps break → SKIP to breakEnd                 │
-│         │                                                                    │
-│         ├─► CREATE slot:                                                     │
-│         │     • slotDate = day                                               │
-│         │     • startTime = currentTime                                      │
-│         │     • endTime = currentTime + slotDuration                         │
-│         │     • isAvailable = true                                           │
-│         │     • isBlocked = (check doctor absence)                           │
-│         │                                                                    │
-│         └─► currentTime = currentTime + slotDuration                         │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### 2.3 Example Slot Generation
-
-```
-Doctor: Dr. Smith
-Slot Duration: 30 minutes
-Schedule: Monday 09:00-17:00, Break 13:00-14:00
-
-Generated Slots for Monday:
-┌──────────┬──────────┬───────────┬───────────┐
-│   Slot   │  Start   │    End    │  Status   │
-├──────────┼──────────┼───────────┼───────────┤
-│    1     │  09:00   │   09:30   │ Available │
-│    2     │  09:30   │   10:00   │ Available │
-│    3     │  10:00   │   10:30   │ Available │
-│    4     │  10:30   │   11:00   │ Available │
-│    5     │  11:00   │   11:30   │ Available │
-│    6     │  11:30   │   12:00   │ Available │
-│    7     │  12:00   │   12:30   │ Available │
-│    8     │  12:30   │   13:00   │ Available │
-│  BREAK   │  13:00   │   14:00   │  SKIPPED  │
-│    9     │  14:00   │   14:30   │ Available │
-│   10     │  14:30   │   15:00   │ Available │
-│   11     │  15:00   │   15:30   │ Available │
-│   12     │  15:30   │   16:00   │ Available │
-│   13     │  16:00   │   16:30   │ Available │
-│   14     │  16:30   │   17:00   │ Available │
-└──────────┴──────────┴───────────┴───────────┘
-Total: 14 slots (excluding break)
-```
-
----
-
-## 3. Patient Online Booking Flow
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      PATIENT ONLINE BOOKING FLOW                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-     Patient                    System                         Database
-        │                          │                              │
-        │  1. Select Department    │                              │
-        ├─────────────────────────▶│                              │
-        │                          │  Query active doctors        │
-        │                          ├─────────────────────────────▶│
-        │                          │◀─────────────────────────────┤
-        │◀─────────────────────────┤  Return doctor list          │
-        │                          │                              │
-        │  2. Select Doctor        │                              │
-        ├─────────────────────────▶│                              │
-        │                          │                              │
-        │  3. Select Date          │                              │
-        ├─────────────────────────▶│                              │
-        │                          │  Validation Checks:          │
-        │                          │  ┌────────────────────────┐  │
-        │                          │  │ • Not past date        │  │
-        │                          │  │ • Within 30 days       │  │
-        │                          │  │ • Not hospital holiday │  │
-        │                          │  │ • Not doctor absence   │  │
-        │                          │  │ • Doctor is active     │  │
-        │                          │  └────────────────────────┘  │
-        │                          │                              │
-        │                          │  Query available slots       │
-        │                          ├─────────────────────────────▶│
-        │                          │◀─────────────────────────────┤
-        │◀─────────────────────────┤  Return slot list            │
-        │                          │                              │
-        │  4. Select Time Slot     │                              │
-        ├─────────────────────────▶│                              │
-        │                          │  Patient Validation:         │
-        │                          │  ┌────────────────────────┐  │
-        │                          │  │ • Not BLOCKED status   │  │
-        │                          │  │ • No duplicate booking │  │
-        │                          │  └────────────────────────┘  │
-        │                          │                              │
-        │                          │  Slot Validation:            │
-        │                          │  ┌────────────────────────┐  │
-        │                          │  │ • Slot is available    │  │
-        │                          │  │ • Not blocked          │  │
-        │                          │  │ • Max patients check   │  │
-        │                          │  └────────────────────────┘  │
-        │                          │                              │
-        │                          │  Transaction (Serializable): │
-        │                          │  ┌────────────────────────┐  │
-        │                          │  │ 1. Lock slot           │  │
-        │                          │  │ 2. Re-verify available │  │
-        │                          │  │ 3. Create appointment  │  │
-        │                          │  │ 4. Mark slot booked    │  │
-        │                          │  │ 5. Assign token number │  │
-        │                          │  └────────────────────────┘  │
-        │                          │                              │
-        │◀─────────────────────────┤  Booking Confirmed           │
-        │                          │                              │
-        │                          │  Send Notifications:         │
-        │                          │  • SMS confirmation          │
-        │                          │  • Email with details        │
-        │                          │  • In-app notification       │
-        │                          │                              │
-```
-
-### 3.1 Booking Validation Matrix
-
-| Check | Condition | Error Message |
-|-------|-----------|---------------|
-| Past Date | `appointmentDate < today` | Cannot book appointments in the past |
-| Max Advance | `appointmentDate > today + 30` | Cannot book more than 30 days in advance |
-| Hospital Holiday | `isHoliday(date) = true` | Cannot book on {holidayName} (hospital holiday) |
-| Doctor Absence | `hasAbsence(doctorId, date)` | Doctor is on leave on this date |
-| Doctor Inactive | `doctor.isAvailable = false` | Doctor is currently not available |
-| Doctor User Inactive | `doctor.user.isActive = false` | Doctor is no longer active in the system |
-| Patient Blocked | `patient.status = BLOCKED` | Patient is blocked due to repeated no-shows |
-| Slot Unavailable | `slot.isAvailable = false` | This time slot is already booked |
-| Slot Blocked | `slot.isBlocked = true` | This time slot is blocked |
-| Max Patients | `bookedToday >= maxPatientsPerDay` | Doctor has reached maximum patients for this day |
-| Duplicate Booking | `existingAppointment(patient, date, time)` | Patient already has an appointment at this time |
-
----
-
-## 4. Appointment Journey Flow
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      APPOINTMENT STATUS JOURNEY                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-  SCHEDULED ──────► CONFIRMED ──────► CHECKED_IN ──────► IN_PROGRESS ──────► COMPLETED
-      │                 │                  │                  │
-      │                 │                  │                  │
-      ▼                 ▼                  ▼                  ▼
-   CANCELLED         NO_SHOW           NO_SHOW           ABANDONED
-   (by patient)    (auto/manual)    (left before       (left during
-                                      vitals)          consultation)
-
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         DETAILED JOURNEY                                     │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-  ┌──────────────────────────────────────────────────────────────────────┐
-  │ 1. SCHEDULED                                                          │
-  │    • Patient books appointment online/receptionist                    │
-  │    • Slot marked as booked                                           │
-  │    • Token number assigned                                           │
-  │    • Confirmation sent                                               │
-  └──────────────────────────────────────────────────────────────────────┘
-                                    │
-                    ┌───────────────┴───────────────┐
-                    ▼                               ▼
-  ┌─────────────────────────┐         ┌─────────────────────────┐
-  │ 2. CONFIRMED            │         │ CANCELLED               │
-  │    • Day-before reminder│         │ • Patient cancels       │
-  │    • Patient confirms   │         │ • Slot released         │
-  │                         │         │ • Doctor notified       │
-  └─────────────────────────┘         └─────────────────────────┘
-                    │
-                    ▼
-  ┌──────────────────────────────────────────────────────────────────────┐
-  │ 3. CHECKED_IN                                                         │
-  │    • Patient arrives at clinic                                       │
-  │    • Receptionist/Kiosk checks in                                    │
-  │    • checkedInAt timestamp recorded                                  │
-  │    • Added to doctor's queue                                         │
-  │    • Timer starts for vitals alert (slotDuration + 5 min)            │
-  └──────────────────────────────────────────────────────────────────────┘
-                    │
-                    ├──────────────────────────────────┐
-                    ▼                                  ▼
-  ┌─────────────────────────┐         ┌─────────────────────────────────┐
-  │ VITALS RECORDED         │         │ NO_VITALS ALERT (if timeout)    │
-  │ • Nurse records vitals  │         │ • Alert sent to nurse           │
-  │ • vitalsRecordedAt set  │         │ • "Patient waiting for vitals"  │
-  │ • Timer starts for      │         └─────────────────────────────────┘
-  │   doctor alert          │
-  └─────────────────────────┘
-                    │
-                    ├──────────────────────────────────┐
-                    ▼                                  ▼
-  ┌─────────────────────────┐         ┌─────────────────────────────────┐
-  │ 4. IN_PROGRESS          │         │ NO_DOCTOR ALERT (if timeout)    │
-  │    • Doctor calls patient│         │ • Alert sent to doctor          │
-  │    • Consultation begins │         │ • "Patient waiting with vitals" │
-  │    • Consultation record │         └─────────────────────────────────┘
-  │      created (STARTED)   │
-  └─────────────────────────┘
-                    │
-                    ├──────────────────────────────────┐
-                    ▼                                  ▼
-  ┌─────────────────────────┐         ┌─────────────────────────────────┐
-  │ 5. COMPLETED            │         │ ABANDONED                       │
-  │    • Diagnosis recorded │         │ • Consultation incomplete       │
-  │    • Prescription given │         │ • Doctor left without finishing │
-  │    • Consultation status│         │ • Needs follow-up               │
-  │      = COMPLETED        │         └─────────────────────────────────┘
-  │    • Lab orders if any  │
-  │    • Follow-up scheduled│
-  └─────────────────────────┘
-```
-
-### 4.1 Appointment Timeline Example
-
-```
-┌────────────────────────────────────────────────────────────────────────────┐
-│ TIMELINE: Patient John's Appointment with Dr. Smith (30-min slots)         │
-├────────────────────────────────────────────────────────────────────────────┤
-│                                                                            │
-│  08:00  ┌─────────────────────────────────────────────────────────────┐   │
-│         │ John books 09:00 appointment online                          │   │
-│         │ Status: SCHEDULED, Token: #5                                 │   │
-│         └─────────────────────────────────────────────────────────────┘   │
-│                                                                            │
-│  08:50  ┌─────────────────────────────────────────────────────────────┐   │
-│         │ John arrives, checks in at kiosk                             │   │
-│         │ Status: CHECKED_IN, checkedInAt: 08:50                       │   │
-│         └─────────────────────────────────────────────────────────────┘   │
-│                                                                            │
-│  08:55  ┌─────────────────────────────────────────────────────────────┐   │
-│         │ Nurse records vitals                                         │   │
-│         │ vitalsRecordedAt: 08:55                                      │   │
-│         │ BP: 120/80, Temp: 98.6°F, Weight: 75kg                       │   │
-│         └─────────────────────────────────────────────────────────────┘   │
-│                                                                            │
-│  09:05  ┌─────────────────────────────────────────────────────────────┐   │
-│         │ Doctor calls John                                            │   │
-│         │ Status: IN_PROGRESS                                          │   │
-│         │ Consultation created (status: STARTED)                       │   │
-│         └─────────────────────────────────────────────────────────────┘   │
-│                                                                            │
-│  09:25  ┌─────────────────────────────────────────────────────────────┐   │
-│         │ Doctor completes consultation                                │   │
-│         │ Diagnosis: Common cold                                       │   │
-│         │ Prescription: Paracetamol, Vitamin C                         │   │
-│         │ Status: COMPLETED                                            │   │
-│         │ Consultation status: COMPLETED                               │   │
-│         └─────────────────────────────────────────────────────────────┘   │
-│                                                                            │
-└────────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 5. NO_SHOW Detection Flow
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      AUTO NO_SHOW DETECTION FLOW                             │
-│                    (Dynamic Timeout Based on Slot Duration)                  │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-                         Cron Job (Every 5 minutes, 7AM-10PM)
-                                        │
-                                        ▼
-                    ┌───────────────────────────────────────┐
-                    │  Query today's appointments where:     │
-                    │  • status IN (SCHEDULED, CONFIRMED)   │
-                    │  • appointmentDate = TODAY            │
-                    └───────────────────────────────────────┘
-                                        │
-                                        ▼
-                              For each appointment:
-                                        │
-                    ┌───────────────────────────────────────┐
-                    │  Calculate Dynamic Timeout:            │
-                    │                                        │
-                    │  timeout = slotStartTime +             │
-                    │            doctor.slotDuration         │
-                    │                                        │
-                    │  Example:                              │
-                    │  • Slot: 09:00                         │
-                    │  • Duration: 30 mins                   │
-                    │  • Timeout: 09:30                      │
-                    └───────────────────────────────────────┘
-                                        │
-                                        ▼
-                    ┌───────────────────────────────────────┐
-                    │  Is currentTime > timeout?            │
-                    └───────────────────────────────────────┘
-                                        │
-                           ┌────────────┴────────────┐
-                          YES                        NO
-                           │                          │
-                           ▼                          ▼
-          ┌──────────────────────────┐    ┌────────────────┐
-          │ Mark as NO_SHOW:         │    │ Skip, not yet  │
-          │                          │    │ timed out      │
-          │ 1. status = NO_SHOW      │    └────────────────┘
-          │ 2. Create NoShowLog      │
-          │ 3. Check slot release    │
-          │ 4. Update patient count  │
-          │ 5. Send notification     │
-          └──────────────────────────┘
-                           │
-                           ▼
-          ┌──────────────────────────┐
-          │ Patient Blocking Check:  │
-          │                          │
-          │ noShowCount++            │
-          │                          │
-          │ IF count >= 3:           │
-          │   status = BLOCKED       │
-          │   blockedReason = "..."  │
-          └──────────────────────────┘
-```
-
-### 5.1 Dynamic Timeout Examples
-
-| Doctor | Slot Duration | Appointment Time | NO_SHOW After |
-|--------|---------------|------------------|---------------|
-| Dr. Smith | 15 mins | 09:00 | 09:15 |
-| Dr. Jones | 20 mins | 10:00 | 10:20 |
-| Dr. Brown | 30 mins | 11:00 | 11:30 |
-| Dr. Wilson | 45 mins | 14:00 | 14:45 |
-| Dr. Taylor | 60 mins | 15:00 | 16:00 |
-
----
-
-## 6. Slot Release Flow
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         SLOT RELEASE FLOW                                    │
-│           (Only releases if time hasn't passed for rebooking)               │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-                    After NO_SHOW is marked:
-                                │
-                                ▼
-                ┌───────────────────────────────────┐
-                │  Check if slot can be released:   │
-                │                                   │
-                │  isSlotStillValid(                │
-                │    appointmentDate,               │
-                │    slotStartTime                  │
-                │  )                                │
-                └───────────────────────────────────┘
-                                │
-                                ▼
-                ┌───────────────────────────────────┐
-                │  LOGIC:                           │
-                │                                   │
-                │  IF appointmentDate > TODAY:      │
-                │    → Always release (future date) │
-                │                                   │
-                │  IF appointmentDate == TODAY:     │
-                │    currentTime < slotStartTime?   │
-                │    → YES: Release for rebooking   │
-                │    → NO: Don't release (passed)   │
-                └───────────────────────────────────┘
-                                │
-                       ┌───────┴───────┐
-                      YES              NO
-                       │               │
-                       ▼               ▼
-          ┌────────────────────┐  ┌────────────────────┐
-          │ RELEASE SLOT:      │  │ DON'T RELEASE:     │
-          │                    │  │                    │
-          │ • isAvailable=true │  │ • Slot time passed │
-          │ • appointmentId=   │  │ • Cannot rebook    │
-          │   null             │  │ • slotReleased=    │
-          │ • slotReleased=    │  │   false            │
-          │   true             │  │                    │
-          │                    │  │                    │
-          │ Now another patient│  │                    │
-          │ can book this slot │  │                    │
-          └────────────────────┘  └────────────────────┘
-```
-
-### 6.1 Slot Release Examples
-
-```
-Current Time: 10:30 AM, January 22, 2026
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ SCENARIO 1: Future Date Appointment                                          │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ Appointment: January 25, 09:00 AM                                           │
-│ NO_SHOW marked: January 22, 10:30 AM (manually by staff)                    │
-│ Result: SLOT RELEASED                                                       │
-│ Reason: Future date, plenty of time for someone else to book                │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ SCENARIO 2: Today's Appointment - Time Passed                               │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ Appointment: January 22, 09:00 AM                                           │
-│ NO_SHOW marked: January 22, 09:30 AM (auto timeout)                         │
-│ Current time: 10:30 AM                                                      │
-│ Result: SLOT NOT RELEASED                                                   │
-│ Reason: 09:00 slot already passed, no one can use it                        │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ SCENARIO 3: Today's Appointment - Time Not Passed                           │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ Appointment: January 22, 11:00 AM                                           │
-│ NO_SHOW marked: January 22, 10:30 AM (manually by staff, early mark)        │
-│ Current time: 10:30 AM                                                      │
-│ Result: SLOT RELEASED                                                       │
-│ Reason: 11:00 hasn't passed yet, someone else could book it                 │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 7. Doctor Absence Flow
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         DOCTOR ABSENCE FLOW                                  │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-                    Admin/Doctor Creates Absence
-                                │
-                                ▼
-                ┌───────────────────────────────────┐
-                │  Absence Details:                 │
-                │  • Doctor ID                      │
-                │  • Start Date                     │
-                │  • End Date                       │
-                │  • Type: ANNUAL/SICK/EMERGENCY/   │
-                │          CONFERENCE/TRAINING/     │
-                │          PERSONAL/OTHER           │
-                │  • Full Day or Partial            │
-                │  • Reason/Notes                   │
-                └───────────────────────────────────┘
-                                │
-                                ▼
-                ┌───────────────────────────────────┐
-                │  Query existing appointments      │
-                │  in the absence date range        │
-                └───────────────────────────────────┘
-                                │
-                ┌───────────────┴───────────────┐
-                │                               │
-          Has Appointments              No Appointments
-                │                               │
-                ▼                               ▼
-    ┌─────────────────────┐         ┌─────────────────────┐
-    │ Is EMERGENCY type?  │         │ Block slots only    │
-    └─────────────────────┘         │ No notifications    │
-                │                   └─────────────────────┘
-        ┌───────┴───────┐
-       YES              NO
-        │               │
-        ▼               ▼
-┌──────────────────┐  ┌──────────────────┐
-│ AUTO-CANCEL:     │  │ WARN ONLY:       │
-│                  │  │                  │
-│ 1. Cancel all    │  │ 1. Block slots   │
-│    appointments  │  │ 2. Include in    │
-│ 2. Release slots │  │    response:     │
-│ 3. Notify all    │  │    "X affected   │
-│    patients      │  │     appointments"│
-│ 4. Block slots   │  │ 3. Notify        │
-│                  │  │    patients to   │
-│                  │  │    reschedule    │
-└──────────────────┘  └──────────────────┘
-```
-
-### 7.1 Absence Types & Behavior
-
-| Absence Type | Behavior | Patient Notification |
-|--------------|----------|---------------------|
-| EMERGENCY | Auto-cancel all appointments, release slots | "Appointment cancelled due to emergency" |
-| SICK_LEAVE | Block slots, warn about affected | "Doctor unavailable, please reschedule" |
-| ANNUAL_LEAVE | Block slots, warn about affected | "Doctor on leave, please reschedule" |
-| CONFERENCE | Block slots, warn about affected | "Doctor at conference, please reschedule" |
-| TRAINING | Block slots, warn about affected | "Doctor unavailable, please reschedule" |
-| PERSONAL | Block slots, warn about affected | "Doctor unavailable, please reschedule" |
-
----
-
-## 8. Hospital Holiday Flow
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         HOSPITAL HOLIDAY FLOW                                │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-                    Admin Creates Holiday
-                                │
-                                ▼
-                ┌───────────────────────────────────┐
-                │  Holiday Details:                 │
-                │  • Name (e.g., "Christmas")       │
-                │  • Date                           │
-                │  • Is Recurring (yearly)          │
-                │  • Description                    │
-                └───────────────────────────────────┘
-                                │
-                                ▼
-          ┌─────────────────────────────────────────────────┐
-          │                  IMPACTS                         │
-          ├─────────────────────────────────────────────────┤
-          │                                                  │
-          │  1. SLOT GENERATION                              │
-          │     • Holiday dates skipped during generation   │
-          │     • No slots created for holiday              │
-          │                                                  │
-          │  2. BOOKING VALIDATION                           │
-          │     • Booking on holiday blocked                │
-          │     • Error: "Cannot book on {holidayName}"     │
-          │                                                  │
-          │  3. CALENDAR DISPLAY                             │
-          │     • Holiday shown in booking calendar         │
-          │     • Date marked as unavailable                │
-          │                                                  │
-          │  4. RECURRING HOLIDAYS                           │
-          │     • Christmas, New Year, etc.                 │
-          │     • Same date blocked every year              │
-          │                                                  │
-          └─────────────────────────────────────────────────┘
-```
-
----
-
-## 9. Multi-Doctor Visit Flow
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         MULTI-DOCTOR VISIT FLOW                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-     Patient books primary doctor
-                │
-                ▼
-    ┌───────────────────────────────┐
-    │ Appointment Created:          │
-    │ • Primary Doctor: Dr. Smith   │
-    │ • Status: SCHEDULED           │
-    │ • Token: #5                   │
-    └───────────────────────────────┘
-                │
-                ▼
-    ┌───────────────────────────────┐
-    │ Patient arrives & checks in   │
-    │ Status: CHECKED_IN            │
-    └───────────────────────────────┘
-                │
-                ▼
-    ┌───────────────────────────────┐
-    │ Vitals recorded once          │
-    │ (Shared across all doctors)   │
-    └───────────────────────────────┘
-                │
-                ▼
-    ┌───────────────────────────────┐
-    │ Primary consultation starts   │
-    │ Dr. Smith: IN_PROGRESS        │
-    │ Consultation created (STARTED)│
-    └───────────────────────────────┘
-                │
-                ▼
-    ┌───────────────────────────────┐
-    │ Dr. Smith requests consult    │
-    │ from Dr. Jones (Neurology)    │
-    │                               │
-    │ ConsultationParticipant:      │
-    │ • consultationId: xxx         │
-    │ • doctorId: Dr. Jones         │
-    │ • role: CONSULTING            │
-    │ • joinedAt: timestamp         │
-    └───────────────────────────────┘
-                │
-                ▼
-    ┌───────────────────────────────┐
-    │ Dr. Jones adds notes          │
-    │ • Examines patient            │
-    │ • Records findings            │
-    │ • leftAt: timestamp           │
-    └───────────────────────────────┘
-                │
-                ▼
-    ┌───────────────────────────────┐
-    │ Dr. Smith completes consult   │
-    │ Consultation: COMPLETED       │
-    │ Appointment: COMPLETED        │
-    └───────────────────────────────┘
-                │
-                ▼
-    ┌───────────────────────────────┐
-    │ Combined Billing:             │
-    │ • Dr. Smith: $150             │
-    │ • Dr. Jones (consult): $100   │
-    │ • Total: $250                 │
-    └───────────────────────────────┘
-```
-
-### 9.1 Participant Roles
-
-| Role | Description | Billing |
-|------|-------------|---------|
-| PRIMARY | Main treating doctor | Full consultation fee |
-| CONSULTING | Called for opinion | Consultation fee |
-| ASSISTING | Helps during procedure | Procedure assist fee |
-| SUPERVISING | Senior oversight | Supervisory fee |
-
----
-
-## 10. Consultation Completion Flow
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    CONSULTATION COMPLETION FLOW                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-                    Consultation Status Lifecycle
-                                │
-        ┌───────────────────────┼───────────────────────┐
-        │                       │                       │
-        ▼                       ▼                       ▼
-    STARTED              IN_PROGRESS              COMPLETED
-   (Created)          (Being worked on)          (Finished)
-        │                       │                       │
-        │                       │                       │
-        └───────────┬───────────┘                       │
-                    │                                   │
-                    ▼                                   │
-                ABANDONED ◄─────────────────────────────┘
-              (Incomplete)                      (If abandoned later)
-
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    COMPLETION VALIDATION                                     │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-    Doctor attempts to complete consultation
-                        │
-                        ▼
-            ┌───────────────────────────┐
-            │  Required Field Checks:   │
-            │                           │
-            │  1. chiefComplaint        │
-            │     - Must not be empty   │
-            │                           │
-            │  2. diagnosis[]           │
-            │     - At least one entry  │
-            │                           │
-            └───────────────────────────┘
-                        │
-            ┌───────────┴───────────┐
-           PASS                    FAIL
-            │                       │
-            ▼                       ▼
-    ┌──────────────────┐    ┌──────────────────┐
-    │ COMPLETE:        │    │ ERROR:           │
-    │                  │    │                  │
-    │ • status =       │    │ "Cannot complete │
-    │   COMPLETED      │    │  consultation:   │
-    │ • completedAt =  │    │  - Chief         │
-    │   NOW()          │    │    complaint     │
-    │ • completedBy =  │    │    required      │
-    │   doctorId       │    │  - Diagnosis     │
-    │                  │    │    required"     │
-    │ • Appointment    │    │                  │
-    │   also marked    │    │                  │
-    │   COMPLETED      │    │                  │
-    └──────────────────┘    └──────────────────┘
-```
-
----
-
-## 11. No-Show Blocking Flow
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    PATIENT NO-SHOW BLOCKING FLOW                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-                    Patient marked as NO_SHOW
-                                │
-                                ▼
-                ┌───────────────────────────────────┐
-                │  Increment noShowCount            │
-                │  Record lastNoShowAt              │
-                └───────────────────────────────────┘
-                                │
-                                ▼
-    ┌───────────────────────────────────────────────────────────────┐
-    │                   NO-SHOW THRESHOLD ACTIONS                    │
-    ├───────────────────────────────────────────────────────────────┤
-    │                                                                │
-    │  Count: 1-2     │ No restriction                              │
-    │                 │ Normal booking allowed                       │
-    │─────────────────┼──────────────────────────────────────────── │
-    │  Count: 3       │ WARNING                                      │
-    │                 │ Patient notified: "Please attend or cancel"  │
-    │                 │ status = FLAGGED                             │
-    │─────────────────┼──────────────────────────────────────────── │
-    │  Count: 5       │ ADVANCE PAYMENT REQUIRED                     │
-    │                 │ Online booking requires deposit              │
-    │                 │ Or book via receptionist                     │
-    │─────────────────┼──────────────────────────────────────────── │
-    │  Count: 7+      │ BLOCKED                                      │
-    │                 │ Online booking disabled                      │
-    │                 │ Only receptionist can book                   │
-    │                 │ status = BLOCKED                             │
-    │                 │ blockedAt = timestamp                        │
-    │                 │ blockedReason = "Repeated no-shows"          │
-    │                                                                │
-    └───────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-    ┌───────────────────────────────────────────────────────────────┐
-    │                   RESET AFTER GOOD BEHAVIOR                    │
-    ├───────────────────────────────────────────────────────────────┤
-    │                                                                │
-    │  After 6 months with:                                          │
-    │  • No additional no-shows                                      │
-    │  • Successfully attended appointments                          │
-    │                                                                │
-    │  RESET:                                                        │
-    │  • noShowCount = 0                                             │
-    │  • status = ACTIVE                                             │
-    │  • blockedAt = null                                            │
-    │  • blockedReason = null                                        │
-    │                                                                │
-    └───────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 12. Doctor Resignation Flow
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    DOCTOR RESIGNATION FLOW                                   │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-            Admin deactivates doctor (isAvailable = false)
-                                │
-                                ▼
-                ┌───────────────────────────────────┐
-                │  Query future appointments        │
-                │  • appointmentDate >= today       │
-                │  • status IN (SCHEDULED,CONFIRMED)│
-                └───────────────────────────────────┘
-                                │
-                ┌───────────────┴───────────────┐
-                │                               │
-          Has Bookings                    No Bookings
-                │                               │
-                ▼                               ▼
-    ┌─────────────────────┐         ┌─────────────────────┐
-    │ CASCADE ACTIONS:    │         │ Simple deactivation │
-    │                     │         │ isAvailable = false │
-    │ 1. Cancel all       │         └─────────────────────┘
-    │    appointments     │
-    │    (status=CANCELLED│
-    │    notes="Doctor    │
-    │    unavailable")    │
-    │                     │
-    │ 2. Release all      │
-    │    booked slots     │
-    │    (isAvailable=true│
-    │    appointmentId=   │
-    │    null)            │
-    │                     │
-    │ 3. Notify patients  │
-    │    via SMS + in-app │
-    │    "Appointment     │
-    │    cancelled,       │
-    │    please rebook"   │
-    │                     │
-    │ 4. Return stats:    │
-    │    cancelledCount   │
-    │    notifiedPatients │
-    └─────────────────────┘
-```
-
----
-
-## 13. Patient Cancellation Flow
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    PATIENT CANCELLATION FLOW                                 │
-│           (With Last-Minute Notification Priority)                          │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-                    Patient requests cancellation
-                                │
-                                ▼
-                ┌───────────────────────────────────┐
-                │  Update appointment:              │
-                │  • status = CANCELLED             │
-                │  • cancelledAt = NOW()            │
-                │  • cancelReason = patient_reason  │
-                └───────────────────────────────────┘
-                                │
-                                ▼
-                ┌───────────────────────────────────┐
-                │  Release slot:                    │
-                │  • isAvailable = true             │
-                │  • appointmentId = null           │
-                │  (If not past slot time)          │
-                └───────────────────────────────────┘
-                                │
-                                ▼
-                ┌───────────────────────────────────┐
-                │  Calculate hours until appointment│
-                │                                   │
-                │  hoursUntil = (appointmentDate +  │
-                │                slotTime) - NOW()  │
-                └───────────────────────────────────┘
-                                │
-                ┌───────────────┴───────────────┐
-                │                               │
-         hoursUntil <= 24             hoursUntil > 24
-         (Last-minute)               (Advance notice)
-                │                               │
-                ▼                               ▼
-    ┌─────────────────────┐         ┌─────────────────────┐
-    │ HIGH PRIORITY       │         │ NORMAL PRIORITY     │
-    │ Notification:       │         │ Notification:       │
-    │                     │         │                     │
-    │ Title: "Last-Minute │         │ Title: "Appointment │
-    │         Cancellation│         │         Cancelled"  │
-    │                     │         │                     │
-    │ isLastMinute = true │         │ isLastMinute = false│
-    │                     │         │                     │
-    │ Doctor may need to  │         │ Doctor has time to  │
-    │ reschedule their    │         │ adjust schedule     │
-    │ day immediately     │         │                     │
-    └─────────────────────┘         └─────────────────────┘
-```
-
-### 13.1 Cancellation Window Rules
-
-| Time Until Appointment | Cancellation Type | Doctor Notification | Patient Impact |
-|-----------------------|-------------------|---------------------|----------------|
-| > 24 hours | Advance | Normal priority | No penalty |
-| 2-24 hours | Last-minute | HIGH priority | Warning recorded |
-| < 2 hours | Very late | URGENT priority | May affect future bookings |
-| Past start time | Not allowed | N/A | Error returned |
-
-### 13.2 Notification Message Examples
-
-**Last-Minute (< 24 hours):**
-```
-Title: Last-Minute Cancellation
-Message: John Smith cancelled their 09:00 appointment on Jan 22, 2026
-         Reason: "Emergency came up"
-         This cancellation was made 1.5 hours before the appointment.
-Priority: HIGH
-```
-
-**Advance Notice (> 24 hours):**
-```
-Title: Appointment Cancelled
-Message: John Smith cancelled their 09:00 appointment on Jan 25, 2026
-         Reason: "Schedule conflict"
-Priority: NORMAL
-```
-
----
-
-## 14. Cron Job & Notification Flow
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    CRON JOB & NOTIFICATION FLOW                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-    ┌─────────────────────────────────────────────────────────────────────┐
-    │                    CRON JOB SCHEDULE                                 │
-    ├─────────────────────────────────────────────────────────────────────┤
-    │                                                                      │
-    │  Job: NO_SHOW_CHECK                                                  │
-    │  Schedule: */5 7-22 * * *  (Every 5 min, 7 AM - 10 PM)              │
-    │                                                                      │
-    │  Tasks:                                                              │
-    │  1. Process auto NO_SHOWs (dynamic timeout)                         │
-    │  2. Create stage alerts (NO_VITALS, NO_DOCTOR)                      │
-    │  3. Log run to cron_job_runs table                                  │
-    │                                                                      │
-    └─────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-    ┌─────────────────────────────────────────────────────────────────────┐
-    │                    TIMEOUT PROTECTION                                │
-    ├─────────────────────────────────────────────────────────────────────┤
-    │                                                                      │
-    │  • isProcessing flag prevents duplicate runs                        │
-    │  • 5-minute timeout resets stuck processing                         │
-    │  • consecutiveFailures tracked                                      │
-    │  • Admin notified after 3+ failures                                 │
-    │                                                                      │
-    └─────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-    ┌─────────────────────────────────────────────────────────────────────┐
-    │                    NOTIFICATION CHANNELS                             │
-    ├─────────────────────────────────────────────────────────────────────┤
-    │                                                                      │
-    │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐            │
-    │  │   SMS    │  │  Email   │  │  In-App  │  │ WhatsApp │            │
-    │  │  (SNS)   │  │  (SES)   │  │          │  │          │            │
-    │  └──────────┘  └──────────┘  └──────────┘  └──────────┘            │
-    │                                                                      │
-    │  Usage by Event:                                                     │
-    │  • NO_SHOW: SMS + In-App                                            │
-    │  • Stage Alert: In-App (staff only)                                 │
-    │  • Absence: SMS + In-App + Email                                    │
-    │  • Booking Confirm: SMS + Email + In-App                            │
-    │  • Cancellation: SMS + In-App                                       │
-    │                                                                      │
-    └─────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-    ┌─────────────────────────────────────────────────────────────────────┐
-    │                    FALLBACK MECHANISMS                               │
-    ├─────────────────────────────────────────────────────────────────────┤
-    │                                                                      │
-    │  1. CloudWatch Lambda (external backup)                             │
-    │     • Calls /external-trigger every 5 mins                          │
-    │     • Acts as backup if internal cron fails                         │
-    │                                                                      │
-    │  2. Notification Retry                                               │
-    │     • Exponential backoff: 2^retryCount * 1000ms                    │
-    │     • Max 3 retries per notification                                │
-    │     • Failures logged for admin review                              │
-    │                                                                      │
-    │  3. Health Monitoring                                                │
-    │     • /cron-health endpoint for status                              │
-    │     • CloudWatch alarm if unhealthy > 10 mins                       │
-    │     • SNS alert to admin email                                      │
-    │                                                                      │
-    └─────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Quick Reference: Status Transitions
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    APPOINTMENT STATUS MATRIX                                 │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  FROM ↓ / TO →   │ CONFIRMED │ CHECKED_IN │ IN_PROGRESS │ COMPLETED │ NO_SHOW │ CANCELLED │
-│  ─────────────────┼───────────┼────────────┼─────────────┼───────────┼─────────┼───────────│
-│  SCHEDULED        │     ✓     │     ✓      │      -      │     -     │    ✓    │     ✓     │
-│  CONFIRMED        │     -     │     ✓      │      -      │     -     │    ✓    │     ✓     │
-│  CHECKED_IN       │     -     │     -      │      ✓      │     -     │    ✓    │     -     │
-│  IN_PROGRESS      │     -     │     -      │      -      │     ✓     │    -    │     -     │
-│  COMPLETED        │     -     │     -      │      -      │     -     │    -    │     -     │
-│  NO_SHOW          │     -     │     -      │      -      │     -     │    -    │     -     │
-│  CANCELLED        │     -     │     -      │      -      │     -     │    -    │     -     │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    CONSULTATION STATUS MATRIX                                │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  FROM ↓ / TO →   │ IN_PROGRESS │ COMPLETED │ ABANDONED │
-│  ─────────────────┼─────────────┼───────────┼───────────│
-│  STARTED          │      ✓      │     ✓     │     ✓     │
-│  IN_PROGRESS      │      -      │     ✓     │     ✓     │
-│  COMPLETED        │      -      │     -     │     -     │
-│  ABANDONED        │      -      │     -     │     -     │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Key Files Reference
-
-| Component | File | Description |
-|-----------|------|-------------|
-| Slot Generation | `slotService.ts` | Generate, book, release slots |
-| Appointments | `appointmentService.ts` | CRUD, validation, booking |
-| NO_SHOW | `noShowService.ts` | Auto detection, stage alerts |
-| Cron Jobs | `noShowCron.ts` | Scheduled tasks, health monitoring |
-| Holidays | `holidayService.ts` | Hospital-wide holiday management |
-| Consultations | `consultationService.ts` | Status tracking, multi-doctor |
-| Doctors | `doctorService.ts` | Schedules, absences, resignation |
-| Notifications | `notificationService.ts` | SMS, email, in-app |
-
----
-
-## 15. CloudWatch Monitoring Flow
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    AWS CLOUDWATCH MONITORING ARCHITECTURE                    │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-  ┌─────────────────────────────────────────────────────────────────────────┐
-  │                        AWS Cloud                                         │
-  │                                                                          │
-  │  ┌──────────────────────────────────────────────────────────────────┐   │
-  │  │                   CloudWatch Monitoring Layer                     │   │
-  │  │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐        │   │
-  │  │  │ EventBridge  │───▶│    Lambda    │───▶│   Metrics    │        │   │
-  │  │  │ (5 min rule) │    │ Health Check │    │ & Alarms     │        │   │
-  │  │  └──────────────┘    └──────┬───────┘    └──────┬───────┘        │   │
-  │  │                             │                    │                │   │
-  │  │                             │                    ▼                │   │
-  │  │                             │            ┌──────────────┐         │   │
-  │  │                             │            │  SNS Topic   │──▶Email │   │
-  │  │                             │            └──────────────┘         │   │
-  │  └─────────────────────────────┼────────────────────────────────────┘   │
-  │                                │                                         │
-  │                                ▼                                         │
-  │  ┌─────────────────────────────────────────────────────────────────────┐│
-  │  │                     EC2: hms-backend                                 ││
-  │  │  ┌──────────────────────────────────────────────────────────────┐   ││
-  │  │  │                    Node.js Application                        │   ││
-  │  │  │                                                               │   ││
-  │  │  │  ┌─────────────┐    ┌─────────────┐    ┌─────────────────┐   │   ││
-  │  │  │  │ node-cron   │───▶│ noShowCron  │───▶│  noShowService  │   │   ││
-  │  │  │  │ (internal)  │    │             │    │                 │   │   ││
-  │  │  │  └─────────────┘    └─────────────┘    └────────┬────────┘   │   ││
-  │  │  │                                                  │            │   ││
-  │  │  │  ┌─────────────┐    ┌─────────────┐             │            │   ││
-  │  │  │  │ Express API │◀───│ /external-  │◀────────────┘            │   ││
-  │  │  │  │             │    │  trigger    │     (Lambda backup)      │   ││
-  │  │  │  └─────────────┘    └─────────────┘                          │   ││
-  │  │  └──────────────────────────────────────────────────────────────┘   ││
-  │  └─────────────────────────────────────────────────────────────────────┘│
-  └─────────────────────────────────────────────────────────────────────────┘
-```
-
-### 15.1 Monitoring Components
-
-| Component | Purpose | Trigger |
-|-----------|---------|---------|
-| **EventBridge Rule** | Trigger Lambda every 5 min | rate(5 minutes) |
-| **Lambda Function** | Call health endpoint, backup trigger | EventBridge |
-| **CloudWatch Metrics** | Track health status, execution time | Lambda publish |
-| **CloudWatch Alarm** | Alert on failures | 2 consecutive unhealthy |
-| **SNS Topic** | Send email alerts | Alarm trigger |
-
-### 15.2 Health Check Flow
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         HEALTH CHECK FLOW                                    │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-                    Every 5 Minutes
-                          │
-                          ▼
-            ┌─────────────────────────────────┐
-            │       Lambda Function           │
-            │                                 │
-            │  1. POST /external-trigger      │
-            │     with x-cron-api-key        │
-            │                                 │
-            │  2. Backend executes NO_SHOW    │
-            │     check (backup if internal   │
-            │     cron failed)                │
-            │                                 │
-            │  3. Receive health response     │
-            └─────────────────────────────────┘
-                          │
-             ┌────────────┴────────────┐
-            200                       Error
-         (Success)                  (Failure)
-             │                          │
-             ▼                          ▼
-┌──────────────────────┐    ┌──────────────────────┐
-│ Publish to CloudWatch:│    │ Publish to CloudWatch:│
-│                      │    │                      │
-│ CronHealthStatus = 1 │    │ CronHealthStatus = 0 │
-│ CronExecutionDuration│    │                      │
-└──────────────────────┘    └──────────────────────┘
-             │                          │
-             ▼                          ▼
-┌──────────────────────┐    ┌──────────────────────┐
-│ Alarm State: OK      │    │ 2 consecutive        │
-│ (No notification)    │    │ failures?            │
-└──────────────────────┘    │                      │
-                            │ YES → Alarm State:   │
-                            │       ALARM          │
-                            │                      │
-                            │ → SNS → Email Alert  │
-                            │   to admin team      │
-                            └──────────────────────┘
-```
-
-### 15.3 Failure Recovery Matrix
-
-| Failure Type | Detection | Recovery Action | Alert |
-|--------------|-----------|-----------------|-------|
-| Internal cron stops | Lambda still runs, acts as backup | External trigger processes NO_SHOWs | None (silent recovery) |
-| Backend down | Lambda gets connection refused | Alarm after 2 failures (10 min) | Email via SNS |
-| Cron throws error | consecutiveFailures increments | Admin in-app notification after 3 | In-app notification |
-| Database error | Logged to cron_job_runs | Retry on next cron cycle | Log + admin notification |
-
-### 15.4 Health Endpoint Response
-
-**GET /api/v1/no-show/cron-health**
-```json
+### Doctor Model Fields
+```typescript
 {
-  "success": true,
-  "data": {
-    "jobName": "NO_SHOW_CHECK",
-    "isHealthy": true,
-    "healthMessage": "OK",
-    "isWorkingHours": true,
-    "lastRunTime": "2026-01-22T10:15:00.000Z",
-    "lastRunStatus": "success",
-    "consecutiveFailures": 0,
-    "lastSuccessfulRun": {
-      "id": "uuid",
-      "startedAt": "2026-01-22T10:15:00.000Z",
-      "durationMs": 45,
-      "itemsProcessed": 2
-    },
-    "stats": {
-      "totalRuns": 100,
-      "failedRuns": 1,
-      "successRate": "99.0%"
-    }
+  slotDuration: number;      // Minutes per slot (default: 30)
+  maxPatientsPerDay: number; // Max appointments per day (default: 30)
+  isAvailable: boolean;      // Can accept new appointments
+}
+```
+
+### DoctorSchedule Model
+```typescript
+{
+  doctorId: string;
+  dayOfWeek: DayOfWeek;      // MONDAY, TUESDAY, etc.
+  startTime: string;         // "09:00"
+  endTime: string;           // "17:00"
+  breakStart?: string;       // "13:00"
+  breakEnd?: string;         // "14:00"
+  isActive: boolean;
+}
+```
+
+### Schedule Update Flow
+```
+Admin/Doctor updates schedule
+         │
+         ▼
+┌────────────────────────────┐
+│ Delete existing schedules  │  doctorService.ts:403-415
+│ Create new schedules       │
+└────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────┐
+│ slotService.regenerateSlots()  slotService.ts:701-723
+│ - Delete unbooked future slots
+│ - Generate new slots       │
+└────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────┐
+│ Find affected appointments │  doctorService.ts:365-400
+│ (slots no longer valid)    │
+└────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────┐
+│ Notify affected patients   │  doctorService.ts:428-456
+│ Priority: HIGH             │
+│ Channels: sms, in_app      │
+└────────────────────────────┘
+```
+
+---
+
+## 3. Dynamic Slot Generation
+
+**File:** `backend/src/services/slotService.ts:93-240`
+
+### Slot Generation Algorithm
+```typescript
+async generateSlotsForDoctor(doctorId, hospitalId, daysAhead = 30) {
+  // 1. Get doctor with schedules
+  // 2. Get active absences in date range
+  // 3. Get hospital holidays in date range
+
+  for (each day in range) {
+    - Skip if holiday
+    - Find schedule for day of week
+    - Generate time slots based on schedule
+    - Mark slots as blocked if in absence period
+    - Upsert to avoid duplicates
   }
 }
 ```
+
+### Time Slot Calculation
+**File:** `backend/src/services/slotService.ts:46-87`
+
+```
+Schedule: 09:00 - 17:00, Break: 13:00 - 14:00
+Doctor slotDuration: 30 minutes
+
+Morning Slots: 09:00, 09:30, 10:00, 10:30, 11:00, 11:30, 12:00, 12:30
+Afternoon Slots: 14:00, 14:30, 15:00, 15:30, 16:00, 16:30
+Total: 14 slots
+```
+
+### Slots by Duration
+| Duration | 8hr Day (with 1hr break) |
+|----------|-------------------------|
+| 15 min   | 28 slots |
+| 20 min   | 21 slots |
+| 30 min   | 14 slots |
+| 45 min   | 9 slots |
+| 60 min   | 7 slots |
+
+### On-Demand Generation
+**File:** `backend/src/services/slotService.ts:369-412`
+
+If no slots exist for a requested date, they are generated on-the-fly:
+```
+GET /slots/doctor/:doctorId/date/:date
+         │
+         ▼
+    Slots exist?
+    ├─ YES → Return slots
+    └─ NO  → Generate slots for date → Return newly generated slots
+```
+
+---
+
+## 4. Doctor Absence System
+
+**File:** `backend/src/services/doctorService.ts:640-800`
+
+### Absence Types (AbsenceType enum)
+- `ANNUAL_LEAVE`
+- `SICK_LEAVE`
+- `CONFERENCE`
+- `TRAINING`
+- `PERSONAL`
+- `OTHER`
+
+### Absence Status
+- `ACTIVE` - Currently in effect
+- `CANCELLED` - No longer applies
+
+### Create Absence Flow
+```
+POST /doctors/:id/absences
+         │
+         ▼
+┌────────────────────────────┐
+│ Validate dates             │  doctorService.ts:658-674
+│ - endDate >= startDate     │
+│ - startDate >= today       │
+└────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────┐
+│ Check overlapping absences │  doctorService.ts:676-692
+│ (error if overlap)         │
+└────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────┐
+│ Find affected appointments │  doctorService.ts:694-710
+│ Return warning count       │
+└────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────┐
+│ Block slots in date range  │  slotService.ts:784-853
+└────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────┐
+│ Create DoctorAbsence       │
+│ status: ACTIVE             │
+└────────────────────────────┘
+```
+
+### Partial Day Absence
+```typescript
+{
+  isFullDay: false,
+  startDate: "2026-01-25",
+  endDate: "2026-01-25",
+  startTime: "14:00",  // Absence starts at 2 PM
+  endTime: "17:00"     // Absence ends at 5 PM
+}
+// Only afternoon slots are blocked
+```
+
+---
+
+## 5. Hospital Holiday Calendar
+
+**File:** `backend/src/services/holidayService.ts`
+
+### Holiday Model
+```typescript
+{
+  hospitalId: string;
+  name: string;           // "New Year's Day"
+  date: Date;
+  isRecurring: boolean;   // Repeats every year
+  isActive: boolean;
+  description?: string;
+}
+```
+
+### Holiday Impact
+1. **Slot Generation** (slotService.ts:173-185): Skips holiday dates
+2. **Booking Validation** (appointmentService.ts:69-72): Prevents booking on holidays
+3. **Recurring Holidays** (holidayService.ts:88-108): Matched by month/day across years
+
+---
+
+## 6. Booking Validations
+
+**File:** `backend/src/services/appointmentService.ts:20-175`
+
+### Validation Sequence
+```
+POST /appointments (create booking)
+         │
+         ▼
+┌────────────────────────────┐
+│ 1. Patient exists?         │  line 179-185
+└────────────────────────────┘
+         │ YES
+         ▼
+┌────────────────────────────┐
+│ 2. Patient BLOCKED?        │  line 187-193
+│    (status === 'BLOCKED')  │
+└────────────────────────────┘
+         │ NO
+         ▼
+┌────────────────────────────┐
+│ 3. Patient duplicate?      │  line 203-227
+│    (same date/time)        │
+└────────────────────────────┘
+         │ NO
+         ▼
+┌────────────────────────────┐
+│ 4. Doctor exists?          │  line 28-35
+└────────────────────────────┘
+         │ YES
+         ▼
+┌────────────────────────────┐
+│ 5. Doctor available?       │  line 37-40
+│    (isAvailable=true)      │
+└────────────────────────────┘
+         │ YES
+         ▼
+┌────────────────────────────┐
+│ 6. Doctor active?          │  line 42-45
+│    (user.isActive=true)    │
+└────────────────────────────┘
+         │ YES
+         ▼
+┌────────────────────────────┐
+│ 7. Date in past?           │  line 55-59
+└────────────────────────────┘
+         │ NO
+         ▼
+┌────────────────────────────┐
+│ 8. Date > 30 days ahead?   │  line 61-66
+└────────────────────────────┘
+         │ NO
+         ▼
+┌────────────────────────────┐
+│ 9. Hospital holiday?       │  line 68-72
+└────────────────────────────┘
+         │ NO
+         ▼
+┌────────────────────────────┐
+│ 10. Doctor absence?        │  line 74-97
+└────────────────────────────┘
+         │ NO
+         ▼
+┌────────────────────────────┐
+│ 11. Within schedule hours? │  line 108-119
+└────────────────────────────┘
+         │ YES
+         ▼
+┌────────────────────────────┐
+│ 12. During break time?     │  line 121-131
+└────────────────────────────┘
+         │ NO
+         ▼
+┌────────────────────────────┐
+│ 13. Slot already booked?   │  line 133-155
+└────────────────────────────┘
+         │ NO
+         ▼
+┌────────────────────────────┐
+│ 14. Max patients reached?  │  line 157-172
+└────────────────────────────┘
+         │ NO
+         ▼
+     CREATE APPOINTMENT
+```
+
+### Race Condition Prevention
+**File:** `backend/src/services/slotService.ts:579-649`
+
+```typescript
+await prisma.$transaction(async (tx) => {
+  // Check slot availability within transaction
+  // Book slot atomically
+}, {
+  isolationLevel: 'Serializable',
+  timeout: 10000
+});
+```
+
+---
+
+## 7. Auto NO_SHOW Detection
+
+**File:** `backend/src/services/noShowService.ts:74-244`
+
+### Dynamic Timeout Calculation
+```
+NO_SHOW Threshold = Slot Start Time + Doctor's Slot Duration
+
+Example:
+- Appointment: 10:00
+- Doctor slotDuration: 30 minutes
+- Threshold: 10:30
+- Current time: 10:35 → Mark as NO_SHOW
+```
+
+### NO_SHOW Detection Flow
+```
+Cron runs every 5 minutes (7 AM - 10 PM)
+         │
+         ▼
+┌────────────────────────────────────────┐
+│ Query appointments for today:          │  noShowService.ts:85-125
+│ - status IN (SCHEDULED, CONFIRMED)     │
+│ - appointmentDate = today              │
+└────────────────────────────────────────┘
+         │
+         ▼
+    For each appointment:
+         │
+         ▼
+┌────────────────────────────────────────┐
+│ currentTime >= slotStart + slotDuration?  line 128-133
+└────────────────────────────────────────┘
+         │
+    ├─ NO  → Skip (within grace period)
+    │
+    └─ YES ▼
+┌────────────────────────────────────────┐
+│ 1. Update status = NO_SHOW             │  line 136-139
+│ 2. Check if slot rebookable            │  line 142-152
+│ 3. Create NoShowLog                    │  line 155-168
+│ 4. Increment patient.noShowCount       │  line 171-178
+│ 5. Block patient if count >= 3         │  line 180-191
+│ 6. Send notification to patient        │  line 194-224
+└────────────────────────────────────────┘
+```
+
+### Slot Release Logic
+**File:** `backend/src/services/noShowService.ts:46-68`
+
+```typescript
+isSlotStillValid(appointmentDate, slotTime, bufferMinutes = 5) {
+  - Future dates: Always valid for rebooking
+  - Today: Valid if slotTime > currentTime + buffer
+  - Past dates: Never valid
+}
+```
+
+### NoShowLog Record
+```typescript
+{
+  hospitalId: string;
+  appointmentId: string;
+  patientId: string;
+  doctorId: string;
+  reason: 'AUTO_TIMEOUT' | 'MANUAL_STAFF' | 'MANUAL_DOCTOR' | 'PATIENT_CALLED';
+  slotTime: string;
+  timeoutMinutes: number;    // Doctor's slotDuration used as timeout
+  slotReleased: boolean;
+  slotReleasedAt?: Date;
+  notificationSent: boolean;
+  notes?: string;
+  createdBy?: string;
+}
+```
+
+---
+
+## 8. Stage Alerts
+
+**File:** `backend/src/services/noShowService.ts:251-436`
+
+### Alert Thresholds
+| Type | Trigger | Threshold |
+|------|---------|-----------|
+| `NO_VITALS` | Checked in, no vitals | slotDuration + 5 min |
+| `NO_DOCTOR` | Vitals done, waiting | slotDuration + 10 min |
+
+**File:** `noShowService.ts:7-8`
+```typescript
+const VITALS_ALERT_BUFFER = 5;   // Alert after slot interval + 5 mins
+const DOCTOR_ALERT_BUFFER = 10;  // Alert after slot interval + 10 mins
+```
+
+### Stage Alert Flow
+```
+Patient checks in at 10:00
+Doctor slotDuration: 30 min
+         │
+         ▼
+┌────────────────────────────┐
+│ Wait for vitals...         │
+└────────────────────────────┘
+         │
+    10:35 (30 + 5 = 35 min elapsed)
+         │
+         ▼
+┌────────────────────────────┐
+│ status = CHECKED_IN        │  noShowService.ts:261-268
+│ vitalsRecordedAt = null    │
+│ Threshold exceeded!        │
+└────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────┐
+│ Create StageAlert:         │  noShowService.ts:311-320
+│ - alertType: NO_VITALS     │
+│ - status: ACTIVE           │
+│ - message: "Patient..."    │
+└────────────────────────────┘
+```
+
+### Alert Lifecycle
+```
+ACTIVE → ACKNOWLEDGED → RESOLVED
+
+acknowledgeAlert(): noShowService.ts:569-577
+resolveAlert(): noShowService.ts:583-591
+```
+
+---
+
+## 9. No-Show Patient Blocking
+
+**File:** `backend/src/services/noShowService.ts:171-191`
+
+### Blocking Threshold
+```typescript
+const NO_SHOW_BLOCK_THRESHOLD = 3;  // noShowService.ts:171
+```
+
+### Blocking Flow
+```
+Patient no-shows:
+  1st → noShowCount = 1, status = ACTIVE
+  2nd → noShowCount = 2, status = ACTIVE
+  3rd → noShowCount = 3, status = BLOCKED ← Blocked immediately!
+```
+
+### Blocking Code
+```typescript
+// noShowService.ts:180-191
+if (updatedPatient.noShowCount >= NO_SHOW_BLOCK_THRESHOLD
+    && updatedPatient.status !== 'BLOCKED') {
+  await prisma.patient.update({
+    data: {
+      status: 'BLOCKED',
+      blockedAt: new Date(),
+      blockedReason: `Blocked due to ${noShowCount} no-show appointments`
+    }
+  });
+}
+```
+
+### Blocked Patient Impact
+**File:** `appointmentService.ts:187-193`
+```typescript
+if (patient.status === 'BLOCKED') {
+  throw new AppError(
+    `Patient is blocked from booking appointments due to repeated no-shows...`,
+    403
+  );
+}
+```
+
+---
+
+## 10. Doctor Resignation/Unavailability
+
+**File:** `backend/src/services/doctorService.ts:481-576`
+
+### Toggle Availability Flow
+```
+PATCH /doctors/:id  { isAvailable: false }
+         │
+         ▼
+┌────────────────────────────┐
+│ Find all future appts:     │  doctorService.ts:499-508
+│ - status: SCHEDULED/CONFIRMED
+│ - appointmentDate >= today │
+└────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────┐
+│ Cancel all appointments    │  doctorService.ts:511-523
+│ status = CANCELLED         │
+│ notes = "Doctor unavailable"
+└────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────┐
+│ Release all booked slots   │  doctorService.ts:526-537
+│ isAvailable = true         │
+│ appointmentId = null       │
+└────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────┐
+│ Notify all patients:       │  doctorService.ts:540-561
+│ Priority: HIGH             │
+│ Channels: in_app, sms      │
+└────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────┐
+│ Update doctor:             │  doctorService.ts:565-568
+│ isAvailable = false        │
+└────────────────────────────┘
+```
+
+### Response
+```typescript
+{
+  ...doctor,
+  cancelledAppointments: 5,
+  notifiedPatients: 5,
+  affectedAppointmentIds: ["uuid1", "uuid2", ...]
+}
+```
+
+---
+
+## 11. Consultation Tracking
+
+**File:** `backend/src/services/consultationService.ts`
+
+### Consultation Status Flow
+```
+    ┌─────────┐
+    │ STARTED │ ← Created when doctor opens consultation
+    └────┬────┘
+         │ Update with diagnosis/notes
+         ▼
+   ┌────────────┐
+   │ IN_PROGRESS│ ← consultationService.ts:97
+   └─────┬──────┘
+         │
+    ┌────┴────┐
+    ▼         ▼
+┌─────────┐ ┌──────────┐
+│COMPLETED│ │ ABANDONED│
+└─────────┘ └──────────┘
+```
+
+### Completion Validation
+**File:** `consultationService.ts:147-158`
+```typescript
+// Required before completion:
+if (!consultation.chiefComplaint) {
+  errors.push('Chief complaint is required');
+}
+if (!consultation.diagnosis || consultation.diagnosis.length === 0) {
+  errors.push('At least one diagnosis is required');
+}
+```
+
+### Completion Transaction
+**File:** `consultationService.ts:161-174`
+```typescript
+await prisma.$transaction([
+  prisma.consultation.update({ status: 'COMPLETED', completedAt: new Date() }),
+  prisma.appointment.update({ status: 'COMPLETED' }),
+]);
+```
+
+---
+
+## 12. Multi-Doctor Visits
+
+**File:** `backend/src/services/consultationService.ts:245-412`
+
+### Participant Roles (ParticipantRole enum)
+| Role | Description |
+|------|-------------|
+| `PRIMARY` | Main attending doctor |
+| `CONSULTING` | Specialist providing opinion |
+| `ASSISTING` | Supporting the primary |
+| `SUPERVISING` | Overseeing (training cases) |
+
+### Add Participant Flow
+```
+POST /consultations/:id/participants
+         │
+         ▼
+┌────────────────────────────┐
+│ Validate consultation:     │  consultationService.ts:259-277
+│ - Exists                   │
+│ - Not COMPLETED/ABANDONED  │
+└────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────┐
+│ Validate doctor:           │  consultationService.ts:280-296
+│ - Not already participant  │
+│ - Not the primary doctor   │
+└────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────┐
+│ Create ConsultationParticipant  consultationService.ts:298-310
+└────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────┐
+│ Notify consulting doctor   │  consultationService.ts:313-333
+│ "Dr. X has requested..."   │
+│ Priority: HIGH             │
+└────────────────────────────┘
+```
+
+---
+
+## 13. Cron Jobs
+
+**File:** `backend/src/jobs/noShowCron.ts`
+
+### NO_SHOW Cron Configuration
+```typescript
+const JOB_NAME = 'NO_SHOW_CHECK';                    // line 21
+const PROCESSING_TIMEOUT_MS = 5 * 60 * 1000;        // line 22 (5 minutes)
+const schedule = '*/5 7-22 * * *';                  // line 182 (every 5 min, 7AM-10PM)
+```
+
+### Cron Job Tasks
+**File:** `noShowCron.ts:62-78`
+```typescript
+// 1. Process auto NO_SHOWs
+const noShowResults = await noShowService.processAutoNoShows();
+
+// 2. Process stage alerts
+const alertResults = await noShowService.processStageAlerts();
+```
+
+### Health Monitoring
+**File:** `noShowCron.ts:216-278`
+```typescript
+{
+  jobName: "NO_SHOW_CHECK",
+  isHealthy: boolean,
+  healthMessage: string,
+  isWorkingHours: boolean,
+  lastRunTime: Date,
+  lastRunStatus: "success" | "error",
+  consecutiveFailures: number,
+  lastSuccessfulRun: { id, startedAt, durationMs, itemsProcessed },
+  recentRuns: [...],
+  stats: { totalRuns, failedRuns, successRate }
+}
+```
+
+### Timeout Protection
+**File:** `noShowCron.ts:30-42`
+```typescript
+if (isProcessing && processingStartTime) {
+  const elapsed = Date.now() - processingStartTime;
+  if (elapsed > PROCESSING_TIMEOUT_MS) {
+    console.error('Previous run stuck, resetting...');
+    isProcessing = false;
+    consecutiveFailures++;
+  }
+}
+```
+
+### Admin Alert on Failures
+**File:** `noShowCron.ts:132-161`
+```typescript
+// After 3 consecutive failures
+if (consecutiveFailures >= 3) {
+  // Send notification to HOSPITAL_ADMIN users
+  // Priority: HIGH
+  // Channels: in_app, email
+}
+```
+
+### External Trigger (Backup)
+**File:** `noShowRoutes.ts:154-174`
+```
+POST /no-show/external-trigger
+Header: x-cron-api-key: <CRON_API_KEY>
+
+- Can be called by external scheduler (AWS CloudWatch, system cron)
+- No JWT required, uses API key
+- Acts as backup if internal cron fails
+```
+
+---
+
+## 14. API Reference
+
+### Slot Routes (`/api/v1/slots`)
+**File:** `backend/src/routes/slotRoutes.ts`
+
+| Method | Endpoint | Auth | Line | Description |
+|--------|----------|------|------|-------------|
+| GET | `/doctor/:doctorId` | User | 27-38 | Get all future available slots |
+| GET | `/doctor/:doctorId/date/:date` | User | 42-56 | Get slots for specific date |
+| GET | `/doctor/:doctorId/range` | User | 59-80 | Get slots in date range |
+| POST | `/generate/:doctorId` | Admin | 83-105 | Generate slots for N days |
+| POST | `/regenerate/:doctorId` | Admin/Doctor | 108-121 | Regenerate future slots |
+| PATCH | `/:slotId/block` | Admin/Doctor | 124-143 | Block/unblock a slot |
+
+### NO_SHOW Routes (`/api/v1/no-show`)
+**File:** `backend/src/routes/noShowRoutes.ts`
+
+| Method | Endpoint | Auth | Line | Description |
+|--------|----------|------|------|-------------|
+| GET | `/logs` | Admin/Doctor/Receptionist | 24-48 | Get NO_SHOW logs |
+| GET | `/stats` | Admin/Doctor | 55-74 | Get NO_SHOW statistics |
+| GET | `/alerts` | Admin/Doctor/Nurse/Receptionist | 80-88 | Get active stage alerts |
+| PUT | `/alerts/:alertId/acknowledge` | Admin/Doctor/Nurse | 94-104 | Acknowledge alert |
+| PUT | `/alerts/:alertId/resolve` | Admin/Doctor/Nurse | 110-120 | Resolve alert |
+| POST | `/trigger` | Admin | 126-134 | Manually trigger check |
+| GET | `/cron-health` | Admin | 140-148 | Get cron health status |
+| POST | `/external-trigger` | API Key | 155-174 | External backup trigger |
+| POST | `/:appointmentId` | Staff | 181-206 | Manual NO_SHOW |
+
+### Appointment Routes (`/api/v1/appointments`)
+**File:** `backend/src/routes/appointmentRoutes.ts`
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/` | User | Create appointment |
+| GET | `/` | User | List appointments |
+| GET | `/:id` | User | Get appointment details |
+| PATCH | `/:id` | User | Update appointment |
+| PATCH | `/:id/status` | User | Update status |
+| DELETE | `/:id` | User | Cancel appointment |
+
+### Doctor Routes (`/api/v1/doctors`)
+**File:** `backend/src/routes/doctorRoutes.ts`
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/:id/absences` | Doctor/Admin | Create absence |
+| GET | `/:id/absences` | User | List absences |
+| PATCH | `/:id/absences/:absenceId` | Doctor/Admin | Update absence |
+| DELETE | `/:id/absences/:absenceId` | Doctor/Admin | Cancel absence |
+| PUT | `/:id/schedules` | Doctor/Admin | Update schedules |
+| PATCH | `/:id` | Admin | Update doctor (availability) |
 
 ---
 
@@ -1280,5 +821,5 @@ Priority: NORMAL
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 1.0 | 2026-01-22 | System | Initial flow documentation |
-| 1.1 | 2026-01-22 | System | Added Patient Cancellation Flow, CloudWatch Monitoring |
+| 1.0 | 2026-01-22 | System | Initial documentation |
+| 2.0 | 2026-01-22 | System | Complete rewrite based on code audit |
