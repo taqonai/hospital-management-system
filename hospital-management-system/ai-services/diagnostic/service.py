@@ -1088,6 +1088,11 @@ class DiagnosticAI:
             # Heart rate
             hr = vital_signs.get("heartRate")
             if hr:
+                try:
+                    hr = int(hr)
+                except (ValueError, TypeError):
+                    hr = None
+            if hr:
                 if hr > 100:
                     risk_factors.append({
                         "factor": f"Tachycardia (HR: {hr})",
@@ -1101,6 +1106,11 @@ class DiagnosticAI:
 
             # Oxygen saturation
             spo2 = vital_signs.get("oxygenSaturation")
+            if spo2:
+                try:
+                    spo2 = float(spo2)
+                except (ValueError, TypeError):
+                    spo2 = None
             if spo2 and spo2 < 95:
                 risk_factors.append({
                     "factor": f"Low oxygen saturation ({spo2}%)",
@@ -1109,6 +1119,11 @@ class DiagnosticAI:
 
             # Temperature
             temp = vital_signs.get("temperature")
+            if temp:
+                try:
+                    temp = float(temp)
+                except (ValueError, TypeError):
+                    temp = None
             if temp:
                 if temp > 38.0:
                     risk_factors.append({
