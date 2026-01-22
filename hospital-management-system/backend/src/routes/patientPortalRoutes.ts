@@ -276,6 +276,34 @@ router.get(
 );
 
 /**
+ * Get available slots for a doctor on a specific date
+ * GET /api/v1/patient-portal/doctors/:doctorId/slots
+ */
+router.get(
+  '/doctors/:doctorId/slots',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const { doctorId } = req.params;
+    const { date } = req.query;
+
+    if (!date) {
+      return res.status(400).json({ success: false, message: 'Date parameter is required' });
+    }
+
+    const dateStr = date as string;
+
+    // Validate date format
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return res.status(400).json({ success: false, message: 'Invalid date format. Use YYYY-MM-DD' });
+    }
+
+    const slots = await patientPortalService.getDoctorAvailableSlots(hospitalId, doctorId, dateStr);
+    sendSuccess(res, slots, 'Available slots retrieved');
+  })
+);
+
+/**
  * Get departments
  * GET /api/v1/patient-portal/departments
  */

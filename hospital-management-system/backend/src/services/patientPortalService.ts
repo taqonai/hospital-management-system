@@ -1,7 +1,7 @@
 import prisma from '../config/database';
 import { NotFoundError, AppError } from '../middleware/errorHandler';
 import { LabOrderStatus, AppointmentType } from '@prisma/client';
-import { getTodayDateUAE } from '../utils/timezone';
+import { getTodayDateUAE, getTodayInUAE, getCurrentTimeMinutesUAE } from '../utils/timezone';
 
 /**
  * Patient Portal Service
@@ -832,6 +832,162 @@ export class PatientPortalService {
         name: d.department?.name || '',
       },
     }));
+  }
+
+  /**
+   * Get available slots for a doctor on a specific date
+   */
+  async getDoctorAvailableSlots(hospitalId: string, doctorId: string, dateStr: string) {
+    const slotDate = new Date(dateStr);
+    slotDate.setHours(0, 0, 0, 0);
+
+    const todayUAE = getTodayInUAE();
+    const requestedDateStr = slotDate.toISOString().split('T')[0];
+
+    // Check if date is in the past
+    if (requestedDateStr < todayUAE) {
+      return [];
+    }
+
+    // Get doctor with schedules
+    const doctor = await prisma.doctor.findFirst({
+      where: { id: doctorId, user: { hospitalId, isActive: true }, isAvailable: true },
+      include: {
+        schedules: { where: { isActive: true } },
+        user: { select: { firstName: true, lastName: true } },
+      },
+    });
+
+    if (!doctor) {
+      return [];
+    }
+
+    // Check for doctor absence on this date
+    const absence = await prisma.doctorAbsence.findFirst({
+      where: {
+        doctorId,
+        status: 'ACTIVE',
+        startDate: { lte: slotDate },
+        endDate: { gte: slotDate },
+        isFullDay: true,
+      },
+    });
+
+    if (absence) {
+      return []; // Doctor is on full-day leave
+    }
+
+    // Get schedule for the day of week
+    const dayNames = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+    const dayOfWeek = dayNames[slotDate.getDay()];
+    const schedule = doctor.schedules.find(s => s.dayOfWeek === dayOfWeek);
+
+    if (!schedule) {
+      return []; // No schedule for this day
+    }
+
+    // Parse times to minutes
+    const parseTime = (time: string): number => {
+      const [hours, mins] = time.split(':').map(Number);
+      return hours * 60 + mins;
+    };
+
+    const formatTime = (minutes: number): string => {
+      const hours = Math.floor(minutes / 60);
+      const mins = minutes % 60;
+      return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+    };
+
+    const startMinutes = parseTime(schedule.startTime);
+    const endMinutes = parseTime(schedule.endTime);
+    const breakStartMinutes = schedule.breakStart ? parseTime(schedule.breakStart) : null;
+    const breakEndMinutes = schedule.breakEnd ? parseTime(schedule.breakEnd) : null;
+    const slotDuration = doctor.slotDuration || 30;
+
+    // Get existing appointments for this date
+    const startOfDay = new Date(slotDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(slotDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const existingAppointments = await prisma.appointment.findMany({
+      where: {
+        doctorId,
+        appointmentDate: { gte: startOfDay, lte: endOfDay },
+        status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+      },
+      select: { startTime: true },
+    });
+
+    const bookedSlots = new Set(existingAppointments.map(a => a.startTime));
+
+    // Check for partial-day absence
+    const partialAbsence = await prisma.doctorAbsence.findFirst({
+      where: {
+        doctorId,
+        status: 'ACTIVE',
+        startDate: { lte: slotDate },
+        endDate: { gte: slotDate },
+        isFullDay: false,
+      },
+    });
+
+    let absenceStartMinutes: number | null = null;
+    let absenceEndMinutes: number | null = null;
+    if (partialAbsence?.startTime && partialAbsence?.endTime) {
+      absenceStartMinutes = parseTime(partialAbsence.startTime);
+      absenceEndMinutes = parseTime(partialAbsence.endTime);
+    }
+
+    // Generate slots
+    const slots: Array<{ time: string; endTime: string; available: boolean }> = [];
+    let currentTime = startMinutes;
+
+    // For today, get current time in UAE
+    const isToday = requestedDateStr === todayUAE;
+    let currentTimeMinutes = 0;
+    if (isToday) {
+      currentTimeMinutes = getCurrentTimeMinutesUAE() + 15; // 15 minute buffer
+    }
+
+    while (currentTime + slotDuration <= endMinutes) {
+      // Skip break time
+      if (breakStartMinutes !== null && breakEndMinutes !== null) {
+        if (currentTime >= breakStartMinutes && currentTime < breakEndMinutes) {
+          currentTime = breakEndMinutes;
+          continue;
+        }
+      }
+
+      const slotStart = formatTime(currentTime);
+      const slotEnd = formatTime(currentTime + slotDuration);
+
+      // Check if slot is in the past for today
+      if (isToday && currentTime < currentTimeMinutes) {
+        currentTime += slotDuration;
+        continue;
+      }
+
+      // Check if slot is already booked
+      let isAvailable = !bookedSlots.has(slotStart);
+
+      // Check if slot overlaps with partial-day absence
+      if (isAvailable && absenceStartMinutes !== null && absenceEndMinutes !== null) {
+        if (currentTime >= absenceStartMinutes && currentTime < absenceEndMinutes) {
+          isAvailable = false;
+        }
+      }
+
+      slots.push({
+        time: slotStart,
+        endTime: slotEnd,
+        available: isAvailable,
+      });
+
+      currentTime += slotDuration;
+    }
+
+    return slots;
   }
 
   /**
