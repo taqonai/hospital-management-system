@@ -13,7 +13,9 @@
 10. [Consultation Completion Flow](#10-consultation-completion-flow)
 11. [No-Show Blocking Flow](#11-no-show-blocking-flow)
 12. [Doctor Resignation Flow](#12-doctor-resignation-flow)
-13. [Cron Job & Notification Flow](#13-cron-job--notification-flow)
+13. [Patient Cancellation Flow](#13-patient-cancellation-flow)
+14. [Cron Job & Notification Flow](#14-cron-job--notification-flow)
+15. [CloudWatch Monitoring Flow](#15-cloudwatch-monitoring-flow)
 
 ---
 
@@ -922,7 +924,92 @@ Current Time: 10:30 AM, January 22, 2026
 
 ---
 
-## 13. Cron Job & Notification Flow
+## 13. Patient Cancellation Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    PATIENT CANCELLATION FLOW                                 │
+│           (With Last-Minute Notification Priority)                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                    Patient requests cancellation
+                                │
+                                ▼
+                ┌───────────────────────────────────┐
+                │  Update appointment:              │
+                │  • status = CANCELLED             │
+                │  • cancelledAt = NOW()            │
+                │  • cancelReason = patient_reason  │
+                └───────────────────────────────────┘
+                                │
+                                ▼
+                ┌───────────────────────────────────┐
+                │  Release slot:                    │
+                │  • isAvailable = true             │
+                │  • appointmentId = null           │
+                │  (If not past slot time)          │
+                └───────────────────────────────────┘
+                                │
+                                ▼
+                ┌───────────────────────────────────┐
+                │  Calculate hours until appointment│
+                │                                   │
+                │  hoursUntil = (appointmentDate +  │
+                │                slotTime) - NOW()  │
+                └───────────────────────────────────┘
+                                │
+                ┌───────────────┴───────────────┐
+                │                               │
+         hoursUntil <= 24             hoursUntil > 24
+         (Last-minute)               (Advance notice)
+                │                               │
+                ▼                               ▼
+    ┌─────────────────────┐         ┌─────────────────────┐
+    │ HIGH PRIORITY       │         │ NORMAL PRIORITY     │
+    │ Notification:       │         │ Notification:       │
+    │                     │         │                     │
+    │ Title: "Last-Minute │         │ Title: "Appointment │
+    │         Cancellation│         │         Cancelled"  │
+    │                     │         │                     │
+    │ isLastMinute = true │         │ isLastMinute = false│
+    │                     │         │                     │
+    │ Doctor may need to  │         │ Doctor has time to  │
+    │ reschedule their    │         │ adjust schedule     │
+    │ day immediately     │         │                     │
+    └─────────────────────┘         └─────────────────────┘
+```
+
+### 13.1 Cancellation Window Rules
+
+| Time Until Appointment | Cancellation Type | Doctor Notification | Patient Impact |
+|-----------------------|-------------------|---------------------|----------------|
+| > 24 hours | Advance | Normal priority | No penalty |
+| 2-24 hours | Last-minute | HIGH priority | Warning recorded |
+| < 2 hours | Very late | URGENT priority | May affect future bookings |
+| Past start time | Not allowed | N/A | Error returned |
+
+### 13.2 Notification Message Examples
+
+**Last-Minute (< 24 hours):**
+```
+Title: Last-Minute Cancellation
+Message: John Smith cancelled their 09:00 appointment on Jan 22, 2026
+         Reason: "Emergency came up"
+         This cancellation was made 1.5 hours before the appointment.
+Priority: HIGH
+```
+
+**Advance Notice (> 24 hours):**
+```
+Title: Appointment Cancelled
+Message: John Smith cancelled their 09:00 appointment on Jan 25, 2026
+         Reason: "Schedule conflict"
+Priority: NORMAL
+```
+
+---
+
+## 14. Cron Job & Notification Flow
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -1045,3 +1132,153 @@ Current Time: 10:30 AM, January 22, 2026
 | Consultations | `consultationService.ts` | Status tracking, multi-doctor |
 | Doctors | `doctorService.ts` | Schedules, absences, resignation |
 | Notifications | `notificationService.ts` | SMS, email, in-app |
+
+---
+
+## 15. CloudWatch Monitoring Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    AWS CLOUDWATCH MONITORING ARCHITECTURE                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │                        AWS Cloud                                         │
+  │                                                                          │
+  │  ┌──────────────────────────────────────────────────────────────────┐   │
+  │  │                   CloudWatch Monitoring Layer                     │   │
+  │  │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐        │   │
+  │  │  │ EventBridge  │───▶│    Lambda    │───▶│   Metrics    │        │   │
+  │  │  │ (5 min rule) │    │ Health Check │    │ & Alarms     │        │   │
+  │  │  └──────────────┘    └──────┬───────┘    └──────┬───────┘        │   │
+  │  │                             │                    │                │   │
+  │  │                             │                    ▼                │   │
+  │  │                             │            ┌──────────────┐         │   │
+  │  │                             │            │  SNS Topic   │──▶Email │   │
+  │  │                             │            └──────────────┘         │   │
+  │  └─────────────────────────────┼────────────────────────────────────┘   │
+  │                                │                                         │
+  │                                ▼                                         │
+  │  ┌─────────────────────────────────────────────────────────────────────┐│
+  │  │                     EC2: hms-backend                                 ││
+  │  │  ┌──────────────────────────────────────────────────────────────┐   ││
+  │  │  │                    Node.js Application                        │   ││
+  │  │  │                                                               │   ││
+  │  │  │  ┌─────────────┐    ┌─────────────┐    ┌─────────────────┐   │   ││
+  │  │  │  │ node-cron   │───▶│ noShowCron  │───▶│  noShowService  │   │   ││
+  │  │  │  │ (internal)  │    │             │    │                 │   │   ││
+  │  │  │  └─────────────┘    └─────────────┘    └────────┬────────┘   │   ││
+  │  │  │                                                  │            │   ││
+  │  │  │  ┌─────────────┐    ┌─────────────┐             │            │   ││
+  │  │  │  │ Express API │◀───│ /external-  │◀────────────┘            │   ││
+  │  │  │  │             │    │  trigger    │     (Lambda backup)      │   ││
+  │  │  │  └─────────────┘    └─────────────┘                          │   ││
+  │  │  └──────────────────────────────────────────────────────────────┘   ││
+  │  └─────────────────────────────────────────────────────────────────────┘│
+  └─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 15.1 Monitoring Components
+
+| Component | Purpose | Trigger |
+|-----------|---------|---------|
+| **EventBridge Rule** | Trigger Lambda every 5 min | rate(5 minutes) |
+| **Lambda Function** | Call health endpoint, backup trigger | EventBridge |
+| **CloudWatch Metrics** | Track health status, execution time | Lambda publish |
+| **CloudWatch Alarm** | Alert on failures | 2 consecutive unhealthy |
+| **SNS Topic** | Send email alerts | Alarm trigger |
+
+### 15.2 Health Check Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         HEALTH CHECK FLOW                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                    Every 5 Minutes
+                          │
+                          ▼
+            ┌─────────────────────────────────┐
+            │       Lambda Function           │
+            │                                 │
+            │  1. POST /external-trigger      │
+            │     with x-cron-api-key        │
+            │                                 │
+            │  2. Backend executes NO_SHOW    │
+            │     check (backup if internal   │
+            │     cron failed)                │
+            │                                 │
+            │  3. Receive health response     │
+            └─────────────────────────────────┘
+                          │
+             ┌────────────┴────────────┐
+            200                       Error
+         (Success)                  (Failure)
+             │                          │
+             ▼                          ▼
+┌──────────────────────┐    ┌──────────────────────┐
+│ Publish to CloudWatch:│    │ Publish to CloudWatch:│
+│                      │    │                      │
+│ CronHealthStatus = 1 │    │ CronHealthStatus = 0 │
+│ CronExecutionDuration│    │                      │
+└──────────────────────┘    └──────────────────────┘
+             │                          │
+             ▼                          ▼
+┌──────────────────────┐    ┌──────────────────────┐
+│ Alarm State: OK      │    │ 2 consecutive        │
+│ (No notification)    │    │ failures?            │
+└──────────────────────┘    │                      │
+                            │ YES → Alarm State:   │
+                            │       ALARM          │
+                            │                      │
+                            │ → SNS → Email Alert  │
+                            │   to admin team      │
+                            └──────────────────────┘
+```
+
+### 15.3 Failure Recovery Matrix
+
+| Failure Type | Detection | Recovery Action | Alert |
+|--------------|-----------|-----------------|-------|
+| Internal cron stops | Lambda still runs, acts as backup | External trigger processes NO_SHOWs | None (silent recovery) |
+| Backend down | Lambda gets connection refused | Alarm after 2 failures (10 min) | Email via SNS |
+| Cron throws error | consecutiveFailures increments | Admin in-app notification after 3 | In-app notification |
+| Database error | Logged to cron_job_runs | Retry on next cron cycle | Log + admin notification |
+
+### 15.4 Health Endpoint Response
+
+**GET /api/v1/no-show/cron-health**
+```json
+{
+  "success": true,
+  "data": {
+    "jobName": "NO_SHOW_CHECK",
+    "isHealthy": true,
+    "healthMessage": "OK",
+    "isWorkingHours": true,
+    "lastRunTime": "2026-01-22T10:15:00.000Z",
+    "lastRunStatus": "success",
+    "consecutiveFailures": 0,
+    "lastSuccessfulRun": {
+      "id": "uuid",
+      "startedAt": "2026-01-22T10:15:00.000Z",
+      "durationMs": 45,
+      "itemsProcessed": 2
+    },
+    "stats": {
+      "totalRuns": 100,
+      "failedRuns": 1,
+      "successRate": "99.0%"
+    }
+  }
+}
+```
+
+---
+
+## Revision History
+
+| Version | Date | Author | Changes |
+|---------|------|--------|---------|
+| 1.0 | 2026-01-22 | System | Initial flow documentation |
+| 1.1 | 2026-01-22 | System | Added Patient Cancellation Flow, CloudWatch Monitoring |

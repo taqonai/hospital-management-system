@@ -12,9 +12,13 @@
 9. [Doctor Resignation](#9-doctor-resignation)
 10. [Consultation Completion](#10-consultation-completion)
 11. [Multi-Doctor Visits](#11-multi-doctor-visits)
-12. [Cron Jobs](#12-cron-jobs)
-13. [Notifications](#13-notifications)
-14. [Example Scenarios](#14-example-scenarios)
+12. [Patient Cancellation](#12-patient-cancellation)
+13. [Emergency Leave](#13-emergency-leave)
+14. [Cron Jobs](#14-cron-jobs)
+15. [Cron Timeout Protection](#15-cron-timeout-protection)
+16. [CloudWatch Monitoring](#16-cloudwatch-monitoring)
+17. [Notifications](#17-notifications)
+18. [Example Scenarios](#18-example-scenarios)
 
 ---
 
@@ -1089,7 +1093,206 @@ Total: 12 slots
 
 ---
 
-## 12. Cron Jobs
+## 12. Patient Cancellation
+
+### TC-PC-001: Cancel Appointment - Advance Notice
+**Description:** Patient cancels > 24 hours before appointment
+**Precondition:** Appointment scheduled for tomorrow 10:00, current time 10:00 today
+
+**Steps:**
+1. POST `/api/v1/appointments/:id/cancel` with reason
+2. Verify appointment status
+3. Check slot release
+4. Check doctor notification
+
+**Expected Result:**
+- Appointment status = CANCELLED
+- Slot released (isAvailable = true)
+- Doctor receives NORMAL priority notification
+
+---
+
+### TC-PC-002: Cancel Appointment - Last Minute (< 24h)
+**Description:** Patient cancels within 24 hours of appointment
+**Precondition:** Appointment scheduled for today 14:00, current time 10:00
+
+**Steps:**
+1. POST `/api/v1/appointments/:id/cancel`
+2. Verify appointment status
+3. Check doctor notification priority
+
+**Expected Result:**
+- Appointment status = CANCELLED
+- Slot released (if time hasn't passed)
+- Doctor receives HIGH priority notification
+- Notification includes `isLastMinute: true`
+
+---
+
+### TC-PC-003: Cancel Appointment - Very Late (< 2h)
+**Description:** Patient cancels less than 2 hours before
+**Precondition:** Appointment at 11:00, current time 09:30
+
+**Steps:**
+1. Cancel appointment
+2. Check notifications
+
+**Expected Result:**
+- Appointment cancelled
+- Doctor receives URGENT priority notification
+- Warning recorded against patient (for future reference)
+
+---
+
+### TC-PC-004: Cancel Past Appointment - Fail
+**Description:** Cannot cancel appointment after start time
+**Precondition:** Appointment at 09:00, current time 09:30
+
+**Steps:**
+1. Attempt to cancel
+
+**Expected Result:** Error 400 - "Cannot cancel past appointments"
+
+---
+
+### TC-PC-005: Cancel Already Cancelled - Fail
+**Description:** Cannot cancel twice
+**Precondition:** Appointment already cancelled
+
+**Steps:**
+1. Attempt to cancel again
+
+**Expected Result:** Error 400 - "Appointment is already cancelled"
+
+---
+
+### TC-PC-006: Cancel Releases Slot for Rebooking
+**Description:** Released slot can be booked by another patient
+**Precondition:** Appointment for tomorrow 10:00
+
+**Steps:**
+1. Patient A cancels
+2. Verify slot available
+3. Patient B books same slot
+
+**Expected Result:** Patient B successfully books the slot
+
+---
+
+### TC-PC-007: Last-Minute Notification Contains Correct Time
+**Description:** Verify notification shows how close to appointment
+**Precondition:** Appointment in 1.5 hours
+
+**Steps:**
+1. Cancel appointment
+2. Check notification message
+
+**Expected Result:** Message includes "1.5 hours before the appointment"
+
+---
+
+## 13. Emergency Leave
+
+### TC-EL-001: Emergency Leave Auto-Cancels Appointments
+**Description:** Emergency leave cancels all appointments automatically
+**Precondition:** Doctor has 5 appointments on target date
+
+**Test Data:**
+```json
+{
+  "startDate": "2026-01-25",
+  "endDate": "2026-01-25",
+  "reason": "Family emergency",
+  "type": "EMERGENCY"
+}
+```
+**Steps:**
+1. POST `/api/v1/doctors/:id/absences` with type=EMERGENCY
+2. Query appointments for that date
+
+**Expected Result:**
+- All 5 appointments status = CANCELLED
+- Notes: "Auto-cancelled due to doctor emergency leave"
+- All slots blocked
+- All patients notified
+
+---
+
+### TC-EL-002: Emergency Leave Response Includes Stats
+**Description:** API returns cancellation statistics
+**Steps:**
+1. Create emergency leave with existing appointments
+2. Check response
+
+**Expected Result:**
+```json
+{
+  "absence": {...},
+  "slotsBlocked": 16,
+  "cancelledAppointments": 5,
+  "patientNotifications": 5
+}
+```
+
+---
+
+### TC-EL-003: Emergency Leave Patient Notification
+**Description:** Patients receive high-priority notification
+**Steps:**
+1. Create emergency leave
+2. Check patient notifications
+
+**Expected Result:**
+- Priority: HIGH
+- Title: "Appointment Cancelled - Doctor Unavailable"
+- Message includes reschedule instruction
+
+---
+
+### TC-EL-004: Non-Emergency Leave Does NOT Auto-Cancel
+**Description:** Regular leave only blocks slots, warns about affected
+**Precondition:** Doctor has appointments, type=ANNUAL_LEAVE
+
+**Steps:**
+1. Create absence with type=ANNUAL_LEAVE
+2. Check appointments
+
+**Expected Result:**
+- Appointments NOT cancelled
+- Response includes warning: "5 appointments affected"
+- Patients receive notification to reschedule
+
+---
+
+### TC-EL-005: Emergency Leave Releases Slots
+**Description:** Cancelled appointment slots are released
+**Steps:**
+1. Create emergency leave
+2. Check slot status
+
+**Expected Result:** Slots have isAvailable=true (not just blocked)
+
+---
+
+### TC-EL-006: Emergency Leave Multi-Day
+**Description:** Emergency spanning multiple days
+**Test Data:**
+```json
+{
+  "startDate": "2026-01-25",
+  "endDate": "2026-01-27",
+  "type": "EMERGENCY"
+}
+```
+**Steps:**
+1. Create 3-day emergency leave
+2. Check all dates
+
+**Expected Result:** All appointments across all 3 days cancelled
+
+---
+
+## 14. Cron Jobs
 
 ### TC-CJ-001: NO_SHOW Detection Cron Runs Every 5 Minutes
 **Description:** Verify cron schedule
@@ -1180,7 +1383,208 @@ Total: 12 slots
 
 ---
 
-## 13. Notifications
+## 15. Cron Timeout Protection
+
+### TC-CTP-001: Stuck Cron Detection (> 5 minutes)
+**Description:** Detect and reset stuck cron processing
+**Precondition:** Cron started processing but hung
+
+**Scenario:**
+```
+09:00 - Cron starts, isProcessing = true
+09:05 - Next cron triggered, isProcessing still true
+        Check: elapsed = 5 min, NOT yet timeout
+09:10 - Next cron triggered
+        Check: elapsed = 10 min > 5 min TIMEOUT
+        Action: Reset flags, continue execution
+```
+**Steps:**
+1. Simulate hung cron (set isProcessing=true, processingStartTime=10 min ago)
+2. Trigger cron
+3. Verify reset and continuation
+
+**Expected Result:**
+- isProcessing reset to false
+- processingStartTime cleared
+- consecutiveFailures incremented
+- Processing continues normally
+
+---
+
+### TC-CTP-002: Normal Skip (Processing Not Stuck)
+**Description:** Skip when processing but within timeout
+**Precondition:** Cron processing for < 5 minutes
+
+**Steps:**
+1. Set isProcessing=true, processingStartTime=2 min ago
+2. Trigger cron
+3. Check behavior
+
+**Expected Result:**
+- Cron skips with "Already processing" log
+- No reset, no error
+
+---
+
+### TC-CTP-003: Processing Flag Reset on Completion
+**Description:** Flag cleared after successful run
+**Steps:**
+1. Run cron to completion
+2. Check isProcessing flag
+
+**Expected Result:** isProcessing = false after completion
+
+---
+
+### TC-CTP-004: Consecutive Failures Tracking
+**Description:** Track failures for alerting
+**Precondition:** consecutiveFailures = 2
+
+**Steps:**
+1. Force cron failure
+2. Check consecutiveFailures
+
+**Expected Result:**
+- consecutiveFailures = 3
+- Admin notification triggered (threshold: 3)
+
+---
+
+### TC-CTP-005: Consecutive Failures Reset on Success
+**Description:** Reset counter after successful run
+**Precondition:** consecutiveFailures = 2
+
+**Steps:**
+1. Run cron successfully
+2. Check consecutiveFailures
+
+**Expected Result:** consecutiveFailures = 0
+
+---
+
+## 16. CloudWatch Monitoring
+
+### TC-CW-001: Lambda Health Check - Success
+**Description:** Lambda calls health endpoint successfully
+**Steps:**
+1. POST `/api/v1/no-show/external-trigger` with API key
+2. Check response
+3. Verify CloudWatch metric published
+
+**Expected Result:**
+- Response: 200 OK with health status
+- CronHealthStatus metric = 1
+- CronExecutionDuration metric recorded
+
+---
+
+### TC-CW-002: Lambda Health Check - Backend Down
+**Description:** Lambda handles connection failure
+**Precondition:** Backend not responding
+
+**Steps:**
+1. Lambda attempts POST /external-trigger
+2. Connection refused
+
+**Expected Result:**
+- CronHealthStatus metric = 0
+- Error logged to CloudWatch Logs
+
+---
+
+### TC-CW-003: CloudWatch Alarm - Single Failure
+**Description:** No alarm on single failure
+**Steps:**
+1. Publish CronHealthStatus = 0 once
+2. Check alarm state
+
+**Expected Result:** Alarm remains in OK state (needs 2 consecutive failures)
+
+---
+
+### TC-CW-004: CloudWatch Alarm - Two Consecutive Failures
+**Description:** Alarm triggers after 2 failures
+**Steps:**
+1. Publish CronHealthStatus = 0
+2. Wait 5 min
+3. Publish CronHealthStatus = 0 again
+4. Check alarm state
+
+**Expected Result:**
+- Alarm state = ALARM
+- SNS notification triggered
+- Email sent to admin
+
+---
+
+### TC-CW-005: CloudWatch Alarm - Recovery
+**Description:** Alarm recovers after success
+**Precondition:** Alarm in ALARM state
+
+**Steps:**
+1. Publish CronHealthStatus = 1
+2. Check alarm state
+
+**Expected Result:** Alarm state = OK
+
+---
+
+### TC-CW-006: External Trigger Acts as Backup
+**Description:** Lambda trigger processes NO_SHOWs when internal fails
+**Precondition:** Internal cron has stopped
+
+**Steps:**
+1. Disable internal cron
+2. Wait for Lambda trigger
+3. Check NO_SHOW processing
+
+**Expected Result:**
+- NO_SHOWs still processed via external trigger
+- System continues functioning
+
+---
+
+### TC-CW-007: API Key Validation
+**Description:** External trigger requires valid API key
+**Steps:**
+1. POST /external-trigger without API key
+2. POST /external-trigger with wrong API key
+
+**Expected Result:** 401 Unauthorized for both
+
+---
+
+### TC-CW-008: Health Endpoint Response Format
+**Description:** Verify health response structure
+**Steps:**
+1. GET /api/v1/no-show/cron-health
+2. Verify response structure
+
+**Expected Result:**
+```json
+{
+  "success": true,
+  "data": {
+    "jobName": "NO_SHOW_CHECK",
+    "isHealthy": true,
+    "healthMessage": "OK",
+    "isWorkingHours": true,
+    "lastRunTime": "...",
+    "lastRunStatus": "success",
+    "consecutiveFailures": 0,
+    "lastSuccessfulRun": {...},
+    "stats": {
+      "totalRuns": 100,
+      "failedRuns": 1,
+      "successRate": "99.0%"
+    }
+  }
+}
+```
+
+---
+
+## 17. Notifications
 
 ### TC-NOT-001: Appointment Booked Notification
 **Description:** Patient receives booking confirmation
@@ -1257,7 +1661,7 @@ Total: 12 slots
 
 ---
 
-## 14. Example Scenarios
+## 18. Example Scenarios
 
 ### Scenario 1: Happy Path - Complete Appointment Journey
 
@@ -1670,3 +2074,4 @@ curl -X POST http://localhost:3001/api/v1/consultations \
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2026-01-22 | System | Initial test cases documentation |
+| 1.1 | 2026-01-22 | System | Added Patient Cancellation, Emergency Leave, Cron Timeout Protection, CloudWatch Monitoring sections |
