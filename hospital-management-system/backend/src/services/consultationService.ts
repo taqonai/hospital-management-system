@@ -410,6 +410,107 @@ class ConsultationService {
       orderBy: { joinedAt: 'asc' },
     });
   }
+
+  /**
+   * Save and complete a consultation in one call
+   * Creates the consultation if it doesn't exist, updates with diagnosis, and completes both consultation and appointment
+   */
+  async saveAndComplete(data: {
+    appointmentId: string;
+    patientId: string;
+    doctorId: string;
+    hospitalId: string;
+    chiefComplaint: string;
+    diagnosis: string[];
+    icdCodes: string[];
+    historyOfIllness?: string;
+    examination?: string;
+    treatmentPlan?: string;
+    advice?: string;
+    followUpDate?: Date;
+    notes?: string;
+  }) {
+    // Validate required fields
+    if (!data.diagnosis || data.diagnosis.length === 0) {
+      throw new AppError('At least one diagnosis is required to complete the consultation', 400);
+    }
+
+    if (!data.chiefComplaint || data.chiefComplaint.trim() === '') {
+      throw new AppError('Chief complaint is required to complete the consultation', 400);
+    }
+
+    // Check if appointment exists and belongs to hospital
+    const appointment = await prisma.appointment.findFirst({
+      where: { id: data.appointmentId, hospitalId: data.hospitalId },
+    });
+
+    if (!appointment) {
+      throw new AppError('Appointment not found', 404);
+    }
+
+    // Check if consultation already exists
+    const existingConsultation = await prisma.consultation.findUnique({
+      where: { appointmentId: data.appointmentId },
+    });
+
+    // Use transaction to create/update consultation and complete appointment
+    const result = await prisma.$transaction(async (tx) => {
+      let consultation;
+
+      if (existingConsultation) {
+        // Update existing consultation
+        consultation = await tx.consultation.update({
+          where: { id: existingConsultation.id },
+          data: {
+            chiefComplaint: data.chiefComplaint,
+            historyOfIllness: data.historyOfIllness,
+            examination: data.examination,
+            diagnosis: data.diagnosis,
+            icdCodes: data.icdCodes,
+            treatmentPlan: data.treatmentPlan,
+            advice: data.advice,
+            followUpDate: data.followUpDate,
+            notes: data.notes,
+            status: 'COMPLETED',
+            completedAt: new Date(),
+            completedBy: data.doctorId,
+          },
+        });
+      } else {
+        // Create new consultation
+        consultation = await tx.consultation.create({
+          data: {
+            appointmentId: data.appointmentId,
+            patientId: data.patientId,
+            doctorId: data.doctorId,
+            chiefComplaint: data.chiefComplaint,
+            historyOfIllness: data.historyOfIllness,
+            examination: data.examination,
+            diagnosis: data.diagnosis,
+            icdCodes: data.icdCodes,
+            treatmentPlan: data.treatmentPlan,
+            advice: data.advice,
+            followUpDate: data.followUpDate,
+            notes: data.notes,
+            status: 'COMPLETED',
+            startedAt: new Date(),
+            completedAt: new Date(),
+            completedBy: data.doctorId,
+          },
+        });
+      }
+
+      // Update appointment status to COMPLETED
+      await tx.appointment.update({
+        where: { id: data.appointmentId },
+        data: { status: 'COMPLETED' },
+      });
+
+      return consultation;
+    });
+
+    return result;
+  }
 }
 
 export const consultationService = new ConsultationService();

@@ -401,6 +401,21 @@ export const aiConsultationApi = {
   // Get follow-up recommendations
   getFollowUp: (consultationId: string) =>
     api.get(`/ai-consultation/follow-up/${consultationId}`),
+
+  // Complete consultation with all data
+  complete: (data: {
+    appointmentId: string;
+    patientId: string;
+    chiefComplaint: string;
+    diagnosis: string[];
+    icdCodes?: string[];
+    historyOfIllness?: string;
+    examination?: string;
+    treatmentPlan?: string;
+    advice?: string;
+    followUpDate?: string;
+    notes?: string;
+  }) => api.post('/ai-consultation/complete', data),
 };
 
 // Laboratory APIs

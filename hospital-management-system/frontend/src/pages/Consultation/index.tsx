@@ -29,7 +29,7 @@ import {
   MicrophoneIcon,
   StopIcon,
 } from '@heroicons/react/24/outline';
-import { patientApi, aiApi, smartOrderApi, medSafetyApi, ipdApi, appointmentApi, opdApi, insuranceCodingApi } from '../../services/api';
+import { patientApi, aiApi, smartOrderApi, medSafetyApi, ipdApi, appointmentApi, opdApi, insuranceCodingApi, aiConsultationApi } from '../../services/api';
 import { useAIHealth } from '../../hooks/useAI';
 import { useWhisperRecorder, formatDuration } from '../../hooks/useWhisperRecorder';
 import {
@@ -940,6 +940,11 @@ export default function Consultation() {
       return;
     }
 
+    if (!appointmentId) {
+      toast.error('No appointment selected');
+      return;
+    }
+
     // Validation: Require at least one diagnosis before completing
     if (selectedDiagnoses.length === 0 && customDiagnoses.length === 0) {
       toast.error('Cannot complete consultation without a diagnosis. Please add at least one diagnosis.');
@@ -959,23 +964,39 @@ export default function Consultation() {
 
     try {
       // Generate final SOAP notes
-      await generateSOAPMutation.mutateAsync();
+      const soapData = await generateSOAPMutation.mutateAsync();
 
-      // Update appointment status to COMPLETED if we have an appointmentId
-      if (appointmentId) {
-        try {
-          await appointmentApi.updateStatus(appointmentId, 'COMPLETED');
-        } catch (statusError: any) {
-          console.error('Failed to update appointment status:', {
-            appointmentId,
-            error: statusError.response?.data || statusError.message,
-            status: statusError.response?.status
-          });
-          // Show actual error message if available
-          const errorMsg = statusError.response?.data?.message || 'Appointment status could not be updated';
-          toast.error(`Note: ${errorMsg}`);
-        }
-      }
+      // Combine all diagnoses (AI-suggested + custom)
+      const allDiagnoses = [
+        ...selectedDiagnoses.map(d => d.name),
+        ...customDiagnoses.map(d => d.name),
+      ];
+      const allIcdCodes = [
+        ...selectedDiagnoses.map(d => d.icd10).filter(Boolean),
+        ...customDiagnoses.map(d => d.icd10).filter(Boolean),
+      ];
+
+      // Build treatment plan from prescriptions
+      const treatmentPlan = prescriptions.length > 0
+        ? prescriptions.map(p => `${p.medication} ${p.dosage} ${p.route} ${p.frequency} for ${p.duration}`).join('\n')
+        : undefined;
+
+      // Build history from symptoms
+      const historyOfIllness = symptoms.length > 0
+        ? symptoms.map(s => `${s.name} (${s.severity}${s.duration ? `, ${s.duration}` : ''})`).join(', ')
+        : undefined;
+
+      // Save and complete consultation via new API endpoint
+      await aiConsultationApi.complete({
+        appointmentId,
+        patientId: selectedPatientId,
+        chiefComplaint: chiefComplaint || symptoms.map(s => s.name).join(', ') || 'General consultation',
+        diagnosis: allDiagnoses,
+        icdCodes: allIcdCodes,
+        historyOfIllness,
+        treatmentPlan,
+        notes: soapData ? `SOAP Notes:\nS: ${soapData.subjective}\nO: ${soapData.objective}\nA: ${soapData.assessment}\nP: ${soapData.plan}` : undefined,
+      });
 
       toast.success('Consultation completed successfully');
 
@@ -984,9 +1005,10 @@ export default function Consultation() {
       queryClient.invalidateQueries({ queryKey: ['appointment', appointmentId] });
 
       navigate('/opd');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to complete consultation:', error);
-      toast.error('Failed to complete consultation');
+      const errorMsg = error.response?.data?.message || 'Failed to complete consultation';
+      toast.error(errorMsg);
     }
   };
 

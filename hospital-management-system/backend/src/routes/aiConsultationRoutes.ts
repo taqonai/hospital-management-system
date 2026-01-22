@@ -4,6 +4,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendError } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
 import { aiConsultationService } from '../services/aiConsultationService';
+import { consultationService } from '../services/consultationService';
 
 const router = Router();
 
@@ -326,6 +327,96 @@ router.get(
     );
 
     sendSuccess(res, result, 'Follow-up recommendations retrieved successfully');
+  })
+);
+
+// ============= Complete Consultation =============
+
+/**
+ * POST /complete
+ * Save and complete a consultation with all data
+ *
+ * Request body:
+ * - appointmentId: string (required)
+ * - patientId: string (required)
+ * - chiefComplaint: string (required)
+ * - diagnosis: string[] (required - at least one)
+ * - icdCodes: string[] (optional)
+ * - historyOfIllness: string (optional)
+ * - examination: string (optional)
+ * - treatmentPlan: string (optional)
+ * - advice: string (optional)
+ * - followUpDate: Date (optional)
+ * - notes: string (optional)
+ *
+ * Returns:
+ * - Created/updated consultation record
+ * - Appointment is marked as COMPLETED
+ */
+router.post(
+  '/complete',
+  authenticate,
+  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const {
+      appointmentId,
+      patientId,
+      chiefComplaint,
+      diagnosis,
+      icdCodes,
+      historyOfIllness,
+      examination,
+      treatmentPlan,
+      advice,
+      followUpDate,
+      notes,
+    } = req.body;
+
+    if (!appointmentId) {
+      return sendError(res, 'Appointment ID is required', 400);
+    }
+
+    if (!patientId) {
+      return sendError(res, 'Patient ID is required', 400);
+    }
+
+    if (!chiefComplaint || chiefComplaint.trim() === '') {
+      return sendError(res, 'Chief complaint is required', 400);
+    }
+
+    if (!diagnosis || !Array.isArray(diagnosis) || diagnosis.length === 0) {
+      return sendError(res, 'At least one diagnosis is required', 400);
+    }
+
+    // Get doctorId from the logged-in user
+    const doctor = await import('../config/database').then(db =>
+      db.default.doctor.findFirst({
+        where: { userId: req.user!.userId },
+        select: { id: true },
+      })
+    );
+
+    if (!doctor) {
+      return sendError(res, 'Doctor profile not found for this user', 400);
+    }
+
+    const result = await consultationService.saveAndComplete({
+      appointmentId,
+      patientId,
+      doctorId: doctor.id,
+      hospitalId: req.user!.hospitalId,
+      chiefComplaint,
+      diagnosis,
+      icdCodes: icdCodes || [],
+      historyOfIllness,
+      examination,
+      treatmentPlan,
+      advice,
+      followUpDate: followUpDate ? new Date(followUpDate) : undefined,
+      notes,
+    });
+
+    sendSuccess(res, result, 'Consultation completed successfully');
   })
 );
 
