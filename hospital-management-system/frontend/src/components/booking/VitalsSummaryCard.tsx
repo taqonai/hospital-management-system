@@ -34,10 +34,35 @@ interface RiskPrediction {
   recommendations: string[];
 }
 
+interface PatientInfo {
+  gender: string;
+  dateOfBirth: string;
+}
+
 interface VitalsSummaryCardProps {
   vitals: VitalsData | null;
   riskPrediction: RiskPrediction | null;
+  patient?: PatientInfo | null;
   className?: string;
+}
+
+function calculateAge(dateOfBirth: string): number {
+  const today = new Date();
+  const birthDate = new Date(dateOfBirth);
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+}
+
+function shouldShowPregnancyStatus(patient?: PatientInfo | null): boolean {
+  if (!patient) return false;
+  const isFemale = patient.gender?.toUpperCase() === 'FEMALE';
+  const age = calculateAge(patient.dateOfBirth);
+  // Only show pregnancy status for females of childbearing age (13-51)
+  return isFemale && age >= 13 && age <= 51;
 }
 
 function VitalItem({
@@ -85,7 +110,9 @@ function isVitalAbnormal(type: string, value: number | null): boolean {
   }
 }
 
-export function VitalsSummaryCard({ vitals, riskPrediction, className }: VitalsSummaryCardProps) {
+export function VitalsSummaryCard({ vitals, riskPrediction, patient, className }: VitalsSummaryCardProps) {
+  // Determine if pregnancy status should be shown based on patient gender/age
+  const showPregnancy = shouldShowPregnancyStatus(patient);
   if (!vitals) {
     return (
       <div className={clsx('bg-yellow-50 border border-yellow-200 rounded-lg p-4', className)}>
@@ -211,8 +238,8 @@ export function VitalsSummaryCard({ vitals, riskPrediction, className }: VitalsS
           </div>
         )}
 
-        {/* Patient Status - Pregnancy, Medications, Treatment */}
-        {(vitals.isPregnant !== null && vitals.isPregnant !== undefined) ||
+        {/* Patient Status - Pregnancy (for females only), Medications, Treatment */}
+        {(showPregnancy && vitals.isPregnant !== null && vitals.isPregnant !== undefined) ||
          (vitals.currentMedications && vitals.currentMedications.length > 0) ||
          vitals.currentTreatment ? (
           <div className="mt-3 p-3 rounded-lg border border-purple-200 bg-purple-50">
@@ -221,8 +248,8 @@ export function VitalsSummaryCard({ vitals, riskPrediction, className }: VitalsS
               <span className="font-medium text-sm text-purple-800">Patient Status</span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {/* Pregnancy Status */}
-              {vitals.isPregnant !== null && vitals.isPregnant !== undefined && (
+              {/* Pregnancy Status - Only show for females of childbearing age */}
+              {showPregnancy && vitals.isPregnant !== null && vitals.isPregnant !== undefined && (
                 <div className={clsx(
                   'p-2 rounded-lg border',
                   vitals.isPregnant ? 'bg-pink-50 border-pink-200' : 'bg-gray-50 border-gray-200'

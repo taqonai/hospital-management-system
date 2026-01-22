@@ -244,7 +244,11 @@ export function BookingTicket({
         {activeTab === 'overview' && (
           <div className="space-y-4">
             {/* Vitals */}
-            <VitalsSummaryCard vitals={vitals} riskPrediction={riskPrediction} />
+            <VitalsSummaryCard
+              vitals={vitals}
+              riskPrediction={riskPrediction}
+              patient={{ gender: patient.gender, dateOfBirth: patient.dateOfBirth }}
+            />
 
             {/* Consultation Summary */}
             {consultation && (
