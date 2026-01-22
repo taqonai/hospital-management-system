@@ -15,7 +15,8 @@
 10. [Consultation Tracking](#10-consultation-tracking)
 11. [Multi-Doctor Visits](#11-multi-doctor-visits)
 12. [Cron Jobs](#12-cron-jobs)
-13. [Example Scenarios](#13-example-scenarios)
+13. [CloudWatch Monitoring (AWS)](#13-cloudwatch-monitoring-aws)
+14. [Example Scenarios](#14-example-scenarios)
 
 ---
 
@@ -1061,7 +1062,119 @@ Schedule: */5 7-22 * * *
 
 ---
 
-## 13. Example Scenarios
+## 13. CloudWatch Monitoring (AWS)
+
+**File:** `infrastructure/terraform/monitoring.tf`
+
+### TC-CW-001: External Trigger with Valid API Key
+**API:** `POST /api/v1/no-show/external-trigger`
+**File:** `noShowRoutes.ts:155-174`
+
+**Request:**
+```bash
+curl -X POST https://api.example.com/api/v1/no-show/external-trigger \
+  -H "x-cron-api-key: valid-api-key"
+```
+
+**Expected:**
+- NO_SHOW check executes (same as internal cron)
+- Returns success with processed count
+- Can be called by AWS Lambda
+
+---
+
+### TC-CW-002: External Trigger with Invalid API Key
+**Test:** Call external trigger with wrong or missing API key
+
+**Expected:**
+- HTTP 401 Unauthorized
+- Error: "Invalid API key"
+- NO_SHOW check NOT executed
+
+---
+
+### TC-CW-003: External Trigger Not Configured
+**Precondition:** `CRON_API_KEY` environment variable not set
+
+**Test:** Call external trigger
+
+**Expected:**
+- HTTP 400 Bad Request
+- Error: "External cron trigger not configured"
+
+---
+
+### TC-CW-004: Lambda Publishes Healthy Metric
+**File:** `monitoring.tf:142-167`
+
+**Precondition:** Backend healthy, external trigger succeeds
+
+**Expected (Lambda behavior):**
+- CloudWatch metric: `CronHealthStatus = 1`
+- CloudWatch metric: `CronExecutionDuration = <ms>`
+- Namespace: `HMS/CronJobs`
+- Dimensions: `JobName=NO_SHOW_CHECK, Environment=prod`
+
+---
+
+### TC-CW-005: Lambda Publishes Unhealthy Metric on Failure
+**File:** `monitoring.tf:179-199`
+
+**Precondition:** Backend unreachable or returns error
+
+**Expected:**
+- CloudWatch metric: `CronHealthStatus = 0`
+- SNS notification sent with error details
+- Alert includes: error message, timestamp, URL
+
+---
+
+### TC-CW-006: CloudWatch Alarm Triggers After 2 Failures
+**File:** `monitoring.tf:334-357`
+
+**Precondition:** `CronHealthStatus = 0` for 2 consecutive 5-minute periods
+
+**Expected:**
+- Alarm state: OK → ALARM
+- SNS notification sent to configured email
+- Subject: "[ALERT] HMS Cron Health Check Failed"
+
+---
+
+### TC-CW-007: CloudWatch Alarm Recovers
+**Precondition:** Alarm in ALARM state, then backend recovers
+
+**Test:** Lambda succeeds, publishes `CronHealthStatus = 1`
+
+**Expected:**
+- Alarm state: ALARM → OK
+- SNS notification sent (OK notification)
+
+---
+
+### TC-CW-008: Lambda Acts as Backup Cron
+**Precondition:** Internal node-cron stopped (process crashed)
+
+**Test:** Lambda continues calling external trigger every 5 min
+
+**Expected:**
+- NO_SHOW checks still execute (via Lambda's external trigger)
+- `CronHealthStatus = 1` (healthy from Lambda's perspective)
+- System continues functioning as backup
+
+---
+
+### TC-CW-009: EventBridge Rule Schedule
+**File:** `monitoring.tf:306-314`
+
+**Expected Configuration:**
+- Schedule: `rate(5 minutes)`
+- Runs 24/7 (unlike internal cron which is 7AM-10PM)
+- Target: Lambda function ARN
+
+---
+
+## 14. Example Scenarios
 
 ### Scenario 1: Happy Path - Complete Appointment
 

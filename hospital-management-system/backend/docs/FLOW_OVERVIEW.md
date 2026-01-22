@@ -16,7 +16,8 @@
 11. [Consultation Tracking](#11-consultation-tracking)
 12. [Multi-Doctor Visits](#12-multi-doctor-visits)
 13. [Cron Jobs](#13-cron-jobs)
-14. [API Reference](#14-api-reference)
+14. [CloudWatch Monitoring (AWS)](#14-cloudwatch-monitoring-aws)
+15. [API Reference](#15-api-reference)
 
 ---
 
@@ -814,7 +815,109 @@ Header: x-cron-api-key: <CRON_API_KEY>
 
 ---
 
-## 14. API Reference
+## 14. CloudWatch Monitoring (AWS)
+
+**File:** `infrastructure/terraform/monitoring.tf`
+
+### Architecture
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        AWS CloudWatch                                │
+└─────────────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────┐         ┌─────────────────────┐
+│ EventBridge Rule    │────────▶│ Lambda Function     │
+│ (every 5 minutes)   │         │ hms-cron-health-*   │
+└─────────────────────┘         └─────────────────────┘
+                                         │
+                                         ▼
+                                POST /no-show/external-trigger
+                                Header: x-cron-api-key
+                                         │
+                       ┌─────────────────┴─────────────────┐
+                       ▼                                   ▼
+              ┌─────────────────┐                 ┌─────────────────┐
+              │   SUCCESS       │                 │    FAILURE      │
+              │                 │                 │                 │
+              │ CronHealthStatus│                 │ CronHealthStatus│
+              │      = 1        │                 │      = 0        │
+              └─────────────────┘                 └─────────────────┘
+                       │                                   │
+                       ▼                                   ▼
+              ┌─────────────────┐                 ┌─────────────────┐
+              │ Alarm: OK       │                 │ Alarm: ALARM    │
+              └─────────────────┘                 │ (after 2 fails) │
+                                                  └─────────────────┘
+                                                           │
+                                                           ▼
+                                                  ┌─────────────────┐
+                                                  │ SNS → Email     │
+                                                  │ Alert sent      │
+                                                  └─────────────────┘
+```
+
+### Components
+
+| Resource | Name Pattern | Purpose |
+|----------|--------------|---------|
+| Lambda | `{project}-cron-health-{env}` | Calls external trigger, publishes metrics |
+| EventBridge | `{project}-cron-health-check-{env}` | Triggers Lambda every 5 min |
+| CloudWatch Alarm | `{project}-cron-unhealthy-{env}` | Alerts after 2 consecutive failures |
+| SNS Topic | `{project}-cron-alerts-{env}` | Email notifications |
+
+### Metrics (Namespace: `HMS/CronJobs`)
+
+| Metric | Description | Healthy Value |
+|--------|-------------|---------------|
+| `CronHealthStatus` | Health status (1=OK, 0=Failed) | 1 |
+| `CronExecutionDuration` | Execution time in ms | < 30000 |
+
+### Lambda Function Logic
+**File:** `monitoring.tf:114-263`
+
+1. Call `POST /api/v1/no-show/external-trigger` with API key
+2. On success: Publish `CronHealthStatus=1` and duration
+3. On failure: Publish `CronHealthStatus=0`, send SNS alert
+
+### Alarm Configuration
+**File:** `monitoring.tf:334-357`
+
+```hcl
+comparison_operator = "LessThanThreshold"
+evaluation_periods  = 2        # Alert after 2 failures
+period              = 300      # 5 minutes
+threshold           = 1        # Healthy = 1
+treat_missing_data  = "breaching"  # Missing = unhealthy
+```
+
+### Environment Variables
+| Variable | Description |
+|----------|-------------|
+| `CRON_API_KEY` | API key for `/external-trigger` authentication |
+| `BACKEND_URL` | Backend URL (e.g., https://spetaar.ai) |
+| `alert_email` | Email for SNS notifications (Terraform var) |
+
+### Failure Scenarios
+
+**Scenario 1: Internal Cron Stopped**
+```
+Internal node-cron stops → Lambda still triggers external-trigger
+                         → NO_SHOW check still runs (backup)
+                         → CronHealthStatus = 1 (healthy from Lambda's view)
+```
+
+**Scenario 2: Backend Down**
+```
+Backend unreachable → Lambda POST fails
+                    → CronHealthStatus = 0
+                    → After 2 periods (10 min) → Alarm triggers
+                    → SNS email to admin
+```
+
+---
+
+## 15. API Reference
 
 ### Slot Routes (`/api/v1/slots`)
 **File:** `backend/src/routes/slotRoutes.ts`
