@@ -193,6 +193,9 @@ export default function Appointments() {
   const [rescheduleDate, setRescheduleDate] = useState('');
   const [rescheduleTime, setRescheduleTime] = useState('');
 
+  // Per-doctor slots for Emergency and Quick booking modes
+  const [doctorSlotsMap, setDoctorSlotsMap] = useState<Record<string, { slots: TimeSlot[]; loading: boolean }>>({});
+
   // Fetch appointments
   const { data: appointmentsData, isLoading, refetch } = useQuery({
     queryKey: ['patient-appointments-page', activeTab, statusFilter, dateRange, currentPage],
@@ -249,13 +252,68 @@ export default function Appointments() {
     staleTime: 0,
   });
 
-  // Fetch available slots for selected doctor and date
+  // Fetch slots for a specific doctor (used in Emergency and Quick modes)
+  const fetchDoctorSlots = async (doctorId: string, date: string) => {
+    if (!doctorId || !date) return;
+
+    // Mark as loading
+    setDoctorSlotsMap(prev => ({
+      ...prev,
+      [doctorId]: { slots: [], loading: true }
+    }));
+
+    try {
+      const response = await patientPortalApi.getAvailableSlots(doctorId, date);
+      const slots = response.data?.data || response.data || [];
+      setDoctorSlotsMap(prev => ({
+        ...prev,
+        [doctorId]: { slots, loading: false }
+      }));
+    } catch (error) {
+      console.error('Failed to fetch slots for doctor:', doctorId, error);
+      setDoctorSlotsMap(prev => ({
+        ...prev,
+        [doctorId]: { slots: [], loading: false }
+      }));
+    }
+  };
+
+  // Fetch slots for all visible doctors when in Emergency/Quick mode
+  useEffect(() => {
+    if (!showBookModal) return;
+    if (bookingMode !== 'emergency' && bookingMode !== 'quick') return;
+    if (!doctors || doctors.length === 0) return;
+
+    const dateToUse = bookingMode === 'emergency' ? getTodayInUAE() : selectedDate;
+    if (!dateToUse) return;
+
+    // Fetch slots for each doctor
+    doctors.forEach((doctor: Doctor) => {
+      const existingEntry = doctorSlotsMap[doctor.id];
+      // Only fetch if we don't have slots for this doctor+date combo or if date changed
+      if (!existingEntry || existingEntry.loading === undefined) {
+        fetchDoctorSlots(doctor.id, dateToUse);
+      }
+    });
+  }, [showBookModal, bookingMode, doctors, selectedDate]);
+
+  // Reset doctor slots map when date changes in Quick mode
+  useEffect(() => {
+    if (bookingMode === 'quick' && selectedDate) {
+      setDoctorSlotsMap({});
+    }
+  }, [selectedDate, bookingMode]);
+
+  // Fetch available slots for selected doctor and date (handles both booking and rescheduling)
+  const slotsDoctorId = showRescheduleModal ? selectedAppointment?.doctorId : selectedDoctor;
+  const slotsDate = showRescheduleModal ? rescheduleDate : selectedDate;
+
   const { data: availableSlots, isLoading: loadingSlots } = useQuery({
-    queryKey: ['patient-portal-slots', selectedDoctor, selectedDate],
+    queryKey: ['patient-portal-slots', slotsDoctorId, slotsDate],
     queryFn: async () => {
-      if (!selectedDoctor || !selectedDate) return DEFAULT_TIME_SLOTS.map(t => ({ time: t, available: true }));
-      const response = await patientPortalApi.getAvailableSlots(selectedDoctor, selectedDate);
-      return response.data?.data || response.data || DEFAULT_TIME_SLOTS.map(t => ({ time: t, available: true }));
+      if (!slotsDoctorId || !slotsDate) return [];
+      const response = await patientPortalApi.getAvailableSlots(slotsDoctorId, slotsDate);
+      return response.data?.data || response.data || [];
     },
     enabled: (showBookModal && bookingStep >= 3 && !!selectedDoctor && !!selectedDate) ||
              (showRescheduleModal && !!selectedAppointment?.doctorId && !!rescheduleDate),
@@ -1093,22 +1151,33 @@ export default function Appointments() {
                                 </div>
                               </div>
                               <div className="flex flex-wrap gap-2">
-                                {DEFAULT_TIME_SLOTS.slice(0, 8).map((time) => (
+                                {doctorSlotsMap[doctor.id]?.loading ? (
+                                  <div className="flex items-center gap-2 text-gray-500 text-sm py-2">
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600" />
+                                    Loading slots...
+                                  </div>
+                                ) : (doctorSlotsMap[doctor.id]?.slots || [])
+                                  .filter((slot: TimeSlot) => slot.available && !isSlotPastInUAE(slot.time, getTodayInUAE(), 15))
+                                  .slice(0, 8)
+                                  .map((slot: TimeSlot) => (
                                   <button
-                                    key={`${doctor.id}-${time}`}
+                                    key={`${doctor.id}-${slot.time}`}
                                     onClick={() => {
                                       setSelectedDoctor(doctor.id);
-                                      setSelectedTime(time);
+                                      setSelectedTime(slot.time);
                                     }}
                                     className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                                      selectedDoctor === doctor.id && selectedTime === time
+                                      selectedDoctor === doctor.id && selectedTime === slot.time
                                         ? 'bg-red-600 text-white'
                                         : 'bg-gray-100 text-gray-700 hover:bg-red-100 hover:text-red-700'
                                     }`}
                                   >
-                                    {time}
+                                    {slot.time}
                                   </button>
                                 ))}
+                                {!doctorSlotsMap[doctor.id]?.loading && (doctorSlotsMap[doctor.id]?.slots || []).filter((s: TimeSlot) => s.available).length === 0 && (
+                                  <span className="text-gray-400 text-sm py-2">No slots available today</span>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -1203,22 +1272,34 @@ export default function Appointments() {
                                 </div>
                               </div>
                               <div className="flex flex-wrap gap-1.5">
-                                {DEFAULT_TIME_SLOTS.map((time) => (
+                                {!selectedDate ? (
+                                  <span className="text-gray-400 text-xs py-1">Select a date to see available slots</span>
+                                ) : doctorSlotsMap[doctor.id]?.loading ? (
+                                  <div className="flex items-center gap-2 text-gray-500 text-xs py-1">
+                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600" />
+                                    Loading...
+                                  </div>
+                                ) : (doctorSlotsMap[doctor.id]?.slots || [])
+                                  .filter((slot: TimeSlot) => slot.available && !isSlotPastInUAE(slot.time, selectedDate, 15))
+                                  .map((slot: TimeSlot) => (
                                   <button
-                                    key={`${doctor.id}-${time}`}
+                                    key={`${doctor.id}-${slot.time}`}
                                     onClick={() => {
                                       setSelectedDoctor(doctor.id);
-                                      setSelectedTime(time);
+                                      setSelectedTime(slot.time);
                                     }}
                                     className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-                                      selectedDoctor === doctor.id && selectedTime === time
+                                      selectedDoctor === doctor.id && selectedTime === slot.time
                                         ? 'bg-blue-600 text-white'
                                         : 'bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-700'
                                     }`}
                                   >
-                                    {time}
+                                    {slot.time}
                                   </button>
                                 ))}
+                                {selectedDate && !doctorSlotsMap[doctor.id]?.loading && (doctorSlotsMap[doctor.id]?.slots || []).filter((s: TimeSlot) => s.available).length === 0 && (
+                                  <span className="text-gray-400 text-xs py-1">No slots available</span>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -1398,35 +1479,32 @@ export default function Appointments() {
                               <div className="flex justify-center py-8">
                                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
                               </div>
+                            ) : (availableSlots || []).length === 0 ? (
+                              <div className="text-center py-6">
+                                <ClockIcon className="h-10 w-10 mx-auto text-gray-300 mb-2" />
+                                <p className="text-gray-500 text-sm">No available slots for this date</p>
+                                <p className="text-gray-400 text-xs mt-1">Doctor may be on leave or fully booked. Try another date.</p>
+                              </div>
                             ) : (
                               <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-[200px] overflow-y-auto">
-                                {(availableSlots || DEFAULT_TIME_SLOTS.map(t => ({ time: t, available: true })))
-                                  .filter((slot: TimeSlot | string) => {
-                                    // Filter out past slots for today (UAE timezone)
-                                    const time = typeof slot === 'string' ? slot : slot.time;
-                                    return !isSlotPastInUAE(time, selectedDate, 15);
-                                  })
-                                  .map(
-                                  (slot: TimeSlot | string) => {
-                                    const time = typeof slot === 'string' ? slot : slot.time;
-                                    const isAvailable = typeof slot === 'string' ? true : slot.available;
-                                    return (
+                                {(availableSlots || [])
+                                  .filter((slot: TimeSlot) => !isSlotPastInUAE(slot.time, selectedDate, 15))
+                                  .map((slot: TimeSlot) => (
                                       <button
-                                        key={time}
-                                        onClick={() => isAvailable && setSelectedTime(time)}
-                                        disabled={!isAvailable}
+                                        key={slot.time}
+                                        onClick={() => slot.available && setSelectedTime(slot.time)}
+                                        disabled={!slot.available}
                                         className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                                          selectedTime === time
+                                          selectedTime === slot.time
                                             ? 'bg-blue-600 text-white'
-                                            : isAvailable
+                                            : slot.available
                                             ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                             : 'bg-gray-50 text-gray-300 cursor-not-allowed line-through'
                                         }`}
                                       >
-                                        {time}
+                                        {slot.time}
                                       </button>
-                                    );
-                                  }
+                                    )
                                 )}
                               </div>
                             )}
@@ -1688,21 +1766,34 @@ export default function Appointments() {
                       {rescheduleDate && (
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">New Time</label>
-                          <div className="grid grid-cols-4 gap-2 max-h-[150px] overflow-y-auto">
-                            {DEFAULT_TIME_SLOTS.map((time) => (
-                              <button
-                                key={time}
-                                onClick={() => setRescheduleTime(time)}
-                                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                                  rescheduleTime === time
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                }`}
-                              >
-                                {time}
-                              </button>
-                            ))}
-                          </div>
+                          {loadingSlots ? (
+                            <div className="flex justify-center py-6">
+                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
+                            </div>
+                          ) : (availableSlots || []).length === 0 ? (
+                            <div className="text-center py-4">
+                              <p className="text-gray-500 text-sm">No slots available for this date</p>
+                              <p className="text-gray-400 text-xs mt-1">Try selecting a different date</p>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-4 gap-2 max-h-[150px] overflow-y-auto">
+                              {(availableSlots || [])
+                                .filter((slot: TimeSlot) => slot.available && !isSlotPastInUAE(slot.time, rescheduleDate, 15))
+                                .map((slot: TimeSlot) => (
+                                <button
+                                  key={slot.time}
+                                  onClick={() => setRescheduleTime(slot.time)}
+                                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                                    rescheduleTime === slot.time
+                                      ? 'bg-blue-600 text-white'
+                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                  }`}
+                                >
+                                  {slot.time}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

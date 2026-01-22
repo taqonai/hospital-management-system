@@ -140,9 +140,9 @@ export default function AppointmentsList() {
   const { data: availableSlots, isLoading: loadingSlots } = useQuery({
     queryKey: ['patient-portal-slots', selectedDoctor, selectedDate],
     queryFn: async () => {
-      if (!selectedDoctor || !selectedDate) return DEFAULT_TIME_SLOTS.map(t => ({ time: t, available: true }));
+      if (!selectedDoctor || !selectedDate) return [];
       const response = await patientPortalApi.getAvailableSlots(selectedDoctor, selectedDate);
-      return response.data?.data || response.data || DEFAULT_TIME_SLOTS.map(t => ({ time: t, available: true }));
+      return response.data?.data || response.data || [];
     },
     enabled: showBookModal && bookingStep >= 3 && !!selectedDoctor && !!selectedDate,
   });
@@ -598,35 +598,32 @@ export default function AppointmentsList() {
                             <div className="flex justify-center py-8">
                               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
                             </div>
+                          ) : (availableSlots || []).length === 0 ? (
+                            <div className="text-center py-6">
+                              <ClockIcon className="h-10 w-10 mx-auto text-gray-300 mb-2" />
+                              <p className="text-gray-500 text-sm">No available slots for this date</p>
+                              <p className="text-gray-400 text-xs mt-1">Doctor may be on leave or fully booked. Try another date.</p>
+                            </div>
                           ) : (
                             <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-[200px] overflow-y-auto">
-                              {(availableSlots || DEFAULT_TIME_SLOTS.map(t => ({ time: t, available: true })))
-                                .filter((slot: TimeSlot | string) => {
-                                  // Filter out past slots for today (UAE timezone)
-                                  const time = typeof slot === 'string' ? slot : slot.time;
-                                  return !isSlotPastInUAE(time, selectedDate, 15);
-                                })
-                                .map(
-                                (slot: TimeSlot | string) => {
-                                  const time = typeof slot === 'string' ? slot : slot.time;
-                                  const isAvailable = typeof slot === 'string' ? true : slot.available;
-                                  return (
+                              {(availableSlots || [])
+                                .filter((slot: TimeSlot) => !isSlotPastInUAE(slot.time, selectedDate, 15))
+                                .map((slot: TimeSlot) => (
                                     <button
-                                      key={time}
-                                      onClick={() => isAvailable && setSelectedTime(time)}
-                                      disabled={!isAvailable}
+                                      key={slot.time}
+                                      onClick={() => slot.available && setSelectedTime(slot.time)}
+                                      disabled={!slot.available}
                                       className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                                        selectedTime === time
+                                        selectedTime === slot.time
                                           ? 'bg-blue-600 text-white'
-                                          : isAvailable
+                                          : slot.available
                                           ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                          : 'bg-gray-50 text-gray-300 cursor-not-allowed'
+                                          : 'bg-gray-50 text-gray-300 cursor-not-allowed line-through'
                                       }`}
                                     >
-                                      {time}
+                                      {slot.time}
                                     </button>
-                                  );
-                                }
+                                  )
                               )}
                             </div>
                           )}
