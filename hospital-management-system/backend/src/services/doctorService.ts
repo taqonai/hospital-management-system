@@ -157,6 +157,14 @@ export class DoctorService {
 
     const hashedPassword = await bcrypt.hash(data.password, 12);
 
+    // Compute availableDays from schedules if provided, otherwise use data.availableDays
+    let availableDays = data.availableDays || [];
+    if (data.schedules && data.schedules.length > 0) {
+      availableDays = data.schedules
+        .filter((s: any) => s.isActive)
+        .map((s: any) => s.dayOfWeek);
+    }
+
     // Create user and doctor in transaction
     const result = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
@@ -182,7 +190,7 @@ export class DoctorService {
           licenseNumber: data.licenseNumber,
           consultationFee: data.consultationFee,
           bio: data.bio,
-          availableDays: data.availableDays,
+          availableDays: availableDays,
           slotDuration: data.slotDuration || 30,
           maxPatientsPerDay: data.maxPatientsPerDay || 30,
         },
@@ -442,7 +450,12 @@ export class DoctorService {
 
     // Handle schedules if provided (update or create)
     if (schedules && Array.isArray(schedules) && schedules.length > 0) {
-      // Delete existing schedules and create new ones
+      // Compute availableDays from active schedules
+      const availableDays = schedules
+        .filter((s: any) => s.isActive)
+        .map((s: any) => s.dayOfWeek);
+
+      // Delete existing schedules and create new ones, also update availableDays
       await prisma.$transaction(async (tx) => {
         await tx.doctorSchedule.deleteMany({
           where: { doctorId: id },
@@ -461,6 +474,12 @@ export class DoctorService {
               isActive: s.isActive !== false,
             })),
         });
+
+        // Update doctor's availableDays field
+        await tx.doctor.update({
+          where: { id },
+          data: { availableDays },
+        });
       });
 
       // Regenerate future slots based on new schedule
@@ -468,13 +487,28 @@ export class DoctorService {
         console.error('Failed to regenerate slots after doctor update:', err);
       });
 
-      // Fetch updated schedules
-      const updatedSchedules = await prisma.doctorSchedule.findMany({
-        where: { doctorId: id },
-        orderBy: { dayOfWeek: 'asc' },
+      // Fetch updated doctor with schedules
+      const updatedDoctor = await prisma.doctor.findUnique({
+        where: { id },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              phone: true,
+            },
+          },
+          department: true,
+          specializationRef: true,
+          schedules: {
+            orderBy: { dayOfWeek: 'asc' },
+          },
+        },
       });
 
-      return { ...result, schedules: updatedSchedules };
+      return updatedDoctor;
     }
 
     return result;
