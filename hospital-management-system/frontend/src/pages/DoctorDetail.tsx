@@ -14,12 +14,15 @@ import {
   StarIcon,
   DocumentTextIcon,
   NoSymbolIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ExclamationCircleIcon,
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
-import { doctorApi } from '../services/api';
+import { doctorApi, appointmentApi } from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import DoctorAbsenceList from '../components/doctors/DoctorAbsenceList';
-import { format } from 'date-fns';
+import { format, isToday, isFuture, isPast } from 'date-fns';
 import clsx from 'clsx';
 
 export default function DoctorDetail() {
@@ -30,6 +33,16 @@ export default function DoctorDetail() {
     queryFn: async () => {
       const response = await doctorApi.getById(id!);
       return response.data.data;
+    },
+    enabled: !!id,
+  });
+
+  // Fetch doctor's appointments
+  const { data: appointments, isLoading: appointmentsLoading } = useQuery({
+    queryKey: ['doctor-appointments', id],
+    queryFn: async () => {
+      const response = await appointmentApi.getAll({ doctorId: id, limit: 50 });
+      return response.data.data || [];
     },
     enabled: !!id,
   });
@@ -359,10 +372,115 @@ export default function DoctorDetail() {
           {/* Appointments Tab */}
           <Tab.Panel>
             <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Appointments</h3>
-              <p className="text-gray-500 text-center py-8">
-                Appointment history will be displayed here.
-              </p>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Appointments</h3>
+              {appointmentsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <LoadingSpinner size="md" />
+                </div>
+              ) : appointments && appointments.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Patient
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Date & Time
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Type
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {appointments.map((apt: any) => {
+                        const aptDate = new Date(apt.appointmentDate);
+                        const isUpcoming = isFuture(aptDate) || isToday(aptDate);
+                        const isPastApt = isPast(aptDate) && !isToday(aptDate);
+
+                        const statusConfig: Record<string, { bg: string; text: string; icon: any }> = {
+                          SCHEDULED: { bg: 'bg-blue-100', text: 'text-blue-700', icon: CalendarDaysIcon },
+                          CONFIRMED: { bg: 'bg-indigo-100', text: 'text-indigo-700', icon: CheckCircleIcon },
+                          CHECKED_IN: { bg: 'bg-amber-100', text: 'text-amber-700', icon: ClockIcon },
+                          IN_PROGRESS: { bg: 'bg-purple-100', text: 'text-purple-700', icon: ClockIcon },
+                          COMPLETED: { bg: 'bg-green-100', text: 'text-green-700', icon: CheckCircleIcon },
+                          CANCELLED: { bg: 'bg-red-100', text: 'text-red-700', icon: XCircleIcon },
+                          NO_SHOW: { bg: 'bg-gray-100', text: 'text-gray-700', icon: ExclamationCircleIcon },
+                        };
+
+                        const status = statusConfig[apt.status] || statusConfig.SCHEDULED;
+                        const StatusIcon = status.icon;
+
+                        return (
+                          <tr key={apt.id} className={clsx(isPastApt && 'bg-gray-50')}>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
+                                  <span className="text-xs font-medium text-gray-600">
+                                    {apt.patient?.user?.firstName?.[0] || 'P'}{apt.patient?.user?.lastName?.[0] || ''}
+                                  </span>
+                                </div>
+                                <div className="ml-3">
+                                  <p className="text-sm font-medium text-gray-900">
+                                    {apt.patient?.user?.firstName} {apt.patient?.user?.lastName}
+                                  </p>
+                                  <p className="text-xs text-gray-500">{apt.patient?.mrn || 'No MRN'}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <div>
+                                <p className={clsx(
+                                  'text-sm font-medium',
+                                  isToday(aptDate) ? 'text-emerald-600' : 'text-gray-900'
+                                )}>
+                                  {isToday(aptDate) ? 'Today' : format(aptDate, 'MMM d, yyyy')}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {apt.startTime} - {apt.endTime}
+                                </p>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span className="text-sm text-gray-700">
+                                {apt.appointmentType?.replace(/_/g, ' ') || 'General'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span className={clsx(
+                                'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium',
+                                status.bg, status.text
+                              )}>
+                                <StatusIcon className="h-3.5 w-3.5" />
+                                {apt.status?.replace(/_/g, ' ')}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <Link
+                                to={`/appointments/${apt.id}`}
+                                className="text-emerald-600 hover:text-emerald-800 text-sm font-medium"
+                              >
+                                View
+                              </Link>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-8">
+                  No appointments found for this doctor.
+                </p>
+              )}
             </div>
           </Tab.Panel>
         </Tab.Panels>

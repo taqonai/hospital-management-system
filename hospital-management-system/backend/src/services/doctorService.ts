@@ -25,6 +25,17 @@ export interface UpdateAbsenceDto {
   notes?: string;
 }
 
+// Human-readable labels for absence types
+const ABSENCE_TYPE_LABELS: Record<string, string> = {
+  ANNUAL_LEAVE: 'Annual Leave',
+  SICK_LEAVE: 'Sick Leave',
+  CONFERENCE: 'Conference',
+  TRAINING: 'Training',
+  PERSONAL: 'Personal',
+  EMERGENCY: 'Emergency',
+  OTHER: 'Other',
+};
+
 // Helper function to validate schedule times
 const validateScheduleTimes = (schedules: {
   dayOfWeek: string;
@@ -882,10 +893,11 @@ export class DoctorService {
       data.endTime
     );
 
-    // Handle affected appointments
+    // Handle affected appointments - AUTO-CANCEL ALL appointments when doctor is absent
     const notifiedPatients: string[] = [];
     const cancelledAppointments: string[] = [];
     const isEmergency = data.absenceType === 'EMERGENCY';
+    const absenceTypeLabel = ABSENCE_TYPE_LABELS[data.absenceType] || data.absenceType || 'Doctor Leave';
 
     if (affectedAppointments.length > 0) {
       const doctorName = affectedAppointments[0]?.doctor?.user
@@ -893,23 +905,25 @@ export class DoctorService {
         : 'Your doctor';
 
       for (const appointment of affectedAppointments) {
-        // For emergency leave, auto-cancel appointments and release slots
-        if (isEmergency) {
-          try {
-            await prisma.appointment.update({
-              where: { id: appointment.id },
-              data: {
-                status: 'CANCELLED',
-                notes: `${appointment.notes || ''}\nAuto-cancelled due to doctor emergency leave`.trim(),
-              },
-            });
+        // Auto-cancel ALL appointments when doctor adds any absence
+        try {
+          const cancellationReason = isEmergency
+            ? 'Auto-cancelled due to doctor emergency leave'
+            : `Auto-cancelled due to doctor unavailability (${absenceTypeLabel})`;
 
-            // Release the slot
-            await slotService.releaseSlot(appointment.id);
-            cancelledAppointments.push(appointment.id);
-          } catch (error) {
-            console.error('Failed to cancel appointment:', appointment.id, error);
-          }
+          await prisma.appointment.update({
+            where: { id: appointment.id },
+            data: {
+              status: 'CANCELLED',
+              notes: `${appointment.notes || ''}\n${cancellationReason}`.trim(),
+            },
+          });
+
+          // Release the slot
+          await slotService.releaseSlot(appointment.id);
+          cancelledAppointments.push(appointment.id);
+        } catch (error) {
+          console.error('Failed to cancel appointment:', appointment.id, error);
         }
 
         // Create notification for patient
@@ -917,11 +931,9 @@ export class DoctorService {
           try {
             const notificationTitle = isEmergency
               ? 'Appointment Cancelled - Doctor Emergency'
-              : 'Appointment Affected by Doctor Absence';
+              : `Appointment Cancelled - Doctor ${absenceTypeLabel}`;
 
-            const notificationMessage = isEmergency
-              ? `Your appointment with ${doctorName} on ${new Date(appointment.appointmentDate).toLocaleDateString()} at ${appointment.startTime} has been cancelled due to an emergency. Please rebook at your earliest convenience.`
-              : `${doctorName} will be unavailable on ${new Date(appointment.appointmentDate).toLocaleDateString()}. Please reschedule your appointment scheduled for ${appointment.startTime}.`;
+            const notificationMessage = `Your appointment with ${doctorName} on ${new Date(appointment.appointmentDate).toLocaleDateString()} at ${appointment.startTime} has been cancelled due to ${isEmergency ? 'an emergency' : `doctor ${absenceTypeLabel.toLowerCase()}`}. Please rebook at your earliest convenience.`;
 
             await prisma.notification.create({
               data: {
@@ -934,7 +946,7 @@ export class DoctorService {
                   absenceId: absence.id,
                   doctorId,
                   originalDate: appointment.appointmentDate,
-                  wasCancelled: isEmergency,
+                  wasCancelled: true,
                   priority: isEmergency ? 'HIGH' : 'NORMAL',
                 }),
               },
@@ -958,41 +970,25 @@ export class DoctorService {
 
             const emailSubject = isEmergency
               ? `URGENT: Your Appointment Has Been Cancelled - ${appointmentDate}`
-              : `Important: Doctor Unavailability Notice - ${appointmentDate}`;
+              : `Your Appointment Has Been Cancelled - ${appointmentDate}`;
 
-            const emailHtml = isEmergency
-              ? `
+            const emailHtml = `
                 <h2>Appointment Cancellation Notice</h2>
                 <p>Dear ${patientName},</p>
-                <p>We regret to inform you that your appointment has been <strong>cancelled</strong> due to an emergency situation.</p>
+                <p>We regret to inform you that your appointment has been <strong>cancelled</strong> due to ${isEmergency ? 'an emergency situation' : `doctor ${absenceTypeLabel.toLowerCase()}`}.</p>
                 <div class="info-box">
                   <table>
                     <tr><td class="info-label">Doctor:</td><td class="info-value">${doctorName}</td></tr>
                     <tr><td class="info-label">Original Date:</td><td class="info-value">${appointmentDate}</td></tr>
                     <tr><td class="info-label">Original Time:</td><td class="info-value">${appointment.startTime}</td></tr>
-                    <tr><td class="info-label">Reason:</td><td class="info-value">Doctor Emergency</td></tr>
+                    <tr><td class="info-label">Reason:</td><td class="info-value">Doctor ${absenceTypeLabel}</td></tr>
                   </table>
                 </div>
                 <div class="warning">
                   <strong>Action Required:</strong> Please rebook your appointment at your earliest convenience through the patient portal or by contacting our reception.
                 </div>
                 <p>We sincerely apologize for any inconvenience this may cause.</p>
-                <p>If you have any urgent medical concerns, please contact us immediately or visit our emergency department.</p>
-              `
-              : `
-                <h2>Doctor Unavailability Notice</h2>
-                <p>Dear ${patientName},</p>
-                <p>We are writing to inform you that your scheduled appointment may be affected by a doctor unavailability.</p>
-                <div class="info-box">
-                  <table>
-                    <tr><td class="info-label">Doctor:</td><td class="info-value">${doctorName}</td></tr>
-                    <tr><td class="info-label">Appointment Date:</td><td class="info-value">${appointmentDate}</td></tr>
-                    <tr><td class="info-label">Appointment Time:</td><td class="info-value">${appointment.startTime}</td></tr>
-                    <tr><td class="info-label">Reason:</td><td class="info-value">${data.absenceType || 'Doctor Leave'}</td></tr>
-                  </table>
-                </div>
-                <p>Please reschedule your appointment to an alternative date through the patient portal or by contacting our reception.</p>
-                <p>We apologize for any inconvenience caused.</p>
+                ${isEmergency ? '<p>If you have any urgent medical concerns, please contact us immediately or visit our emergency department.</p>' : ''}
               `;
 
             const emailResult = await sendEmail({
@@ -1156,15 +1152,30 @@ export class DoctorService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const [upcomingAbsences, totalDaysBlocked] = await Promise.all([
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const [upcomingAbsences, activeAbsences, allFutureAbsences] = await Promise.all([
+      // True upcoming: absences that start in the future (not yet active)
       prisma.doctorAbsence.count({
         where: {
           doctorId,
           hospitalId,
           status: AbsenceStatus.ACTIVE,
+          startDate: { gt: today }, // Start date is in the future
+        },
+      }),
+      // Currently active: today is within the absence range
+      prisma.doctorAbsence.count({
+        where: {
+          doctorId,
+          hospitalId,
+          status: AbsenceStatus.ACTIVE,
+          startDate: { lte: today },
           endDate: { gte: today },
         },
       }),
+      // All future absences (for calculating blocked days)
       prisma.doctorAbsence.findMany({
         where: {
           doctorId,
@@ -1179,9 +1190,9 @@ export class DoctorService {
       }),
     ]);
 
-    // Calculate total days
+    // Calculate total days blocked from today onwards
     let totalDays = 0;
-    for (const absence of totalDaysBlocked) {
+    for (const absence of allFutureAbsences) {
       const start = new Date(Math.max(absence.startDate.getTime(), today.getTime()));
       const end = absence.endDate;
       const diffTime = Math.abs(end.getTime() - start.getTime());
@@ -1190,7 +1201,8 @@ export class DoctorService {
     }
 
     return {
-      upcomingAbsences,
+      upcomingAbsences, // Only future absences, not currently active ones
+      activeAbsences, // Currently active absences
       totalDaysBlocked: totalDays,
     };
   }
