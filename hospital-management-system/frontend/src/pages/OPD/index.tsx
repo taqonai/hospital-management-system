@@ -179,7 +179,7 @@ function WalkInModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
             <p className="text-white/80 text-sm">Register a walk-in patient for OPD consultation</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+          <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[70vh] overflow-y-auto overflow-x-hidden">
             {/* Patient Selection */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -360,6 +360,13 @@ function WalkInModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
   );
 }
 
+// Medication interface for current medications
+interface CurrentMedication {
+  name: string;
+  dosage: string;
+  frequency: string;
+}
+
 // Vitals Recording Modal for pre-consultation
 interface VitalsModalProps {
   appointment: QueueItem;
@@ -367,9 +374,24 @@ interface VitalsModalProps {
   onSuccess: () => void;
 }
 
+// Helper to calculate age from date of birth
+const calculateAge = (dateOfBirth: string | undefined): number | null => {
+  if (!dateOfBirth) return null;
+  const birthDate = new Date(dateOfBirth);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+};
+
 function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalProps) {
   const [loading, setLoading] = useState(false);
   const [loadingExisting, setLoadingExisting] = useState(false);
+  const [loadingPatient, setLoadingPatient] = useState(false);
+  const [patientData, setPatientData] = useState<{ gender?: string; dateOfBirth?: string } | null>(null);
   const [vitals, setVitals] = useState({
     temperature: '',
     bloodPressureSys: '',
@@ -382,11 +404,56 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
     bloodSugar: '',
     painLevel: '',
     notes: '',
+    // New fields for pregnancy and medications
+    isPregnant: undefined as boolean | undefined,
+    expectedDueDate: '',
+    currentMedications: [] as CurrentMedication[],
+    currentTreatment: '',
+  });
+
+  // State for new medication input
+  const [newMedication, setNewMedication] = useState<CurrentMedication>({
+    name: '',
+    dosage: '',
+    frequency: '',
   });
 
   // State for AI risk assessment display
   const [riskAssessment, setRiskAssessment] = useState<any>(null);
   const [showRiskAssessment, setShowRiskAssessment] = useState(false);
+
+  // Calculate if pregnancy question should be shown
+  const patientAge = patientData?.dateOfBirth ? calculateAge(patientData.dateOfBirth) : null;
+  const showPregnancyQuestion =
+    patientData?.gender?.toUpperCase() === 'FEMALE' &&
+    patientAge !== null &&
+    patientAge >= 13 &&
+    patientAge <= 51;
+
+  // Fetch patient details for gender/DOB
+  useEffect(() => {
+    const fetchPatientData = async () => {
+      if (!appointment.patient?.id) return;
+
+      setLoadingPatient(true);
+      try {
+        const response = await patientApi.getById(appointment.patient.id);
+        const patient = response.data?.data;
+        if (patient) {
+          setPatientData({
+            gender: patient.gender,
+            dateOfBirth: patient.dateOfBirth,
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch patient data:', error);
+      } finally {
+        setLoadingPatient(false);
+      }
+    };
+
+    fetchPatientData();
+  }, [appointment.patient?.id]);
 
   // Fetch existing vitals to pre-populate the form when updating
   useEffect(() => {
@@ -410,6 +477,10 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
             bloodSugar: existingVitals.bloodSugar?.toString() || '',
             painLevel: existingVitals.painLevel?.toString() || '',
             notes: existingVitals.notes || '',
+            isPregnant: existingVitals.isPregnant,
+            expectedDueDate: existingVitals.expectedDueDate || '',
+            currentMedications: existingVitals.currentMedications || [],
+            currentTreatment: existingVitals.currentTreatment || '',
           });
         }
       } catch (error) {
@@ -425,6 +496,25 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setVitals((prev) => ({ ...prev, [name]: value }));
+  };
+
+  // Add medication to list
+  const addMedication = () => {
+    if (newMedication.name.trim()) {
+      setVitals({
+        ...vitals,
+        currentMedications: [...vitals.currentMedications, { ...newMedication }],
+      });
+      setNewMedication({ name: '', dosage: '', frequency: '' });
+    }
+  };
+
+  // Remove medication from list
+  const removeMedication = (index: number) => {
+    setVitals({
+      ...vitals,
+      currentMedications: vitals.currentMedications.filter((_, i) => i !== index),
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -443,6 +533,11 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
         bloodSugar: vitals.bloodSugar ? parseFloat(vitals.bloodSugar) : undefined,
         painLevel: vitals.painLevel ? parseInt(vitals.painLevel) : undefined,
         notes: vitals.notes || undefined,
+        // New pregnancy and medication fields
+        isPregnant: vitals.isPregnant,
+        expectedDueDate: vitals.expectedDueDate || undefined,
+        currentMedications: vitals.currentMedications.length > 0 ? vitals.currentMedications : undefined,
+        currentTreatment: vitals.currentTreatment || undefined,
       };
 
       const response = await opdApi.recordVitals(appointment.id, vitalsData);
@@ -529,7 +624,7 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+          <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[70vh] overflow-y-auto overflow-x-hidden">
             {/* Loading indicator when fetching existing vitals */}
             {loadingExisting && (
               <div className="flex items-center justify-center py-4 text-gray-500">
@@ -722,6 +817,157 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
                     className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
                   />
                 </div>
+              </div>
+            </div>
+
+            {/* Patient Details Section - Pregnancy, Medications, Treatment */}
+            <div className="p-4 bg-pink-50 rounded-xl border border-pink-200">
+              <h3 className="text-sm font-semibold text-pink-900 mb-4 flex items-center gap-2">
+                <span className="w-2 h-2 bg-pink-500 rounded-full" />
+                Patient Details
+              </h3>
+
+              {/* Loading indicator */}
+              {loadingPatient && (
+                <div className="flex items-center justify-center py-2 text-gray-500 text-sm">
+                  <ArrowPathIcon className="h-4 w-4 animate-spin mr-2" />
+                  Loading patient info...
+                </div>
+              )}
+
+              {/* Pregnancy Check - Female aged 13-51 only */}
+              {showPregnancyQuestion && (
+                <div className="mb-4">
+                  <label className="block text-xs font-medium text-gray-700 mb-2">
+                    Is the patient pregnant? <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex gap-3">
+                    <label className={clsx(
+                      'flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg border-2 transition-colors text-sm',
+                      vitals.isPregnant === true ? 'bg-pink-100 border-pink-500 text-pink-700' : 'bg-white border-gray-200 hover:border-gray-300'
+                    )}>
+                      <input
+                        type="radio"
+                        name="pregnancy"
+                        checked={vitals.isPregnant === true}
+                        onChange={() => setVitals({ ...vitals, isPregnant: true })}
+                        className="w-4 h-4 text-pink-600 focus:ring-pink-500"
+                      />
+                      <span className="font-medium">Yes</span>
+                    </label>
+                    <label className={clsx(
+                      'flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg border-2 transition-colors text-sm',
+                      vitals.isPregnant === false ? 'bg-green-100 border-green-500 text-green-700' : 'bg-white border-gray-200 hover:border-gray-300'
+                    )}>
+                      <input
+                        type="radio"
+                        name="pregnancy"
+                        checked={vitals.isPregnant === false}
+                        onChange={() => setVitals({ ...vitals, isPregnant: false, expectedDueDate: '' })}
+                        className="w-4 h-4 text-green-600 focus:ring-green-500"
+                      />
+                      <span className="font-medium">No</span>
+                    </label>
+                  </div>
+
+                  {/* Expected Due Date - shown only if pregnant */}
+                  {vitals.isPregnant === true && (
+                    <div className="mt-3">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Expected Due Date <span className="text-gray-400">(optional)</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={vitals.expectedDueDate}
+                        onChange={(e) => setVitals({ ...vitals, expectedDueDate: e.target.value })}
+                        className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500 text-sm"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Current Medications */}
+              <div className="mb-4">
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  Current Medications <span className="text-gray-400">(optional)</span>
+                </label>
+
+                {/* Medications List */}
+                {vitals.currentMedications.length > 0 && (
+                  <div className="mb-3 space-y-2">
+                    {vitals.currentMedications.map((med, index) => (
+                      <div key={index} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-gray-200">
+                        <div className="flex-1 text-sm">
+                          <span className="font-medium text-gray-900">{med.name}</span>
+                          {med.dosage && <span className="text-gray-600 ml-2">{med.dosage}</span>}
+                          {med.frequency && <span className="text-gray-500 ml-2">({med.frequency})</span>}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeMedication(index)}
+                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                        >
+                          <XMarkIcon className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add New Medication */}
+                <div className="flex gap-2 items-end flex-wrap">
+                  <div className="flex-1 min-w-[120px]">
+                    <input
+                      type="text"
+                      placeholder="Medication name"
+                      value={newMedication.name}
+                      onChange={(e) => setNewMedication({ ...newMedication, name: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500 text-sm"
+                    />
+                  </div>
+                  <div className="w-20">
+                    <input
+                      type="text"
+                      placeholder="Dosage"
+                      value={newMedication.dosage}
+                      onChange={(e) => setNewMedication({ ...newMedication, dosage: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500 text-sm"
+                    />
+                  </div>
+                  <div className="w-24">
+                    <input
+                      type="text"
+                      placeholder="Frequency"
+                      value={newMedication.frequency}
+                      onChange={(e) => setNewMedication({ ...newMedication, frequency: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500 text-sm"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addMedication}
+                    disabled={!newMedication.name.trim()}
+                    className="flex items-center gap-1 px-3 py-2 bg-pink-600 text-white rounded-lg text-sm font-medium hover:bg-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <PlusIcon className="h-4 w-4" />
+                    Add
+                  </button>
+                </div>
+              </div>
+
+              {/* Current Treatment */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Current Treatment / Ongoing Conditions <span className="text-gray-400">(optional)</span>
+                </label>
+                <textarea
+                  value={vitals.currentTreatment}
+                  onChange={(e) => setVitals({ ...vitals, currentTreatment: e.target.value })}
+                  placeholder="e.g., Undergoing chemotherapy, Dialysis 3x/week, Post-surgery recovery..."
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500 text-sm resize-none"
+                />
               </div>
             </div>
 
@@ -1047,7 +1293,7 @@ export default function OPD() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-x-hidden">
       {/* Glassmorphism Header with Gradient Background */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-cyan-500 to-blue-600 p-8 shadow-xl">
         {/* Floating Orbs */}
@@ -1338,7 +1584,7 @@ export default function OPD() {
           <div
             key={stat.label}
             className={clsx(
-              'relative rounded-2xl backdrop-blur-xl border border-white/50 p-5 shadow-lg overflow-hidden animate-fade-in',
+              'relative rounded-2xl backdrop-blur-xl border border-white/50 p-5 shadow-lg overflow-hidden animate-fade-in min-w-0',
               stat.bgColor
             )}
             style={{ animationDelay: `${index * 100}ms` }}

@@ -48,10 +48,18 @@ export default function PatientDetail() {
     );
   }
 
-  const age = Math.floor(
-    (new Date().getTime() - new Date(patient.dateOfBirth).getTime()) /
-      (365.25 * 24 * 60 * 60 * 1000)
-  );
+  // Calculate age safely with null check
+  const age = patient.dateOfBirth
+    ? Math.floor(
+        (new Date().getTime() - new Date(patient.dateOfBirth).getTime()) /
+          (365.25 * 24 * 60 * 60 * 1000)
+      )
+    : null;
+
+  // Format DOB for display
+  const formattedDOB = patient.dateOfBirth
+    ? format(new Date(patient.dateOfBirth), 'dd MMM yyyy')
+    : null;
 
   const tabs = [
     { name: 'Overview', icon: DocumentTextIcon },
@@ -86,12 +94,26 @@ export default function PatientDetail() {
               <h1 className="text-2xl font-bold text-gray-900">
                 {patient.firstName} {patient.lastName}
               </h1>
-              <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
+              <div className="flex items-center gap-4 mt-1 text-sm text-gray-500 flex-wrap">
                 <span className="font-mono">{patient.mrn}</span>
-                <span>|</span>
-                <span>{age} years old</span>
-                <span>|</span>
-                <span className="capitalize">{patient.gender.toLowerCase()}</span>
+                {age !== null && (
+                  <>
+                    <span>|</span>
+                    <span>{age} years old</span>
+                  </>
+                )}
+                {formattedDOB && (
+                  <>
+                    <span>|</span>
+                    <span>DOB: {formattedDOB}</span>
+                  </>
+                )}
+                {patient.gender && (
+                  <>
+                    <span>|</span>
+                    <span className="capitalize">{patient.gender.toLowerCase()}</span>
+                  </>
+                )}
                 {patient.bloodGroup && (
                   <>
                     <span>|</span>

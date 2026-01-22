@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   UserCircleIcon,
+  UserGroupIcon,
   BeakerIcon,
   DocumentTextIcon,
   ArrowLeftIcon,
@@ -157,6 +158,32 @@ const COMMON_SYMPTOMS = [
 
 const MEDICATION_ROUTES = ['oral', 'intravenous', 'intramuscular', 'subcutaneous', 'topical', 'inhalation', 'sublingual'];
 const FREQUENCIES = ['once daily', 'twice daily', 'three times daily', 'four times daily', 'every 4 hours', 'every 6 hours', 'every 8 hours', 'as needed'];
+
+const CONSULTANT_SPECIALTIES = [
+  'Cardiology',
+  'Neurology',
+  'Gastroenterology',
+  'Pulmonology',
+  'Endocrinology',
+  'Nephrology',
+  'Rheumatology',
+  'Oncology',
+  'Dermatology',
+  'Ophthalmology',
+  'ENT (Otolaryngology)',
+  'Orthopedics',
+  'Urology',
+  'Psychiatry',
+  'General Surgery',
+  'Pediatrics',
+  'Obstetrics & Gynecology',
+  'Infectious Disease',
+  'Hematology',
+  'Allergy & Immunology',
+  'Physical Medicine & Rehabilitation',
+  'Pain Management',
+  'Other',
+];
 
 // =============== Helper Functions ===============
 const calculateAge = (dob: string): number => {
@@ -400,6 +427,12 @@ export default function Consultation() {
   const [aiInsights, setAiInsights] = useState<AIInsight[]>([]);
   const [drugInteractions, setDrugInteractions] = useState<DrugInteraction[]>([]);
   const [recommendedTests, setRecommendedTests] = useState<string[]>([]);
+
+  // Consultant Referral State
+  const [needsConsultantReferral, setNeedsConsultantReferral] = useState(false);
+  const [consultantSpecialty, setConsultantSpecialty] = useState('');
+  const [referralReason, setReferralReason] = useState('');
+  const [referralUrgency, setReferralUrgency] = useState<'routine' | 'urgent' | 'emergency'>('routine');
 
   // Allergy Conflict State
   const [allergyConflicts, setAllergyConflicts] = useState<{medication: string; allergen: string}[]>([]);
@@ -1916,6 +1949,116 @@ export default function Consultation() {
           </div>
         </div>
       )}
+
+      {/* Consultant Referral Section */}
+      <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <UserGroupIcon className="h-5 w-5 text-indigo-500" />
+            Consultant Referral
+          </h3>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <span className="text-sm text-gray-600">Needs Referral</span>
+            <button
+              type="button"
+              onClick={() => setNeedsConsultantReferral(!needsConsultantReferral)}
+              className={clsx(
+                'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2',
+                needsConsultantReferral ? 'bg-indigo-600' : 'bg-gray-200'
+              )}
+            >
+              <span
+                className={clsx(
+                  'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                  needsConsultantReferral ? 'translate-x-5' : 'translate-x-0'
+                )}
+              />
+            </button>
+          </label>
+        </div>
+
+        {needsConsultantReferral && (
+          <div className="space-y-4 pt-4 border-t border-gray-100">
+            {/* Specialty Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Consultant Specialty <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={consultantSpecialty}
+                onChange={(e) => setConsultantSpecialty(e.target.value)}
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
+              >
+                <option value="">Select Specialty</option>
+                {CONSULTANT_SPECIALTIES.map((specialty) => (
+                  <option key={specialty} value={specialty}>{specialty}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Urgency Level */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Urgency Level
+              </label>
+              <div className="flex gap-3">
+                {[
+                  { value: 'routine', label: 'Routine', color: 'bg-green-100 border-green-300 text-green-700' },
+                  { value: 'urgent', label: 'Urgent', color: 'bg-amber-100 border-amber-300 text-amber-700' },
+                  { value: 'emergency', label: 'Emergency', color: 'bg-red-100 border-red-300 text-red-700' },
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setReferralUrgency(option.value as typeof referralUrgency)}
+                    className={clsx(
+                      'px-4 py-2 rounded-lg border-2 font-medium text-sm transition-all',
+                      referralUrgency === option.value
+                        ? option.color
+                        : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Referral Reason */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Reason for Referral
+              </label>
+              <textarea
+                value={referralReason}
+                onChange={(e) => setReferralReason(e.target.value)}
+                rows={3}
+                placeholder="Describe the reason for consultant referral..."
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 resize-none"
+              />
+            </div>
+
+            {/* Referral Summary */}
+            {consultantSpecialty && (
+              <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl">
+                <p className="text-sm text-indigo-800">
+                  <span className="font-semibold">Referral Summary:</span> Patient will be referred to{' '}
+                  <span className="font-medium">{consultantSpecialty}</span> with{' '}
+                  <span className={clsx(
+                    'font-medium',
+                    referralUrgency === 'routine' && 'text-green-700',
+                    referralUrgency === 'urgent' && 'text-amber-700',
+                    referralUrgency === 'emergency' && 'text-red-700'
+                  )}>
+                    {referralUrgency}
+                  </span>{' '}
+                  priority.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Insurance Coding Section */}
       {selectedDiagnoses.length > 0 && (
