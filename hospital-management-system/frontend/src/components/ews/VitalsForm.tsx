@@ -5,8 +5,10 @@ import {
   XMarkIcon,
   ExclamationTriangleIcon,
   ArrowPathIcon,
+  PlusIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
-import type { Patient, VitalsInput, NEWS2Result } from '../../hooks/useEarlyWarning';
+import type { Patient, VitalsInput, NEWS2Result, CurrentMedication } from '../../hooks/useEarlyWarning';
 import { useNEWS2Calculation } from '../../hooks/useEarlyWarning';
 
 interface VitalsFormProps {
@@ -34,6 +36,19 @@ const VITAL_RANGES = {
   heartRate: { min: 20, max: 250, normal: [51, 90], unit: 'bpm' },
 };
 
+// Helper to calculate age from date of birth
+const calculateAge = (dateOfBirth: string | undefined): number | null => {
+  if (!dateOfBirth) return null;
+  const birthDate = new Date(dateOfBirth);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+};
+
 export default function VitalsForm({
   patient,
   onSubmit,
@@ -43,6 +58,16 @@ export default function VitalsForm({
   error = null,
 }: VitalsFormProps) {
   const { calculateNEWS2, calculateQSOFA } = useNEWS2Calculation();
+
+  // Calculate patient age for pregnancy check
+  const patientAge = patient.age ?? calculateAge(patient.dateOfBirth);
+
+  // Check if pregnancy question should be shown (female, age 13-51)
+  const showPregnancyQuestion = useMemo(() => {
+    const isFemale = patient.gender?.toUpperCase() === 'FEMALE';
+    const isInAgeRange = patientAge !== null && patientAge >= 13 && patientAge <= 51;
+    return isFemale && isInAgeRange;
+  }, [patient.gender, patientAge]);
 
   const [vitals, setVitals] = useState<VitalsInput>(() => {
     // Pre-fill with latest vitals if available
@@ -60,6 +85,11 @@ export default function VitalsForm({
         diastolicBP: patient.latestVitals.diastolicBP || 80,
         heartRate: patient.latestVitals.heartRate || 75,
         consciousness: 'alert',
+        // Pre-fill patient details from last vitals
+        isPregnant: patient.latestVitals.isPregnant,
+        expectedDueDate: patient.latestVitals.expectedDueDate,
+        currentMedications: patient.latestVitals.currentMedications || [],
+        currentTreatment: patient.latestVitals.currentTreatment || '',
       };
     }
     return {
@@ -71,8 +101,22 @@ export default function VitalsForm({
       diastolicBP: 80,
       heartRate: 75,
       consciousness: 'alert',
+      isPregnant: undefined,
+      expectedDueDate: undefined,
+      currentMedications: [],
+      currentTreatment: '',
     };
   });
+
+  // State for new medication input
+  const [newMedication, setNewMedication] = useState<CurrentMedication>({
+    name: '',
+    dosage: '',
+    frequency: '',
+  });
+
+  // Validation state
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   // Calculate NEWS2 score in real-time
   const news2Result = useMemo<NEWS2Result>(() => {
@@ -88,8 +132,35 @@ export default function VitalsForm({
     });
   }, [vitals.respiratoryRate, vitals.systolicBP, vitals.consciousness, calculateQSOFA]);
 
+  // Add medication to list
+  const addMedication = () => {
+    if (newMedication.name.trim()) {
+      setVitals({
+        ...vitals,
+        currentMedications: [...(vitals.currentMedications || []), { ...newMedication }],
+      });
+      setNewMedication({ name: '', dosage: '', frequency: '' });
+    }
+  };
+
+  // Remove medication from list
+  const removeMedication = (index: number) => {
+    setVitals({
+      ...vitals,
+      currentMedications: (vitals.currentMedications || []).filter((_, i) => i !== index),
+    });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setValidationError(null);
+
+    // Validate pregnancy question if required
+    if (showPregnancyQuestion && vitals.isPregnant === undefined) {
+      setValidationError('Please answer the pregnancy question');
+      return;
+    }
+
     onSubmit(vitals);
   };
 
@@ -473,6 +544,152 @@ export default function VitalsForm({
                 <p className="text-sm font-semibold text-gray-700 mb-1">Clinical Response:</p>
                 <p className="text-sm text-gray-600">{news2Result.clinicalResponse}</p>
               </div>
+
+              {/* Patient Details Section */}
+              <div className="mt-6 p-4 bg-blue-50 rounded-xl border border-blue-200">
+                <h4 className="text-sm font-semibold text-blue-900 mb-4">Patient Details</h4>
+
+                {/* Pregnancy Check - Female aged 13-51 only */}
+                {showPregnancyQuestion && (
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Is the patient pregnant? <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex gap-4">
+                      <label className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg border-2 transition-colors ${
+                        vitals.isPregnant === true ? 'bg-pink-100 border-pink-500 text-pink-700' : 'bg-white border-gray-200 hover:border-gray-300'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="pregnancy"
+                          checked={vitals.isPregnant === true}
+                          onChange={() => setVitals({ ...vitals, isPregnant: true })}
+                          className="w-4 h-4 text-pink-600 focus:ring-pink-500"
+                        />
+                        <span className="font-medium">Yes</span>
+                      </label>
+                      <label className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg border-2 transition-colors ${
+                        vitals.isPregnant === false ? 'bg-green-100 border-green-500 text-green-700' : 'bg-white border-gray-200 hover:border-gray-300'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="pregnancy"
+                          checked={vitals.isPregnant === false}
+                          onChange={() => setVitals({ ...vitals, isPregnant: false, expectedDueDate: undefined })}
+                          className="w-4 h-4 text-green-600 focus:ring-green-500"
+                        />
+                        <span className="font-medium">No</span>
+                      </label>
+                    </div>
+
+                    {/* Expected Due Date - shown only if pregnant */}
+                    {vitals.isPregnant === true && (
+                      <div className="mt-3">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Expected Due Date <span className="text-gray-400">(optional)</span>
+                        </label>
+                        <input
+                          type="date"
+                          value={vitals.expectedDueDate || ''}
+                          onChange={(e) => setVitals({ ...vitals, expectedDueDate: e.target.value })}
+                          className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Current Medications */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Current Medications <span className="text-gray-400">(optional)</span>
+                  </label>
+
+                  {/* Medications List */}
+                  {vitals.currentMedications && vitals.currentMedications.length > 0 && (
+                    <div className="mb-3 space-y-2">
+                      {vitals.currentMedications.map((med, index) => (
+                        <div key={index} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-gray-200">
+                          <div className="flex-1">
+                            <span className="font-medium text-gray-900">{med.name}</span>
+                            {med.dosage && <span className="text-gray-600 ml-2">{med.dosage}</span>}
+                            {med.frequency && <span className="text-gray-500 ml-2">({med.frequency})</span>}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeMedication(index)}
+                            className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Add New Medication */}
+                  <div className="flex gap-2 items-end flex-wrap">
+                    <div className="flex-1 min-w-[150px]">
+                      <input
+                        type="text"
+                        placeholder="Medication name"
+                        value={newMedication.name}
+                        onChange={(e) => setNewMedication({ ...newMedication, name: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      />
+                    </div>
+                    <div className="w-24">
+                      <input
+                        type="text"
+                        placeholder="Dosage"
+                        value={newMedication.dosage}
+                        onChange={(e) => setNewMedication({ ...newMedication, dosage: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      />
+                    </div>
+                    <div className="w-28">
+                      <input
+                        type="text"
+                        placeholder="Frequency"
+                        value={newMedication.frequency}
+                        onChange={(e) => setNewMedication({ ...newMedication, frequency: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addMedication}
+                      disabled={!newMedication.name.trim()}
+                      className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <PlusIcon className="h-4 w-4" />
+                      Add
+                    </button>
+                  </div>
+                </div>
+
+                {/* Current Treatment */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Current Treatment / Ongoing Conditions <span className="text-gray-400">(optional)</span>
+                  </label>
+                  <textarea
+                    value={vitals.currentTreatment || ''}
+                    onChange={(e) => setVitals({ ...vitals, currentTreatment: e.target.value })}
+                    placeholder="e.g., Undergoing chemotherapy, Dialysis 3x/week, Post-surgery recovery..."
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm resize-none"
+                  />
+                </div>
+              </div>
+
+              {/* Validation Error */}
+              {validationError && (
+                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-red-700">
+                  <ExclamationTriangleIcon className="h-5 w-5" />
+                  <span className="text-sm font-medium">{validationError}</span>
+                </div>
+              )}
 
               {/* qSOFA Alert */}
               {qsofaScore >= 2 && (

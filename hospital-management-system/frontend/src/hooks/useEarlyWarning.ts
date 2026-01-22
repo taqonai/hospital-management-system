@@ -5,6 +5,12 @@ import toast from 'react-hot-toast';
 const API_BASE = 'http://localhost:3000/api/v1';
 
 // Types
+export interface CurrentMedication {
+  name: string;
+  dosage?: string;
+  frequency?: string;
+}
+
 export interface VitalsInput {
   respiratoryRate: number;
   oxygenSaturation: number;
@@ -14,6 +20,11 @@ export interface VitalsInput {
   diastolicBP: number;
   heartRate: number;
   consciousness: 'alert' | 'voice' | 'pain' | 'unresponsive';
+  // Patient details (filled during vital recording)
+  isPregnant?: boolean;
+  expectedDueDate?: string;
+  currentMedications?: CurrentMedication[];
+  currentTreatment?: string;
 }
 
 export interface NEWS2Result {
@@ -36,6 +47,7 @@ export interface Patient {
   bed: string;
   age?: number;
   gender?: string;
+  dateOfBirth?: string;
   news2Score: number;
   riskLevel: string;
   severity: string;
@@ -51,6 +63,11 @@ export interface Patient {
     diastolicBP?: number;
     heartRate?: number;
     temperature?: string;
+    // Patient details from last vital
+    isPregnant?: boolean;
+    expectedDueDate?: string;
+    currentMedications?: CurrentMedication[];
+    currentTreatment?: string;
   } | null;
   qsofaScore?: number;
   fallRisk?: 'low' | 'medium' | 'high';

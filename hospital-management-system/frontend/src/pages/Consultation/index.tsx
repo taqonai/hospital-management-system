@@ -57,6 +57,12 @@ interface Patient {
   medicalHistory?: Array<{ condition: string; diagnosedDate: string; status?: string }>;
 }
 
+interface CurrentMedication {
+  name: string;
+  dosage?: string;
+  frequency?: string;
+}
+
 interface Vitals {
   bloodPressureSys?: number;
   bloodPressureDia?: number;
@@ -68,6 +74,11 @@ interface Vitals {
   height?: number;
   painLevel?: number;
   consciousness?: string;
+  // Patient details from vital recording
+  isPregnant?: boolean;
+  expectedDueDate?: string;
+  currentMedications?: CurrentMedication[];
+  currentTreatment?: string;
 }
 
 interface NEWS2Result {
@@ -1087,6 +1098,55 @@ export default function Consultation() {
                   {h.condition}
                 </span>
               ))}
+            </div>
+          )}
+
+          {/* Pregnancy Status (highlighted if pregnant) */}
+          {bookingData?.vitals?.isPregnant === true && (
+            <div className="mt-4 p-3 bg-pink-500/30 backdrop-blur border border-pink-300/30 rounded-xl">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🤰</span>
+                <span className="font-medium">Patient is Pregnant</span>
+                {bookingData.vitals.expectedDueDate && (
+                  <span className="text-sm text-pink-100">
+                    (Due: {new Date(bookingData.vitals.expectedDueDate).toLocaleDateString()})
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Current Medications from Vital Recording */}
+          {bookingData?.vitals?.currentMedications && bookingData.vitals.currentMedications.length > 0 && (
+            <div className="mt-4 p-3 bg-amber-500/20 backdrop-blur border border-amber-300/30 rounded-xl">
+              <div className="flex items-start gap-2">
+                <span className="text-lg">💊</span>
+                <div>
+                  <span className="font-medium">Current Medications:</span>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {bookingData.vitals.currentMedications.map((med: CurrentMedication, i: number) => (
+                      <span key={i} className="px-2 py-1 bg-amber-200/30 rounded text-sm">
+                        {med.name}
+                        {med.dosage && ` ${med.dosage}`}
+                        {med.frequency && ` (${med.frequency})`}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Current Treatment */}
+          {bookingData?.vitals?.currentTreatment && (
+            <div className="mt-4 p-3 bg-cyan-500/20 backdrop-blur border border-cyan-300/30 rounded-xl">
+              <div className="flex items-start gap-2">
+                <span className="text-lg">🏥</span>
+                <div>
+                  <span className="font-medium">Ongoing Treatment:</span>
+                  <p className="text-sm mt-1 text-cyan-100">{bookingData.vitals.currentTreatment}</p>
+                </div>
+              </div>
             </div>
           )}
         </div>

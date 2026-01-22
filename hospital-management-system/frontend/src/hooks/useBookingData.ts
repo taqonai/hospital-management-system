@@ -68,6 +68,11 @@ export interface BookingTicketData {
     notes: string | null;
     recordedBy: string;
     recordedAt: string;
+    // Patient details from vital recording
+    isPregnant: boolean | null;
+    expectedDueDate: string | null;
+    currentMedications: Array<{ name: string; dosage?: string; frequency?: string }> | null;
+    currentTreatment: string | null;
   } | null;
   riskPrediction: {
     riskScore: number;

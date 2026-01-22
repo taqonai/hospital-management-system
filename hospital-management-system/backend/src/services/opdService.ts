@@ -16,6 +16,11 @@ interface VitalsData {
   bloodSugar?: number;
   painLevel?: number;
   notes?: string;
+  // Patient details (filled during vital recording)
+  isPregnant?: boolean;
+  expectedDueDate?: string;
+  currentMedications?: Array<{ name: string; dosage?: string; frequency?: string }>;
+  currentTreatment?: string;
 }
 
 // Helper function to generate clinical response based on NEWS2 score
@@ -381,6 +386,11 @@ export class OPDService {
         painLevel: vitalsData.painLevel || null,
         notes: vitalsData.notes || null,
         recordedBy,
+        // Patient details
+        isPregnant: vitalsData.isPregnant ?? null,
+        expectedDueDate: vitalsData.expectedDueDate ? new Date(vitalsData.expectedDueDate) : null,
+        currentMedications: vitalsData.currentMedications || null,
+        currentTreatment: vitalsData.currentTreatment || null,
       },
     });
 

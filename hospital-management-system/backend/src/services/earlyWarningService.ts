@@ -16,6 +16,11 @@ interface VitalsInput {
   heartRate?: number;
   consciousness?: string;
   gcs?: number;
+  // Patient details (filled during vital recording)
+  isPregnant?: boolean;
+  expectedDueDate?: string;
+  currentMedications?: Array<{ name: string; dosage?: string; frequency?: string }>;
+  currentTreatment?: string;
 }
 
 interface PatientData {
@@ -758,6 +763,11 @@ export class EarlyWarningService {
         heartRate: vitalsData.heartRate,
         temperature: vitalsData.temperature,
         notes: vitalsData.consciousness ? `Consciousness: ${vitalsData.consciousness}` : null,
+        // Patient details
+        isPregnant: vitalsData.isPregnant,
+        expectedDueDate: vitalsData.expectedDueDate ? new Date(vitalsData.expectedDueDate) : null,
+        currentMedications: vitalsData.currentMedications || null,
+        currentTreatment: vitalsData.currentTreatment || null,
       },
     });
 

@@ -589,6 +589,12 @@ model Vital {
   recordedBy        String
   recordedAt        DateTime @default(now())
 
+  // Patient details during vital recording (nurse fills these)
+  isPregnant          Boolean?   // For females aged 13-51 only
+  expectedDueDate     DateTime?  // If pregnant, optional due date
+  currentMedications  Json?      // Array of {name, dosage, frequency}
+  currentTreatment    String?    // Ongoing treatment details
+
   patient     Patient      @relation(fields: [patientId], references: [id])
   appointment Appointment? @relation(fields: [appointmentId], references: [id])
 
