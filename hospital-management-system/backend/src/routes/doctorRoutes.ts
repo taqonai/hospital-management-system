@@ -40,6 +40,20 @@ router.post(
   })
 );
 
+// Get current doctor (for logged-in doctor)
+router.get(
+  '/me',
+  authenticate,
+  authorize('DOCTOR'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const doctor = await doctorService.findByUserId(req.user!.userId, req.user!.hospitalId);
+    if (!doctor) {
+      return res.status(404).json({ success: false, message: 'Doctor profile not found' });
+    }
+    sendSuccess(res, doctor);
+  })
+);
+
 // Get doctor by ID
 router.get(
   '/:id',

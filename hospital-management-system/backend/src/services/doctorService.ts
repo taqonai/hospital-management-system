@@ -322,6 +322,43 @@ export class DoctorService {
     return doctor;
   }
 
+  async findByUserId(userId: string, hospitalId: string) {
+    const doctor = await prisma.doctor.findFirst({
+      where: {
+        userId,
+        user: { hospitalId },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            avatar: true,
+            isActive: true,
+            lastLogin: true,
+          },
+        },
+        department: true,
+        specializationRef: true,
+        schedules: {
+          orderBy: { dayOfWeek: 'asc' },
+        },
+        _count: {
+          select: {
+            appointments: true,
+            consultations: true,
+            surgeries: true,
+          },
+        },
+      },
+    });
+
+    return doctor;
+  }
+
   async update(id: string, hospitalId: string, data: Partial<CreateDoctorDto> & { specializationId?: string }) {
     const doctor = await prisma.doctor.findFirst({
       where: { id, user: { hospitalId } },
