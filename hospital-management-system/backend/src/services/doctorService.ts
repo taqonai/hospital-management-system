@@ -5,6 +5,8 @@ import { NotFoundError, ConflictError, AppError, ValidationError } from '../midd
 import { DayOfWeek, AbsenceStatus, AbsenceType } from '@prisma/client';
 import { slotService } from './slotService';
 import { notificationService } from './notificationService';
+import { sendEmail } from './emailService';
+import logger from '../utils/logger';
 
 export interface CreateAbsenceDto {
   startDate: string;
@@ -905,10 +907,76 @@ export class DoctorService {
             console.error('Failed to create notification for patient:', appointment.patient.id, error);
           }
         }
+
+        // Send email notification to patient if they have an email address
+        if (appointment.patient?.email) {
+          try {
+            const patientName = `${appointment.patient.firstName} ${appointment.patient.lastName}`;
+            const appointmentDate = new Date(appointment.appointmentDate).toLocaleDateString('en-US', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            });
+
+            const emailSubject = isEmergency
+              ? `URGENT: Your Appointment Has Been Cancelled - ${appointmentDate}`
+              : `Important: Doctor Unavailability Notice - ${appointmentDate}`;
+
+            const emailHtml = isEmergency
+              ? `
+                <h2>Appointment Cancellation Notice</h2>
+                <p>Dear ${patientName},</p>
+                <p>We regret to inform you that your appointment has been <strong>cancelled</strong> due to an emergency situation.</p>
+                <div class="info-box">
+                  <table>
+                    <tr><td class="info-label">Doctor:</td><td class="info-value">${doctorName}</td></tr>
+                    <tr><td class="info-label">Original Date:</td><td class="info-value">${appointmentDate}</td></tr>
+                    <tr><td class="info-label">Original Time:</td><td class="info-value">${appointment.startTime}</td></tr>
+                    <tr><td class="info-label">Reason:</td><td class="info-value">Doctor Emergency</td></tr>
+                  </table>
+                </div>
+                <div class="warning">
+                  <strong>Action Required:</strong> Please rebook your appointment at your earliest convenience through the patient portal or by contacting our reception.
+                </div>
+                <p>We sincerely apologize for any inconvenience this may cause.</p>
+                <p>If you have any urgent medical concerns, please contact us immediately or visit our emergency department.</p>
+              `
+              : `
+                <h2>Doctor Unavailability Notice</h2>
+                <p>Dear ${patientName},</p>
+                <p>We are writing to inform you that your scheduled appointment may be affected by a doctor unavailability.</p>
+                <div class="info-box">
+                  <table>
+                    <tr><td class="info-label">Doctor:</td><td class="info-value">${doctorName}</td></tr>
+                    <tr><td class="info-label">Appointment Date:</td><td class="info-value">${appointmentDate}</td></tr>
+                    <tr><td class="info-label">Appointment Time:</td><td class="info-value">${appointment.startTime}</td></tr>
+                    <tr><td class="info-label">Reason:</td><td class="info-value">${data.absenceType || 'Doctor Leave'}</td></tr>
+                  </table>
+                </div>
+                <p>Please reschedule your appointment to an alternative date through the patient portal or by contacting our reception.</p>
+                <p>We apologize for any inconvenience caused.</p>
+              `;
+
+            const emailResult = await sendEmail({
+              to: appointment.patient.email,
+              subject: emailSubject,
+              html: emailHtml,
+            });
+
+            if (emailResult.success) {
+              logger.info(`[ABSENCE] Email sent to ${appointment.patient.email} for ${isEmergency ? 'cancelled' : 'affected'} appointment ${appointment.id}`);
+            } else {
+              logger.warn(`[ABSENCE] Failed to send email to ${appointment.patient.email}: ${emailResult.error}`);
+            }
+          } catch (emailError) {
+            logger.error(`[ABSENCE] Error sending email to patient ${appointment.patient.id}:`, emailError);
+          }
+        }
       }
     }
 
-    console.log(`[ABSENCE] Created ${isEmergency ? 'EMERGENCY' : 'regular'} absence for doctor ${doctorId}. Affected: ${affectedAppointments.length}, Cancelled: ${cancelledAppointments.length}, Notified: ${notifiedPatients.length}`);
+    logger.info(`[ABSENCE] Created ${isEmergency ? 'EMERGENCY' : 'regular'} absence for doctor ${doctorId}. Affected: ${affectedAppointments.length}, Cancelled: ${cancelledAppointments.length}, Notified: ${notifiedPatients.length}`);
 
     return {
       ...absence,

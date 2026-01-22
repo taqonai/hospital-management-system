@@ -123,8 +123,25 @@ export default function AppointmentForm() {
     enabled: !!formData.doctorId && !!formData.appointmentDate,
   });
 
-  // Extract slots from response
-  const slotsData = slotsResponse?.slots || [];
+  // Helper to check if a time slot has passed (for today only)
+  const isSlotPast = (slotTime: string, selectedDate: string): boolean => {
+    const today = format(new Date(), 'yyyy-MM-dd');
+    if (selectedDate !== today) return false;
+
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const [hours, mins] = slotTime.split(':').map(Number);
+    const slotMinutes = hours * 60 + mins;
+
+    // Slot is past if it starts within 15 minutes or has already passed
+    return slotMinutes < currentMinutes + 15;
+  };
+
+  // Extract slots from response and filter past slots for today
+  const rawSlots = slotsResponse?.slots || [];
+  const slotsData = rawSlots.filter((slot: Slot) =>
+    !isSlotPast(slot.startTime, formData.appointmentDate)
+  );
 
   // Fetch appointment data if editing
   const { data: appointmentData, isLoading: loadingAppointment } = useQuery({
