@@ -519,6 +519,55 @@ export class HRService {
     });
   }
 
+  // Get employee by user ID (for self-service)
+  async getEmployeeByUserId(userId: string, hospitalId: string) {
+    return prisma.employee.findFirst({
+      where: { oderId: userId, hospitalId },
+      include: {
+        shift: true,
+      },
+    });
+  }
+
+  // Withdraw pending leave request (self-service)
+  async withdrawLeaveRequest(requestId: string, employeeId: string) {
+    const request = await prisma.leaveRequest.findUnique({
+      where: { id: requestId },
+    });
+
+    if (!request) throw new NotFoundError('Leave request not found');
+
+    if (request.employeeId !== employeeId) {
+      throw new AppError('You can only withdraw your own leave requests');
+    }
+
+    if (request.status !== 'PENDING') {
+      throw new AppError('Only pending leave requests can be withdrawn');
+    }
+
+    const currentYear = new Date().getFullYear();
+
+    // Restore pending balance
+    await prisma.leaveBalance.update({
+      where: {
+        employeeId_leaveTypeId_year: {
+          employeeId: request.employeeId,
+          leaveTypeId: request.leaveTypeId,
+          year: currentYear,
+        },
+      },
+      data: {
+        pending: { decrement: Number(request.days) },
+      },
+    });
+
+    return prisma.leaveRequest.update({
+      where: { id: requestId },
+      data: { status: 'WITHDRAWN' },
+      include: { leaveType: true, employee: true },
+    });
+  }
+
   // ==================== PAYROLL ====================
 
   // Generate payroll for a month

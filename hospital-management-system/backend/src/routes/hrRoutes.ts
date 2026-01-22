@@ -292,6 +292,78 @@ router.post(
   })
 );
 
+// ==================== EMPLOYEE SELF-SERVICE LEAVE ====================
+
+// Get current user's employee record
+router.get(
+  '/leave/my-employee',
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const employee = await hrService.getEmployeeByUserId(
+      req.user!.userId,
+      req.user!.hospitalId
+    );
+    sendSuccess(res, employee);
+  })
+);
+
+// Get current user's leave balances
+router.get(
+  '/leave/my-balance',
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const employee = await hrService.getEmployeeByUserId(
+      req.user!.userId,
+      req.user!.hospitalId
+    );
+    if (!employee) {
+      return sendSuccess(res, { balances: [], message: 'No employee record found' });
+    }
+    const year = parseInt(req.query.year as string) || new Date().getFullYear();
+    const balances = await hrService.getLeaveBalances(employee.id, year);
+    sendSuccess(res, { employee, balances });
+  })
+);
+
+// Get current user's leave requests
+router.get(
+  '/leave/my-requests',
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const employee = await hrService.getEmployeeByUserId(
+      req.user!.userId,
+      req.user!.hospitalId
+    );
+    if (!employee) {
+      return sendSuccess(res, { requests: [], message: 'No employee record found' });
+    }
+    const result = await hrService.getLeaveRequests({
+      hospitalId: req.user!.hospitalId,
+      employeeId: employee.id,
+      status: req.query.status as string,
+      page: parseInt(req.query.page as string) || 1,
+      limit: parseInt(req.query.limit as string) || 20,
+    });
+    sendSuccess(res, result);
+  })
+);
+
+// Withdraw own pending leave request
+router.patch(
+  '/leave/:id/withdraw',
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const employee = await hrService.getEmployeeByUserId(
+      req.user!.userId,
+      req.user!.hospitalId
+    );
+    if (!employee) {
+      throw new Error('No employee record found');
+    }
+    const leaveRequest = await hrService.withdrawLeaveRequest(
+      req.params.id,
+      employee.id
+    );
+    sendSuccess(res, leaveRequest, 'Leave request withdrawn successfully');
+  })
+);
+
 // ==================== DASHBOARD ====================
 
 // Get HR dashboard stats

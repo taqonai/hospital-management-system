@@ -855,6 +855,14 @@ export const hrApi = {
     api.post('/hr/shifts/assign', { employeeId, shiftId }),
   // Dashboard
   getDashboard: () => api.get('/hr/dashboard'),
+  // Employee Self-Service Leave
+  getMyEmployee: () => api.get('/hr/leave/my-employee'),
+  getMyLeaveBalance: (year?: number) =>
+    api.get('/hr/leave/my-balance', { params: { year } }),
+  getMyLeaveRequests: (params?: any) =>
+    api.get('/hr/leave/my-requests', { params }),
+  withdrawLeaveRequest: (id: string) =>
+    api.patch(`/hr/leave/${id}/withdraw`),
 };
 
 // Housekeeping APIs

@@ -32,6 +32,7 @@ import Radiology from './pages/Radiology';
 import Surgery from './pages/Surgery';
 import Billing from './pages/Billing';
 import HR from './pages/HR';
+import EmployeeLeave from './pages/EmployeeLeave';
 import Housekeeping from './pages/Housekeeping';
 import Dietary from './pages/Dietary';
 
@@ -211,6 +212,7 @@ function App() {
         <Route path="/surgery" element={<Surgery />} />
         <Route path="/billing" element={<Billing />} />
         <Route path="/hr" element={<HR />} />
+        <Route path="/my-leave" element={<EmployeeLeave />} />
         <Route path="/housekeeping" element={<Housekeeping />} />
         <Route path="/dietary" element={<Dietary />} />
 

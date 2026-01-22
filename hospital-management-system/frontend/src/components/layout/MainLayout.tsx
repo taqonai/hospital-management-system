@@ -134,6 +134,8 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT'] },
       { name: 'HR', href: '/hr', icon: BriefcaseIcon, color: 'from-slate-500 to-slate-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'HR_MANAGER', 'HR_STAFF'] },
+      { name: 'My Leave', href: '/my-leave', icon: CalendarDaysIcon, color: 'from-teal-500 to-teal-600',
+        roles: ['NURSE', 'LAB_TECHNICIAN', 'PHARMACIST', 'RADIOLOGIST', 'ACCOUNTANT', 'HR_STAFF', 'HOUSEKEEPING_STAFF', 'MAINTENANCE_STAFF', 'SECURITY_STAFF', 'DIETARY_STAFF', 'RECEPTIONIST'] },
       { name: 'Housekeeping', href: '/housekeeping', icon: HomeModernIcon, color: 'from-amber-500 to-amber-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF'] },
       { name: 'Queue', href: '/queue', icon: QueueListIcon, color: 'from-indigo-500 to-indigo-600',
