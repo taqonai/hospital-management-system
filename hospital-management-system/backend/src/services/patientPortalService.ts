@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { NotFoundError, AppError } from '../middleware/errorHandler';
 import { LabOrderStatus, AppointmentType } from '@prisma/client';
+import { getTodayDateUAE } from '../utils/timezone';
 
 /**
  * Patient Portal Service
@@ -28,9 +29,8 @@ export class PatientPortalService {
       throw new NotFoundError('Patient not found');
     }
 
-    // Normalize to start of day for date comparisons (matches getAppointments logic)
-    const startOfToday = new Date();
-    startOfToday.setUTCHours(0, 0, 0, 0);
+    // Normalize to start of day for date comparisons (UAE timezone)
+    const startOfToday = getTodayDateUAE();
 
     // Define upcoming appointments filter
     const upcomingFilter = {
@@ -126,10 +126,8 @@ export class PatientPortalService {
 
     const where: any = { patientId, hospitalId };
 
-    // Normalize to start of day for date comparisons
-    // Appointments are stored with date at 00:00:00 UTC
-    const startOfToday = new Date();
-    startOfToday.setUTCHours(0, 0, 0, 0);
+    // Normalize to start of day for date comparisons (UAE timezone)
+    const startOfToday = getTodayDateUAE();
 
     if (filters.type === 'upcoming') {
       // Include today and future appointments
@@ -296,7 +294,7 @@ export class PatientPortalService {
         where: {
           patientId,
           hospitalId,
-          appointmentDate: { gte: new Date() },
+          appointmentDate: { gte: getTodayDateUAE() },
           status: { in: ['SCHEDULED', 'CONFIRMED'] },
         },
       });
@@ -858,7 +856,7 @@ export class PatientPortalService {
       where: {
         patientId,
         status: { in: ['SCHEDULED', 'CONFIRMED'] },
-        appointmentDate: { gte: new Date() },
+        appointmentDate: { gte: getTodayDateUAE() },
       },
     });
 

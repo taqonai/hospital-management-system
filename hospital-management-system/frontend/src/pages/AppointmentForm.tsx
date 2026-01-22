@@ -14,6 +14,7 @@ import { appointmentApi, patientApi, doctorApi, slotApi } from '../services/api'
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { ExclamationCircleIcon } from '@heroicons/react/24/outline';
+import { isSlotPastInUAE, getTodayInUAE } from '../utils/timezone';
 
 interface AppointmentFormData {
   patientId: string;
@@ -123,18 +124,9 @@ export default function AppointmentForm() {
     enabled: !!formData.doctorId && !!formData.appointmentDate,
   });
 
-  // Helper to check if a time slot has passed (for today only)
+  // Helper to check if a time slot has passed (for today only, UAE timezone)
   const isSlotPast = (slotTime: string, selectedDate: string): boolean => {
-    const today = format(new Date(), 'yyyy-MM-dd');
-    if (selectedDate !== today) return false;
-
-    const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-    const [hours, mins] = slotTime.split(':').map(Number);
-    const slotMinutes = hours * 60 + mins;
-
-    // Slot is past if it starts within 15 minutes or has already passed
-    return slotMinutes < currentMinutes + 15;
+    return isSlotPastInUAE(slotTime, selectedDate, 15);
   };
 
   // Extract slots from response and filter past slots for today

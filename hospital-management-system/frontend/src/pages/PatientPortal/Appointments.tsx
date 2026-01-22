@@ -31,6 +31,7 @@ import {
 import { patientPortalApi } from '../../services/api';
 import { CurrencyDisplay } from '../../components/common';
 import toast from 'react-hot-toast';
+import { isSlotPastInUAE, getTodayInUAE } from '../../utils/timezone';
 
 interface Appointment {
   id: string;
@@ -1399,7 +1400,13 @@ export default function Appointments() {
                               </div>
                             ) : (
                               <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-[200px] overflow-y-auto">
-                                {(availableSlots || DEFAULT_TIME_SLOTS.map(t => ({ time: t, available: true }))).map(
+                                {(availableSlots || DEFAULT_TIME_SLOTS.map(t => ({ time: t, available: true })))
+                                  .filter((slot: TimeSlot | string) => {
+                                    // Filter out past slots for today (UAE timezone)
+                                    const time = typeof slot === 'string' ? slot : slot.time;
+                                    return !isSlotPastInUAE(time, selectedDate, 15);
+                                  })
+                                  .map(
                                   (slot: TimeSlot | string) => {
                                     const time = typeof slot === 'string' ? slot : slot.time;
                                     const isAvailable = typeof slot === 'string' ? true : slot.available;

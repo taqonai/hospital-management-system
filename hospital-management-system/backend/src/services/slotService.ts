@@ -2,6 +2,13 @@ import prisma from '../config/database';
 import { NotFoundError, AppError, ValidationError } from '../middleware/errorHandler';
 import { DayOfWeek } from '@prisma/client';
 import { holidayService } from './holidayService';
+import {
+  getCurrentTimeMinutesUAE,
+  getTodayDateUAE,
+  getTodayInUAE,
+  isTodayInUAE,
+  isDateInPastUAE,
+} from '../utils/timezone';
 
 // Map JavaScript Date.getDay() (0=Sunday, 6=Saturday) to DayOfWeek enum
 const dayIndexToEnum: Record<number, DayOfWeek> = {
@@ -113,8 +120,8 @@ export class SlotService {
       return 0; // No schedules defined
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Use UAE timezone for "today"
+    const today = getTodayDateUAE();
 
     const endDate = new Date(today);
     endDate.setDate(endDate.getDate() + daysAhead);
@@ -243,8 +250,8 @@ export class SlotService {
    * Get all future available slots for a doctor
    */
   async getAvailableSlotsForDoctor(doctorId: string, hospitalId: string) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Use UAE timezone for "today"
+    const today = getTodayDateUAE();
 
     const slots = await prisma.doctorSlot.findMany({
       where: {
@@ -274,21 +281,17 @@ export class SlotService {
   }
 
   /**
-   * Get current time in minutes since midnight
+   * Get current time in minutes since midnight (UAE timezone)
    */
   private getCurrentTimeMinutes(): number {
-    const now = new Date();
-    return now.getHours() * 60 + now.getMinutes();
+    return getCurrentTimeMinutesUAE();
   }
 
   /**
-   * Check if a date is today
+   * Check if a date is today (UAE timezone)
    */
   private isToday(date: Date): boolean {
-    const today = new Date();
-    return date.getFullYear() === today.getFullYear() &&
-           date.getMonth() === today.getMonth() &&
-           date.getDate() === today.getDate();
+    return isTodayInUAE(date);
   }
 
   /**
@@ -306,11 +309,12 @@ export class SlotService {
     const slotDate = new Date(date);
     slotDate.setHours(0, 0, 0, 0);
 
-    // Check if the date is not in the past
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Check if the date is not in the past (UAE timezone)
+    const today = getTodayDateUAE();
+    const todayStr = getTodayInUAE();
+    const slotDateStr = slotDate.toISOString().split('T')[0];
 
-    if (slotDate < today) {
+    if (slotDateStr < todayStr) {
       return { slots: [], unavailableReason: 'past_date', message: 'Cannot book appointments in the past' };
     }
 
@@ -411,8 +415,9 @@ export class SlotService {
       }
     }
 
-    // For today's date, filter out past time slots
-    if (this.isToday(slotDate)) {
+    // For today's date (UAE timezone), filter out past time slots
+    const requestedDateStr = slotDate.toISOString().split('T')[0];
+    if (requestedDateStr === todayStr) {
       const currentMinutes = this.getCurrentTimeMinutes();
       // Add 15 minute buffer - don't show slots that start in less than 15 mins
       const bufferMinutes = currentMinutes + 15;
@@ -516,11 +521,12 @@ export class SlotService {
     const normalizedDate = new Date(slotDate);
     normalizedDate.setHours(0, 0, 0, 0);
 
-    // Check if the date is not in the past
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Check if the date is not in the past (UAE timezone)
+    const today = getTodayDateUAE();
+    const todayStr = getTodayInUAE();
+    const normalizedDateStr = normalizedDate.toISOString().split('T')[0];
 
-    if (normalizedDate < today) {
+    if (normalizedDateStr < todayStr) {
       throw new AppError('Cannot book appointments in the past', 400);
     }
 
@@ -531,8 +537,8 @@ export class SlotService {
       throw new AppError(`Cannot book appointments more than ${MAX_ADVANCE_BOOKING_DAYS} days in advance`, 400);
     }
 
-    // For today, check if the time slot has already passed
-    if (this.isToday(normalizedDate)) {
+    // For today (UAE timezone), check if the time slot has already passed
+    if (normalizedDateStr === todayStr) {
       const slotStartMinutes = this.parseTime(startTime);
       const currentMinutes = this.getCurrentTimeMinutes();
       // Add buffer time
@@ -703,8 +709,8 @@ export class SlotService {
     hospitalId: string,
     fromDate?: Date
   ): Promise<number> {
-    const startDate = fromDate || new Date();
-    startDate.setHours(0, 0, 0, 0);
+    // Use UAE timezone for default start date
+    const startDate = fromDate || getTodayDateUAE();
 
     // Delete future unbooked slots
     await prisma.doctorSlot.deleteMany({
