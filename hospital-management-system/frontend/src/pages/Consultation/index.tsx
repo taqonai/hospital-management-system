@@ -279,9 +279,9 @@ export default function Consultation() {
     },
   });
 
-  // Voice-to-text for Prescription and Clinical Notes
+  // Voice-to-text for Prescription, Clinical Notes, and Referral Reason
   const [activeVoiceField, setActiveVoiceField] = useState<{
-    type: 'prescription' | 'clinicalNotes';
+    type: 'prescription' | 'clinicalNotes' | 'referralReason';
     prescriptionId?: string;
     field?: 'medication' | 'dosage' | 'instructions';
   } | null>(null);
@@ -316,6 +316,12 @@ export default function Consultation() {
             const separator = prev.trim() ? ' ' : '';
             return prev + separator + transcript;
           });
+        } else if (activeVoiceField.type === 'referralReason') {
+          // Update referral reason
+          setReferralReason((prev) => {
+            const separator = prev.trim() ? ' ' : '';
+            return prev + separator + transcript;
+          });
         }
         toast.success('Voice transcription complete');
       }
@@ -339,6 +345,12 @@ export default function Consultation() {
   // Start voice input for clinical notes
   const startClinicalNotesVoice = useCallback(async () => {
     setActiveVoiceField({ type: 'clinicalNotes' });
+    await startFieldRecording();
+  }, [startFieldRecording]);
+
+  // Start voice input for referral reason
+  const startReferralReasonVoice = useCallback(async () => {
+    setActiveVoiceField({ type: 'referralReason' });
     await startFieldRecording();
   }, [startFieldRecording]);
 
@@ -382,6 +394,10 @@ export default function Consultation() {
   // Check if clinical notes is recording
   const isClinicalNotesRecording = isRecordingField && activeVoiceField?.type === 'clinicalNotes';
   const isClinicalNotesProcessing = isProcessingField && activeVoiceField?.type === 'clinicalNotes';
+
+  // Check if referral reason is recording
+  const isReferralReasonRecording = isRecordingField && activeVoiceField?.type === 'referralReason';
+  const isReferralReasonProcessing = isProcessingField && activeVoiceField?.type === 'referralReason';
 
   const [selectedDiagnoses, setSelectedDiagnoses] = useState<Diagnosis[]>([]);
   // Insurance Coding State
@@ -1088,12 +1104,6 @@ export default function Consultation() {
               >
                 <ClockIcon className="w-4 h-4" />
                 Past Visits
-              </button>
-              <button
-                onClick={() => setSelectedPatientId(null)}
-                className="px-3 py-1 bg-white/20 rounded-lg text-sm hover:bg-white/30 transition-colors"
-              >
-                Change
               </button>
             </div>
           </div>
@@ -2028,14 +2038,66 @@ export default function Consultation() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Reason for Referral
+                {whisperAvailable === true && !isReferralReasonRecording && !isReferralReasonProcessing && (
+                  <span className="ml-2 text-xs text-indigo-500 flex items-center gap-1 inline-flex">
+                    <MicrophoneIcon className="h-3 w-3" />
+                    Voice enabled
+                  </span>
+                )}
               </label>
-              <textarea
-                value={referralReason}
-                onChange={(e) => setReferralReason(e.target.value)}
-                rows={3}
-                placeholder="Describe the reason for consultant referral..."
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 resize-none"
-              />
+              <div className="relative">
+                <textarea
+                  value={referralReason}
+                  onChange={(e) => setReferralReason(e.target.value)}
+                  rows={3}
+                  placeholder="Describe the reason for consultant referral..."
+                  className={clsx(
+                    "w-full rounded-xl border bg-white px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 resize-none pr-12",
+                    isReferralReasonRecording
+                      ? "border-red-400 bg-red-50"
+                      : "border-gray-300"
+                  )}
+                />
+                {/* Mic button */}
+                {!isReferralReasonRecording && !isReferralReasonProcessing && (
+                  <button
+                    type="button"
+                    onClick={startReferralReasonVoice}
+                    disabled={whisperAvailable === false || isRecordingField || isProcessingField || isRecordingChiefComplaint || isProcessingVoice}
+                    className={clsx(
+                      "absolute right-3 top-3 p-2 rounded-lg transition-colors",
+                      whisperAvailable === false || isRecordingField || isProcessingField || isRecordingChiefComplaint || isProcessingVoice
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        : "bg-indigo-500 text-white hover:bg-indigo-600"
+                    )}
+                    title={whisperAvailable === false ? "Voice input unavailable" : "Voice input for referral reason"}
+                  >
+                    <MicrophoneIcon className="h-5 w-5" />
+                  </button>
+                )}
+                {/* Recording indicator */}
+                {isReferralReasonRecording && (
+                  <div className="absolute right-3 top-3 flex items-center gap-2">
+                    <span className="flex items-center gap-1 text-red-600 text-sm">
+                      <span className="animate-pulse">●</span> Recording...
+                    </span>
+                    <button
+                      type="button"
+                      onClick={stopVoiceInput}
+                      className="p-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
+                    >
+                      Stop
+                    </button>
+                  </div>
+                )}
+                {/* Processing indicator */}
+                {isReferralReasonProcessing && (
+                  <div className="absolute right-3 top-3 flex items-center gap-2 text-indigo-600 text-sm">
+                    <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                    Transcribing...
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Referral Summary */}

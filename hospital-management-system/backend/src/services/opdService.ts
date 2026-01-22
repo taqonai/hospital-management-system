@@ -730,11 +730,16 @@ export class OPDService {
         weight: appointment.vitals[0].weight,
         height: appointment.vitals[0].height,
         bmi: appointment.vitals[0].bmi,
-        bloodSugar: appointment.vitals[0].bloodGlucose,
+        bloodSugar: (appointment.vitals[0] as any).bloodGlucose,
         painLevel: appointment.vitals[0].painLevel,
-        notes: appointment.vitals[0].notes,
+        notes: (appointment.vitals[0] as any).notes,
         recordedAt: appointment.vitals[0].recordedAt,
         recordedBy: vitalsRecordedByUser,
+        // Pregnancy and medications data from nurse vitals recording
+        isPregnant: (appointment.vitals[0] as any).isPregnant,
+        expectedDueDate: (appointment.vitals[0] as any).expectedDueDate,
+        currentMedications: (appointment.vitals[0] as any).currentMedications,
+        currentTreatment: (appointment.vitals[0] as any).currentTreatment,
       } : null,
       riskPrediction: riskPrediction ? {
         riskScore: riskPrediction.riskScore,
