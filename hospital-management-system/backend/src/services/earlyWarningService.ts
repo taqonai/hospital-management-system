@@ -333,25 +333,32 @@ export class EarlyWarningService {
     let severity: string;
     let timeToReassessment: string;
 
+    // NEWS2 Risk Classification (per NHS guidelines):
+    // - Score 0-4: LOW risk (routine monitoring)
+    // - Score 5-6 OR single parameter = 3: MEDIUM risk (urgent response)
+    // - Score >= 7: HIGH/CRITICAL risk (emergency response)
     if (totalScore >= 7) {
       riskLevel = 'CRITICAL';
       severity = 'critical';
       clinicalResponse = 'Emergency response - continuous monitoring, immediate senior review, consider ICU';
       timeToReassessment = 'Continuous';
     } else if (totalScore >= 5 || hasExtremeScore) {
-      riskLevel = 'HIGH';
-      severity = 'high';
-      clinicalResponse = 'Urgent response - increase monitoring to at least hourly, urgent clinical review within 30 minutes';
-      timeToReassessment = '30 minutes';
-    } else if (totalScore >= 3) {
+      // Score 5-6 OR any single parameter scoring 3 requires urgent response (MEDIUM risk)
       riskLevel = 'MEDIUM';
       severity = 'medium';
-      clinicalResponse = 'Ward-based response - increase monitoring to 4-6 hourly, inform nurse-in-charge';
-      timeToReassessment = '4 hours';
-    } else {
+      clinicalResponse = 'Urgent response - increase monitoring to at least hourly, urgent clinical review within 30 minutes';
+      timeToReassessment = '1 hour';
+    } else if (totalScore >= 1) {
+      // Score 1-4: Low-medium risk, increase monitoring
       riskLevel = 'LOW';
       severity = 'low';
-      clinicalResponse = 'Continue routine monitoring - minimum 12 hourly';
+      clinicalResponse = 'Low-medium clinical risk - inform registered nurse, increase monitoring frequency';
+      timeToReassessment = '4-6 hours';
+    } else {
+      // Score 0: Minimal risk
+      riskLevel = 'LOW';
+      severity = 'low';
+      clinicalResponse = 'Routine monitoring - minimum 12 hourly';
       timeToReassessment = '12 hours';
     }
 
@@ -690,10 +697,10 @@ export class EarlyWarningService {
         'Review current treatment plan',
       ],
       MEDIUM: [
-        'Increase monitoring to 4-6 hourly',
-        'Inform nurse-in-charge of NEWS2 score',
-        'Clinical review within 4 hours',
-        'Document trend observations',
+        'Increase monitoring frequency to at least hourly',
+        'Urgent clinical review within 30 minutes',
+        'Notify nurse-in-charge and primary physician',
+        'Review current treatment plan',
       ],
       LOW: [
         'Continue routine monitoring (minimum 12 hourly)',
