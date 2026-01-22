@@ -398,6 +398,95 @@ Total: 14 slots
 
 ---
 
+### TC-DA-007: Emergency Leave Auto-Cancels Appointments
+**API:** `POST /api/v1/doctors/:id/absences`
+**File:** `doctorService.ts:758-783`
+
+**Precondition:** Doctor has 3 booked appointments on Feb 10
+
+**Test Data:**
+```json
+{
+  "startDate": "2026-02-10",
+  "endDate": "2026-02-10",
+  "absenceType": "EMERGENCY",
+  "reason": "Family emergency"
+}
+```
+
+**Expected:**
+- DoctorAbsence created with `absenceType=EMERGENCY`
+- All 3 appointments updated to `status=CANCELLED`
+- Appointment notes include: "Auto-cancelled due to doctor emergency leave"
+- Slots released (available for rebooking by other doctors)
+- Response includes `cancelledAppointments: 3`
+
+---
+
+### TC-DA-008: Emergency Leave Creates HIGH Priority Notifications
+**File:** `doctorService.ts:788-811`
+
+**Precondition:** Emergency absence cancels appointments for 2 patients
+
+**Expected:**
+- Notification created for each patient
+- Notification `title`: "Appointment Cancelled - Doctor Emergency"
+- Notification `data.priority`: "HIGH"
+- Message explains cancellation and suggests rebooking
+
+---
+
+### TC-DA-009: Regular Leave Does NOT Auto-Cancel
+**Precondition:** Doctor has appointments on Feb 15
+
+**Test Data:**
+```json
+{
+  "startDate": "2026-02-15",
+  "endDate": "2026-02-15",
+  "absenceType": "ANNUAL_LEAVE"
+}
+```
+
+**Expected:**
+- DoctorAbsence created
+- Slots blocked
+- Appointments remain `status=SCHEDULED` (NOT cancelled)
+- Notifications sent with `priority=NORMAL`
+- Message says "Appointment Affected..." (not cancelled)
+
+---
+
+### TC-DA-010: Emergency Leave Response Details
+**File:** `doctorService.ts:822-836`
+
+**Test:** Create emergency absence with affected appointments
+
+**Expected Response Structure:**
+```json
+{
+  "id": "absence-uuid",
+  "absenceType": "EMERGENCY",
+  "status": "ACTIVE",
+  "blockedSlots": 8,
+  "affectedAppointments": 3,
+  "cancelledAppointments": 3,
+  "notifiedPatients": 3,
+  "affectedAppointmentDetails": [
+    {
+      "id": "apt-1",
+      "date": "2026-02-10",
+      "time": "09:00",
+      "patientName": "John Doe",
+      "patientPhone": "+1234567890",
+      "wasCancelled": true
+    }
+  ]
+}
+```
+
+---
+
 ## 5. Hospital Holidays
 
 **File:** `backend/src/services/holidayService.ts`

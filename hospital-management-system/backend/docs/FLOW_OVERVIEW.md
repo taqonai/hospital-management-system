@@ -186,6 +186,7 @@ GET /slots/doctor/:doctorId/date/:date
 - `CONFERENCE`
 - `TRAINING`
 - `PERSONAL`
+- `EMERGENCY` - **Special handling** (see below)
 - `OTHER`
 
 ### Absence Status
@@ -238,6 +239,57 @@ POST /doctors/:id/absences
 }
 // Only afternoon slots are blocked
 ```
+
+### Emergency Leave (Special Handling)
+
+**File:** `backend/src/services/doctorService.ts:758-820`
+
+When `absenceType: 'EMERGENCY'`, the system performs additional actions:
+
+```
+POST /doctors/:id/absences { absenceType: 'EMERGENCY', ... }
+         │
+         ▼
+┌────────────────────────────┐
+│ Standard absence creation  │
+│ (validate, block slots)    │
+└────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────┐
+│ Is absenceType EMERGENCY?  │  doctorService.ts:758
+└────────────────────────────┘
+         │ YES
+         ▼
+┌────────────────────────────┐
+│ For each affected appt:    │  doctorService.ts:767-783
+│ • Update status → CANCELLED│
+│ • Add note: "Auto-cancelled│
+│   due to doctor emergency" │
+│ • Release slot             │
+└────────────────────────────┘
+         │
+         ▼
+┌────────────────────────────┐
+│ Create HIGH priority       │  doctorService.ts:788-811
+│ notification to patient:   │
+│ • Title: "Appointment      │
+│   Cancelled - Doctor       │
+│   Emergency"               │
+│ • priority: HIGH           │
+└────────────────────────────┘
+```
+
+**Emergency vs Regular Leave Comparison:**
+
+| Behavior | Regular Leave | Emergency Leave |
+|----------|---------------|-----------------|
+| Slots | Blocked | Blocked |
+| Appointments | Remain active | **Auto-cancelled** |
+| Slot after cancel | N/A | **Released for rebooking** |
+| Notification | "Appointment Affected..." | **"Appointment Cancelled - Doctor Emergency"** |
+| Priority | NORMAL | **HIGH** |
+| Patient action | Must reschedule | Informed, can rebook |
 
 ---
 
