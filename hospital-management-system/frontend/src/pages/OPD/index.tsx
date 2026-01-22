@@ -458,12 +458,16 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
   // Fetch existing vitals to pre-populate the form when updating
   useEffect(() => {
     const fetchExistingVitals = async () => {
+      console.log('[VitalsModal] fetchExistingVitals called, vitalsRecordedAt:', appointment.vitalsRecordedAt);
       if (!appointment.vitalsRecordedAt) return; // Only fetch if vitals were previously recorded
 
       setLoadingExisting(true);
       try {
         const response = await opdApi.getBookingTicket(appointment.id);
+        console.log('[VitalsModal] Booking ticket response:', response.data);
         const existingVitals = response.data?.data?.vitals;
+        console.log('[VitalsModal] existingVitals:', existingVitals);
+        console.log('[VitalsModal] isPregnant:', existingVitals?.isPregnant, 'currentMedications:', existingVitals?.currentMedications);
         if (existingVitals) {
           setVitals({
             temperature: existingVitals.temperature?.toString() || '',
