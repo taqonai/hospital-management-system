@@ -4,27 +4,59 @@ import { authenticate, authorize } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
+import prisma from '../config/database';
 
 const router = Router();
 
+// Helper function to get doctorId for the logged-in doctor
+async function getDoctorIdForUser(userId: string): Promise<string | null> {
+  const doctor = await prisma.doctor.findFirst({
+    where: { userId },
+    select: { id: true },
+  });
+  return doctor?.id || null;
+}
+
 // Get today's queue (Live Queue - only CHECKED_IN and IN_PROGRESS)
+// DOCTOR: Only sees their own queue
+// NURSE/RECEPTIONIST/ADMIN: See all departments
 router.get(
   '/queue',
   authenticate,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const { doctorId } = req.query;
-    const queue = await opdService.getTodayQueue(req.user!.hospitalId, doctorId as string);
+    let doctorId = req.query.doctorId as string | undefined;
+
+    // If user is a DOCTOR, automatically filter to their own queue
+    if (req.user!.role === 'DOCTOR') {
+      const loggedInDoctorId = await getDoctorIdForUser(req.user!.userId);
+      if (loggedInDoctorId) {
+        doctorId = loggedInDoctorId;
+      }
+    }
+
+    const queue = await opdService.getTodayQueue(req.user!.hospitalId, doctorId);
     sendSuccess(res, queue);
   })
 );
 
 // Get all today's appointments (full schedule for the day)
+// DOCTOR: Only sees their own appointments
+// NURSE/RECEPTIONIST/ADMIN: See all departments
 router.get(
   '/appointments/today',
   authenticate,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const { doctorId } = req.query;
-    const appointments = await opdService.getTodayAppointments(req.user!.hospitalId, doctorId as string);
+    let doctorId = req.query.doctorId as string | undefined;
+
+    // If user is a DOCTOR, automatically filter to their own appointments
+    if (req.user!.role === 'DOCTOR') {
+      const loggedInDoctorId = await getDoctorIdForUser(req.user!.userId);
+      if (loggedInDoctorId) {
+        doctorId = loggedInDoctorId;
+      }
+    }
+
+    const appointments = await opdService.getTodayAppointments(req.user!.hospitalId, doctorId);
     sendSuccess(res, appointments);
   })
 );
@@ -107,11 +139,23 @@ router.post(
 );
 
 // Get OPD stats
+// DOCTOR: Only sees their own stats
+// NURSE/RECEPTIONIST/ADMIN: See hospital-wide stats
 router.get(
   '/stats',
   authenticate,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const stats = await opdService.getOPDStats(req.user!.hospitalId);
+    let doctorId: string | undefined;
+
+    // If user is a DOCTOR, automatically filter to their own stats
+    if (req.user!.role === 'DOCTOR') {
+      const loggedInDoctorId = await getDoctorIdForUser(req.user!.userId);
+      if (loggedInDoctorId) {
+        doctorId = loggedInDoctorId;
+      }
+    }
+
+    const stats = await opdService.getOPDStats(req.user!.hospitalId, doctorId);
     sendSuccess(res, stats);
   })
 );

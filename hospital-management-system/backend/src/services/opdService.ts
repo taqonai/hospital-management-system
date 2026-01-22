@@ -302,8 +302,14 @@ export class OPDService {
     });
   }
 
-  async getOPDStats(hospitalId: string) {
+  async getOPDStats(hospitalId: string, doctorId?: string) {
     const { today, tomorrow } = getTodayRangeGST();
+
+    // Base where clause - optionally filter by doctor
+    const baseWhere: any = { hospitalId, appointmentDate: { gte: today, lt: tomorrow } };
+    if (doctorId) {
+      baseWhere.doctorId = doctorId;
+    }
 
     const [
       totalAppointments,
@@ -315,28 +321,27 @@ export class OPDService {
       avgWaitData,
     ] = await Promise.all([
       prisma.appointment.count({
-        where: { hospitalId, appointmentDate: { gte: today, lt: tomorrow } },
+        where: { ...baseWhere },
       }),
       prisma.appointment.count({
-        where: { hospitalId, appointmentDate: { gte: today, lt: tomorrow }, status: 'CHECKED_IN' },
+        where: { ...baseWhere, status: 'CHECKED_IN' },
       }),
       prisma.appointment.count({
-        where: { hospitalId, appointmentDate: { gte: today, lt: tomorrow }, status: 'COMPLETED' },
+        where: { ...baseWhere, status: 'COMPLETED' },
       }),
       prisma.appointment.count({
-        where: { hospitalId, appointmentDate: { gte: today, lt: tomorrow }, status: 'NO_SHOW' },
+        where: { ...baseWhere, status: 'NO_SHOW' },
       }),
       prisma.appointment.count({
-        where: { hospitalId, appointmentDate: { gte: today, lt: tomorrow }, status: { in: ['SCHEDULED', 'CONFIRMED'] } },
+        where: { ...baseWhere, status: { in: ['SCHEDULED', 'CONFIRMED'] } },
       }),
       prisma.appointment.count({
-        where: { hospitalId, appointmentDate: { gte: today, lt: tomorrow }, status: 'IN_PROGRESS' },
+        where: { ...baseWhere, status: 'IN_PROGRESS' },
       }),
       // Get average wait time for today's completed appointments
       prisma.appointment.findMany({
         where: {
-          hospitalId,
-          appointmentDate: { gte: today, lt: tomorrow },
+          ...baseWhere,
           status: 'COMPLETED',
           checkedInAt: { not: null },
         },
