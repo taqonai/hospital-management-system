@@ -33,13 +33,34 @@ function getClinicalResponseFromScore(score: number | undefined): string {
   return 'Monitor patient condition';
 }
 
+// Gulf Standard Time (GST) is UTC+4
+const GST_OFFSET_HOURS = 4;
+
+// Helper function to get today's date range in Gulf Standard Time
+function getTodayRangeGST(): { today: Date; tomorrow: Date } {
+  const now = new Date();
+  // Get current time in GST by adding 4 hours to UTC
+  const gstNow = new Date(now.getTime() + GST_OFFSET_HOURS * 60 * 60 * 1000);
+
+  // Get the date portion in GST
+  const gstYear = gstNow.getUTCFullYear();
+  const gstMonth = gstNow.getUTCMonth();
+  const gstDay = gstNow.getUTCDate();
+
+  // Create today's start (midnight in GST, converted back to UTC)
+  // Midnight GST = 20:00 UTC previous day (or -4 hours)
+  const today = new Date(Date.UTC(gstYear, gstMonth, gstDay, -GST_OFFSET_HOURS, 0, 0, 0));
+
+  // Tomorrow is 24 hours later
+  const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+
+  return { today, tomorrow };
+}
+
 export class OPDService {
   // Queue Management
   async getTodayQueue(hospitalId: string, doctorId?: string) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const { today, tomorrow } = getTodayRangeGST();
 
     const where: any = {
       hospitalId,
@@ -86,10 +107,7 @@ export class OPDService {
     if (!appointment) throw new NotFoundError('Appointment not found');
 
     // Generate token number for today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const { today, tomorrow } = getTodayRangeGST();
 
     const lastToken = await prisma.appointment.findFirst({
       where: {
@@ -122,10 +140,7 @@ export class OPDService {
   }
 
   async callNextPatient(doctorId: string, hospitalId: string) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const { today, tomorrow } = getTodayRangeGST();
 
     // Mark current in-progress as completed
     await prisma.appointment.updateMany({
@@ -168,10 +183,7 @@ export class OPDService {
   }
 
   async getCurrentToken(doctorId: string, hospitalId: string) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const { today, tomorrow } = getTodayRangeGST();
 
     const current = await prisma.appointment.findFirst({
       where: {
@@ -198,10 +210,7 @@ export class OPDService {
   }
 
   async getWaitTime(doctorId: string, hospitalId: string) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const { today, tomorrow } = getTodayRangeGST();
 
     const [waiting, doctor] = await Promise.all([
       prisma.appointment.count({
@@ -253,10 +262,7 @@ export class OPDService {
   }
 
   async getOPDStats(hospitalId: string) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const { today, tomorrow } = getTodayRangeGST();
 
     const [
       totalAppointments,
@@ -264,6 +270,8 @@ export class OPDService {
       completed,
       noShow,
       waiting,
+      inProgress,
+      avgWaitData,
     ] = await Promise.all([
       prisma.appointment.count({
         where: { hospitalId, appointmentDate: { gte: today, lt: tomorrow } },
@@ -280,25 +288,53 @@ export class OPDService {
       prisma.appointment.count({
         where: { hospitalId, appointmentDate: { gte: today, lt: tomorrow }, status: { in: ['SCHEDULED', 'CONFIRMED'] } },
       }),
+      prisma.appointment.count({
+        where: { hospitalId, appointmentDate: { gte: today, lt: tomorrow }, status: 'IN_PROGRESS' },
+      }),
+      // Get average wait time for today's completed appointments
+      prisma.appointment.findMany({
+        where: {
+          hospitalId,
+          appointmentDate: { gte: today, lt: tomorrow },
+          status: 'COMPLETED',
+          checkedInAt: { not: null },
+        },
+        select: {
+          checkedInAt: true,
+          doctor: { select: { slotDuration: true } },
+        },
+      }),
     ]);
 
+    // Calculate average wait time (estimate based on checked-in patients and slot duration)
+    let avgWaitTime = 0;
+    if (avgWaitData.length > 0) {
+      const avgSlotDuration = avgWaitData.reduce((acc, app) => acc + (app.doctor?.slotDuration || 15), 0) / avgWaitData.length;
+      avgWaitTime = Math.round(avgSlotDuration);
+    } else {
+      // Estimate based on waiting patients and average slot duration
+      avgWaitTime = checkedIn > 0 ? checkedIn * 15 : 0;
+    }
+
+    // Return in format expected by frontend
     return {
+      // Original fields for backwards compatibility
       totalAppointments,
       checkedIn,
       completed,
       noShow,
       waiting,
-      inProgress: await prisma.appointment.count({
-        where: { hospitalId, appointmentDate: { gte: today, lt: tomorrow }, status: 'IN_PROGRESS' },
-      }),
+      inProgress,
+      // Fields expected by frontend OPD page
+      inQueue: checkedIn, // Patients who checked in and waiting
+      inConsultation: inProgress, // Patients currently being seen
+      avgWaitTime: avgWaitTime, // Average wait time in minutes
+      seenToday: completed, // Patients who completed consultation today
     };
   }
 
   async getDoctorQueueDisplay(hospitalId: string) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const { today, tomorrow } = getTodayRangeGST();
 
     const doctors = await prisma.doctor.findMany({
       where: {
