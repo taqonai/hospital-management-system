@@ -35,7 +35,46 @@ router.post(
   authenticate,
   authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const doctor = await doctorService.create(req.user!.hospitalId, req.body);
+    // Convert numeric fields from string to number
+    const data = { ...req.body };
+    if (data.slotDuration !== undefined) {
+      data.slotDuration = Number(data.slotDuration);
+      if (isNaN(data.slotDuration) || data.slotDuration < 5 || data.slotDuration > 120) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid slot duration. Must be between 5 and 120 minutes.',
+        });
+      }
+    }
+    if (data.maxPatientsPerDay !== undefined) {
+      data.maxPatientsPerDay = Number(data.maxPatientsPerDay);
+      if (isNaN(data.maxPatientsPerDay) || data.maxPatientsPerDay < 1 || data.maxPatientsPerDay > 100) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid max patients per day. Must be between 1 and 100.',
+        });
+      }
+    }
+    if (data.experience !== undefined) {
+      data.experience = Number(data.experience);
+      if (isNaN(data.experience) || data.experience < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid experience. Must be a non-negative number.',
+        });
+      }
+    }
+    if (data.consultationFee !== undefined) {
+      data.consultationFee = Number(data.consultationFee);
+      if (isNaN(data.consultationFee) || data.consultationFee < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid consultation fee. Must be a non-negative number.',
+        });
+      }
+    }
+
+    const doctor = await doctorService.create(req.user!.hospitalId, data);
     sendCreated(res, doctor, 'Doctor created successfully');
   })
 );
@@ -72,7 +111,46 @@ router.put(
   authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN', 'DOCTOR'),
   validate(uuidParamSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const doctor = await doctorService.update(req.params.id, req.user!.hospitalId, req.body);
+    // Convert numeric fields from string to number
+    const data = { ...req.body };
+    if (data.slotDuration !== undefined) {
+      data.slotDuration = Number(data.slotDuration);
+      if (isNaN(data.slotDuration) || data.slotDuration < 5 || data.slotDuration > 120) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid slot duration. Must be between 5 and 120 minutes.',
+        });
+      }
+    }
+    if (data.maxPatientsPerDay !== undefined) {
+      data.maxPatientsPerDay = Number(data.maxPatientsPerDay);
+      if (isNaN(data.maxPatientsPerDay) || data.maxPatientsPerDay < 1 || data.maxPatientsPerDay > 100) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid max patients per day. Must be between 1 and 100.',
+        });
+      }
+    }
+    if (data.experience !== undefined) {
+      data.experience = Number(data.experience);
+      if (isNaN(data.experience) || data.experience < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid experience. Must be a non-negative number.',
+        });
+      }
+    }
+    if (data.consultationFee !== undefined) {
+      data.consultationFee = Number(data.consultationFee);
+      if (isNaN(data.consultationFee) || data.consultationFee < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid consultation fee. Must be a non-negative number.',
+        });
+      }
+    }
+
+    const doctor = await doctorService.update(req.params.id, req.user!.hospitalId, data);
     sendSuccess(res, doctor, 'Doctor updated successfully');
   })
 );
