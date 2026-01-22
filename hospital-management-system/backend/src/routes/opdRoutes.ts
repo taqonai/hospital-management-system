@@ -17,24 +17,26 @@ async function getDoctorIdForUser(userId: string): Promise<string | null> {
   return doctor?.id || null;
 }
 
-// Get today's queue (Live Queue - only CHECKED_IN and IN_PROGRESS)
-// DOCTOR: Only sees their own queue
-// NURSE/RECEPTIONIST/ADMIN: See all departments
+// Get today's queue (Live Queue)
+// RECEPTIONIST: Sees SCHEDULED, CONFIRMED, CHECKED_IN, IN_PROGRESS (to check patients in)
+// NURSE: Sees CHECKED_IN, IN_PROGRESS (patients ready for vitals)
+// DOCTOR: Sees only their own CHECKED_IN, IN_PROGRESS (patients ready for consultation)
 router.get(
   '/queue',
   authenticate,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     let doctorId = req.query.doctorId as string | undefined;
+    const userRole = req.user!.role;
 
     // If user is a DOCTOR, automatically filter to their own queue
-    if (req.user!.role === 'DOCTOR') {
+    if (userRole === 'DOCTOR') {
       const loggedInDoctorId = await getDoctorIdForUser(req.user!.userId);
       if (loggedInDoctorId) {
         doctorId = loggedInDoctorId;
       }
     }
 
-    const queue = await opdService.getTodayQueue(req.user!.hospitalId, doctorId);
+    const queue = await opdService.getTodayQueue(req.user!.hospitalId, doctorId, userRole);
     sendSuccess(res, queue);
   })
 );
@@ -141,21 +143,23 @@ router.post(
 // Get OPD stats
 // DOCTOR: Only sees their own stats
 // NURSE/RECEPTIONIST/ADMIN: See hospital-wide stats
+// Stats reflect role-based queue counts
 router.get(
   '/stats',
   authenticate,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     let doctorId: string | undefined;
+    const userRole = req.user!.role;
 
     // If user is a DOCTOR, automatically filter to their own stats
-    if (req.user!.role === 'DOCTOR') {
+    if (userRole === 'DOCTOR') {
       const loggedInDoctorId = await getDoctorIdForUser(req.user!.userId);
       if (loggedInDoctorId) {
         doctorId = loggedInDoctorId;
       }
     }
 
-    const stats = await opdService.getOPDStats(req.user!.hospitalId, doctorId);
+    const stats = await opdService.getOPDStats(req.user!.hospitalId, doctorId, userRole);
     sendSuccess(res, stats);
   })
 );

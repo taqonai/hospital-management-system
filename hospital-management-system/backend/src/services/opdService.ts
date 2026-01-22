@@ -58,15 +58,28 @@ function getTodayRangeGST(): { today: Date; tomorrow: Date } {
 }
 
 export class OPDService {
-  // Queue Management - Live Queue (only checked-in patients)
-  async getTodayQueue(hospitalId: string, doctorId?: string) {
+  // Queue Management - Live Queue
+  // Role-based status filtering:
+  // - RECEPTIONIST: SCHEDULED, CONFIRMED, CHECKED_IN, IN_PROGRESS (to check patients in)
+  // - NURSE: CHECKED_IN, IN_PROGRESS (patients ready for vitals)
+  // - DOCTOR: CHECKED_IN, IN_PROGRESS (patients ready for consultation)
+  async getTodayQueue(hospitalId: string, doctorId?: string, userRole?: string) {
     const { today, tomorrow } = getTodayRangeGST();
+
+    // Determine which statuses to show based on role
+    let statuses: string[];
+    if (userRole === 'RECEPTIONIST') {
+      // Receptionist sees all actionable appointments (to check in or monitor)
+      statuses = ['SCHEDULED', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS'];
+    } else {
+      // Nurse/Doctor see only patients who are checked in or being seen
+      statuses = ['CHECKED_IN', 'IN_PROGRESS'];
+    }
 
     const where: any = {
       hospitalId,
       appointmentDate: { gte: today, lt: tomorrow },
-      // Live Queue only shows patients who are physically present (checked in or being seen)
-      status: { in: ['CHECKED_IN', 'IN_PROGRESS'] },
+      status: { in: statuses },
     };
     if (doctorId) where.doctorId = doctorId;
 
@@ -302,7 +315,7 @@ export class OPDService {
     });
   }
 
-  async getOPDStats(hospitalId: string, doctorId?: string) {
+  async getOPDStats(hospitalId: string, doctorId?: string, userRole?: string) {
     const { today, tomorrow } = getTodayRangeGST();
 
     // Base where clause - optionally filter by doctor
@@ -362,6 +375,16 @@ export class OPDService {
       avgWaitTime = checkedIn > 0 ? checkedIn * 15 : 0;
     }
 
+    // Calculate inQueue based on role
+    // RECEPTIONIST sees SCHEDULED + CONFIRMED + CHECKED_IN as their "queue"
+    // NURSE/DOCTOR only sees CHECKED_IN as their "queue"
+    let inQueue: number;
+    if (userRole === 'RECEPTIONIST') {
+      inQueue = waiting + checkedIn; // SCHEDULED + CONFIRMED + CHECKED_IN
+    } else {
+      inQueue = checkedIn; // Only CHECKED_IN
+    }
+
     // Return in format expected by frontend
     return {
       // Original fields for backwards compatibility
@@ -372,7 +395,7 @@ export class OPDService {
       waiting,
       inProgress,
       // Fields expected by frontend OPD page
-      inQueue: checkedIn, // Patients who checked in and waiting
+      inQueue, // Role-based queue count
       inConsultation: inProgress, // Patients currently being seen
       avgWaitTime: avgWaitTime, // Average wait time in minutes
       seenToday: completed, // Patients who completed consultation today
