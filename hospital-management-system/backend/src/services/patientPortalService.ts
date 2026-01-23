@@ -112,6 +112,85 @@ export class PatientPortalService {
   }
 
   /**
+   * Get appointment by ID
+   */
+  async getAppointmentById(hospitalId: string, patientId: string, appointmentId: string) {
+    const appointment = await prisma.appointment.findFirst({
+      where: { id: appointmentId, patientId, hospitalId },
+      include: {
+        doctor: {
+          include: {
+            user: { select: { firstName: true, lastName: true } },
+            department: { select: { id: true, name: true } },
+          },
+        },
+        patient: {
+          select: { firstName: true, lastName: true, mrn: true },
+        },
+        vitals: {
+          orderBy: { recordedAt: 'desc' },
+          take: 1,
+        },
+        consultation: {
+          select: {
+            id: true,
+            chiefComplaint: true,
+            diagnosis: true,
+            notes: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+
+    if (!appointment) {
+      throw new NotFoundError('Appointment not found');
+    }
+
+    return {
+      id: appointment.id,
+      appointmentDate: appointment.appointmentDate,
+      date: appointment.appointmentDate,
+      startTime: appointment.startTime,
+      time: appointment.startTime,
+      endTime: appointment.endTime,
+      type: appointment.type,
+      reason: appointment.reason,
+      status: appointment.status,
+      notes: appointment.notes,
+      tokenNumber: appointment.tokenNumber,
+      checkedInAt: appointment.checkedInAt,
+      createdAt: appointment.createdAt,
+      doctor: appointment.doctor ? {
+        id: appointment.doctor.id,
+        name: `Dr. ${appointment.doctor.user.firstName} ${appointment.doctor.user.lastName}`,
+        specialization: appointment.doctor.specialization || '',
+        department: appointment.doctor.department ? {
+          id: appointment.doctor.department.id,
+          name: appointment.doctor.department.name,
+        } : null,
+      } : null,
+      vitals: appointment.vitals[0] ? {
+        bloodPressure: appointment.vitals[0].bloodPressureSys && appointment.vitals[0].bloodPressureDia
+          ? `${appointment.vitals[0].bloodPressureSys}/${appointment.vitals[0].bloodPressureDia}`
+          : null,
+        heartRate: appointment.vitals[0].heartRate,
+        temperature: appointment.vitals[0].temperature,
+        weight: appointment.vitals[0].weight,
+        height: appointment.vitals[0].height,
+        recordedAt: appointment.vitals[0].recordedAt,
+      } : null,
+      consultation: appointment.consultation ? {
+        id: appointment.consultation.id,
+        chiefComplaint: appointment.consultation.chiefComplaint,
+        diagnosis: appointment.consultation.diagnosis,
+        notes: appointment.consultation.notes,
+        createdAt: appointment.consultation.createdAt,
+      } : null,
+    };
+  }
+
+  /**
    * Get patient appointments
    */
   async getAppointments(hospitalId: string, patientId: string, filters: {
@@ -576,6 +655,116 @@ export class PatientPortalService {
   }
 
   /**
+   * Get medical record by ID (consultation)
+   */
+  async getMedicalRecordById(hospitalId: string, patientId: string, recordId: string) {
+    const consultation = await prisma.consultation.findFirst({
+      where: { id: recordId, patientId },
+      include: {
+        doctor: {
+          include: {
+            user: { select: { firstName: true, lastName: true } },
+            department: { select: { id: true, name: true } },
+          },
+        },
+        appointment: {
+          select: {
+            id: true,
+            appointmentDate: true,
+            startTime: true,
+            type: true,
+          },
+        },
+        labOrders: {
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
+            tests: {
+              select: {
+                id: true,
+                result: true,
+                status: true,
+                labTest: { select: { name: true, category: true } },
+              },
+            },
+          },
+        },
+        prescriptions: {
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
+            medications: {
+              select: {
+                id: true,
+                drugName: true,
+                dosage: true,
+                frequency: true,
+                duration: true,
+                instructions: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!consultation) {
+      throw new NotFoundError('Medical record not found');
+    }
+
+    return {
+      id: consultation.id,
+      type: 'Consultation',
+      date: consultation.createdAt,
+      provider: consultation.doctor?.user
+        ? `Dr. ${consultation.doctor.user.firstName} ${consultation.doctor.user.lastName}`
+        : 'Unknown',
+      department: consultation.doctor?.department?.name || '',
+      chiefComplaint: consultation.chiefComplaint,
+      historyOfIllness: consultation.historyOfIllness,
+      examination: consultation.examination,
+      diagnosis: consultation.diagnosis,
+      treatmentPlan: consultation.treatmentPlan,
+      advice: consultation.advice,
+      notes: consultation.notes,
+      followUpDate: consultation.followUpDate,
+      appointment: consultation.appointment ? {
+        id: consultation.appointment.id,
+        date: consultation.appointment.appointmentDate,
+        time: consultation.appointment.startTime,
+        type: consultation.appointment.type,
+      } : null,
+      labOrders: consultation.labOrders.map(order => ({
+        id: order.id,
+        status: order.status,
+        date: order.createdAt,
+        tests: order.tests.map(t => ({
+          id: t.id,
+          name: t.labTest?.name || 'Unknown Test',
+          category: t.labTest?.category || '',
+          result: t.result,
+          status: t.status,
+        })),
+      })),
+      prescriptions: consultation.prescriptions.map(p => ({
+        id: p.id,
+        status: p.status,
+        date: p.createdAt,
+        medications: p.medications.map(m => ({
+          id: m.id,
+          name: m.drugName,
+          dosage: m.dosage,
+          frequency: m.frequency,
+          duration: m.duration,
+          instructions: m.instructions,
+        })),
+      })),
+    };
+  }
+
+  /**
    * Get prescriptions
    */
   async getPrescriptions(hospitalId: string, patientId: string, filters?: {
@@ -626,6 +815,69 @@ export class PatientPortalService {
   }
 
   /**
+   * Get prescription by ID
+   */
+  async getPrescriptionById(hospitalId: string, patientId: string, prescriptionId: string) {
+    const prescription = await prisma.prescription.findFirst({
+      where: { id: prescriptionId, patientId },
+      include: {
+        doctor: {
+          include: {
+            user: { select: { firstName: true, lastName: true } },
+            department: { select: { id: true, name: true } },
+          },
+        },
+        medications: true,
+        consultation: {
+          select: {
+            id: true,
+            diagnosis: true,
+            chiefComplaint: true,
+          },
+        },
+      },
+    });
+
+    if (!prescription) {
+      throw new NotFoundError('Prescription not found');
+    }
+
+    return {
+      id: prescription.id,
+      prescriptionNumber: (prescription as any).prescriptionNumber || null,
+      date: prescription.createdAt,
+      prescriptionDate: prescription.prescriptionDate,
+      status: prescription.status,
+      notes: prescription.notes,
+      doctor: prescription.doctor ? {
+        id: prescription.doctor.id,
+        name: `Dr. ${prescription.doctor.user.firstName} ${prescription.doctor.user.lastName}`,
+        specialization: prescription.doctor.specialization || '',
+        department: prescription.doctor.department?.name || '',
+      } : null,
+      consultation: prescription.consultation ? {
+        id: prescription.consultation.id,
+        diagnosis: prescription.consultation.diagnosis,
+        chiefComplaint: prescription.consultation.chiefComplaint,
+      } : null,
+      medications: prescription.medications.map(m => ({
+        id: m.id,
+        name: m.drugName,
+        drugName: m.drugName,
+        dosage: m.dosage,
+        frequency: m.frequency,
+        duration: m.duration,
+        quantity: m.quantity,
+        route: m.route,
+        instructions: m.instructions,
+        beforeAfterFood: m.beforeAfterFood,
+        isDispensed: m.isDispensed,
+        dispensedAt: m.dispensedAt,
+      })),
+    };
+  }
+
+  /**
    * Get lab results
    */
   async getLabResults(hospitalId: string, patientId: string, filters?: {
@@ -657,6 +909,87 @@ export class PatientPortalService {
         clinicalNotes: order.clinicalNotes,
       })),
       pagination: { page, limit, total: labOrders.length, totalPages: 1 },
+    };
+  }
+
+  /**
+   * Get lab result by ID
+   */
+  async getLabResultById(hospitalId: string, patientId: string, labOrderId: string) {
+    const labOrder = await prisma.labOrder.findFirst({
+      where: { id: labOrderId, patientId, hospitalId },
+      include: {
+        tests: {
+          include: {
+            labTest: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                category: true,
+                unit: true,
+                normalRange: true,
+                description: true,
+              },
+            },
+          },
+        },
+        consultation: {
+          select: {
+            id: true,
+            diagnosis: true,
+          },
+        },
+      },
+    });
+
+    if (!labOrder) {
+      throw new NotFoundError('Lab result not found');
+    }
+
+    // Get ordering doctor info separately
+    let orderedByDoctor = null;
+    if (labOrder.orderedBy) {
+      const doctor = await prisma.doctor.findUnique({
+        where: { id: labOrder.orderedBy },
+        include: { user: { select: { firstName: true, lastName: true } } },
+      });
+      if (doctor) {
+        orderedByDoctor = {
+          id: doctor.id,
+          name: `Dr. ${doctor.user.firstName} ${doctor.user.lastName}`,
+        };
+      }
+    }
+
+    return {
+      id: labOrder.id,
+      orderNumber: labOrder.orderNumber,
+      date: labOrder.createdAt,
+      status: labOrder.status,
+      priority: labOrder.priority,
+      clinicalNotes: labOrder.clinicalNotes,
+      specialInstructions: labOrder.specialInstructions,
+      orderedAt: labOrder.orderedAt,
+      collectedAt: labOrder.collectedAt,
+      completedAt: labOrder.completedAt,
+      orderedBy: orderedByDoctor,
+      consultation: labOrder.consultation ? {
+        id: labOrder.consultation.id,
+        diagnosis: labOrder.consultation.diagnosis,
+      } : null,
+      tests: labOrder.tests.map(test => ({
+        id: test.id,
+        name: test.labTest?.name || 'Unknown Test',
+        code: test.labTest?.code || '',
+        category: test.labTest?.category || '',
+        result: test.result,
+        resultValue: test.resultValue ? Number(test.resultValue) : null,
+        unit: test.unit || test.labTest?.unit || '',
+        normalRange: test.normalRange || test.labTest?.normalRange || '',
+        status: test.status,
+        isAbnormal: test.isAbnormal,
+      })),
     };
   }
 
@@ -794,6 +1127,80 @@ export class PatientPortalService {
         total,
         totalPages: Math.ceil(total / limit),
       },
+    };
+  }
+
+  /**
+   * Get bill by ID
+   */
+  async getBillById(hospitalId: string, patientId: string, billId: string) {
+    const invoice = await prisma.invoice.findFirst({
+      where: { id: billId, hospitalId, patientId },
+      include: {
+        items: true,
+        payments: {
+          orderBy: { paymentDate: 'desc' },
+        },
+        patient: {
+          select: { firstName: true, lastName: true, mrn: true },
+        },
+      },
+    });
+
+    if (!invoice) {
+      throw new NotFoundError('Bill not found');
+    }
+
+    return {
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      billNumber: invoice.invoiceNumber,
+      type: invoice.items[0]?.category || 'GENERAL',
+      description: invoice.items.length > 0
+        ? invoice.items.map(i => i.description).join(', ')
+        : `Invoice #${invoice.invoiceNumber}`,
+      status: invoice.status,
+      invoiceDate: invoice.invoiceDate.toISOString(),
+      billDate: invoice.invoiceDate.toISOString(),
+      dueDate: invoice.dueDate?.toISOString() || invoice.invoiceDate.toISOString(),
+      createdAt: invoice.createdAt.toISOString(),
+      patient: invoice.patient ? {
+        name: `${invoice.patient.firstName} ${invoice.patient.lastName}`,
+        mrn: invoice.patient.mrn,
+      } : null,
+      // Financial details
+      subtotal: Number(invoice.subtotal),
+      discount: Number(invoice.discount),
+      tax: Number(invoice.tax),
+      totalAmount: Number(invoice.totalAmount),
+      amount: Number(invoice.totalAmount),
+      paidAmount: Number(invoice.paidAmount),
+      balanceAmount: Number(invoice.balanceAmount),
+      balanceDue: Number(invoice.balanceAmount),
+      // Line items
+      items: invoice.items.map(item => ({
+        id: item.id,
+        description: item.description,
+        category: item.category,
+        quantity: item.quantity,
+        unitPrice: Number(item.unitPrice),
+        discount: Number(item.discount),
+        total: Number(item.totalPrice),
+        totalPrice: Number(item.totalPrice),
+      })),
+      // Payment history
+      payments: invoice.payments.map(p => ({
+        id: p.id,
+        amount: Number(p.amount),
+        method: p.paymentMethod,
+        paymentMethod: p.paymentMethod,
+        date: p.paymentDate.toISOString(),
+        paymentDate: p.paymentDate.toISOString(),
+        reference: p.referenceNumber,
+        referenceNumber: p.referenceNumber,
+        notes: p.notes,
+      })),
+      notes: invoice.notes,
     };
   }
 

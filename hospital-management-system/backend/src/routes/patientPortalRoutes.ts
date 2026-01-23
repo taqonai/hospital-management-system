@@ -48,6 +48,21 @@ router.get(
 );
 
 /**
+ * Get appointment by ID
+ * GET /api/v1/patient-portal/appointments/:id
+ */
+router.get(
+  '/appointments/:id',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
+    const appointment = await patientPortalService.getAppointmentById(hospitalId, patientId, req.params.id);
+    sendSuccess(res, appointment, 'Appointment retrieved');
+  })
+);
+
+/**
  * Book new appointment
  * POST /api/v1/patient-portal/appointments
  */
@@ -144,6 +159,21 @@ router.get(
 );
 
 /**
+ * Get medical record by ID
+ * GET /api/v1/patient-portal/records/:id
+ */
+router.get(
+  '/records/:id',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
+    const record = await patientPortalService.getMedicalRecordById(hospitalId, patientId, req.params.id);
+    sendSuccess(res, record, 'Medical record retrieved');
+  })
+);
+
+/**
  * Get prescriptions
  * GET /api/v1/patient-portal/prescriptions
  */
@@ -160,6 +190,21 @@ router.get(
       limit: limit ? parseInt(limit as string) : 10,
     });
     sendSuccess(res, prescriptions, 'Prescriptions retrieved');
+  })
+);
+
+/**
+ * Get prescription by ID
+ * GET /api/v1/patient-portal/prescriptions/:id
+ */
+router.get(
+  '/prescriptions/:id',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
+    const prescription = await patientPortalService.getPrescriptionById(hospitalId, patientId, req.params.id);
+    sendSuccess(res, prescription, 'Prescription retrieved');
   })
 );
 
@@ -193,6 +238,21 @@ router.get(
       limit: limit ? parseInt(limit as string) : 10,
     });
     sendSuccess(res, labs, 'Lab results retrieved');
+  })
+);
+
+/**
+ * Get lab result by ID
+ * GET /api/v1/patient-portal/labs/:id
+ */
+router.get(
+  '/labs/:id',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
+    const labResult = await patientPortalService.getLabResultById(hospitalId, patientId, req.params.id);
+    sendSuccess(res, labResult, 'Lab result retrieved');
   })
 );
 
@@ -254,6 +314,21 @@ router.get(
       limit: limit ? parseInt(limit as string) : 10,
     });
     sendSuccess(res, bills, 'Bills retrieved');
+  })
+);
+
+/**
+ * Get bill by ID
+ * GET /api/v1/patient-portal/bills/:id
+ */
+router.get(
+  '/bills/:id',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
+    const bill = await patientPortalService.getBillById(hospitalId, patientId, req.params.id);
+    sendSuccess(res, bill, 'Bill retrieved');
   })
 );
 
