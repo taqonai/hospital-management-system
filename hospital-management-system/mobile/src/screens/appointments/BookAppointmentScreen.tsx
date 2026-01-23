@@ -202,63 +202,42 @@ const BookAppointmentScreen: React.FC = () => {
       const response = await patientPortalApi.getAvailableSlots(doctorId, date);
       const rawSlots = (response.data?.data || response.data || []) as any[];
 
-      if (rawSlots.length > 0) {
-        // Transform backend response to expected TimeSlot format
-        // Patient portal returns: { time: "09:00", endTime: "09:30", available: true }
-        // We need: { startTime: "09:00", endTime: "09:30", isAvailable: true }
-        const transformedSlots: TimeSlot[] = rawSlots.map((slot: any) => {
-          // Get the start time (patient portal returns 24h format in 'time' field)
-          const startTime = slot.time || slot.startTime || '';
+      // Transform backend response to expected TimeSlot format
+      // Patient portal returns: { time: "09:00", endTime: "09:30", available: true }
+      // We need: { startTime: "09:00", endTime: "09:30", isAvailable: true }
+      // IMPORTANT: If backend returns empty slots, doctor is not available on this day
+      // DO NOT generate default slots - respect the doctor's actual schedule
+      const transformedSlots: TimeSlot[] = rawSlots.map((slot: any) => {
+        // Get the start time (patient portal returns 24h format in 'time' field)
+        const startTime = slot.time || slot.startTime || '';
 
-          // Use endTime from response, or calculate if missing
-          let endTime = slot.endTime || '';
-          if (!endTime && startTime) {
-            const [hours, mins] = startTime.split(':').map(Number);
-            const endMins = mins + 30;
-            const endHours = endMins >= 60 ? hours + 1 : hours;
-            const finalMins = endMins >= 60 ? endMins - 60 : endMins;
-            endTime = `${endHours.toString().padStart(2, '0')}:${finalMins.toString().padStart(2, '0')}`;
-          }
+        // Use endTime from response, or calculate if missing
+        let endTime = slot.endTime || '';
+        if (!endTime && startTime) {
+          const [hours, mins] = startTime.split(':').map(Number);
+          const endMins = mins + 30;
+          const endHours = endMins >= 60 ? hours + 1 : hours;
+          const finalMins = endMins >= 60 ? endMins - 60 : endMins;
+          endTime = `${endHours.toString().padStart(2, '0')}:${finalMins.toString().padStart(2, '0')}`;
+        }
 
-          return {
-            startTime,
-            endTime,
-            // Patient portal uses 'available', fallback to 'isAvailable' for compatibility
-            isAvailable: slot.available !== false && slot.isAvailable !== false,
-          };
-        });
+        return {
+          startTime,
+          endTime,
+          // Patient portal uses 'available', fallback to 'isAvailable' for compatibility
+          isAvailable: slot.available !== false && slot.isAvailable !== false,
+        };
+      });
 
-        setTimeSlots(transformedSlots);
-      } else {
-        // Generate default time slots if none returned
-        setTimeSlots(generateDefaultTimeSlots());
-      }
+      setTimeSlots(transformedSlots);
     } catch (error) {
       console.error('Failed to load time slots:', error);
-      // Generate default time slots as fallback
-      setTimeSlots(generateDefaultTimeSlots());
+      // On error, show no slots - don't generate fake defaults
+      // This ensures users can only book when API confirms availability
+      setTimeSlots([]);
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // Generate default time slots (9 AM to 5 PM, 30 min intervals)
-  const generateDefaultTimeSlots = (): TimeSlot[] => {
-    const slots: TimeSlot[] = [];
-    for (let hour = 9; hour < 17; hour++) {
-      for (let min = 0; min < 60; min += 30) {
-        const startTime = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
-        const endHour = min === 30 ? hour + 1 : hour;
-        const endMin = min === 30 ? 0 : 30;
-        const endTime = `${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`;
-        slots.push({
-          startTime,
-          endTime,
-          isAvailable: true,
-        });
-      }
-    }
-    return slots;
   };
 
   // Reset form to initial state
