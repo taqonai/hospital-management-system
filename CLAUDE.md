@@ -35,7 +35,9 @@ npm run db:seed              # Seed test data
 npm run db:seed:wellness     # Seed wellness/fitness test data
 npm run db:seed:icd10        # Seed ICD-10 diagnosis codes
 npm run db:seed:cpt          # Seed CPT procedure codes
+npm run db:seed:insurance-coding  # Seed both ICD-10 and CPT codes
 npm run db:seed:amad         # Seed A'mad precision health data
+npm run db:seed:dashboard    # Seed dashboard analytics data
 npm run dev                  # Start dev server (port 3001)
 npm run build                # TypeScript compile
 npm run build:strict         # TypeScript compile with strict mode
