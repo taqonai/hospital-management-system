@@ -193,9 +193,10 @@ export default function MedicalHistory() {
     },
   });
 
-  // Sync form data when query data changes (on initial load or after refetch)
+  // Sync form data on initial load only (when historyData first arrives)
+  // After that, formData is updated directly from mutation response
   useEffect(() => {
-    if (historyData && !isEditing) {
+    if (historyData) {
       setFormData({
         chronicConditions: historyData?.chronicConditions || [],
         pastSurgeries: historyData?.pastSurgeries || [],
@@ -209,7 +210,7 @@ export default function MedicalHistory() {
         expectedDueDate: historyData?.expectedDueDate ? new Date(historyData.expectedDueDate).toISOString().split('T')[0] : null,
       });
     }
-  }, [historyData, isEditing]);
+  }, [historyData]);
 
   // Fetch allergies
   const { data: allergiesData, isLoading: loadingAllergies } = useQuery({
@@ -223,7 +224,23 @@ export default function MedicalHistory() {
   // Update medical history mutation
   const updateHistoryMutation = useMutation({
     mutationFn: (data: any) => patientPortalApi.updateMedicalHistory(data),
-    onSuccess: () => {
+    onSuccess: (response) => {
+      // Update formData directly from response to ensure immediate display
+      const data = response.data?.data || response.data;
+      if (data) {
+        setFormData({
+          chronicConditions: data?.chronicConditions || [],
+          pastSurgeries: data?.pastSurgeries || [],
+          familyHistory: data?.familyHistory || [],
+          currentMedications: data?.currentMedications || [],
+          immunizations: data?.immunizations || [],
+          lifestyle: data?.lifestyle || null,
+          notes: data?.notes || null,
+          currentTreatment: data?.currentTreatment || null,
+          isPregnant: data?.isPregnant ?? null,
+          expectedDueDate: data?.expectedDueDate ? new Date(data.expectedDueDate).toISOString().split('T')[0] : null,
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ['patient-medical-history'] });
       toast.success('Medical history updated successfully');
       setIsEditing(false);
@@ -296,6 +313,25 @@ export default function MedicalHistory() {
       reaction: '',
       notes: '',
     });
+  };
+
+  // Reset form data from historyData (used when Cancel is clicked)
+  const handleCancelEdit = () => {
+    if (historyData) {
+      setFormData({
+        chronicConditions: historyData?.chronicConditions || [],
+        pastSurgeries: historyData?.pastSurgeries || [],
+        familyHistory: historyData?.familyHistory || [],
+        currentMedications: historyData?.currentMedications || [],
+        immunizations: historyData?.immunizations || [],
+        lifestyle: historyData?.lifestyle || null,
+        notes: historyData?.notes || null,
+        currentTreatment: historyData?.currentTreatment || null,
+        isPregnant: historyData?.isPregnant ?? null,
+        expectedDueDate: historyData?.expectedDueDate ? new Date(historyData.expectedDueDate).toISOString().split('T')[0] : null,
+      });
+    }
+    setIsEditing(false);
   };
 
   const handleAddItem = (field: keyof MedicalHistory, value: string, setter: (val: string) => void) => {
@@ -546,7 +582,7 @@ export default function MedicalHistory() {
                   ) : (
                     <div className="flex gap-2">
                       <button
-                        onClick={() => setIsEditing(false)}
+                        onClick={handleCancelEdit}
                         className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700"
                       >
                         Cancel
@@ -901,7 +937,7 @@ export default function MedicalHistory() {
                   ) : (
                     <div className="flex gap-2">
                       <button
-                        onClick={() => setIsEditing(false)}
+                        onClick={handleCancelEdit}
                         className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700"
                       >
                         Cancel
@@ -1046,7 +1082,7 @@ export default function MedicalHistory() {
                   ) : (
                     <div className="flex gap-2">
                       <button
-                        onClick={() => setIsEditing(false)}
+                        onClick={handleCancelEdit}
                         className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700"
                       >
                         Cancel
