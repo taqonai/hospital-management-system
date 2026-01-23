@@ -284,7 +284,7 @@ export class AIBookingService {
     }
 
     return {
-      symptoms,
+      symptoms: symptomArray,
       suggestedDepartment: sortedDepts[0],
       alternativeDepartments: sortedDepts.slice(1, 3),
       urgencyLevel,

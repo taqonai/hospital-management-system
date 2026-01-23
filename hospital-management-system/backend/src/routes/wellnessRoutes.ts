@@ -197,56 +197,44 @@ router.post(
       }
     }
 
-    // Sync workouts
+    // Sync workouts using FitnessActivity model
     if (workouts.length > 0) {
-      const activityTypeMap: Record<string, string> = {
-        'WALKING': 'walking',
-        'RUNNING': 'running',
-        'CYCLING': 'cycling',
-        'SWIMMING': 'swimming',
-        'HIIT': 'hiit',
-        'STRENGTH_TRAINING': 'weight_training',
-        'YOGA': 'yoga',
-        'OTHER': 'other',
+      const activityTypeMap: Record<string, 'WALKING' | 'RUNNING' | 'CYCLING' | 'SWIMMING' | 'HIIT' | 'WEIGHT_TRAINING' | 'YOGA' | 'AEROBICS'> = {
+        'WALKING': 'WALKING',
+        'RUNNING': 'RUNNING',
+        'CYCLING': 'CYCLING',
+        'SWIMMING': 'SWIMMING',
+        'HIIT': 'HIIT',
+        'STRENGTH_TRAINING': 'WEIGHT_TRAINING',
+        'WEIGHT_TRAINING': 'WEIGHT_TRAINING',
+        'YOGA': 'YOGA',
+        'OTHER': 'AEROBICS',
       };
 
-      const workoutsToCreate = workouts.map((w: any) => ({
-        patientId,
-        activityType: activityTypeMap[w.workoutType] || 'other',
-        duration: w.duration,
-        caloriesBurned: w.calories,
-        distance: w.distance,
-        avgHeartRate: w.avgHeartRate,
-        startTime: new Date(w.startTime),
-        endTime: new Date(w.endTime),
-        source: provider,
-        metadata: { workoutType: w.workoutType },
-      }));
-
-      await prisma.activityLog.createMany({
-        data: workoutsToCreate,
-        skipDuplicates: true,
-      });
+      for (const w of workouts) {
+        await prisma.fitnessActivity.create({
+          data: {
+            patientId,
+            activityType: activityTypeMap[w.workoutType] || 'AEROBICS',
+            name: w.workoutType || 'Workout',
+            durationMinutes: Math.round((w.duration || 0) / 60),
+            caloriesBurned: w.calories,
+            distanceKm: w.distance ? w.distance / 1000 : undefined,
+            avgHeartRate: w.avgHeartRate,
+            source: provider as any,
+            startTime: new Date(w.startTime),
+            endTime: w.endTime ? new Date(w.endTime) : undefined,
+          },
+        });
+      }
       syncedWorkouts = workouts.length;
     }
 
-    // Sync sleep data
+    // TODO: Sleep sync requires a SleepLog model to be added to the schema
+    // For now, sleep data from health platforms is not persisted
     if (sleep.length > 0) {
-      const sleepToCreate = sleep.map((s: any) => ({
-        patientId,
-        sleepStart: new Date(s.startTime),
-        sleepEnd: new Date(s.endTime),
-        duration: s.duration,
-        quality: 'UNKNOWN' as any,
-        stages: s.stages || [],
-        source: provider,
-      }));
-
-      await prisma.sleepLog.createMany({
-        data: sleepToCreate,
-        skipDuplicates: true,
-      });
-      syncedSleep = sleep.length;
+      console.log(`Received ${sleep.length} sleep records - sleep sync not yet implemented`);
+      // syncedSleep = sleep.length;
     }
 
     // Update last sync time on connection

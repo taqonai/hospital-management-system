@@ -456,7 +456,13 @@ router.post(
       });
 
       if (aiResponse.ok) {
-        const aiData = await aiResponse.json();
+        const aiData = await aiResponse.json() as {
+          response?: string;
+          message?: string;
+          suggestedActions?: Array<{ label: string; route: string }>;
+          aiPowered?: boolean;
+          model?: string;
+        };
         sendSuccess(res, {
           response: aiData.response || aiData.message,
           suggestedActions: aiData.suggestedActions || getSuggestedActions(message),
@@ -570,6 +576,7 @@ router.get(
                 result: true,
                 normalRange: true,
                 status: true,
+                isAbnormal: true,
                 labTest: {
                   select: {
                     name: true,
@@ -824,7 +831,7 @@ router.get(
       for (const order of patient.labOrders) {
         for (const test of order.tests || []) {
           if (test.result && test.labTest?.name) {
-            const isAbnormal = test.status === 'ABNORMAL';
+            const isAbnormal = test.isAbnormal === true;
             labResults.push({
               name: test.labTest.name,
               value: test.result,
