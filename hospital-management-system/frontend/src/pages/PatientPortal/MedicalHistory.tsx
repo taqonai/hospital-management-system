@@ -129,10 +129,13 @@ export default function MedicalHistory() {
   });
 
   // Ref to always have access to the latest formData value
+  // Only sync ref when NOT editing (to preserve manual updates during edit)
   const formDataRef = useRef(formData);
   useEffect(() => {
-    formDataRef.current = formData;
-  }, [formData]);
+    if (!isEditing) {
+      formDataRef.current = formData;
+    }
+  }, [formData, isEditing]);
 
   // Patient profile for gender/age check
   const [patientProfile, setPatientProfile] = useState<{
@@ -351,35 +354,45 @@ export default function MedicalHistory() {
 
   const handleAddItem = (field: keyof MedicalHistory, value: string, setter: (val: string) => void) => {
     if (!value.trim()) return;
-    // Use functional form to ensure we always have the latest state
-    setFormData(prev => {
-      const currentItems = (prev[field] as string[]) || [];
-      if (!currentItems.includes(value.trim())) {
-        const newData = {
-          ...prev,
-          [field]: [...currentItems, value.trim()],
-        };
-        // Debug: Log what we're adding
-        console.log(`Adding to ${field}:`, value.trim());
-        console.log('New array:', newData[field]);
-        // Also update ref immediately
-        formDataRef.current = newData;
-        return newData;
-      }
-      return prev;
-    });
+
+    // Get current data from ref (always most up-to-date)
+    const currentFormData = { ...formDataRef.current };
+    const currentItems = (currentFormData[field] as string[]) || [];
+
+    if (!currentItems.includes(value.trim())) {
+      const newData = {
+        ...currentFormData,
+        [field]: [...currentItems, value.trim()],
+      };
+
+      // Update ref FIRST (synchronous)
+      formDataRef.current = newData;
+
+      // Then update state for UI
+      setFormData(newData);
+
+      console.log(`Added to ${field}:`, value.trim());
+      console.log('Ref now has:', formDataRef.current[field]);
+    }
+
     setter('');
   };
 
   const handleRemoveItem = (field: keyof MedicalHistory, value: string) => {
-    // Use functional form to ensure we always have the latest state
-    setFormData(prev => {
-      const currentItems = (prev[field] as string[]) || [];
-      return {
-        ...prev,
-        [field]: currentItems.filter((item) => item !== value),
-      };
-    });
+    // Get current data from ref
+    const currentFormData = { ...formDataRef.current };
+    const currentItems = (currentFormData[field] as string[]) || [];
+
+    const newData = {
+      ...currentFormData,
+      [field]: currentItems.filter((item) => item !== value),
+    };
+
+    // Update ref FIRST
+    formDataRef.current = newData;
+
+    // Then update state for UI
+    setFormData(newData);
   };
 
   const handleSaveHistory = () => {
