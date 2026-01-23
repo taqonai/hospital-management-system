@@ -355,10 +355,16 @@ export default function MedicalHistory() {
     setFormData(prev => {
       const currentItems = (prev[field] as string[]) || [];
       if (!currentItems.includes(value.trim())) {
-        return {
+        const newData = {
           ...prev,
           [field]: [...currentItems, value.trim()],
         };
+        // Debug: Log what we're adding
+        console.log(`Adding to ${field}:`, value.trim());
+        console.log('New array:', newData[field]);
+        // Also update ref immediately
+        formDataRef.current = newData;
+        return newData;
       }
       return prev;
     });
@@ -377,6 +383,13 @@ export default function MedicalHistory() {
   };
 
   const handleSaveHistory = () => {
+    // Debug: Log what we're sending
+    console.log('=== SAVING MEDICAL HISTORY ===');
+    console.log('formData:', JSON.stringify(formData, null, 2));
+    console.log('formDataRef.current:', JSON.stringify(formDataRef.current, null, 2));
+    console.log('familyHistory in formData:', formData.familyHistory);
+    console.log('familyHistory in ref:', formDataRef.current.familyHistory);
+
     // Use ref to ensure we always have the latest formData value
     updateHistoryMutation.mutate(formDataRef.current);
   };
