@@ -209,13 +209,13 @@ const BookAppointmentScreen: React.FC = () => {
 
       if (rawSlots.length > 0) {
         // Transform backend response to expected TimeSlot format
-        // Backend returns: { time: "09:00 AM", time24: "09:00", isAvailable: true }
+        // Patient portal returns: { time: "09:00", endTime: "09:30", available: true }
         // We need: { startTime: "09:00", endTime: "09:30", isAvailable: true }
-        const transformedSlots: TimeSlot[] = rawSlots.map((slot: any, index: number) => {
-          // Get the start time in 24-hour format
-          const startTime = slot.time24 || slot.startTime || slot.time || '';
+        const transformedSlots: TimeSlot[] = rawSlots.map((slot: any) => {
+          // Get the start time (patient portal returns 24h format in 'time' field)
+          const startTime = slot.time || slot.startTime || '';
 
-          // Calculate end time (30 min later)
+          // Use endTime from response, or calculate if missing
           let endTime = slot.endTime || '';
           if (!endTime && startTime) {
             const [hours, mins] = startTime.split(':').map(Number);
@@ -228,7 +228,8 @@ const BookAppointmentScreen: React.FC = () => {
           return {
             startTime,
             endTime,
-            isAvailable: slot.isAvailable !== false, // Default to true if not specified
+            // Patient portal uses 'available', fallback to 'isAvailable' for compatibility
+            isAvailable: slot.available !== false && slot.isAvailable !== false,
           };
         });
 

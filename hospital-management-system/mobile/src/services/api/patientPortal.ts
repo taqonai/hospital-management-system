@@ -96,7 +96,7 @@ export const patientPortalApi = {
     api.put<ApiResponse<Appointment>>(`/patient-portal/appointments/${id}/reschedule`, data),
 
   getAvailableSlots: (doctorId: string, date: string) =>
-    api.get<ApiResponse<TimeSlot[]>>(`/public/slots/${doctorId}/${date}`),
+    api.get<ApiResponse<TimeSlot[]>>(`/patient-portal/doctors/${doctorId}/slots`, { params: { date } }),
 
   // Doctors and Departments
   getDoctors: (params?: { departmentId?: string; search?: string }) =>
