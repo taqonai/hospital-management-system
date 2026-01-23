@@ -145,8 +145,10 @@ const MedicalHistoryScreen: React.FC = () => {
         [editingSection.key]: newValue,
       };
 
-      await patientPortalApi.updateMedicalHistory(updatedHistory);
-      setHistory(updatedHistory);
+      const response = await patientPortalApi.updateMedicalHistory(updatedHistory);
+      // Use the response data from server to ensure consistency
+      const savedData = response.data?.data || updatedHistory;
+      setHistory(savedData);
       setShowEditModal(false);
       Alert.alert('Success', 'Medical history updated');
     } catch (error: any) {
@@ -178,8 +180,10 @@ const MedicalHistoryScreen: React.FC = () => {
         lifestyle: lifestyleForm,
       };
 
-      await patientPortalApi.updateMedicalHistory(updatedHistory);
-      setHistory(updatedHistory);
+      const response = await patientPortalApi.updateMedicalHistory(updatedHistory);
+      // Use the response data from server to ensure consistency
+      const savedData = response.data?.data || updatedHistory;
+      setHistory(savedData);
       setShowLifestyleModal(false);
       Alert.alert('Success', 'Lifestyle information updated');
     } catch (error: any) {
@@ -225,8 +229,10 @@ const MedicalHistoryScreen: React.FC = () => {
         expectedDueDate: isPregnant && expectedDueDate ? expectedDueDate : null,
       };
 
-      await patientPortalApi.updateMedicalHistory(updatedHistory);
-      setHistory(updatedHistory);
+      const response = await patientPortalApi.updateMedicalHistory(updatedHistory);
+      // Use the response data from server to ensure consistency
+      const savedData = response.data?.data || updatedHistory;
+      setHistory(savedData);
       Alert.alert('Success', 'Pregnancy status updated');
     } catch (error: any) {
       const message = error?.response?.data?.message || 'Failed to update. Please try again.';

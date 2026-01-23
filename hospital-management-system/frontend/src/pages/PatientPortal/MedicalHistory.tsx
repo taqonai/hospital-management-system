@@ -1,4 +1,4 @@
-import { useState, Fragment } from 'react';
+import { useState, Fragment, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dialog, Transition, Tab } from '@headlessui/react';
 import {
@@ -189,22 +189,27 @@ export default function MedicalHistory() {
     queryKey: ['patient-medical-history'],
     queryFn: async () => {
       const response = await patientPortalApi.getMedicalHistory();
-      const data = response.data?.data || response.data;
-      setFormData({
-        chronicConditions: data?.chronicConditions || [],
-        pastSurgeries: data?.pastSurgeries || [],
-        familyHistory: data?.familyHistory || [],
-        currentMedications: data?.currentMedications || [],
-        immunizations: data?.immunizations || [],
-        lifestyle: data?.lifestyle || null,
-        notes: data?.notes || null,
-        currentTreatment: data?.currentTreatment || null,
-        isPregnant: data?.isPregnant ?? null,
-        expectedDueDate: data?.expectedDueDate ? new Date(data.expectedDueDate).toISOString().split('T')[0] : null,
-      });
-      return data;
+      return response.data?.data || response.data;
     },
   });
+
+  // Sync form data when query data changes (on initial load or after refetch)
+  useEffect(() => {
+    if (historyData && !isEditing) {
+      setFormData({
+        chronicConditions: historyData?.chronicConditions || [],
+        pastSurgeries: historyData?.pastSurgeries || [],
+        familyHistory: historyData?.familyHistory || [],
+        currentMedications: historyData?.currentMedications || [],
+        immunizations: historyData?.immunizations || [],
+        lifestyle: historyData?.lifestyle || null,
+        notes: historyData?.notes || null,
+        currentTreatment: historyData?.currentTreatment || null,
+        isPregnant: historyData?.isPregnant ?? null,
+        expectedDueDate: historyData?.expectedDueDate ? new Date(historyData.expectedDueDate).toISOString().split('T')[0] : null,
+      });
+    }
+  }, [historyData, isEditing]);
 
   // Fetch allergies
   const { data: allergiesData, isLoading: loadingAllergies } = useQuery({
