@@ -193,10 +193,13 @@ export default function MedicalHistory() {
     },
   });
 
-  // Sync form data on initial load only (when historyData first arrives)
-  // After that, formData is updated directly from mutation response
+  // Track if initial data has been loaded
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
+
+  // Sync form data on initial load and after mutation refetch
+  // This ensures display is always up to date with server data
   useEffect(() => {
-    if (historyData) {
+    if (historyData && !isEditing) {
       setFormData({
         chronicConditions: historyData?.chronicConditions || [],
         pastSurgeries: historyData?.pastSurgeries || [],
@@ -209,8 +212,11 @@ export default function MedicalHistory() {
         isPregnant: historyData?.isPregnant ?? null,
         expectedDueDate: historyData?.expectedDueDate ? new Date(historyData.expectedDueDate).toISOString().split('T')[0] : null,
       });
+      if (!initialLoadDone) {
+        setInitialLoadDone(true);
+      }
     }
-  }, [historyData]);
+  }, [historyData, isEditing, initialLoadDone]);
 
   // Fetch allergies
   const { data: allergiesData, isLoading: loadingAllergies } = useQuery({
@@ -224,24 +230,27 @@ export default function MedicalHistory() {
   // Update medical history mutation
   const updateHistoryMutation = useMutation({
     mutationFn: (data: any) => patientPortalApi.updateMedicalHistory(data),
-    onSuccess: (response) => {
+    onSuccess: async (response) => {
       // Update formData directly from response to ensure immediate display
-      const data = response.data?.data || response.data;
-      if (data) {
-        setFormData({
-          chronicConditions: data?.chronicConditions || [],
-          pastSurgeries: data?.pastSurgeries || [],
-          familyHistory: data?.familyHistory || [],
-          currentMedications: data?.currentMedications || [],
-          immunizations: data?.immunizations || [],
-          lifestyle: data?.lifestyle || null,
-          notes: data?.notes || null,
-          currentTreatment: data?.currentTreatment || null,
-          isPregnant: data?.isPregnant ?? null,
-          expectedDueDate: data?.expectedDueDate ? new Date(data.expectedDueDate).toISOString().split('T')[0] : null,
-        });
+      const responseData = response.data?.data || response.data;
+      if (responseData) {
+        const newFormData = {
+          chronicConditions: responseData?.chronicConditions || [],
+          pastSurgeries: responseData?.pastSurgeries || [],
+          familyHistory: responseData?.familyHistory || [],
+          currentMedications: responseData?.currentMedications || [],
+          immunizations: responseData?.immunizations || [],
+          lifestyle: responseData?.lifestyle || null,
+          notes: responseData?.notes || null,
+          currentTreatment: responseData?.currentTreatment || null,
+          isPregnant: responseData?.isPregnant ?? null,
+          expectedDueDate: responseData?.expectedDueDate ? new Date(responseData.expectedDueDate).toISOString().split('T')[0] : null,
+        };
+        setFormData(newFormData);
       }
-      queryClient.invalidateQueries({ queryKey: ['patient-medical-history'] });
+      // Invalidate and refetch to ensure cache is updated
+      await queryClient.invalidateQueries({ queryKey: ['patient-medical-history'] });
+      await queryClient.refetchQueries({ queryKey: ['patient-medical-history'] });
       toast.success('Medical history updated successfully');
       setIsEditing(false);
     },
