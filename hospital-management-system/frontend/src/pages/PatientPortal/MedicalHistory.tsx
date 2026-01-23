@@ -1,4 +1,4 @@
-import { useState, Fragment, useEffect } from 'react';
+import { useState, Fragment, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dialog, Transition, Tab } from '@headlessui/react';
 import {
@@ -127,6 +127,12 @@ export default function MedicalHistory() {
     isPregnant: null,
     expectedDueDate: null,
   });
+
+  // Ref to always have access to the latest formData value
+  const formDataRef = useRef(formData);
+  useEffect(() => {
+    formDataRef.current = formData;
+  }, [formData]);
 
   // Patient profile for gender/age check
   const [patientProfile, setPatientProfile] = useState<{
@@ -345,26 +351,34 @@ export default function MedicalHistory() {
 
   const handleAddItem = (field: keyof MedicalHistory, value: string, setter: (val: string) => void) => {
     if (!value.trim()) return;
-    const currentItems = (formData[field] as string[]) || [];
-    if (!currentItems.includes(value.trim())) {
-      setFormData({
-        ...formData,
-        [field]: [...currentItems, value.trim()],
-      });
-    }
+    // Use functional form to ensure we always have the latest state
+    setFormData(prev => {
+      const currentItems = (prev[field] as string[]) || [];
+      if (!currentItems.includes(value.trim())) {
+        return {
+          ...prev,
+          [field]: [...currentItems, value.trim()],
+        };
+      }
+      return prev;
+    });
     setter('');
   };
 
   const handleRemoveItem = (field: keyof MedicalHistory, value: string) => {
-    const currentItems = (formData[field] as string[]) || [];
-    setFormData({
-      ...formData,
-      [field]: currentItems.filter((item) => item !== value),
+    // Use functional form to ensure we always have the latest state
+    setFormData(prev => {
+      const currentItems = (prev[field] as string[]) || [];
+      return {
+        ...prev,
+        [field]: currentItems.filter((item) => item !== value),
+      };
     });
   };
 
   const handleSaveHistory = () => {
-    updateHistoryMutation.mutate(formData);
+    // Use ref to ensure we always have the latest formData value
+    updateHistoryMutation.mutate(formDataRef.current);
   };
 
   const handleSaveAllergy = () => {
