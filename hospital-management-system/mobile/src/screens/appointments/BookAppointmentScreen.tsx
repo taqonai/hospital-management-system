@@ -20,6 +20,7 @@ import { colors, spacing, borderRadius, typography, shadows, keyboardConfig } fr
 import { patientPortalApi } from '../../services/api';
 import { Department, Doctor, TimeSlot } from '../../types';
 import { AppointmentsStackParamList } from '../../navigation/types';
+import { generateAvailableDatesUAE, getTodayInUAE, isSlotPastOrTooSoon } from '../../utils/timezone';
 
 type BookAppointmentRouteProp = RouteProp<AppointmentsStackParamList, 'BookAppointment'>;
 
@@ -161,17 +162,11 @@ const BookAppointmentScreen: React.FC = () => {
     }
   }, [bookingData.doctor, bookingData.date]);
 
-  // Generate available dates (today + next 14 days)
+  // Generate available dates (today + next 14 days) using UAE timezone
   // Note: Doctor availability is handled dynamically by the backend based on their schedule
   useEffect(() => {
-    const dates: string[] = [];
-    const today = new Date();
-    // Start from i = 0 to include today
-    for (let i = 0; i <= 14; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
-      dates.push(date.toISOString().split('T')[0]);
-    }
+    // Use UAE timezone (UTC+4) to match backend slot generation
+    const dates = generateAvailableDatesUAE(15); // today + 14 days
     setAvailableDates(dates);
   }, []);
 
@@ -340,7 +335,7 @@ const BookAppointmentScreen: React.FC = () => {
         d.name.toLowerCase().includes('emergency') ||
         d.name.toLowerCase().includes('urgent')
       );
-      const today = new Date().toISOString().split('T')[0];
+      const today = getTodayInUAE();
 
       if (emergencyDept) {
         setBookingData(prev => ({
