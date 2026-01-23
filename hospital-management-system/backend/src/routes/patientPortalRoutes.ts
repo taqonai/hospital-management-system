@@ -1153,25 +1153,48 @@ router.put(
       expectedDueDate,
     } = req.body;
 
-    // Build update data - only include pregnancy fields if explicitly provided
+    // Helper to ensure array fields are valid arrays of strings
+    const toStringArray = (value: any): string[] => {
+      if (!value) return [];
+      if (!Array.isArray(value)) return [];
+      return value.filter((item: any) => typeof item === 'string' && item.trim().length > 0);
+    };
+
+    // Helper to handle lifestyle object
+    const toLifestyleObject = (value: any): object | null => {
+      if (!value || typeof value !== 'object') return null;
+      if (Object.keys(value).length === 0) return null;
+      return value;
+    };
+
+    // Build update data with proper type handling
     const updateData: any = {
-      chronicConditions: chronicConditions || [],
-      pastSurgeries: pastSurgeries || [],
-      familyHistory: familyHistory || [],
-      currentMedications: currentMedications || [],
-      immunizations: immunizations || [],
-      lifestyle: lifestyle || null,
-      notes: notes || null,
-      currentTreatment: currentTreatment || null,
+      chronicConditions: toStringArray(chronicConditions),
+      pastSurgeries: toStringArray(pastSurgeries),
+      familyHistory: toStringArray(familyHistory),
+      currentMedications: toStringArray(currentMedications),
+      immunizations: toStringArray(immunizations),
+      lifestyle: toLifestyleObject(lifestyle),
+      notes: notes && typeof notes === 'string' && notes.trim() ? notes.trim() : null,
+      currentTreatment: currentTreatment && typeof currentTreatment === 'string' && currentTreatment.trim() ? currentTreatment.trim() : null,
     };
 
     // Handle pregnancy fields - only update if isPregnant is explicitly set
     if (isPregnant !== undefined) {
-      updateData.isPregnant = isPregnant;
+      updateData.isPregnant = isPregnant === true ? true : isPregnant === false ? false : null;
       updateData.lastPregnancyUpdate = new Date();
-      updateData.expectedDueDate = isPregnant && expectedDueDate
-        ? new Date(expectedDueDate)
-        : null;
+
+      // Handle expectedDueDate
+      if (isPregnant === true && expectedDueDate) {
+        try {
+          const dueDate = new Date(expectedDueDate);
+          updateData.expectedDueDate = isNaN(dueDate.getTime()) ? null : dueDate;
+        } catch {
+          updateData.expectedDueDate = null;
+        }
+      } else {
+        updateData.expectedDueDate = null;
+      }
     }
 
     // Upsert medical history
