@@ -692,6 +692,8 @@ export const opdApi = {
     api.get(`/opd/patient-history/${patientId}`, { params: { limit } }),
   // Get patient's latest patient status (pregnancy, medications, treatment) from previous vitals
   getPatientStatus: (patientId: string) => api.get(`/opd/patient-status/${patientId}`),
+  // Get patient's medical summary (medical history + allergies) for nurse vitals modal
+  getPatientMedicalSummary: (patientId: string) => api.get(`/opd/patient-medical-summary/${patientId}`),
 };
 
 // Emergency APIs

@@ -280,4 +280,16 @@ router.get(
   })
 );
 
+// Get patient's medical summary (medical history + allergies) for nurse vitals modal
+router.get(
+  '/patient-medical-summary/:patientId',
+  authenticate,
+  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { patientId } = req.params;
+    const result = await opdService.getPatientMedicalSummary(patientId, req.user!.hospitalId);
+    sendSuccess(res, result);
+  })
+);
+
 export default router;

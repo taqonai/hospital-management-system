@@ -15,9 +15,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { useSelector } from 'react-redux';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme';
 import { patientPortalApi } from '../../services/api';
 import { MedicalHistory, HealthStackParamList } from '../../types';
+import type { RootState } from '../../store';
 
 type NavigationProp = NativeStackNavigationProp<HealthStackParamList>;
 
@@ -36,7 +38,21 @@ const SECTIONS: EditableSection[] = [
   { title: 'Family History', key: 'familyHistory', icon: 'people-outline', color: colors.primary[500], isArray: true },
   { title: 'Current Medications', key: 'currentMedications', icon: 'medical-outline', color: colors.success[500], isArray: true },
   { title: 'Immunizations', key: 'immunizations', icon: 'shield-checkmark-outline', color: colors.info[500], isArray: true },
+  { title: 'Ongoing Treatment', key: 'currentTreatment', icon: 'bandage-outline', color: colors.info[600], isArray: false },
 ];
+
+// Helper to calculate age from date of birth
+const calculateAge = (dateOfBirth: string | undefined): number | null => {
+  if (!dateOfBirth) return null;
+  const birthDate = new Date(dateOfBirth);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+};
 
 const MedicalHistoryScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
@@ -50,6 +66,9 @@ const MedicalHistoryScreen: React.FC = () => {
   const [editValue, setEditValue] = useState('');
   const [analysisResult, setAnalysisResult] = useState<{ insights: string[]; recommendations: string[] } | null>(null);
 
+  // Get patient profile from auth store for pregnancy section visibility
+  const user = useSelector((state: RootState) => state.auth.user);
+
   // Lifestyle edit state
   const [showLifestyleModal, setShowLifestyleModal] = useState(false);
   const [lifestyleForm, setLifestyleForm] = useState({
@@ -59,8 +78,17 @@ const MedicalHistoryScreen: React.FC = () => {
     diet: '',
   });
 
+  // Calculate if pregnancy section should be shown
+  const patientAge = calculateAge(user?.dateOfBirth);
+  const shouldShowPregnancy =
+    user?.gender?.toUpperCase() === 'FEMALE' &&
+    patientAge !== null &&
+    patientAge >= 18 &&
+    patientAge <= 55;
+
   const loadHistory = useCallback(async () => {
     try {
+      // Load medical history
       const response = await patientPortalApi.getMedicalHistory();
       setHistory(response.data?.data || null);
     } catch (error) {
@@ -82,9 +110,14 @@ const MedicalHistoryScreen: React.FC = () => {
 
   const handleEditSection = (section: EditableSection) => {
     setEditingSection(section);
-    if (history && section.isArray) {
-      const value = history[section.key] as string[];
-      setEditValue(Array.isArray(value) ? value.join('\n') : '');
+    if (history) {
+      if (section.isArray) {
+        const value = history[section.key] as string[];
+        setEditValue(Array.isArray(value) ? value.join('\n') : '');
+      } else {
+        const value = history[section.key] as string;
+        setEditValue(value || '');
+      }
     }
     setShowEditModal(true);
   };
@@ -94,10 +127,18 @@ const MedicalHistoryScreen: React.FC = () => {
 
     setIsSaving(true);
     try {
-      const newValue = editValue
-        .split('\n')
-        .map(s => s.trim())
-        .filter(s => s.length > 0);
+      let newValue: string[] | string | null;
+
+      if (editingSection.isArray) {
+        // For array fields, split by newlines
+        newValue = editValue
+          .split('\n')
+          .map(s => s.trim())
+          .filter(s => s.length > 0);
+      } else {
+        // For single-value fields, use the value directly or null if empty
+        newValue = editValue.trim() || null;
+      }
 
       const updatedHistory = {
         ...history,
@@ -149,6 +190,52 @@ const MedicalHistoryScreen: React.FC = () => {
     }
   };
 
+  // Handle saving single-value fields (like currentTreatment)
+  const handleSaveSingleField = async (key: keyof MedicalHistory, value: string) => {
+    if (!history) return;
+
+    setIsSaving(true);
+    try {
+      const updatedHistory = {
+        ...history,
+        [key]: value || null,
+      };
+
+      await patientPortalApi.updateMedicalHistory(updatedHistory);
+      setHistory(updatedHistory);
+      setShowEditModal(false);
+      Alert.alert('Success', 'Information updated');
+    } catch (error: any) {
+      const message = error?.response?.data?.message || 'Failed to update. Please try again.';
+      Alert.alert('Error', message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Handle pregnancy status update
+  const handleUpdatePregnancy = async (isPregnant: boolean | null, expectedDueDate?: string) => {
+    if (!history) return;
+
+    setIsSaving(true);
+    try {
+      const updatedHistory = {
+        ...history,
+        isPregnant,
+        expectedDueDate: isPregnant && expectedDueDate ? expectedDueDate : null,
+      };
+
+      await patientPortalApi.updateMedicalHistory(updatedHistory);
+      setHistory(updatedHistory);
+      Alert.alert('Success', 'Pregnancy status updated');
+    } catch (error: any) {
+      const message = error?.response?.data?.message || 'Failed to update. Please try again.';
+      Alert.alert('Error', message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
     setAnalysisResult(null);
@@ -187,6 +274,33 @@ const MedicalHistoryScreen: React.FC = () => {
   };
 
   const renderListSection = (section: EditableSection) => {
+    // Handle non-array fields (like currentTreatment)
+    if (!section.isArray) {
+      const value = history?.[section.key] as string || '';
+      return (
+        <View key={section.key} style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIcon, { backgroundColor: `${section.color}15` }]}>
+              <Ionicons name={section.icon as any} size={20} color={section.color} />
+            </View>
+            <Text style={styles.sectionTitle}>{section.title}</Text>
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={() => handleEditSection(section)}
+            >
+              <Ionicons name="pencil" size={16} color={colors.primary[600]} />
+            </TouchableOpacity>
+          </View>
+          {!value ? (
+            <Text style={styles.emptyText}>No information recorded</Text>
+          ) : (
+            <Text style={styles.treatmentText}>{value}</Text>
+          )}
+        </View>
+      );
+    }
+
+    // Handle array fields
     const items = history?.[section.key] as string[] || [];
     return (
       <View key={section.key} style={styles.sectionCard}>
@@ -211,6 +325,79 @@ const MedicalHistoryScreen: React.FC = () => {
                 <Text style={styles.itemText}>{item}</Text>
               </View>
             ))}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  // Render pregnancy status section
+  const renderPregnancySection = () => {
+    if (!shouldShowPregnancy) return null;
+
+    return (
+      <View style={styles.pregnancyCard}>
+        <View style={styles.sectionHeader}>
+          <View style={[styles.sectionIcon, { backgroundColor: `${colors.error[100]}` }]}>
+            <Ionicons name="heart-half-outline" size={20} color={colors.error[500]} />
+          </View>
+          <Text style={styles.sectionTitle}>Pregnancy Status</Text>
+        </View>
+
+        <Text style={styles.pregnancyHelpText}>
+          This information helps healthcare providers make safer treatment decisions.
+        </Text>
+
+        <View style={styles.radioGroup}>
+          <TouchableOpacity
+            style={[styles.radioOption, history?.isPregnant === true && styles.radioSelected]}
+            onPress={() => handleUpdatePregnancy(true)}
+          >
+            <Ionicons
+              name={history?.isPregnant === true ? 'radio-button-on' : 'radio-button-off'}
+              size={20}
+              color={history?.isPregnant === true ? colors.error[500] : colors.gray[400]}
+            />
+            <Text style={[styles.radioText, history?.isPregnant === true && styles.radioTextSelected]}>
+              Yes, I am pregnant
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.radioOption, history?.isPregnant === false && styles.radioSelected]}
+            onPress={() => handleUpdatePregnancy(false)}
+          >
+            <Ionicons
+              name={history?.isPregnant === false ? 'radio-button-on' : 'radio-button-off'}
+              size={20}
+              color={history?.isPregnant === false ? colors.primary[500] : colors.gray[400]}
+            />
+            <Text style={[styles.radioText, history?.isPregnant === false && styles.radioTextSelected]}>
+              No
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.radioOption, (history?.isPregnant === null || history?.isPregnant === undefined) && styles.radioSelected]}
+            onPress={() => handleUpdatePregnancy(null)}
+          >
+            <Ionicons
+              name={(history?.isPregnant === null || history?.isPregnant === undefined) ? 'radio-button-on' : 'radio-button-off'}
+              size={20}
+              color={(history?.isPregnant === null || history?.isPregnant === undefined) ? colors.gray[500] : colors.gray[400]}
+            />
+            <Text style={styles.radioText}>Not specified</Text>
+          </TouchableOpacity>
+        </View>
+
+        {history?.isPregnant === true && (
+          <View style={styles.dueDateContainer}>
+            <Text style={styles.dueDateLabel}>Expected Due Date</Text>
+            <Text style={styles.dueDateValue}>
+              {history?.expectedDueDate
+                ? new Date(history.expectedDueDate).toLocaleDateString()
+                : 'Not specified'}
+            </Text>
           </View>
         )}
       </View>
@@ -288,6 +475,9 @@ const MedicalHistoryScreen: React.FC = () => {
 
         {/* Medical History Sections */}
         {SECTIONS.map(section => renderListSection(section))}
+
+        {/* Pregnancy Status - Only for females aged 18-55 */}
+        {renderPregnancySection()}
 
         {/* Lifestyle */}
         {renderLifestyle()}
@@ -380,11 +570,13 @@ const MedicalHistoryScreen: React.FC = () => {
 
             <View style={styles.modalBody}>
               <Text style={styles.modalInstructions}>
-                Enter each item on a new line
+                {editingSection?.isArray
+                  ? 'Enter each item on a new line'
+                  : 'Enter the information below'}
               </Text>
               <TextInput
                 style={styles.modalInput}
-                placeholder="Enter items..."
+                placeholder={editingSection?.isArray ? 'Enter items...' : 'Enter information...'}
                 placeholderTextColor={colors.gray[400]}
                 value={editValue}
                 onChangeText={setEditValue}
@@ -800,6 +992,68 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
     paddingVertical: spacing.md,
+  },
+  // Treatment text styles
+  treatmentText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.text.primary,
+    lineHeight: 20,
+  },
+  // Pregnancy section styles
+  pregnancyCard: {
+    backgroundColor: colors.error[50],
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    ...shadows.sm,
+  },
+  pregnancyHelpText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.error[600],
+    marginBottom: spacing.md,
+  },
+  radioGroup: {
+    gap: spacing.sm,
+  },
+  radioOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.sm,
+  },
+  radioSelected: {
+    borderColor: colors.primary[400],
+    backgroundColor: colors.primary[50],
+  },
+  radioText: {
+    marginLeft: spacing.sm,
+    fontSize: typography.fontSize.sm,
+    color: colors.text.secondary,
+  },
+  radioTextSelected: {
+    color: colors.text.primary,
+    fontWeight: typography.fontWeight.medium,
+  },
+  dueDateContainer: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.error[100],
+  },
+  dueDateLabel: {
+    fontSize: typography.fontSize.xs,
+    color: colors.error[600],
+    marginBottom: spacing.xs,
+  },
+  dueDateValue: {
+    fontSize: typography.fontSize.sm,
+    color: colors.text.primary,
+    fontWeight: typography.fontWeight.medium,
   },
 });
 

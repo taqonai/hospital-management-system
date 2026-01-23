@@ -194,6 +194,10 @@ export interface MedicalHistory {
     diet?: string;
   };
   notes?: string;
+  // New fields
+  currentTreatment?: string | null;
+  isPregnant?: boolean | null;
+  expectedDueDate?: string | null;
 }
 
 export interface Allergy {

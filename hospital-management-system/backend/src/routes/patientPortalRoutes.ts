@@ -1139,29 +1139,48 @@ router.put(
   patientAuthenticate,
   asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
     const patientId = req.patient?.patientId || '';
-    const { chronicConditions, pastSurgeries, familyHistory, currentMedications, immunizations, lifestyle, notes } = req.body;
+    const {
+      chronicConditions,
+      pastSurgeries,
+      familyHistory,
+      currentMedications,
+      immunizations,
+      lifestyle,
+      notes,
+      // New fields
+      currentTreatment,
+      isPregnant,
+      expectedDueDate,
+    } = req.body;
+
+    // Build update data - only include pregnancy fields if explicitly provided
+    const updateData: any = {
+      chronicConditions: chronicConditions || [],
+      pastSurgeries: pastSurgeries || [],
+      familyHistory: familyHistory || [],
+      currentMedications: currentMedications || [],
+      immunizations: immunizations || [],
+      lifestyle: lifestyle || null,
+      notes: notes || null,
+      currentTreatment: currentTreatment || null,
+    };
+
+    // Handle pregnancy fields - only update if isPregnant is explicitly set
+    if (isPregnant !== undefined) {
+      updateData.isPregnant = isPregnant;
+      updateData.lastPregnancyUpdate = new Date();
+      updateData.expectedDueDate = isPregnant && expectedDueDate
+        ? new Date(expectedDueDate)
+        : null;
+    }
 
     // Upsert medical history
     const medicalHistory = await prisma.medicalHistory.upsert({
       where: { patientId },
-      update: {
-        chronicConditions: chronicConditions || [],
-        pastSurgeries: pastSurgeries || [],
-        familyHistory: familyHistory || [],
-        currentMedications: currentMedications || [],
-        immunizations: immunizations || [],
-        lifestyle: lifestyle || null,
-        notes: notes || null,
-      },
+      update: updateData,
       create: {
         patientId,
-        chronicConditions: chronicConditions || [],
-        pastSurgeries: pastSurgeries || [],
-        familyHistory: familyHistory || [],
-        currentMedications: currentMedications || [],
-        immunizations: immunizations || [],
-        lifestyle: lifestyle || null,
-        notes: notes || null,
+        ...updateData,
       }
     });
 

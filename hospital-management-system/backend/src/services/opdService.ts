@@ -1081,6 +1081,47 @@ export class OPDService {
       recordedAt: latestVitalsWithStatus.recordedAt,
     };
   }
+
+  // Get patient's medical summary (medical history + allergies) for OPD nurse vitals modal
+  async getPatientMedicalSummary(patientId: string, hospitalId: string) {
+    // Verify patient belongs to hospital
+    const patient = await prisma.patient.findFirst({
+      where: { id: patientId, hospitalId },
+      include: {
+        medicalHistory: true,
+        allergies: {
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+
+    if (!patient) {
+      throw new NotFoundError('Patient not found');
+    }
+
+    return {
+      medicalHistory: patient.medicalHistory ? {
+        chronicConditions: patient.medicalHistory.chronicConditions || [],
+        pastSurgeries: patient.medicalHistory.pastSurgeries || [],
+        familyHistory: patient.medicalHistory.familyHistory || [],
+        currentMedications: patient.medicalHistory.currentMedications || [],
+        currentTreatment: patient.medicalHistory.currentTreatment || null,
+        isPregnant: patient.medicalHistory.isPregnant ?? null,
+        expectedDueDate: patient.medicalHistory.expectedDueDate || null,
+        immunizations: patient.medicalHistory.immunizations || [],
+        lifestyle: patient.medicalHistory.lifestyle || null,
+        notes: patient.medicalHistory.notes || null,
+      } : null,
+      allergies: patient.allergies.map(a => ({
+        id: a.id,
+        allergen: a.allergen,
+        type: a.type,
+        severity: a.severity,
+        reaction: a.reaction || null,
+        notes: a.notes || null,
+      })),
+    };
+  }
 }
 
 export const opdService = new OPDService();

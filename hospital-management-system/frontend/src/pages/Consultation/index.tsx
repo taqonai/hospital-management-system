@@ -55,7 +55,24 @@ interface Patient {
   email?: string;
   bloodGroup?: string;
   allergies?: Array<{ allergen: string; severity: string; reaction?: string }>;
-  medicalHistory?: Array<{ condition: string; diagnosedDate: string; status?: string }>;
+  // MedicalHistory is a single object (1-to-1 relation), not an array
+  medicalHistory?: {
+    chronicConditions?: string[];
+    pastSurgeries?: string[];
+    familyHistory?: string[];
+    currentMedications?: string[];
+    immunizations?: string[];
+    currentTreatment?: string | null;
+    isPregnant?: boolean | null;
+    expectedDueDate?: string | null;
+    lifestyle?: {
+      smoking?: string;
+      alcohol?: string;
+      exercise?: string;
+      diet?: string;
+    } | null;
+    notes?: string | null;
+  } | null;
 }
 
 interface CurrentMedication {
@@ -639,10 +656,8 @@ export default function Consultation() {
   // AI Diagnosis
   const diagnosisMutation = useMutation({
     mutationFn: async (data: { symptoms: string[]; patientAge: number; gender: string }) => {
-      // Safely extract medical history - ensure it's an array before mapping
-      const medicalHistory = Array.isArray(patientData?.medicalHistory)
-        ? patientData.medicalHistory.map(h => h?.condition).filter(Boolean)
-        : [];
+      // Extract medical history from MedicalHistory model (chronic conditions)
+      const medicalHistory = patientData?.medicalHistory?.chronicConditions || [];
 
       // Safely extract allergies - ensure it's an array before mapping
       const allergies = Array.isArray(patientData?.allergies)
@@ -1177,18 +1192,83 @@ export default function Consultation() {
             </div>
           )}
 
-          {/* Medical History */}
-          {patientData.medicalHistory && patientData.medicalHistory.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {patientData.medicalHistory.slice(0, 5).map((h, i) => (
-                <span key={i} className="px-2 py-1 bg-white/15 rounded-lg text-sm">
-                  {h.condition}
-                </span>
-              ))}
+          {/* Comprehensive Medical History from MedicalHistory Model */}
+          {patientData.medicalHistory && (
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              {/* Chronic Conditions */}
+              {patientData.medicalHistory.chronicConditions?.length > 0 && (
+                <div className="p-3 bg-red-500/10 rounded-xl">
+                  <span className="text-xs uppercase text-red-200">Chronic Conditions</span>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {patientData.medicalHistory.chronicConditions.map((c: string, i: number) => (
+                      <span key={i} className="px-2 py-0.5 bg-red-200/30 text-white rounded text-sm">{c}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Past Surgeries */}
+              {patientData.medicalHistory.pastSurgeries?.length > 0 && (
+                <div className="p-3 bg-blue-500/10 rounded-xl">
+                  <span className="text-xs uppercase text-blue-200">Past Surgeries</span>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {patientData.medicalHistory.pastSurgeries.map((s: string, i: number) => (
+                      <span key={i} className="px-2 py-0.5 bg-blue-200/30 text-white rounded text-sm">{s}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Family History */}
+              {patientData.medicalHistory.familyHistory?.length > 0 && (
+                <div className="p-3 bg-purple-500/10 rounded-xl">
+                  <span className="text-xs uppercase text-purple-200">Family History</span>
+                  <div className="mt-1 text-sm text-white/80">
+                    {patientData.medicalHistory.familyHistory.join(', ')}
+                  </div>
+                </div>
+              )}
+
+              {/* Current Treatment from MedicalHistory */}
+              {patientData.medicalHistory.currentTreatment && (
+                <div className="p-3 bg-cyan-500/10 rounded-xl">
+                  <span className="text-xs uppercase text-cyan-200">Ongoing Treatment</span>
+                  <div className="mt-1 text-sm text-white/80">
+                    {patientData.medicalHistory.currentTreatment}
+                  </div>
+                </div>
+              )}
+
+              {/* Current Medications from MedicalHistory Model */}
+              {patientData.medicalHistory.currentMedications?.length > 0 && (
+                <div className="p-3 bg-green-500/10 rounded-xl col-span-2">
+                  <span className="text-xs uppercase text-green-200">Medications (Patient Reported)</span>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {patientData.medicalHistory.currentMedications.map((m: string, i: number) => (
+                      <span key={i} className="px-2 py-0.5 bg-green-200/30 text-white rounded text-sm">{m}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Pregnancy Status from MedicalHistory (persistent) */}
+              {patientData.medicalHistory.isPregnant === true && (
+                <div className="p-3 bg-pink-500/10 rounded-xl col-span-2">
+                  <div className="flex items-center gap-2 text-pink-200">
+                    <span className="text-lg">🤰</span>
+                    <span className="font-medium">Patient is Pregnant (Medical History)</span>
+                    {patientData.medicalHistory.expectedDueDate && (
+                      <span className="text-sm text-pink-300">
+                        (Due: {new Date(patientData.medicalHistory.expectedDueDate).toLocaleDateString()})
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Pregnancy Status (highlighted if pregnant) */}
+          {/* Pregnancy Status from Visit Vitals (highlighted if pregnant) */}
           {bookingData?.vitals?.isPregnant === true && (
             <div className="mt-4 p-3 bg-pink-500/30 backdrop-blur border border-pink-300/30 rounded-xl">
               <div className="flex items-center gap-2">

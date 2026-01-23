@@ -36,6 +36,10 @@ interface MedicalHistory {
     diet?: string;
   } | null;
   notes: string | null;
+  // New fields
+  currentTreatment?: string | null;
+  isPregnant?: boolean | null;
+  expectedDueDate?: string | null;
 }
 
 interface Allergy {
@@ -119,7 +123,16 @@ export default function MedicalHistory() {
     immunizations: [],
     lifestyle: null,
     notes: null,
+    currentTreatment: null,
+    isPregnant: null,
+    expectedDueDate: null,
   });
+
+  // Patient profile for gender/age check
+  const [patientProfile, setPatientProfile] = useState<{
+    gender?: string;
+    dateOfBirth?: string;
+  } | null>(null);
 
   const [newCondition, setNewCondition] = useState('');
   const [newSurgery, setNewSurgery] = useState('');
@@ -136,6 +149,41 @@ export default function MedicalHistory() {
     notes: '',
   });
 
+  // Helper to calculate age from date of birth
+  const calculateAge = (dateOfBirth: string | undefined): number | null => {
+    if (!dateOfBirth) return null;
+    const birthDate = new Date(dateOfBirth);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
+  // Fetch patient profile for gender/age check
+  const { data: profileData } = useQuery({
+    queryKey: ['patient-profile'],
+    queryFn: async () => {
+      const response = await patientPortalApi.getProfile();
+      const data = response.data?.data || response.data;
+      setPatientProfile({
+        gender: data?.gender,
+        dateOfBirth: data?.dateOfBirth,
+      });
+      return data;
+    },
+  });
+
+  // Determine if pregnancy question should be shown
+  const patientAge = calculateAge(patientProfile?.dateOfBirth);
+  const shouldShowPregnancy =
+    patientProfile?.gender?.toUpperCase() === 'FEMALE' &&
+    patientAge !== null &&
+    patientAge >= 18 &&
+    patientAge <= 55;
+
   // Fetch medical history
   const { data: historyData, isLoading: loadingHistory } = useQuery({
     queryKey: ['patient-medical-history'],
@@ -150,6 +198,9 @@ export default function MedicalHistory() {
         immunizations: data?.immunizations || [],
         lifestyle: data?.lifestyle || null,
         notes: data?.notes || null,
+        currentTreatment: data?.currentTreatment || null,
+        isPregnant: data?.isPregnant ?? null,
+        expectedDueDate: data?.expectedDueDate ? new Date(data.expectedDueDate).toISOString().split('T')[0] : null,
       });
       return data;
     },
@@ -623,6 +674,105 @@ export default function MedicalHistory() {
                         )}
                       </div>
                     </div>
+
+                    {/* Ongoing Treatment */}
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Ongoing Treatment</h3>
+                      <p className="text-sm text-gray-500 mb-3">
+                        Record any ongoing treatments such as chemotherapy, dialysis, physical therapy, etc.
+                      </p>
+                      {isEditing ? (
+                        <textarea
+                          value={formData.currentTreatment || ''}
+                          onChange={(e) => setFormData({ ...formData, currentTreatment: e.target.value })}
+                          placeholder="e.g., Chemotherapy every 2 weeks, Dialysis 3x/week, Physical therapy sessions..."
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-rose-500 focus:border-rose-500"
+                          rows={3}
+                        />
+                      ) : (
+                        <div className="p-4 bg-gray-50 rounded-xl">
+                          {formData.currentTreatment ? (
+                            <p className="text-gray-800">{formData.currentTreatment}</p>
+                          ) : (
+                            <p className="text-gray-500 italic">No ongoing treatment recorded</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Pregnancy Status - Only show for females aged 18-55 */}
+                    {shouldShowPregnancy && (
+                      <div className="p-5 bg-pink-50 border border-pink-200 rounded-xl">
+                        <h3 className="text-lg font-semibold text-pink-900 mb-4">Pregnancy Status</h3>
+                        <p className="text-sm text-pink-700 mb-4">
+                          This information helps healthcare providers make safer treatment decisions.
+                        </p>
+                        {isEditing ? (
+                          <>
+                            <div className="flex gap-4 mb-4">
+                              <label className="flex items-center cursor-pointer">
+                                <input
+                                  type="radio"
+                                  checked={formData.isPregnant === true}
+                                  onChange={() => setFormData({ ...formData, isPregnant: true })}
+                                  className="w-4 h-4 text-pink-600 border-gray-300 focus:ring-pink-500"
+                                />
+                                <span className="ml-2 text-gray-700">Yes, I am pregnant</span>
+                              </label>
+                              <label className="flex items-center cursor-pointer">
+                                <input
+                                  type="radio"
+                                  checked={formData.isPregnant === false}
+                                  onChange={() => setFormData({ ...formData, isPregnant: false, expectedDueDate: null })}
+                                  className="w-4 h-4 text-pink-600 border-gray-300 focus:ring-pink-500"
+                                />
+                                <span className="ml-2 text-gray-700">No</span>
+                              </label>
+                              <label className="flex items-center cursor-pointer">
+                                <input
+                                  type="radio"
+                                  checked={formData.isPregnant === null || formData.isPregnant === undefined}
+                                  onChange={() => setFormData({ ...formData, isPregnant: null, expectedDueDate: null })}
+                                  className="w-4 h-4 text-pink-600 border-gray-300 focus:ring-pink-500"
+                                />
+                                <span className="ml-2 text-gray-700">Not specified</span>
+                              </label>
+                            </div>
+                            {formData.isPregnant === true && (
+                              <div>
+                                <label className="block text-sm font-medium text-pink-800 mb-2">
+                                  Expected Due Date
+                                </label>
+                                <input
+                                  type="date"
+                                  value={formData.expectedDueDate || ''}
+                                  onChange={(e) => setFormData({ ...formData, expectedDueDate: e.target.value })}
+                                  className="px-4 py-2 rounded-xl border border-pink-300 focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                                />
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="p-3 bg-white rounded-lg">
+                            {formData.isPregnant === true ? (
+                              <div className="flex items-center gap-2 text-pink-800">
+                                <span className="text-xl">🤰</span>
+                                <span className="font-medium">Currently Pregnant</span>
+                                {formData.expectedDueDate && (
+                                  <span className="text-sm text-pink-600 ml-2">
+                                    (Due: {new Date(formData.expectedDueDate).toLocaleDateString()})
+                                  </span>
+                                )}
+                              </div>
+                            ) : formData.isPregnant === false ? (
+                              <p className="text-gray-600">Not pregnant</p>
+                            ) : (
+                              <p className="text-gray-500 italic">Not specified</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

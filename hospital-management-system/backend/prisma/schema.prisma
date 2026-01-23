@@ -533,17 +533,23 @@ enum MaritalStatus {
 }
 
 model MedicalHistory {
-  id                  String   @id @default(uuid())
-  patientId           String   @unique
+  id                  String    @id @default(uuid())
+  patientId           String    @unique
   chronicConditions   String[]
   pastSurgeries       String[]
   familyHistory       String[]
   currentMedications  String[]
   immunizations       String[]
-  lifestyle           Json?    // smoking, alcohol, exercise
+  lifestyle           Json?     // smoking, alcohol, exercise
   notes               String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  // Ongoing treatment (chemotherapy, dialysis, physical therapy, etc.)
+  currentTreatment    String?
+  // Pregnancy status fields (for females 18-55)
+  isPregnant          Boolean?
+  expectedDueDate     DateTime?
+  lastPregnancyUpdate DateTime? // When pregnancy status was last updated
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   patient Patient @relation(fields: [patientId], references: [id])
 

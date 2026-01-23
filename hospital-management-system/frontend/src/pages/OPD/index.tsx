@@ -14,6 +14,7 @@ import {
   EyeIcon,
   CheckIcon,
   ExclamationCircleIcon,
+  ExclamationTriangleIcon,
   PlayIcon,
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
@@ -422,6 +423,27 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
   const [riskAssessment, setRiskAssessment] = useState<any>(null);
   const [showRiskAssessment, setShowRiskAssessment] = useState(false);
 
+  // State for patient medical summary (read-only display from MedicalHistory model)
+  const [medicalSummary, setMedicalSummary] = useState<{
+    medicalHistory: {
+      chronicConditions: string[];
+      pastSurgeries: string[];
+      familyHistory: string[];
+      currentMedications: string[];
+      currentTreatment: string | null;
+      isPregnant: boolean | null;
+      expectedDueDate: string | null;
+    } | null;
+    allergies: Array<{
+      id: string;
+      allergen: string;
+      type: string;
+      severity: string;
+      reaction: string | null;
+    }>;
+  } | null>(null);
+  const [loadingMedicalSummary, setLoadingMedicalSummary] = useState(false);
+
   // Calculate if pregnancy question should be shown
   const patientAge = patientData?.dateOfBirth ? calculateAge(patientData.dateOfBirth) : null;
   const showPregnancyQuestion =
@@ -453,6 +475,26 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
     };
 
     fetchPatientData();
+  }, [appointment.patient?.id]);
+
+  // Fetch patient medical summary (medical history + allergies from MedicalHistory model)
+  useEffect(() => {
+    const fetchMedicalSummary = async () => {
+      if (!appointment.patient?.id) return;
+
+      setLoadingMedicalSummary(true);
+      try {
+        const response = await opdApi.getPatientMedicalSummary(appointment.patient.id);
+        setMedicalSummary(response.data?.data || null);
+      } catch (error) {
+        console.error('Failed to fetch patient medical summary:', error);
+        setMedicalSummary(null);
+      } finally {
+        setLoadingMedicalSummary(false);
+      }
+    };
+
+    fetchMedicalSummary();
   }, [appointment.patient?.id]);
 
   // Fetch existing vitals and patient status from previous appointments
@@ -687,6 +729,107 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
                   . You are updating existing values.
                 </span>
               </div>
+            )}
+
+            {/* Patient Medical History (Read-Only) */}
+            {!loadingMedicalSummary && medicalSummary && (
+              (medicalSummary.medicalHistory?.chronicConditions?.length > 0 ||
+               medicalSummary.medicalHistory?.pastSurgeries?.length > 0 ||
+               medicalSummary.medicalHistory?.currentTreatment ||
+               medicalSummary.allergies?.length > 0) && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                    <ClipboardDocumentListIcon className="h-5 w-5" />
+                    Patient Medical History (Read-Only)
+                  </h3>
+
+                  {/* Allergies - Highlighted for safety */}
+                  {medicalSummary.allergies?.length > 0 && (
+                    <div className="mb-3 p-2.5 bg-red-100 border border-red-300 rounded-lg">
+                      <span className="text-xs text-red-700 uppercase font-semibold flex items-center gap-1 mb-1.5">
+                        <ExclamationTriangleIcon className="h-4 w-4" /> Allergies
+                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        {medicalSummary.allergies.map((a, i) => (
+                          <span
+                            key={i}
+                            className="px-2 py-0.5 bg-red-200 text-red-900 rounded text-sm font-medium"
+                          >
+                            {a.allergen} ({a.severity})
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Chronic Conditions */}
+                  {medicalSummary.medicalHistory?.chronicConditions?.length > 0 && (
+                    <div className="mb-3">
+                      <span className="text-xs text-gray-500 uppercase font-medium">Chronic Conditions</span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {medicalSummary.medicalHistory.chronicConditions.map((c, i) => (
+                          <span key={i} className="px-2 py-0.5 bg-rose-100 text-rose-800 rounded text-sm">
+                            {c}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Past Surgeries */}
+                  {medicalSummary.medicalHistory?.pastSurgeries?.length > 0 && (
+                    <div className="mb-3">
+                      <span className="text-xs text-gray-500 uppercase font-medium">Past Surgeries</span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {medicalSummary.medicalHistory.pastSurgeries.map((s, i) => (
+                          <span key={i} className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-sm">
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Ongoing Treatment from MedicalHistory */}
+                  {medicalSummary.medicalHistory?.currentTreatment && (
+                    <div className="mb-3">
+                      <span className="text-xs text-gray-500 uppercase font-medium">Ongoing Treatment</span>
+                      <p className="mt-1 text-sm text-gray-700 bg-cyan-50 px-2 py-1 rounded">
+                        {medicalSummary.medicalHistory.currentTreatment}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Patient Medications from MedicalHistory */}
+                  {medicalSummary.medicalHistory?.currentMedications?.length > 0 && (
+                    <div className="mb-3">
+                      <span className="text-xs text-gray-500 uppercase font-medium">Current Medications (from Medical History)</span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {medicalSummary.medicalHistory.currentMedications.map((m, i) => (
+                          <span key={i} className="px-2 py-0.5 bg-green-100 text-green-800 rounded text-sm">
+                            {m}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Pregnancy Status from MedicalHistory */}
+                  {medicalSummary.medicalHistory?.isPregnant === true && (
+                    <div className="p-2 bg-pink-100 border border-pink-300 rounded-lg">
+                      <div className="flex items-center gap-2 text-pink-800">
+                        <span className="text-lg">🤰</span>
+                        <span className="font-medium text-sm">Patient is Pregnant</span>
+                        {medicalSummary.medicalHistory.expectedDueDate && (
+                          <span className="text-xs text-pink-600">
+                            (Due: {new Date(medicalSummary.medicalHistory.expectedDueDate).toLocaleDateString()})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
             )}
 
             {/* Primary Vitals */}
