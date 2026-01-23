@@ -1140,12 +1140,6 @@ router.put(
   asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
     const patientId = req.patient?.patientId || '';
 
-    // Debug: Log received data
-    console.log('=== Medical History Update ===');
-    console.log('Patient ID:', patientId);
-    console.log('Received familyHistory:', JSON.stringify(req.body.familyHistory));
-    console.log('Full body:', JSON.stringify(req.body, null, 2));
-
     const {
       chronicConditions,
       pastSurgeries,

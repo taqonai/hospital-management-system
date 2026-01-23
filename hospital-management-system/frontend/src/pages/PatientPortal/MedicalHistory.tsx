@@ -370,9 +370,6 @@ export default function MedicalHistory() {
 
       // Then update state for UI
       setFormData(newData);
-
-      console.log(`Added to ${field}:`, value.trim());
-      console.log('Ref now has:', formDataRef.current[field]);
     }
 
     setter('');
@@ -396,14 +393,6 @@ export default function MedicalHistory() {
   };
 
   const handleSaveHistory = () => {
-    // Debug: Log what we're sending
-    console.log('=== SAVING MEDICAL HISTORY ===');
-    console.log('formData:', JSON.stringify(formData, null, 2));
-    console.log('formDataRef.current:', JSON.stringify(formDataRef.current, null, 2));
-    console.log('familyHistory in formData:', formData.familyHistory);
-    console.log('familyHistory in ref:', formDataRef.current.familyHistory);
-
-    // Use ref to ensure we always have the latest formData value
     updateHistoryMutation.mutate(formDataRef.current);
   };
 
