@@ -21,6 +21,7 @@
     "db:seed:insurance-coding": "npm run db:seed:icd10 && npm run db:seed:cpt",
     "db:seed:amad": "ts-node prisma/seed-amad.ts",
     "db:seed:dashboard": "ts-node prisma/seed-dashboard.ts",
+    "db:seed:uae-drugs": "ts-node prisma/seed-uae-drugs.ts",
     "lint": "eslint src/**/*.ts",
     "test": "jest"
   },
