@@ -105,10 +105,21 @@ export class PharmacyService {
       },
     });
 
-    return drugs.filter(drug => {
-      const totalStock = drug.inventory.reduce((sum, inv) => sum + inv.quantity, 0);
-      return totalStock <= (threshold || drug.reorderLevel);
-    });
+    // Filter and transform to match frontend expected format
+    return drugs
+      .filter(drug => {
+        const totalStock = drug.inventory.reduce((sum, inv) => sum + inv.quantity, 0);
+        return totalStock <= (threshold || drug.reorderLevel);
+      })
+      .map(drug => {
+        const totalStock = drug.inventory.reduce((sum, inv) => sum + inv.quantity, 0);
+        return {
+          id: drug.id,
+          drug: { name: drug.name },
+          quantity: totalStock,
+          reorderLevel: drug.reorderLevel,
+        };
+      });
   }
 
   async getExpiringDrugs(days: number = 30) {
