@@ -31,6 +31,7 @@ import IVCompatibility from '../../components/pharmacy/IVCompatibility';
 // Drug Management Modals
 import AddDrugModal from './AddDrugModal';
 import DrugCSVImportModal from './DrugCSVImportModal';
+import DrugManagement from './DrugManagement';
 
 interface Prescription {
   id: string;
@@ -397,12 +398,11 @@ export default function Pharmacy() {
 
       {/* Inventory Tab */}
       {activeTab === 'inventory' && (
-        <div className="relative overflow-hidden rounded-2xl backdrop-blur-xl bg-white border border-gray-200 p-6 shadow-xl animate-fade-in-up">
-          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
-          <div className="text-center mb-6"><div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gray-100 mb-4"><BuildingStorefrontIcon className="h-8 w-8 text-gray-400" /></div><h3 className="font-semibold text-gray-900">Drug Inventory Management</h3><p className="text-sm text-gray-500 mt-1">Track stock levels, expiry dates, and reorder alerts</p></div>
-          {lowStock.length > 0 && (
-            <div className="mt-4"><h4 className="font-medium text-orange-700 mb-3">Low Stock Items:</h4><div className="space-y-2">{lowStock.map((item, index) => (<div key={item.id} className="flex justify-between p-3 bg-orange-500/10 rounded-xl border border-orange-500/20 animate-fade-in-up" style={{ animationDelay: `${index * 50}ms` }}><span className="text-gray-700">{item.drug?.name}</span><span className="text-orange-600 font-medium">{item.quantity} / {item.reorderLevel}</span></div>))}</div></div>
-          )}
+        <div className="animate-fade-in-up">
+          <DrugManagement
+            onAddDrug={() => setShowAddDrugModal(true)}
+            onImportCSV={() => setShowImportModal(true)}
+          />
         </div>
       )}
 
