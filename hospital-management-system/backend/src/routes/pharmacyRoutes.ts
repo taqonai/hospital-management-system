@@ -1,9 +1,23 @@
 import { Router, Response } from 'express';
+import multer from 'multer';
 import { pharmacyService } from '../services/pharmacyService';
 import { authenticate, authorize } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
+
+// Configure multer for CSV uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV files are allowed'));
+    }
+  },
+});
 
 const router = Router();
 
@@ -178,6 +192,38 @@ router.get(
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const stats = await pharmacyService.getPharmacyStats(req.user!.hospitalId);
     sendSuccess(res, stats);
+  })
+);
+
+// ==================== Bulk Import ====================
+
+// Download CSV template for drug import
+router.get(
+  '/drugs/csv-template',
+  authenticate,
+  authorize('HOSPITAL_ADMIN', 'PHARMACIST'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const template = pharmacyService.getDrugCSVTemplate();
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=drug-import-template.csv');
+    res.send(template);
+  })
+);
+
+// Bulk import drugs from CSV
+router.post(
+  '/drugs/bulk-import',
+  authenticate,
+  authorize('HOSPITAL_ADMIN', 'PHARMACIST'),
+  upload.single('file'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No CSV file uploaded' });
+    }
+
+    const csvContent = req.file.buffer.toString('utf-8');
+    const result = await pharmacyService.bulkImportDrugs(csvContent);
+    sendSuccess(res, result);
   })
 );
 

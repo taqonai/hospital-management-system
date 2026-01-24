@@ -15,6 +15,7 @@ import {
   CurrencyDollarIcon,
   BeakerIcon as FlaskIcon,
   ClipboardDocumentCheckIcon,
+  ArrowUpTrayIcon,
 } from '@heroicons/react/24/outline';
 import { useAIHealth } from '../../hooks/useAI';
 import { pharmacyApi } from '../../services/api';
@@ -26,6 +27,10 @@ import TDMMonitoring from '../../components/pharmacy/TDMMonitoring';
 import CostAlternatives from '../../components/pharmacy/CostAlternatives';
 import PolypharmacyRisk from '../../components/pharmacy/PolypharmacyRisk';
 import IVCompatibility from '../../components/pharmacy/IVCompatibility';
+
+// Drug Management Modals
+import AddDrugModal from './AddDrugModal';
+import DrugCSVImportModal from './DrugCSVImportModal';
 
 interface Prescription {
   id: string;
@@ -128,6 +133,10 @@ export default function Pharmacy() {
   const [dosageResult, setDosageResult] = useState<DosageResult | null>(null);
   const [calculatingDosage, setCalculatingDosage] = useState(false);
 
+  // Modal states
+  const [showAddDrugModal, setShowAddDrugModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+
   const { data: healthStatus } = useAIHealth();
   const isAIOnline = healthStatus?.status === 'connected';
 
@@ -170,6 +179,19 @@ export default function Pharmacy() {
     };
     fetchStats();
   }, []);
+
+  const refreshData = async () => {
+    try {
+      const [lowStockRes, statsRes] = await Promise.all([
+        pharmacyApi.getLowStock(),
+        pharmacyApi.getStats(),
+      ]);
+      setLowStock(lowStockRes.data.data || []);
+      setStats(statsRes.data.data || { pendingPrescriptions: 0, dispensedToday: 0, lowStockItems: 0, expiringSoon: 0 });
+    } catch (error) {
+      console.error('Failed to refresh data:', error);
+    }
+  };
 
   const handleAddDrug = () => setDrugList([...drugList, { name: '', genericName: '' }]);
   const handleRemoveDrug = (index: number) => { if (drugList.length > 2) setDrugList(drugList.filter((_, i) => i !== index)); };
@@ -256,6 +278,14 @@ export default function Pharmacy() {
             <p className="text-green-100">Manage prescriptions, dispensing, and drug inventory</p>
           </div>
           <div className="flex items-center gap-3">
+            <button onClick={() => setShowImportModal(true)} className="group relative px-4 py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-xl rounded-xl text-white font-medium transition-all duration-300 flex items-center gap-2 border border-white/20 hover:border-white/40 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-green-500/25">
+              <ArrowUpTrayIcon className="h-5 w-5" />
+              Import CSV
+            </button>
+            <button onClick={() => setShowAddDrugModal(true)} className="group relative px-4 py-2.5 bg-white hover:bg-green-50 backdrop-blur-xl rounded-xl text-green-700 font-medium transition-all duration-300 flex items-center gap-2 border border-white/20 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-green-500/25">
+              <PlusIcon className="h-5 w-5" />
+              Add Medicine
+            </button>
             {isAIOnline && (
               <>
                 <button onClick={() => setActiveTab('interactions')} className="group relative px-4 py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-xl rounded-xl text-white font-medium transition-all duration-300 flex items-center gap-2 border border-white/20 hover:border-white/40 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-green-500/25">
@@ -465,6 +495,20 @@ export default function Pharmacy() {
           <IVCompatibility />
         </div>
       )}
+
+      {/* Add Drug Modal */}
+      <AddDrugModal
+        isOpen={showAddDrugModal}
+        onClose={() => setShowAddDrugModal(false)}
+        onSuccess={refreshData}
+      />
+
+      {/* CSV Import Modal */}
+      <DrugCSVImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={refreshData}
+      />
     </div>
   );
 }

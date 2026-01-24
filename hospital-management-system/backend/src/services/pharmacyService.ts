@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import { NotFoundError } from '../middleware/errorHandler';
+import { parse } from 'csv-parse/sync';
 
 export class PharmacyService {
   // Drug Management
@@ -651,6 +652,191 @@ export class PharmacyService {
     ]);
 
     return { pendingPrescriptions, dispensedToday, lowStockCount, expiringCount };
+  }
+
+  // ==================== Bulk Import ====================
+
+  getDrugCSVTemplate(): string {
+    const headers = [
+      'name',
+      'genericName',
+      'brandName',
+      'code',
+      'category',
+      'dosageForm',
+      'strength',
+      'manufacturer',
+      'price',
+      'reorderLevel',
+      'requiresPrescription',
+      'isControlled',
+      'sideEffects',
+      'contraindications',
+      'interactions',
+    ];
+
+    const exampleRow = [
+      'Paracetamol',
+      'Acetaminophen',
+      'Tylenol',
+      'PARA-500',
+      'ANALGESIC',
+      'TABLET',
+      '500mg',
+      'PharmaCorp',
+      '5.99',
+      '50',
+      'false',
+      'false',
+      'Nausea|Dizziness',
+      'Liver disease|Allergy',
+      'Warfarin|Alcohol',
+    ];
+
+    return headers.join(',') + '\n' + exampleRow.join(',');
+  }
+
+  async bulkImportDrugs(csvContent: string): Promise<{
+    total: number;
+    created: number;
+    updated: number;
+    errors: Array<{ row: number; code: string; error: string }>;
+  }> {
+    const errors: Array<{ row: number; code: string; error: string }> = [];
+    let created = 0;
+    let updated = 0;
+
+    // Parse CSV
+    let records: any[];
+    try {
+      records = parse(csvContent, {
+        columns: true,
+        skip_empty_lines: true,
+        trim: true,
+      });
+    } catch (e: any) {
+      throw new Error(`Failed to parse CSV: ${e.message}`);
+    }
+
+    const total = records.length;
+
+    // Valid categories and dosage forms
+    const validCategories = [
+      'ANALGESIC', 'ANTIBIOTIC', 'ANTIVIRAL', 'ANTIFUNGAL', 'ANTIHISTAMINE',
+      'ANTIHYPERTENSIVE', 'ANTIDIABETIC', 'ANTIDEPRESSANT', 'ANTICONVULSANT',
+      'ANTICOAGULANT', 'BRONCHODILATOR', 'CARDIOVASCULAR', 'CORTICOSTEROID',
+      'DIURETIC', 'GASTROINTESTINAL', 'HORMONE', 'IMMUNOSUPPRESSANT',
+      'MUSCLE_RELAXANT', 'NSAID', 'OPIOID', 'SEDATIVE', 'STATIN', 'VITAMIN', 'OTHER',
+    ];
+
+    const validDosageForms = [
+      'TABLET', 'CAPSULE', 'SYRUP', 'SUSPENSION', 'INJECTION', 'CREAM',
+      'OINTMENT', 'GEL', 'DROPS', 'INHALER', 'PATCH', 'SUPPOSITORY',
+      'POWDER', 'SOLUTION', 'SPRAY', 'LOTION', 'OTHER',
+    ];
+
+    for (let i = 0; i < records.length; i++) {
+      const row = records[i];
+      const rowNum = i + 2; // Account for header row and 0-based index
+
+      try {
+        // Validate required fields
+        if (!row.name?.trim()) {
+          errors.push({ row: rowNum, code: row.code || 'unknown', error: 'Name is required' });
+          continue;
+        }
+        if (!row.genericName?.trim()) {
+          errors.push({ row: rowNum, code: row.code || 'unknown', error: 'Generic name is required' });
+          continue;
+        }
+        if (!row.code?.trim()) {
+          errors.push({ row: rowNum, code: row.code || 'unknown', error: 'Code is required' });
+          continue;
+        }
+        if (!row.category?.trim()) {
+          errors.push({ row: rowNum, code: row.code || 'unknown', error: 'Category is required' });
+          continue;
+        }
+        if (!row.dosageForm?.trim()) {
+          errors.push({ row: rowNum, code: row.code || 'unknown', error: 'Dosage form is required' });
+          continue;
+        }
+        if (!row.strength?.trim()) {
+          errors.push({ row: rowNum, code: row.code || 'unknown', error: 'Strength is required' });
+          continue;
+        }
+        if (!row.price || isNaN(Number(row.price)) || Number(row.price) <= 0) {
+          errors.push({ row: rowNum, code: row.code || 'unknown', error: 'Valid price is required' });
+          continue;
+        }
+
+        // Validate category
+        const category = row.category.toUpperCase().trim();
+        if (!validCategories.includes(category)) {
+          errors.push({ row: rowNum, code: row.code, error: `Invalid category: ${row.category}` });
+          continue;
+        }
+
+        // Validate dosage form
+        const dosageForm = row.dosageForm.toUpperCase().trim();
+        if (!validDosageForms.includes(dosageForm)) {
+          errors.push({ row: rowNum, code: row.code, error: `Invalid dosage form: ${row.dosageForm}` });
+          continue;
+        }
+
+        // Parse array fields (using | as delimiter within CSV cells)
+        const sideEffects = row.sideEffects?.trim()
+          ? row.sideEffects.split('|').map((s: string) => s.trim()).filter(Boolean)
+          : [];
+        const contraindications = row.contraindications?.trim()
+          ? row.contraindications.split('|').map((s: string) => s.trim()).filter(Boolean)
+          : [];
+        const interactions = row.interactions?.trim()
+          ? row.interactions.split('|').map((s: string) => s.trim()).filter(Boolean)
+          : [];
+
+        // Prepare drug data
+        const drugData = {
+          name: row.name.trim(),
+          genericName: row.genericName.trim(),
+          brandName: row.brandName?.trim() || null,
+          code: row.code.trim(),
+          category,
+          dosageForm,
+          strength: row.strength.trim(),
+          manufacturer: row.manufacturer?.trim() || null,
+          price: Number(row.price),
+          reorderLevel: row.reorderLevel ? Number(row.reorderLevel) : 10,
+          requiresPrescription: row.requiresPrescription?.toLowerCase() === 'true',
+          isControlled: row.isControlled?.toLowerCase() === 'true',
+          sideEffects,
+          contraindications,
+          interactions,
+        };
+
+        // Check if drug with this code already exists
+        const existingDrug = await prisma.drug.findUnique({
+          where: { code: drugData.code },
+        });
+
+        if (existingDrug) {
+          // Update existing drug
+          await prisma.drug.update({
+            where: { code: drugData.code },
+            data: drugData,
+          });
+          updated++;
+        } else {
+          // Create new drug
+          await prisma.drug.create({ data: drugData });
+          created++;
+        }
+      } catch (e: any) {
+        errors.push({ row: rowNum, code: row.code || 'unknown', error: e.message || 'Unknown error' });
+      }
+    }
+
+    return { total, created, updated, errors };
   }
 }
 

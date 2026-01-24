@@ -501,6 +501,15 @@ export const pharmacyApi = {
     isBreastfeeding?: boolean;
   }) => api.post('/pharmacy/calculate-dosage', data),
   getStats: () => api.get('/pharmacy/stats'),
+  // Bulk Import
+  downloadDrugTemplate: () => api.get('/pharmacy/drugs/csv-template', { responseType: 'blob' }),
+  bulkImportDrugs: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/pharmacy/drugs/bulk-import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
 };
 
 // Advanced Pharmacy AI APIs
