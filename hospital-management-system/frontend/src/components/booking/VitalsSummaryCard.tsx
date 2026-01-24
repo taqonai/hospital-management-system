@@ -79,10 +79,10 @@ function VitalItem({
   if (value === null || value === undefined) return null;
 
   return (
-    <div className={clsx('text-center p-2 rounded', isAbnormal ? 'bg-red-50' : 'bg-gray-50')}>
-      <div className={clsx('text-lg font-semibold', isAbnormal ? 'text-red-600' : 'text-gray-900')}>
-        {value}
-        {unit && <span className="text-xs ml-0.5">{unit}</span>}
+    <div className={clsx('text-center p-2 rounded min-w-0', isAbnormal ? 'bg-red-50' : 'bg-gray-50')}>
+      <div className={clsx('font-semibold', isAbnormal ? 'text-red-600' : 'text-gray-900')}>
+        <span className="text-base sm:text-lg">{value}</span>
+        {unit && <span className="text-[10px] sm:text-xs ml-0.5 text-gray-500">{unit}</span>}
       </div>
       <div className="text-xs text-gray-500">{label}</div>
     </div>
@@ -157,7 +157,7 @@ export function VitalsSummaryCard({ vitals, riskPrediction, patient, className }
 
       {/* Vitals Grid */}
       <div className="p-4">
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4">
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4 auto-cols-fr">
           <VitalItem
             label="BP"
             value={
