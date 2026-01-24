@@ -511,15 +511,15 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
           existingVitals = response.data?.data?.vitals;
         }
 
-        // 2. Fetch patient's latest status from previous appointments
+        // 2. Fetch patient's latest status from Medical History (single source of truth)
         // This will be used if current vitals don't have patient status data
         if (appointment.patient?.id) {
           try {
             const statusResponse = await opdApi.getPatientStatus(appointment.patient.id);
             patientStatus = statusResponse.data?.data;
           } catch (err) {
-            // Patient may not have previous status, that's okay
-            console.log('No previous patient status found');
+            // Patient may not have medical history yet, that's okay
+            console.log('No patient medical history found');
           }
         }
 

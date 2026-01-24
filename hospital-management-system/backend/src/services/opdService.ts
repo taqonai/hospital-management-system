@@ -577,6 +577,53 @@ export class OPDService {
       data: { vitalsRecordedAt: new Date() },
     });
 
+    // SYNC TO MEDICAL HISTORY (Single Source of Truth)
+    // If nurse updated patient details (pregnancy, medications, treatment),
+    // sync these back to the MedicalHistory table so all systems see the same data
+    if (vitalsData.isPregnant !== undefined || vitalsData.currentMedications || vitalsData.currentTreatment) {
+      // Convert medications array to string[] for MedicalHistory storage
+      const medicationsAsStrings = vitalsData.currentMedications?.map(med => {
+        const parts = [med.name];
+        if (med.dosage) parts.push(med.dosage);
+        if (med.frequency) parts.push(`(${med.frequency})`);
+        return parts.join(' ');
+      }) || [];
+
+      // Check if patient has existing medical history
+      const existingHistory = await prisma.medicalHistory.findUnique({
+        where: { patientId: appointment.patientId },
+      });
+
+      if (existingHistory) {
+        // Update existing medical history
+        await prisma.medicalHistory.update({
+          where: { patientId: appointment.patientId },
+          data: {
+            ...(vitalsData.isPregnant !== undefined && { isPregnant: vitalsData.isPregnant }),
+            ...(vitalsData.expectedDueDate && { expectedDueDate: new Date(vitalsData.expectedDueDate) }),
+            ...(vitalsData.isPregnant === false && { expectedDueDate: null }), // Clear due date if not pregnant
+            ...(medicationsAsStrings.length > 0 && { currentMedications: medicationsAsStrings }),
+            ...(vitalsData.currentTreatment && { currentTreatment: vitalsData.currentTreatment }),
+          },
+        });
+      } else {
+        // Create new medical history record
+        await prisma.medicalHistory.create({
+          data: {
+            patientId: appointment.patientId,
+            isPregnant: vitalsData.isPregnant ?? null,
+            expectedDueDate: vitalsData.expectedDueDate ? new Date(vitalsData.expectedDueDate) : null,
+            currentMedications: medicationsAsStrings,
+            currentTreatment: vitalsData.currentTreatment || null,
+            chronicConditions: [],
+            pastSurgeries: [],
+            familyHistory: [],
+            immunizations: [],
+          },
+        });
+      }
+    }
+
     return {
       vital,
       appointment: {
@@ -1038,47 +1085,61 @@ export class OPDService {
     };
   }
 
-  // Get patient's latest patient status (pregnancy, medications, treatment) from any previous vitals
+  // Get patient's latest patient status (pregnancy, medications, treatment) from Medical History
+  // This is the SINGLE SOURCE OF TRUTH - both patient app and nurse vitals form read/write here
   async getPatientLatestStatus(patientId: string, hospitalId: string) {
-    // Verify patient belongs to hospital
+    // Verify patient belongs to hospital and get medical history
     const patient = await prisma.patient.findFirst({
       where: { id: patientId, hospitalId },
+      include: {
+        medicalHistory: {
+          select: {
+            isPregnant: true,
+            expectedDueDate: true,
+            currentMedications: true,
+            currentTreatment: true,
+            updatedAt: true,
+          },
+        },
+      },
     });
 
     if (!patient) {
       throw new NotFoundError('Patient not found');
     }
 
-    // Find the most recent vitals with patient status data (where at least one field is set)
-    const latestVitalsWithStatus = await prisma.vital.findFirst({
-      where: {
-        patientId,
-        OR: [
-          { isPregnant: { not: null } },
-          { currentMedications: { not: { equals: null } } },
-          { AND: [{ currentTreatment: { not: null } }, { currentTreatment: { not: '' } }] },
-        ],
-      },
-      orderBy: { recordedAt: 'desc' },
-      select: {
-        isPregnant: true,
-        expectedDueDate: true,
-        currentMedications: true,
-        currentTreatment: true,
-        recordedAt: true,
-      },
-    });
-
-    if (!latestVitalsWithStatus) {
+    // Return from Medical History (single source of truth)
+    if (!patient.medicalHistory) {
       return null;
     }
 
+    // Convert currentMedications from string[] to the format expected by frontend
+    // Medical History stores as string[], but nurse form expects {name, dosage, frequency}[]
+    const medications = patient.medicalHistory.currentMedications || [];
+    const formattedMedications = medications.map((med: string) => {
+      // Try to parse medication string like "Panadol 500mg twice daily"
+      const parts = med.trim().split(/\s+/);
+      if (parts.length >= 2) {
+        // Check if second part looks like a dosage (contains numbers)
+        const hasDosage = /\d/.test(parts[1]);
+        if (hasDosage) {
+          return {
+            name: parts[0],
+            dosage: parts[1],
+            frequency: parts.slice(2).join(' ') || '',
+          };
+        }
+      }
+      // Fallback: entire string as name
+      return { name: med, dosage: '', frequency: '' };
+    });
+
     return {
-      isPregnant: latestVitalsWithStatus.isPregnant,
-      expectedDueDate: latestVitalsWithStatus.expectedDueDate,
-      currentMedications: latestVitalsWithStatus.currentMedications,
-      currentTreatment: latestVitalsWithStatus.currentTreatment,
-      recordedAt: latestVitalsWithStatus.recordedAt,
+      isPregnant: patient.medicalHistory.isPregnant,
+      expectedDueDate: patient.medicalHistory.expectedDueDate,
+      currentMedications: formattedMedications,
+      currentTreatment: patient.medicalHistory.currentTreatment,
+      recordedAt: patient.medicalHistory.updatedAt,
     };
   }
 
