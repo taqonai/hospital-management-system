@@ -486,14 +486,13 @@ const MainNavigator: React.FC = () => {
             // Always reset Health stack to HealthHub when tab is pressed
             navigation.dispatch(
               CommonActions.reset({
-                index: 0,
+                index: 2, // HealthTab index
                 routes: [
                   { name: 'HomeTab' },
                   { name: 'AppointmentsTab' },
                   { name: 'HealthTab', state: { index: 0, routes: [{ name: 'HealthHub' }] } },
                   { name: 'SettingsTab' },
                 ],
-                index: 2, // HealthTab index
               })
             );
           },

@@ -14,6 +14,9 @@ interface MenuItem {
   screen: string;
 }
 
+// Features to hide (can be enabled later by removing from this array)
+const HIDDEN_FEATURES = ['messages'];
+
 const menuItems: MenuItem[] = [
   // A'mad Precision Health Features (Top Priority)
   {
@@ -142,6 +145,7 @@ const menuItems: MenuItem[] = [
     bgColor: colors.error[50],
     screen: 'MedicalHistory',
   },
+  // Messages feature - hidden but code preserved for future use
   {
     id: 'messages',
     title: 'Messages',
@@ -153,6 +157,9 @@ const menuItems: MenuItem[] = [
   },
 ];
 
+// Filter out hidden features
+const visibleMenuItems = menuItems.filter(item => !HIDDEN_FEATURES.includes(item.id));
+
 const HealthHubScreen: React.FC = () => {
   const navigation = useNavigation<any>();
 
@@ -162,7 +169,7 @@ const HealthHubScreen: React.FC = () => {
       <Text style={styles.subtitle}>Manage your health information</Text>
 
       <View style={styles.menuGrid}>
-        {menuItems.map((item) => (
+        {visibleMenuItems.map((item) => (
           <TouchableOpacity
             key={item.id}
             style={styles.menuItem}
@@ -171,7 +178,7 @@ const HealthHubScreen: React.FC = () => {
             <View style={[styles.iconContainer, { backgroundColor: item.bgColor }]}>
               <Ionicons name={item.icon} size={28} color={item.color} />
             </View>
-            <Text style={styles.menuTitle}>{item.title}</Text>
+            <Text style={styles.menuTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{item.title}</Text>
             <Text style={styles.menuDescription}>{item.description}</Text>
           </TouchableOpacity>
         ))}

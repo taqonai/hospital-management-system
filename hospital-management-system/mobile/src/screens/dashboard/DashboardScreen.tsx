@@ -219,7 +219,7 @@ const DashboardScreen: React.FC = () => {
 
         {/* Quick Actions */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <Text style={[styles.sectionTitle, styles.quickActionsTitle]}>Quick Actions</Text>
           <View style={styles.actionsGrid}>
             <TouchableOpacity
               style={styles.actionButton}
@@ -440,6 +440,9 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.lg,
     fontWeight: typography.fontWeight.semibold,
     color: colors.text.primary,
+  },
+  quickActionsTitle: {
+    marginBottom: spacing.md,
   },
   viewAllText: {
     fontSize: typography.fontSize.sm,

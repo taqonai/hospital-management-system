@@ -10,12 +10,14 @@ import {
   Alert,
   Modal,
   TextInput,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useSelector } from 'react-redux';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { colors, spacing, borderRadius, typography, shadows } from '../../theme';
 import { patientPortalApi } from '../../services/api';
 import { MedicalHistory, HealthStackParamList } from '../../types';
@@ -77,6 +79,10 @@ const MedicalHistoryScreen: React.FC = () => {
     exercise: '',
     diet: '',
   });
+
+  // Pregnancy date picker state
+  const [showDueDatePicker, setShowDueDatePicker] = useState(false);
+  const [tempDueDate, setTempDueDate] = useState<Date>(new Date());
 
   // Calculate if pregnancy section should be shown
   const patientAge = calculateAge(user?.dateOfBirth);
@@ -217,9 +223,31 @@ const MedicalHistoryScreen: React.FC = () => {
     }
   };
 
+  // Helper to normalize boolean from API (handles 0/1, "true"/"false", etc.)
+  const normalizeBoolean = (value: any): boolean | null => {
+    if (value === true || value === 1 || value === '1' || value === 'true') return true;
+    if (value === false || value === 0 || value === '0' || value === 'false') return false;
+    return null;
+  };
+
+  // Get normalized pregnancy status
+  const getPregnancyStatus = (): boolean | null => {
+    return normalizeBoolean(history?.isPregnant);
+  };
+
   // Handle pregnancy status update
   const handleUpdatePregnancy = async (isPregnant: boolean | null, expectedDueDate?: string) => {
     if (!history) return;
+
+    // If selecting "Yes", show date picker first
+    if (isPregnant === true && !expectedDueDate) {
+      // Initialize temp date with existing due date or 9 months from now
+      const existingDate = history?.expectedDueDate ? new Date(history.expectedDueDate) : null;
+      const defaultDate = existingDate || new Date(Date.now() + 9 * 30 * 24 * 60 * 60 * 1000);
+      setTempDueDate(defaultDate);
+      setShowDueDatePicker(true);
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -242,20 +270,91 @@ const MedicalHistoryScreen: React.FC = () => {
     }
   };
 
+  // Handle due date selection
+  const handleDueDateChange = (event: any, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowDueDatePicker(false);
+    }
+
+    if (event.type === 'dismissed') {
+      setShowDueDatePicker(false);
+      return;
+    }
+
+    if (selectedDate) {
+      setTempDueDate(selectedDate);
+      if (Platform.OS === 'android') {
+        // On Android, save immediately after selection
+        handleUpdatePregnancy(true, selectedDate.toISOString());
+      }
+    }
+  };
+
+  // Confirm due date selection (for iOS)
+  const handleConfirmDueDate = () => {
+    setShowDueDatePicker(false);
+    handleUpdatePregnancy(true, tempDueDate.toISOString());
+  };
+
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
     setAnalysisResult(null);
     try {
       const response = await patientPortalApi.analyzeMedicalHistory();
-      const data = response.data?.data;
+      // Cast to any since API response structure is dynamic
+      const data: any = response.data?.data;
       if (data && typeof data === 'object') {
-        // Ensure arrays are properly formatted even if API returns unexpected structure
-        const insights = Array.isArray(data.insights)
-          ? data.insights.filter((i: any) => typeof i === 'string' && i.trim().length > 0)
-          : [];
-        const recommendations = Array.isArray(data.recommendations)
-          ? data.recommendations.filter((r: any) => typeof r === 'string' && r.trim().length > 0)
-          : [];
+        // Map API response structure to what the UI expects
+        // API returns: { summary, recommendations: [{title, description, priority}], riskFactors: [{factor, level}], preventiveCare, lastAnalyzed }
+        // UI expects: { insights: string[], recommendations: string[] }
+
+        const insights: string[] = [];
+        const recommendations: string[] = [];
+
+        // Extract insights from summary
+        if (data.summary) {
+          if (data.summary.riskLevel === 'elevated') {
+            insights.push(`Risk Level: Elevated - based on ${data.summary.totalConditions} condition(s) and ${data.summary.totalAllergies} allergy(ies)`);
+          } else if (data.summary.totalConditions > 0 || data.summary.totalAllergies > 0) {
+            insights.push(`Health Summary: ${data.summary.totalConditions} chronic condition(s), ${data.summary.totalAllergies} known allergy(ies)`);
+          }
+        }
+
+        // Extract insights from risk factors
+        if (Array.isArray(data.riskFactors)) {
+          data.riskFactors.forEach((rf: any) => {
+            if (rf && rf.factor) {
+              insights.push(`${rf.factor} risk: ${rf.level || 'noted'}`);
+            }
+          });
+        }
+
+        // Extract recommendations from recommendations array
+        if (Array.isArray(data.recommendations)) {
+          data.recommendations.forEach((rec: any) => {
+            if (rec) {
+              if (typeof rec === 'string') {
+                recommendations.push(rec);
+              } else if (rec.title && rec.description) {
+                recommendations.push(`${rec.title}: ${rec.description}`);
+              } else if (rec.title) {
+                recommendations.push(rec.title);
+              } else if (rec.description) {
+                recommendations.push(rec.description);
+              }
+            }
+          });
+        }
+
+        // Add preventive care as recommendations
+        if (Array.isArray(data.preventiveCare)) {
+          data.preventiveCare.forEach((pc: any) => {
+            if (pc && pc.test) {
+              const frequency = pc.frequency ? ` (${pc.frequency})` : '';
+              recommendations.push(`${pc.test}${frequency}`);
+            }
+          });
+        }
 
         if (insights.length > 0 || recommendations.length > 0) {
           setAnalysisResult({ insights, recommendations });
@@ -341,6 +440,11 @@ const MedicalHistoryScreen: React.FC = () => {
   const renderPregnancySection = () => {
     if (!shouldShowPregnancy) return null;
 
+    const pregnancyStatus = getPregnancyStatus();
+    const isPregnantYes = pregnancyStatus === true;
+    const isPregnantNo = pregnancyStatus === false;
+    const isPregnantNotSpecified = pregnancyStatus === null;
+
     return (
       <View style={styles.pregnancyCard}>
         <View style={styles.sectionHeader}>
@@ -356,55 +460,115 @@ const MedicalHistoryScreen: React.FC = () => {
 
         <View style={styles.radioGroup}>
           <TouchableOpacity
-            style={[styles.radioOption, history?.isPregnant === true && styles.radioSelected]}
+            style={[styles.radioOption, isPregnantYes && styles.radioSelected]}
             onPress={() => handleUpdatePregnancy(true)}
+            disabled={isSaving}
           >
             <Ionicons
-              name={history?.isPregnant === true ? 'radio-button-on' : 'radio-button-off'}
+              name={isPregnantYes ? 'radio-button-on' : 'radio-button-off'}
               size={20}
-              color={history?.isPregnant === true ? colors.error[500] : colors.gray[400]}
+              color={isPregnantYes ? colors.error[500] : colors.gray[400]}
             />
-            <Text style={[styles.radioText, history?.isPregnant === true && styles.radioTextSelected]}>
+            <Text style={[styles.radioText, isPregnantYes && styles.radioTextSelected]}>
               Yes, I am pregnant
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.radioOption, history?.isPregnant === false && styles.radioSelected]}
+            style={[styles.radioOption, isPregnantNo && styles.radioSelected]}
             onPress={() => handleUpdatePregnancy(false)}
+            disabled={isSaving}
           >
             <Ionicons
-              name={history?.isPregnant === false ? 'radio-button-on' : 'radio-button-off'}
+              name={isPregnantNo ? 'radio-button-on' : 'radio-button-off'}
               size={20}
-              color={history?.isPregnant === false ? colors.primary[500] : colors.gray[400]}
+              color={isPregnantNo ? colors.primary[500] : colors.gray[400]}
             />
-            <Text style={[styles.radioText, history?.isPregnant === false && styles.radioTextSelected]}>
+            <Text style={[styles.radioText, isPregnantNo && styles.radioTextSelected]}>
               No
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.radioOption, (history?.isPregnant === null || history?.isPregnant === undefined) && styles.radioSelected]}
+            style={[styles.radioOption, isPregnantNotSpecified && styles.radioSelected]}
             onPress={() => handleUpdatePregnancy(null)}
+            disabled={isSaving}
           >
             <Ionicons
-              name={(history?.isPregnant === null || history?.isPregnant === undefined) ? 'radio-button-on' : 'radio-button-off'}
+              name={isPregnantNotSpecified ? 'radio-button-on' : 'radio-button-off'}
               size={20}
-              color={(history?.isPregnant === null || history?.isPregnant === undefined) ? colors.gray[500] : colors.gray[400]}
+              color={isPregnantNotSpecified ? colors.gray[500] : colors.gray[400]}
             />
             <Text style={styles.radioText}>Not specified</Text>
           </TouchableOpacity>
         </View>
 
-        {history?.isPregnant === true && (
+        {isPregnantYes && (
           <View style={styles.dueDateContainer}>
             <Text style={styles.dueDateLabel}>Expected Due Date</Text>
-            <Text style={styles.dueDateValue}>
-              {history?.expectedDueDate
-                ? new Date(history.expectedDueDate).toLocaleDateString()
-                : 'Not specified'}
-            </Text>
+            <TouchableOpacity
+              style={styles.dueDateButton}
+              onPress={() => {
+                const existingDate = history?.expectedDueDate ? new Date(history.expectedDueDate) : new Date(Date.now() + 9 * 30 * 24 * 60 * 60 * 1000);
+                setTempDueDate(existingDate);
+                setShowDueDatePicker(true);
+              }}
+            >
+              <Text style={styles.dueDateValue}>
+                {history?.expectedDueDate
+                  ? new Date(history.expectedDueDate).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })
+                  : 'Tap to set due date'}
+              </Text>
+              <Ionicons name="calendar-outline" size={20} color={colors.error[500]} />
+            </TouchableOpacity>
           </View>
+        )}
+
+        {/* Due Date Picker Modal */}
+        {showDueDatePicker && (
+          Platform.OS === 'ios' ? (
+            <Modal
+              visible={showDueDatePicker}
+              transparent
+              animationType="slide"
+              onRequestClose={() => setShowDueDatePicker(false)}
+            >
+              <View style={styles.datePickerModalOverlay}>
+                <View style={styles.datePickerModalContent}>
+                  <View style={styles.datePickerHeader}>
+                    <TouchableOpacity onPress={() => setShowDueDatePicker(false)}>
+                      <Text style={styles.datePickerCancel}>Cancel</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.datePickerTitle}>Expected Due Date</Text>
+                    <TouchableOpacity onPress={handleConfirmDueDate}>
+                      <Text style={styles.datePickerDone}>Done</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <DateTimePicker
+                    value={tempDueDate}
+                    mode="date"
+                    display="spinner"
+                    onChange={handleDueDateChange}
+                    minimumDate={new Date()}
+                    maximumDate={new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)}
+                  />
+                </View>
+              </View>
+            </Modal>
+          ) : (
+            <DateTimePicker
+              value={tempDueDate}
+              mode="date"
+              display="default"
+              onChange={handleDueDateChange}
+              minimumDate={new Date()}
+              maximumDate={new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)}
+            />
+          )
         )}
       </View>
     );
@@ -1056,10 +1220,55 @@ const styles = StyleSheet.create({
     color: colors.error[600],
     marginBottom: spacing.xs,
   },
+  dueDateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.white,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.error[100],
+  },
   dueDateValue: {
     fontSize: typography.fontSize.sm,
     color: colors.text.primary,
     fontWeight: typography.fontWeight.medium,
+  },
+  // Date picker modal styles
+  datePickerModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  datePickerModalContent: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
+    paddingBottom: spacing.xl,
+  },
+  datePickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  datePickerTitle: {
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.text.primary,
+  },
+  datePickerCancel: {
+    fontSize: typography.fontSize.base,
+    color: colors.gray[500],
+  },
+  datePickerDone: {
+    fontSize: typography.fontSize.base,
+    color: colors.primary[600],
+    fontWeight: typography.fontWeight.semibold,
   },
 });
 
