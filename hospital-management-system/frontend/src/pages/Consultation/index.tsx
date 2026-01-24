@@ -1229,93 +1229,58 @@ export default function Consultation() {
                 </div>
               )}
 
-              {/* Current Treatment from MedicalHistory */}
-              {patientData.medicalHistory.currentTreatment && (
-                <div className="p-3 bg-cyan-500/10 rounded-xl">
-                  <span className="text-xs uppercase text-cyan-200">Ongoing Treatment</span>
-                  <div className="mt-1 text-sm text-white/80">
-                    {patientData.medicalHistory.currentTreatment}
-                  </div>
-                </div>
-              )}
-
-              {/* Current Medications from MedicalHistory Model */}
-              {patientData.medicalHistory.currentMedications?.length > 0 && (
-                <div className="p-3 bg-green-500/10 rounded-xl col-span-2">
-                  <span className="text-xs uppercase text-green-200">Medications (Patient Reported)</span>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {patientData.medicalHistory.currentMedications.map((m: string, i: number) => (
-                      <span key={i} className="px-2 py-0.5 bg-green-200/30 text-white rounded text-sm">{m}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Pregnancy Status from MedicalHistory (persistent) */}
+              {/* Pregnancy Status from MedicalHistory */}
               {patientData.medicalHistory.isPregnant === true && (
-                <div className="p-3 bg-pink-500/10 rounded-xl col-span-2">
-                  <div className="flex items-center gap-2 text-pink-200">
-                    <span className="text-lg">🤰</span>
-                    <span className="font-medium">Patient is Pregnant (Medical History)</span>
-                    {patientData.medicalHistory.expectedDueDate && (
-                      <span className="text-sm text-pink-300">
-                        (Due: {new Date(patientData.medicalHistory.expectedDueDate).toLocaleDateString()})
-                      </span>
-                    )}
+                <div className="p-3 bg-pink-500/20 rounded-xl col-span-2 border border-pink-400/30">
+                  <div className="flex items-center gap-2 text-pink-100">
+                    <span className="text-xl">🤰</span>
+                    <div>
+                      <span className="font-semibold">Pregnant</span>
+                      {patientData.medicalHistory.expectedDueDate && (
+                        <span className="ml-2 text-sm text-pink-200">
+                          Due: {new Date(patientData.medicalHistory.expectedDueDate).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Current Medications from MedicalHistory */}
+              {patientData.medicalHistory.currentMedications?.length > 0 && (
+                <div className="p-3 bg-amber-500/20 rounded-xl col-span-2 border border-amber-400/30">
+                  <div className="flex items-start gap-2">
+                    <span className="text-xl">💊</span>
+                    <div className="flex-1">
+                      <span className="text-xs uppercase text-amber-200 font-medium">Current Medications</span>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {patientData.medicalHistory.currentMedications.map((m: string, i: number) => (
+                          <span key={i} className="px-2 py-0.5 bg-amber-300/30 text-white rounded text-sm">{m}</span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Ongoing Treatment from MedicalHistory */}
+              {patientData.medicalHistory.currentTreatment && (
+                <div className="p-3 bg-cyan-500/20 rounded-xl col-span-2 border border-cyan-400/30">
+                  <div className="flex items-start gap-2">
+                    <span className="text-xl">🏥</span>
+                    <div>
+                      <span className="text-xs uppercase text-cyan-200 font-medium">Ongoing Treatment</span>
+                      <div className="mt-1 text-sm text-white/90">
+                        {patientData.medicalHistory.currentTreatment}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* Pregnancy Status from Visit Vitals (highlighted if pregnant) */}
-          {bookingData?.vitals?.isPregnant === true && (
-            <div className="mt-4 p-3 bg-pink-500/30 backdrop-blur border border-pink-300/30 rounded-xl">
-              <div className="flex items-center gap-2">
-                <span className="text-lg">🤰</span>
-                <span className="font-medium">Patient is Pregnant</span>
-                {bookingData.vitals.expectedDueDate && (
-                  <span className="text-sm text-pink-100">
-                    (Due: {new Date(bookingData.vitals.expectedDueDate).toLocaleDateString()})
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Current Medications from Vital Recording */}
-          {bookingData?.vitals?.currentMedications && bookingData.vitals.currentMedications.length > 0 && (
-            <div className="mt-4 p-3 bg-amber-500/20 backdrop-blur border border-amber-300/30 rounded-xl">
-              <div className="flex items-start gap-2">
-                <span className="text-lg">💊</span>
-                <div>
-                  <span className="font-medium">Current Medications:</span>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {bookingData.vitals.currentMedications.map((med: CurrentMedication, i: number) => (
-                      <span key={i} className="px-2 py-1 bg-amber-200/30 rounded text-sm">
-                        {med.name}
-                        {med.dosage && ` ${med.dosage}`}
-                        {med.frequency && ` (${med.frequency})`}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Current Treatment */}
-          {bookingData?.vitals?.currentTreatment && (
-            <div className="mt-4 p-3 bg-cyan-500/20 backdrop-blur border border-cyan-300/30 rounded-xl">
-              <div className="flex items-start gap-2">
-                <span className="text-lg">🏥</span>
-                <div>
-                  <span className="font-medium">Ongoing Treatment:</span>
-                  <p className="text-sm mt-1 text-cyan-100">{bookingData.vitals.currentTreatment}</p>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Note: Pregnancy, Medications, and Treatment are now shown from MedicalHistory above (single source of truth) */}
         </div>
       )}
 

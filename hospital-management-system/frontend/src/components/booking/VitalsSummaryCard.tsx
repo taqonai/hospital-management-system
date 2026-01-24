@@ -157,20 +157,28 @@ export function VitalsSummaryCard({ vitals, riskPrediction, patient, className }
 
       {/* Vitals Grid */}
       <div className="p-4">
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4 auto-cols-fr">
-          <VitalItem
-            label="BP"
-            value={
-              vitals.bloodPressureSys && vitals.bloodPressureDia
-                ? `${vitals.bloodPressureSys}/${vitals.bloodPressureDia}`
-                : null
-            }
-            unit="mmHg"
-            isAbnormal={
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 mb-4">
+          {/* BP gets special treatment - show value and unit on separate lines for clarity */}
+          {vitals.bloodPressureSys && vitals.bloodPressureDia && (
+            <div className={clsx(
+              'text-center p-2 rounded',
               isVitalAbnormal('bloodPressureSys', vitals.bloodPressureSys) ||
               isVitalAbnormal('bloodPressureDia', vitals.bloodPressureDia)
-            }
-          />
+                ? 'bg-red-50'
+                : 'bg-gray-50'
+            )}>
+              <div className={clsx(
+                'text-lg font-semibold',
+                isVitalAbnormal('bloodPressureSys', vitals.bloodPressureSys) ||
+                isVitalAbnormal('bloodPressureDia', vitals.bloodPressureDia)
+                  ? 'text-red-600'
+                  : 'text-gray-900'
+              )}>
+                {vitals.bloodPressureSys}/{vitals.bloodPressureDia}
+              </div>
+              <div className="text-xs text-gray-500">BP (mmHg)</div>
+            </div>
+          )}
           <VitalItem
             label="Heart Rate"
             value={vitals.heartRate}
