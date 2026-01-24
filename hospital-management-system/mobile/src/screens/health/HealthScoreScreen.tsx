@@ -259,7 +259,7 @@ export default function HealthScoreScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={['bottom']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary[500]} />
           <Text style={styles.loadingText}>Calculating your health score...</Text>
@@ -269,12 +269,12 @@ export default function HealthScoreScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Health Score</Text>
+        <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit>Daily Health Score</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -377,9 +377,11 @@ const styles = StyleSheet.create({
     padding: spacing.xs,
   },
   headerTitle: {
+    flex: 1,
     fontSize: typography.fontSize.xl,
     fontWeight: typography.fontWeight.bold,
     color: colors.text.primary,
+    textAlign: 'center',
   },
   loadingContainer: {
     flex: 1,
@@ -454,7 +456,7 @@ const styles = StyleSheet.create({
   categoryLabel: {
     fontSize: typography.fontSize.base,
     color: colors.text.primary,
-    width: 80,
+    width: 100,
     marginLeft: spacing.sm,
   },
   progressBarContainer: {

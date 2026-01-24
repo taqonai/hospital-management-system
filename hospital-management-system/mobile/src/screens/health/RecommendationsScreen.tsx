@@ -320,7 +320,7 @@ export default function RecommendationsScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={['bottom']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary[500]} />
           <Text style={styles.loadingText}>Loading recommendations...</Text>
@@ -330,12 +330,12 @@ export default function RecommendationsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Recommendations</Text>
+        <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit>AI Recommendations</Text>
         <TouchableOpacity
           onPress={() => navigation.navigate('HealthScore' as never)}
           style={styles.scoreButton}
@@ -388,9 +388,11 @@ const styles = StyleSheet.create({
     padding: spacing.xs,
   },
   headerTitle: {
+    flex: 1,
     fontSize: typography.fontSize.xl,
     fontWeight: typography.fontWeight.bold,
     color: colors.text.primary,
+    textAlign: 'center',
   },
   loadingContainer: {
     flex: 1,

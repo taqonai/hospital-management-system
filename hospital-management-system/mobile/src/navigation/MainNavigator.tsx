@@ -149,7 +149,11 @@ const HealthStackNavigator = () => (
     <HealthStack.Screen
       name="HealthHub"
       component={HealthHubScreen}
-      options={{ title: 'Health' }}
+      options={{
+        title: 'Health',
+        headerBackVisible: false,
+        headerLeft: () => null,
+      }}
     />
     <HealthStack.Screen
       name="HealthInsights"
@@ -433,23 +437,63 @@ const MainNavigator: React.FC = () => {
         name="HomeTab"
         component={HomeStackNavigator}
         options={{ tabBarLabel: 'Home' }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.dispatch(
+              CommonActions.reset({
+                index: 0,
+                routes: [
+                  { name: 'HomeTab', state: { index: 0, routes: [{ name: 'Dashboard' }] } },
+                  { name: 'AppointmentsTab' },
+                  { name: 'HealthTab' },
+                  { name: 'SettingsTab' },
+                ],
+              })
+            );
+          },
+        })}
       />
       <Tab.Screen
         name="AppointmentsTab"
         component={AppointmentsStackNavigator}
         options={{ tabBarLabel: 'Appointments' }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.dispatch(
+              CommonActions.reset({
+                index: 1,
+                routes: [
+                  { name: 'HomeTab' },
+                  { name: 'AppointmentsTab', state: { index: 0, routes: [{ name: 'AppointmentsList' }] } },
+                  { name: 'HealthTab' },
+                  { name: 'SettingsTab' },
+                ],
+              })
+            );
+          },
+        })}
       />
       <Tab.Screen
         name="HealthTab"
         component={HealthStackNavigator}
         options={{ tabBarLabel: 'Health' }}
-        listeners={({ navigation }) => ({
+        listeners={({ navigation, route }) => ({
           tabPress: (e) => {
-            // Reset Health stack to HealthHub when tab is pressed
+            // Prevent default tab press behavior
+            e.preventDefault();
+            // Always reset Health stack to HealthHub when tab is pressed
             navigation.dispatch(
               CommonActions.reset({
                 index: 0,
-                routes: [{ name: 'HealthTab', state: { routes: [{ name: 'HealthHub' }] } }],
+                routes: [
+                  { name: 'HomeTab' },
+                  { name: 'AppointmentsTab' },
+                  { name: 'HealthTab', state: { index: 0, routes: [{ name: 'HealthHub' }] } },
+                  { name: 'SettingsTab' },
+                ],
+                index: 2, // HealthTab index
               })
             );
           },
@@ -459,6 +503,22 @@ const MainNavigator: React.FC = () => {
         name="SettingsTab"
         component={SettingsStackNavigator}
         options={{ tabBarLabel: 'Settings' }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.dispatch(
+              CommonActions.reset({
+                index: 3,
+                routes: [
+                  { name: 'HomeTab' },
+                  { name: 'AppointmentsTab' },
+                  { name: 'HealthTab' },
+                  { name: 'SettingsTab', state: { index: 0, routes: [{ name: 'SettingsHome' }] } },
+                ],
+              })
+            );
+          },
+        })}
       />
     </Tab.Navigator>
   );

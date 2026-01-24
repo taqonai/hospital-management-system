@@ -271,7 +271,7 @@ export default function GenomicProfileScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={['bottom']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary[500]} />
           <Text style={styles.loadingText}>Loading your genetic profile...</Text>
@@ -281,12 +281,12 @@ export default function GenomicProfileScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Genetic Profile</Text>
+        <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit>Genomic Profile</Text>
         {profile && (
           <TouchableOpacity onPress={handleDeleteProfile} style={styles.menuButton}>
             <Ionicons name="trash-outline" size={24} color={colors.error[500]} />
@@ -383,8 +383,11 @@ const styles = StyleSheet.create({
     padding: spacing.xs,
   },
   headerTitle: {
-    fontSize: typography.fontSize.xl, fontWeight: typography.fontWeight.bold,
+    flex: 1,
+    fontSize: typography.fontSize.xl,
+    fontWeight: typography.fontWeight.bold,
     color: colors.text.primary,
+    textAlign: 'center',
   },
   loadingContainer: {
     flex: 1,
