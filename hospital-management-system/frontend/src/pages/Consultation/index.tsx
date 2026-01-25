@@ -40,6 +40,7 @@ import {
   PayerRulesAlert,
 } from '../../components/insurance';
 import { useBookingData, usePatientHistory } from '../../hooks/useBookingData';
+import DrugPicker, { DrugSelection } from '../../components/consultation/DrugPicker';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 
@@ -125,8 +126,10 @@ interface Diagnosis {
 
 interface Prescription {
   id: string;
+  drugId?: string;  // Links to pharmacy drug inventory
   medication: string;
   genericName?: string;
+  dosageForm?: string;
   dosage: string;
   frequency: string;
   duration: string;
@@ -913,6 +916,51 @@ export default function Consultation() {
             duration: 5000,
           });
         }
+      }
+    }
+  };
+
+  // Handle drug selection from DrugPicker
+  const handleDrugSelection = (id: string, drug: DrugSelection) => {
+    const oldRx = prescriptions.find(rx => rx.id === id);
+    const oldMedication = oldRx?.medication || '';
+
+    // Update prescription with drug details
+    setPrescriptions(prev => prev.map(rx => {
+      if (rx.id === id) {
+        return {
+          ...rx,
+          drugId: drug.id,
+          medication: drug.name,
+          genericName: drug.genericName,
+          dosageForm: drug.dosageForm,
+          // Auto-fill dosage from strength if available and dosage is empty
+          dosage: drug.strength && !rx.dosage ? drug.strength : rx.dosage,
+        };
+      }
+      return rx;
+    }));
+
+    // Check for allergy conflicts
+    if (oldMedication && oldMedication !== drug.name) {
+      setAllergyConflicts(prev =>
+        prev.filter(c => c.medication.toLowerCase() !== oldMedication.toLowerCase())
+      );
+      setAcknowledgedConflicts(prev =>
+        prev.filter(m => m.toLowerCase() !== oldMedication.toLowerCase())
+      );
+    }
+
+    if (drug.name) {
+      const allergyMatch = checkMedicationAllergies(drug.name);
+      if (allergyMatch) {
+        setAllergyConflicts(prev => [
+          ...prev.filter(c => c.medication.toLowerCase() !== drug.name.toLowerCase()),
+          { medication: drug.name, allergen: allergyMatch.allergen }
+        ]);
+        toast.error(`ALLERGY ALERT: ${drug.name} may conflict with patient allergy to ${allergyMatch.allergen}!`, {
+          duration: 5000,
+        });
       }
     }
   };
@@ -2631,18 +2679,13 @@ export default function Consultation() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Medication Name</label>
                   <div className="flex gap-2">
-                    <input
-                      type="text"
+                    <DrugPicker
                       value={rx.medication}
-                      onChange={(e) => updatePrescription(rx.id, 'medication', e.target.value)}
-                      placeholder="e.g., Amoxicillin"
+                      onChange={(drug) => handleDrugSelection(rx.id, drug)}
+                      placeholder="Search medication..."
                       className={clsx(
-                        "flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500",
-                        isPrescriptionFieldRecording(rx.id, 'medication')
-                          ? "border-red-400 bg-red-50"
-                          : allergyConflicts.some(c => c.medication.toLowerCase() === rx.medication.toLowerCase())
-                          ? "border-red-500 bg-red-50"
-                          : "border-gray-300"
+                        "flex-1",
+                        allergyConflicts.some(c => c.medication.toLowerCase() === rx.medication.toLowerCase()) && "[&_input]:border-red-500 [&_input]:bg-red-50"
                       )}
                     />
                     {isPrescriptionFieldRecording(rx.id, 'medication') ? (
@@ -2686,6 +2729,11 @@ export default function Consultation() {
                       </button>
                     )}
                   </div>
+                  {rx.genericName && (
+                    <div className="mt-1 text-xs text-gray-500">
+                      Generic: {rx.genericName} {rx.dosageForm && `· ${rx.dosageForm}`}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Dosage</label>
