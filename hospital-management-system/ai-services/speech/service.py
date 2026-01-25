@@ -4,11 +4,95 @@ Provides accurate transcription for medical terminology
 """
 
 import tempfile
-from typing import Optional, Dict, Any
+import time
+import os
+import logging
+from typing import Optional, Dict, Any, List
 from pathlib import Path
+
+import httpx
 
 # Import shared OpenAI client
 from shared.openai_client import openai_manager, OPENAI_AVAILABLE
+
+logger = logging.getLogger(__name__)
+
+# Backend API URL for fetching drug names
+BACKEND_API_URL = os.getenv("BACKEND_API_URL", "http://hms-backend:3001/api/v1")
+
+
+class DrugNameCache:
+    """
+    Simple cache for drug names with TTL.
+    Fetches drug names from the pharmacy database via backend API.
+    """
+
+    def __init__(self, ttl_seconds: int = 3600):  # 1 hour default TTL
+        self._cache: List[str] = []
+        self._last_fetch: float = 0
+        self._ttl = ttl_seconds
+        self._fetching = False
+
+    def _is_expired(self) -> bool:
+        return time.time() - self._last_fetch > self._ttl
+
+    def get_drug_names(self) -> List[str]:
+        """
+        Get cached drug names. Returns empty list if cache is empty/expired.
+        Use refresh() to update the cache.
+        """
+        if self._is_expired():
+            return []
+        return self._cache
+
+    def refresh(self) -> bool:
+        """
+        Refresh the cache by fetching drug names from the backend API.
+        Returns True if successful, False otherwise.
+        """
+        if self._fetching:
+            return False
+
+        self._fetching = True
+        try:
+            # Fetch drug names from backend pharmacy API
+            response = httpx.get(
+                f"{BACKEND_API_URL}/pharmacy/drugs",
+                params={"isActive": "true"},
+                timeout=10.0
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                drugs = data.get("data", [])
+
+                # Extract unique drug names and generic names
+                drug_names = set()
+                for drug in drugs:
+                    if drug.get("name"):
+                        drug_names.add(drug["name"])
+                    if drug.get("genericName"):
+                        drug_names.add(drug["genericName"])
+                    if drug.get("brandName"):
+                        drug_names.add(drug["brandName"])
+
+                self._cache = list(drug_names)
+                self._last_fetch = time.time()
+                logger.info(f"DrugNameCache: Loaded {len(self._cache)} drug names from database")
+                return True
+            else:
+                logger.warning(f"DrugNameCache: Failed to fetch drugs, status={response.status_code}")
+                return False
+
+        except Exception as e:
+            logger.error(f"DrugNameCache: Error fetching drug names: {e}")
+            return False
+        finally:
+            self._fetching = False
+
+
+# Global drug name cache instance
+_drug_cache = DrugNameCache(ttl_seconds=3600)  # 1 hour TTL
 
 
 class SpeechToTextService:
@@ -24,7 +108,7 @@ class SpeechToTextService:
         else:
             print("Whisper not available - OpenAI API key required")
 
-        # Medical terminology prompt to improve accuracy
+        # Medical terminology prompt to improve accuracy (unchanged - used by other modules)
         self.medical_prompt = """
         Medical transcription context: hospital management system, patient care,
         clinical terminology. Common terms include: patient, diagnosis, prescription,
@@ -36,8 +120,8 @@ class SpeechToTextService:
         myocardial infarction, stroke, sepsis, triage, emergency, ICU, ward, OPD, IPD.
         """
 
-        # Pharmacy-specific prompt with common drug names for medication transcription
-        self.pharmacy_prompt = """
+        # Fallback pharmacy prompt with common drug names (used if database fetch fails)
+        self._fallback_pharmacy_prompt = """
         Medication and drug names transcription. Common medications include:
         Paracetamol, Panadol, Brufen, Ibuprofen, Aspirin, Amoxicillin, Augmentin,
         Azithromycin, Ciprofloxacin, Metformin, Omeprazole, Pantoprazole, Losartan,
@@ -50,6 +134,34 @@ class SpeechToTextService:
         Vitamin D, Calcium, Iron, Zinc. Dosage forms: tablet, capsule, syrup, injection,
         cream, ointment, drops, inhaler, suppository. Dosages: mg, ml, mcg, IU, units.
         """
+
+    def _get_pharmacy_prompt(self) -> str:
+        """
+        Get pharmacy-specific prompt for medication transcription.
+        Dynamically loads drug names from database, falls back to hardcoded list if unavailable.
+        """
+        # Try to get drug names from cache
+        drug_names = _drug_cache.get_drug_names()
+
+        # If cache is empty or expired, try to refresh
+        if not drug_names:
+            _drug_cache.refresh()
+            drug_names = _drug_cache.get_drug_names()
+
+        # If we have drug names from database, build dynamic prompt
+        if drug_names:
+            # Limit to 150 drug names to keep prompt reasonable size
+            names_list = ", ".join(drug_names[:150])
+            return f"""
+            Medication and drug names transcription. Common medications include:
+            {names_list}.
+            Dosage forms: tablet, capsule, syrup, injection, cream, ointment, drops, inhaler, suppository.
+            Dosages: mg, ml, mcg, IU, units.
+            """
+
+        # Fallback to hardcoded list if database fetch fails
+        logger.info("Using fallback pharmacy prompt (database unavailable)")
+        return self._fallback_pharmacy_prompt
 
     def transcribe_audio(
         self,
@@ -175,9 +287,9 @@ class SpeechToTextService:
             Dict with transcript and metadata
         """
         # Build context-aware prompt
-        # Use pharmacy-specific prompt for medication transcription
+        # Use pharmacy-specific prompt for medication transcription (dynamic from database)
         if context and context.get("currentModule", "").lower() == "pharmacy":
-            prompt_parts = [self.pharmacy_prompt]
+            prompt_parts = [self._get_pharmacy_prompt()]
         else:
             prompt_parts = [self.medical_prompt]
 
