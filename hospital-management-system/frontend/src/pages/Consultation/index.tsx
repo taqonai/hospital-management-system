@@ -315,6 +315,7 @@ export default function Consultation() {
     cancelRecording: cancelFieldRecording,
   } = useWhisperRecorder({
     maxDuration: 30000, // 30 seconds max for prescription/notes fields
+    context: { field: 'prescription', type: 'medical', currentModule: 'pharmacy' }, // Pharmacy context for medication names
     onTranscript: (transcript) => {
       if (activeVoiceField) {
         if (activeVoiceField.type === 'prescription' && activeVoiceField.prescriptionId && activeVoiceField.field) {
@@ -2683,6 +2684,7 @@ export default function Consultation() {
                       value={rx.medication}
                       onChange={(drug) => handleDrugSelection(rx.id, drug)}
                       placeholder="Search medication..."
+                      autoSearchOnValueChange={true}
                       className={clsx(
                         "flex-1",
                         allergyConflicts.some(c => c.medication.toLowerCase() === rx.medication.toLowerCase()) && "[&_input]:border-red-500 [&_input]:bg-red-50"

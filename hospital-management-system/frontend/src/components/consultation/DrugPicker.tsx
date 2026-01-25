@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { MagnifyingGlassIcon, CheckIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { pharmacyApi } from '../../services/api';
 import clsx from 'clsx';
@@ -22,21 +22,27 @@ interface Drug {
   inventory?: Array<{ quantity: number }>;
 }
 
+export interface DrugPickerRef {
+  triggerSearch: (term: string) => void;
+}
+
 interface DrugPickerProps {
   value: string;
   onChange: (drug: DrugSelection) => void;
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  autoSearchOnValueChange?: boolean; // Auto-search when value changes externally (e.g., from voice input)
 }
 
-export default function DrugPicker({
+const DrugPicker = forwardRef<DrugPickerRef, DrugPickerProps>(function DrugPicker({
   value,
   onChange,
   placeholder = 'Search medication...',
   className,
   disabled = false,
-}: DrugPickerProps) {
+  autoSearchOnValueChange = false,
+}, ref) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState(value);
   const [drugs, setDrugs] = useState<Drug[]>([]);
@@ -45,26 +51,9 @@ export default function DrugPicker({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const prevValueRef = useRef(value);
 
-  // Sync searchTerm with external value
-  useEffect(() => {
-    if (!selectedDrug || selectedDrug.name !== value) {
-      setSearchTerm(value);
-    }
-  }, [value, selectedDrug]);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Debounced search
+  // Search drugs function - defined early for use in effects
   const searchDrugs = useCallback(async (term: string) => {
     if (!term || term.length < 2) {
       setDrugs([]);
@@ -82,6 +71,41 @@ export default function DrugPicker({
     } finally {
       setIsLoading(false);
     }
+  }, []);
+
+  // Expose triggerSearch method to parent
+  useImperativeHandle(ref, () => ({
+    triggerSearch: (term: string) => {
+      setSearchTerm(term);
+      setSelectedDrug(null);
+      setIsOpen(true);
+      searchDrugs(term);
+    },
+  }), [searchDrugs]);
+
+  // Sync searchTerm with external value and auto-search if enabled
+  useEffect(() => {
+    if (!selectedDrug || selectedDrug.name !== value) {
+      setSearchTerm(value);
+
+      // Auto-search when value changes externally (e.g., from voice transcription)
+      if (autoSearchOnValueChange && value !== prevValueRef.current && value.length >= 2) {
+        setIsOpen(true);
+        searchDrugs(value);
+      }
+      prevValueRef.current = value;
+    }
+  }, [value, selectedDrug, autoSearchOnValueChange, searchDrugs]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -232,4 +256,6 @@ export default function DrugPicker({
       )}
     </div>
   );
-}
+});
+
+export default DrugPicker;

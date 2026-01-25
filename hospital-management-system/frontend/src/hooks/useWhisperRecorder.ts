@@ -19,10 +19,11 @@ export interface UseWhisperRecorderOptions {
   onTranscript?: (text: string) => void;
   onError?: (error: string) => void;
   maxDuration?: number; // in milliseconds, default 60000 (60s)
+  context?: { field?: string; type?: string; currentModule?: string }; // Context for better transcription accuracy
 }
 
 export function useWhisperRecorder(options: UseWhisperRecorderOptions = {}) {
-  const { onTranscript, onError, maxDuration = 60000 } = options;
+  const { onTranscript, onError, maxDuration = 60000, context } = options;
 
   // State
   const [isRecording, setIsRecording] = useState(false);
@@ -222,7 +223,9 @@ export function useWhisperRecorder(options: UseWhisperRecorderOptions = {}) {
                   blob.type.includes('mp4') ? 'm4a' : 'webm';
       formData.append('audio', blob, `recording.${ext}`);
       formData.append('language', 'en');
-      formData.append('context', JSON.stringify({ field: 'chiefComplaint', type: 'medical' }));
+      // Use provided context or default to medical context
+      const transcriptionContext = context || { field: 'chiefComplaint', type: 'medical' };
+      formData.append('context', JSON.stringify(transcriptionContext));
 
       const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const response = await fetch(`${API_URL}/ai/transcribe`, {
@@ -257,7 +260,7 @@ export function useWhisperRecorder(options: UseWhisperRecorderOptions = {}) {
       setIsProcessing(false);
       isProcessingRef.current = false;
     }
-  }, []);
+  }, [context]);
 
   // Toggle recording
   const toggleRecording = useCallback(async () => {
