@@ -164,10 +164,53 @@ const AllergiesScreen: React.FC = () => {
     setIsLoadingSuggestions(true);
     try {
       const response = await patientPortalApi.suggestAllergies();
-      const suggestions = response.data?.data?.suggestions || [];
-      setAiSuggestions(suggestions);
-      setShowSuggestions(suggestions.length > 0);
-      if (suggestions.length === 0) {
+      const rawData = response.data?.data;
+      const rawSuggestions = rawData?.suggestions || [];
+
+      // Map API response to AllergySuggestion format
+      // API returns: { suggestions: [{ type, possible?: string[], reason?, categories?: [...], message? }], disclaimer }
+      // UI expects: { allergen: string, type: string, confidence: number, reason: string }[]
+      const mappedSuggestions: AllergySuggestion[] = [];
+
+      rawSuggestions.forEach((suggestion: any) => {
+        if (suggestion.type === 'GENERAL' && suggestion.categories) {
+          // Handle general suggestions with categories
+          suggestion.categories.forEach((category: any) => {
+            if (category.common && Array.isArray(category.common)) {
+              category.common.slice(0, 3).forEach((allergen: string, index: number) => {
+                mappedSuggestions.push({
+                  allergen,
+                  type: category.type || 'OTHER',
+                  confidence: 0.5 - (index * 0.1), // Decreasing confidence for general suggestions
+                  reason: suggestion.message || 'Common allergen to consider'
+                });
+              });
+            }
+          });
+        } else if (suggestion.possible && Array.isArray(suggestion.possible)) {
+          // Handle specific suggestions with possible array
+          suggestion.possible.forEach((allergen: string, index: number) => {
+            mappedSuggestions.push({
+              allergen,
+              type: suggestion.type || 'OTHER',
+              confidence: 0.8 - (index * 0.1), // Decreasing confidence based on position
+              reason: suggestion.reason || 'Based on your symptoms'
+            });
+          });
+        } else if (suggestion.allergen) {
+          // Already in correct format (from AI service)
+          mappedSuggestions.push({
+            allergen: suggestion.allergen,
+            type: suggestion.type || 'OTHER',
+            confidence: typeof suggestion.confidence === 'number' ? suggestion.confidence : 0.7,
+            reason: suggestion.reason || 'AI suggested'
+          });
+        }
+      });
+
+      setAiSuggestions(mappedSuggestions);
+      setShowSuggestions(mappedSuggestions.length > 0);
+      if (mappedSuggestions.length === 0) {
         Alert.alert('No Suggestions', 'No allergy suggestions available based on your medical history.');
       }
     } catch (error) {

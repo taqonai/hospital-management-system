@@ -59,6 +59,7 @@ npm run dev                  # Start dev server (port 3000)
 npm run build                # TypeScript + Vite build
 npm run preview              # Preview production build locally
 npm run lint                 # ESLint
+# Note: No test suite configured for frontend yet
 ```
 
 ### Mobile App (React Native/Expo)
