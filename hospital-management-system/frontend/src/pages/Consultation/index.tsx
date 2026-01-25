@@ -43,6 +43,11 @@ import { useBookingData, usePatientHistory } from '../../hooks/useBookingData';
 import DrugPicker, { DrugSelection } from '../../components/consultation/DrugPicker';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
+import {
+  calculateNEWS2RiskLevel,
+  toLowercaseRiskLevel,
+  NEWS2RiskLevel,
+} from '../../utils/news2';
 
 // =============== Type Definitions ===============
 interface Patient {
@@ -567,14 +572,24 @@ export default function Consultation() {
   useEffect(() => {
     // If booking data has risk prediction with NEWS2 score, pre-fill the news2Result
     if (bookingData?.riskPrediction?.news2Score !== undefined && !news2Result) {
-      const riskLevel = mapRiskLevelToNEWS2(bookingData.riskPrediction.riskLevel);
+      const score = bookingData.riskPrediction.news2Score;
+      const breakdown = bookingData.riskPrediction.breakdown;
+      // Recalculate risk level using centralized utility (NHS guidelines)
+      // Check if any parameter scored 3 (extreme value)
+      const hasExtremeScore = breakdown
+        ? Object.values(breakdown).some((v) => v === 3)
+        : false;
+      // Use centralized utility to ensure consistent risk classification
+      const calculatedRiskLevel = calculateNEWS2RiskLevel(score, hasExtremeScore);
+      // Map to display format (MEDIUM instead of backend's MODERATE)
+      const riskLevel = calculatedRiskLevel === 'MEDIUM' ? 'MEDIUM' : calculatedRiskLevel;
       setNews2Result({
-        score: bookingData.riskPrediction.news2Score,
-        riskLevel: riskLevel,
+        score: score,
+        riskLevel: riskLevel as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
         clinicalResponse: bookingData.riskPrediction.clinicalResponse || 'Risk assessment from nurse vitals recording',
-        breakdown: bookingData.riskPrediction.breakdown || undefined,
+        breakdown: breakdown || undefined,
       });
-      console.log('Pre-filled NEWS2 result from nurse recording:', bookingData.riskPrediction);
+      console.log('Pre-filled NEWS2 result from nurse recording (recalculated):', { score, hasExtremeScore, riskLevel });
     }
   }, [bookingData, news2Result]);
 
@@ -3179,13 +3194,30 @@ export default function Consultation() {
             Patient Risk Level
           </h4>
           {(() => {
-            // Determine risk level from NEWS2 result (pre-filled from booking data or calculated)
-            // NHS NEWS2 Guidelines: Score 0-4 (no extreme) = LOW, Score 5-6 OR extreme = MEDIUM, Score >= 7 = CRITICAL
-            const riskLevel = news2Result?.riskLevel?.toUpperCase() ||
-                              bookingData?.riskPrediction?.riskLevel?.toUpperCase() ||
-                              (patientData.allergies && patientData.allergies.length > 0 ? 'MEDIUM' : 'LOW');
-            const isCritical = riskLevel === 'CRITICAL' || (news2Result && news2Result.score >= 7);
-            const isMedium = riskLevel === 'MODERATE' || riskLevel === 'MEDIUM' || riskLevel === 'HIGH' || (news2Result && news2Result.score >= 5);
+            // Use centralized NEWS2 utility for consistent risk classification (NHS guidelines)
+            // news2Result.riskLevel is already recalculated in useEffect using the utility
+            let displayRiskLevel: 'LOW' | 'MEDIUM' | 'CRITICAL' = 'LOW';
+
+            if (news2Result) {
+              // news2Result already has correctly calculated riskLevel from useEffect
+              const level = news2Result.riskLevel?.toUpperCase();
+              if (level === 'CRITICAL') displayRiskLevel = 'CRITICAL';
+              else if (level === 'MEDIUM' || level === 'MODERATE' || level === 'HIGH') displayRiskLevel = 'MEDIUM';
+              else displayRiskLevel = 'LOW';
+            } else if (bookingData?.riskPrediction?.news2Score !== undefined) {
+              // Recalculate from booking data if news2Result not yet populated
+              const score = bookingData.riskPrediction.news2Score;
+              const breakdown = bookingData.riskPrediction.breakdown;
+              const hasExtreme = breakdown ? Object.values(breakdown).some((v) => v === 3) : false;
+              const calculated = calculateNEWS2RiskLevel(score, hasExtreme);
+              displayRiskLevel = calculated === 'MEDIUM' ? 'MEDIUM' : calculated as 'LOW' | 'CRITICAL';
+            } else if (patientData.allergies && patientData.allergies.length > 0) {
+              // Fallback: patient with allergies gets medium risk as precaution
+              displayRiskLevel = 'MEDIUM';
+            }
+
+            const isCritical = displayRiskLevel === 'CRITICAL';
+            const isMedium = displayRiskLevel === 'MEDIUM';
             return (
               <div className={clsx(
                 'px-4 py-3 rounded-xl text-center',
@@ -3195,7 +3227,7 @@ export default function Consultation() {
                   'text-2xl font-bold',
                   isCritical ? 'text-red-700' : isMedium ? 'text-amber-700' : 'text-green-700'
                 )}>
-                  {isCritical ? 'CRITICAL' : isMedium ? 'MEDIUM' : 'LOW'}
+                  {displayRiskLevel}
                 </p>
                 {news2Result && (
                   <p className="text-sm mt-1 opacity-75">NEWS2: {news2Result.score}</p>
