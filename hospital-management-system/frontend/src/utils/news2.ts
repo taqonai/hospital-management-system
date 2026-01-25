@@ -13,6 +13,9 @@
  * - Score >= 7:  CRITICAL risk (emergency response, continuous)
  */
 
+// Note: 'HIGH' is included for backwards compatibility with legacy backend responses.
+// The calculateNEWS2RiskLevel function returns only LOW, MEDIUM, or CRITICAL per NHS guidelines.
+// 'HIGH' may still appear in older data and is handled by normalizeRiskLevel().
 export type NEWS2RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
 export interface NEWS2RiskConfig {

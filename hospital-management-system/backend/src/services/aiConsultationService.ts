@@ -20,7 +20,8 @@ export interface VitalsInput {
 
 export interface VitalsInterpretation {
   news2Score: number;
-  riskLevel: 'LOW' | 'LOW_MEDIUM' | 'MEDIUM' | 'HIGH';
+  // Aligned with earlyWarningService.ts: LOW (0-4), MODERATE (5-6 or extreme), CRITICAL (7+)
+  riskLevel: 'LOW' | 'MODERATE' | 'CRITICAL';
   clinicalRisk: string;
   interpretation: string;
   alerts: VitalAlert[];
@@ -425,18 +426,23 @@ export class AIConsultationService {
     let riskLevel: VitalsInterpretation['riskLevel'];
     let clinicalRisk: string;
 
-    if (news2Score >= 7 || hasExtreme) {
-      riskLevel = 'HIGH';
-      clinicalRisk = 'High clinical risk - Urgent/emergency response required';
-    } else if (news2Score >= 5) {
-      riskLevel = 'MEDIUM';
-      clinicalRisk = 'Medium clinical risk - Urgent response threshold';
+    // NEWS2 Risk Classification (NHS guidelines - aligned with earlyWarningService.ts):
+    // - Score >= 7: CRITICAL risk (emergency response)
+    // - Score 5-6 OR single parameter = 3: MODERATE risk (urgent response)
+    // - Score 1-4: LOW risk (increased monitoring)
+    // - Score 0: LOW risk (routine monitoring)
+    if (news2Score >= 7) {
+      riskLevel = 'CRITICAL';
+      clinicalRisk = 'Critical clinical risk - Emergency response, continuous monitoring, immediate senior review';
+    } else if (news2Score >= 5 || hasExtreme) {
+      riskLevel = 'MODERATE';
+      clinicalRisk = 'Moderate clinical risk - Urgent response, hourly monitoring, clinical review within 30 minutes';
     } else if (news2Score >= 1) {
-      riskLevel = 'LOW_MEDIUM';
-      clinicalRisk = 'Low-medium clinical risk - Ward-based response';
+      riskLevel = 'LOW';
+      clinicalRisk = 'Low clinical risk - Increased monitoring frequency (4-6 hourly)';
     } else {
       riskLevel = 'LOW';
-      clinicalRisk = 'Low clinical risk - Continue routine monitoring';
+      clinicalRisk = 'Low clinical risk - Continue routine monitoring (12 hourly)';
     }
 
     // Generate alerts for abnormal values
@@ -1180,20 +1186,19 @@ export class AIConsultationService {
   ): string[] {
     const recommendations: string[] = [];
 
-    if (riskLevel === 'HIGH') {
+    // Risk level recommendations aligned with NHS NEWS2 guidelines
+    if (riskLevel === 'CRITICAL') {
       recommendations.push('Immediate clinical review by senior clinician');
-      recommendations.push('Consider escalation to critical care team');
-      recommendations.push('Continuous monitoring recommended');
-    } else if (riskLevel === 'MEDIUM') {
-      recommendations.push('Urgent clinical review within 1 hour');
-      recommendations.push('Increase monitoring frequency to every 30 minutes');
+      recommendations.push('Consider escalation to critical care team (ICU/HDU)');
+      recommendations.push('Continuous monitoring required');
+    } else if (riskLevel === 'MODERATE') {
+      recommendations.push('Urgent clinical review within 30 minutes');
+      recommendations.push('Increase monitoring frequency to at least hourly');
       recommendations.push('Consider escalation if no improvement');
-    } else if (riskLevel === 'LOW_MEDIUM') {
-      recommendations.push('Review by registered nurse within 1 hour');
-      recommendations.push('Monitoring every 4-6 hours');
-      recommendations.push('Document response to any interventions');
     } else {
-      recommendations.push('Continue routine monitoring every 12 hours');
+      // LOW risk (score 0-4, no extreme parameters)
+      recommendations.push('Continue monitoring every 4-6 hours (or 12 hourly if score 0)');
+      recommendations.push('Document observations and inform registered nurse');
     }
 
     // Specific recommendations based on abnormal values
