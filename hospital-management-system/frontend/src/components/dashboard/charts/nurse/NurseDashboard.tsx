@@ -322,40 +322,44 @@ export default function NurseDashboard() {
                 ))?.slice(0, 5).map((patient: any) => (
                   <tr key={patient.id} className="border-b border-gray-50 hover:bg-red-50/50">
                     <td className="py-3 px-4">
-                      <p className="font-medium text-gray-900">{patient.patientName}</p>
-                      <p className="text-xs text-gray-500">{patient.mrn}</p>
+                      <p className="font-medium text-gray-900">{patient.patientName || 'Unknown'}</p>
+                      <p className="text-xs text-gray-500">{patient.mrn || '-'}</p>
                     </td>
                     <td className="py-3 px-4 text-sm text-gray-600">
-                      {patient.ward} / Bed {patient.bedNumber}
+                      {patient.ward || 'N/A'} / Bed {patient.bedNumber || '-'}
                     </td>
                     <td className="py-3 px-4">
-                      <span className="text-lg font-bold text-red-600">{patient.news2Score}</span>
+                      <span className="text-lg font-bold text-red-600">{patient.news2Score ?? '-'}</span>
                     </td>
                     <td className="py-3 px-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRiskColor(patient.riskLevel)}`}>
-                        {patient.riskLevel.replace('_', ' ')}
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRiskColor(patient.riskLevel || '')}`}>
+                        {(patient.riskLevel || 'UNKNOWN').replace('_', ' ')}
                       </span>
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-1">
-                        {getTrendIcon(patient.trend)}
-                        <span className="text-sm text-gray-600 capitalize">{patient.trend}</span>
+                        {getTrendIcon(patient.trend || '')}
+                        <span className="text-sm text-gray-600 capitalize">{patient.trend || 'N/A'}</span>
                       </div>
                     </td>
                     <td className="py-3 px-4 text-sm">
                       {patient.vitalsOverdue ? (
                         <span className="text-red-600 font-medium">Overdue</span>
                       ) : (
-                        <span className="text-gray-600">{patient.lastVitalsTime}</span>
+                        <span className="text-gray-600">{patient.lastVitalsTime || 'N/A'}</span>
                       )}
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <Link
-                        to={`/ipd/admission/${patient.admissionId}/vitals`}
-                        className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
-                      >
-                        Record Vitals
-                      </Link>
+                      {patient.admissionId ? (
+                        <Link
+                          to={`/ipd/admission/${patient.admissionId}/vitals`}
+                          className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+                        >
+                          Record Vitals
+                        </Link>
+                      ) : (
+                        <span className="text-gray-400 text-sm">-</span>
+                      )}
                     </td>
                   </tr>
                 ))}
