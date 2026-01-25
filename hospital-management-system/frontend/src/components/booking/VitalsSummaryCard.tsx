@@ -117,16 +117,33 @@ function isVitalAbnormal(type: string, value: number | null): boolean {
 export function VitalsSummaryCard({ vitals, riskPrediction, patient, appointmentNotes, className }: VitalsSummaryCardProps) {
   // Determine if pregnancy status should be shown based on patient gender/age
   const showPregnancy = shouldShowPregnancyStatus(patient);
+
+  // When vitals are not recorded yet, show warning + patient's booking notes (if any)
   if (!vitals) {
     return (
-      <div className={clsx('bg-yellow-50 border border-yellow-200 rounded-lg p-4', className)}>
-        <div className="flex items-center gap-2 text-yellow-700">
-          <ExclamationTriangleIcon className="w-5 h-5" />
-          <span className="font-medium">Vitals Not Recorded</span>
+      <div className={clsx('space-y-3', className)}>
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 text-yellow-700">
+            <ExclamationTriangleIcon className="w-5 h-5" />
+            <span className="font-medium">Vitals Not Recorded</span>
+          </div>
+          <p className="text-sm text-yellow-600 mt-1">
+            Pre-consultation vitals have not been recorded for this booking.
+          </p>
         </div>
-        <p className="text-sm text-yellow-600 mt-1">
-          Pre-consultation vitals have not been recorded for this booking.
-        </p>
+        {/* Show patient's booking notes even before vitals are recorded */}
+        {appointmentNotes && (
+          <div className="p-3 rounded-lg border border-gray-200 bg-gray-50">
+            <div className="flex items-center gap-2 mb-2">
+              <ChatBubbleBottomCenterTextIcon className="w-4 h-4 text-gray-600" />
+              <span className="font-medium text-sm text-gray-800">Notes</span>
+            </div>
+            <div className="p-2 rounded-lg bg-blue-50 border border-blue-200">
+              <div className="text-xs font-medium text-blue-700 mb-1">Patient Notes (from booking)</div>
+              <div className="text-sm text-gray-800 whitespace-pre-wrap">{appointmentNotes}</div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
