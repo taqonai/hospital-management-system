@@ -3,6 +3,7 @@ import { NotFoundError, ValidationError } from '../middleware/errorHandler';
 import { Decimal } from '@prisma/client/runtime/library';
 import { RiskLevel } from '@prisma/client';
 import { earlyWarningService } from './earlyWarningService';
+import { getNEWS2ClinicalResponse } from '../utils/news2';
 
 interface VitalsData {
   temperature?: number;
@@ -24,13 +25,11 @@ interface VitalsData {
 }
 
 // Helper function to generate clinical response based on NEWS2 score
+// Uses centralized NEWS2 utility. Note: hasExtremeScore defaults to false when unknown.
+// For accurate risk assessment with extreme parameter detection, use earlyWarningService directly.
 function getClinicalResponseFromScore(score: number | undefined): string {
   if (score === undefined || score === null) return 'Unable to calculate NEWS2 score';
-  if (score === 0) return 'Routine monitoring';
-  if (score >= 1 && score <= 4) return 'Ward-based response - increase monitoring frequency';
-  if (score >= 5 && score <= 6) return 'Urgent response - alert clinical team';
-  if (score >= 7) return 'Emergency response - immediate clinical review required';
-  return 'Monitor patient condition';
+  return getNEWS2ClinicalResponse(score, false);
 }
 
 // Gulf Standard Time (GST) is UTC+4

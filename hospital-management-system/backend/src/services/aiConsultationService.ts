@@ -3,6 +3,10 @@ import prisma from '../config/database';
 import { config } from '../config';
 import { NotFoundError, AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
+import {
+  calculateNEWS2RiskLevel,
+  getNEWS2ClinicalResponse,
+} from '../utils/news2';
 
 // ============= TypeScript Interfaces =============
 
@@ -421,29 +425,10 @@ export class AIConsultationService {
     const componentScores = this.calculateNEWS2Components(vitals);
     const news2Score = Object.values(componentScores).reduce((sum, score) => sum + score, 0);
 
-    // Determine risk level based on NEWS2 aggregate score and individual parameters
+    // Determine risk level using centralized NEWS2 utility (NHS guidelines)
     const hasExtreme = Object.values(componentScores).some(score => score === 3);
-    let riskLevel: VitalsInterpretation['riskLevel'];
-    let clinicalRisk: string;
-
-    // NEWS2 Risk Classification (NHS guidelines - aligned with earlyWarningService.ts):
-    // - Score >= 7: CRITICAL risk (emergency response)
-    // - Score 5-6 OR single parameter = 3: MODERATE risk (urgent response)
-    // - Score 1-4: LOW risk (increased monitoring)
-    // - Score 0: LOW risk (routine monitoring)
-    if (news2Score >= 7) {
-      riskLevel = 'CRITICAL';
-      clinicalRisk = 'Critical clinical risk - Emergency response, continuous monitoring, immediate senior review';
-    } else if (news2Score >= 5 || hasExtreme) {
-      riskLevel = 'MODERATE';
-      clinicalRisk = 'Moderate clinical risk - Urgent response, hourly monitoring, clinical review within 30 minutes';
-    } else if (news2Score >= 1) {
-      riskLevel = 'LOW';
-      clinicalRisk = 'Low clinical risk - Increased monitoring frequency (4-6 hourly)';
-    } else {
-      riskLevel = 'LOW';
-      clinicalRisk = 'Low clinical risk - Continue routine monitoring (12 hourly)';
-    }
+    const riskLevel = calculateNEWS2RiskLevel(news2Score, hasExtreme);
+    const clinicalRisk = getNEWS2ClinicalResponse(news2Score, hasExtreme);
 
     // Generate alerts for abnormal values
     const alerts = this.generateVitalAlerts(vitals, componentScores);

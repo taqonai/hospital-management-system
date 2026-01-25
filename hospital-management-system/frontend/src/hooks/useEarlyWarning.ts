@@ -1,6 +1,11 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import {
+  calculateNEWS2RiskLevel,
+  getNEWS2ClinicalResponse,
+  toLowercaseRiskLevel,
+} from '../utils/news2';
 
 const API_BASE = 'http://localhost:3000/api/v1';
 
@@ -243,32 +248,11 @@ export function useNEWS2Calculation() {
     const totalScore = Object.values(scores).reduce((a, b) => a + b, 0);
     const hasExtremeScore = Object.values(scores).some((s) => s === 3);
 
-    let riskLevel: 'low' | 'medium' | 'high' | 'critical';
-    let clinicalResponse: string;
-    let severity: string;
-
-    // NEWS2 Risk Classification (NHS guidelines):
-    // - Score 0-4 (no extreme): LOW risk
-    // - Score 1-4 with any single parameter = 3: MEDIUM risk (urgent response)
-    // - Score 5-6: MEDIUM risk
-    // - Score >= 7: CRITICAL risk
-    if (totalScore >= 7) {
-      riskLevel = 'critical';
-      severity = 'critical';
-      clinicalResponse =
-        'Emergency response - Continuous monitoring, immediate senior review, consider ICU/HDU';
-    } else if (totalScore >= 5 || hasExtremeScore) {
-      riskLevel = 'medium';
-      severity = 'medium';
-      clinicalResponse =
-        'Urgent response - Increase monitoring to hourly minimum, urgent clinical review within 30 minutes';
-    } else {
-      riskLevel = 'low';
-      severity = 'low';
-      clinicalResponse = totalScore >= 1
-        ? 'Low-medium clinical risk - Inform registered nurse, increase monitoring to 4-6 hourly'
-        : 'Continue routine monitoring - Minimum 12 hourly observations';
-    }
+    // Use centralized NEWS2 utility for risk classification (NHS guidelines)
+    const riskLevelUpper = calculateNEWS2RiskLevel(totalScore, hasExtremeScore);
+    const riskLevel = toLowercaseRiskLevel(riskLevelUpper);
+    const severity = riskLevel;
+    const clinicalResponse = getNEWS2ClinicalResponse(totalScore, hasExtremeScore);
 
     return {
       totalScore,

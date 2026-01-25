@@ -6,6 +6,11 @@ import {
   ExclamationTriangleIcon,
   CheckCircleIcon,
 } from '@heroicons/react/24/outline';
+import {
+  calculateNEWS2RiskLevel,
+  getNEWS2ClinicalResponse,
+  toLowercaseRiskLevel,
+} from '../../utils/news2';
 
 interface VitalsInput {
   respiratoryRate: number;
@@ -170,30 +175,11 @@ export default function EWSCalculator({
     const totalScore = Object.values(scores).reduce((a, b) => a + b, 0);
     const hasExtremeScore = Object.values(scores).some(s => s === 3);
 
-    let riskLevel: string;
-    let clinicalResponse: string;
-    let severity: string;
-
-    // NEWS2 Risk Classification (NHS guidelines):
-    // - Score 0-4 (no extreme): LOW risk
-    // - Score 1-4 with any single parameter = 3: MEDIUM risk (urgent response)
-    // - Score 5-6: MEDIUM risk
-    // - Score >= 7: CRITICAL risk
-    if (totalScore >= 7) {
-      riskLevel = 'critical';
-      severity = 'critical';
-      clinicalResponse = 'Emergency response - continuous monitoring, immediate senior review, consider ICU';
-    } else if (totalScore >= 5 || hasExtremeScore) {
-      riskLevel = 'medium';
-      severity = 'medium';
-      clinicalResponse = 'Urgent response - increase monitoring to at least hourly, urgent clinical review within 30 minutes';
-    } else {
-      riskLevel = 'low';
-      severity = 'low';
-      clinicalResponse = totalScore >= 1
-        ? 'Low-medium clinical risk - inform registered nurse, increase monitoring to 4-6 hourly'
-        : 'Continue routine monitoring - minimum 12 hourly';
-    }
+    // Use centralized NEWS2 utility for risk classification (NHS guidelines)
+    const riskLevelUpper = calculateNEWS2RiskLevel(totalScore, hasExtremeScore);
+    const riskLevel = toLowercaseRiskLevel(riskLevelUpper);
+    const severity = riskLevel;
+    const clinicalResponse = getNEWS2ClinicalResponse(totalScore, hasExtremeScore);
 
     return {
       totalScore,

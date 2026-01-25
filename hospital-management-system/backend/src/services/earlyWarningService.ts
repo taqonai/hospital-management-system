@@ -1,6 +1,12 @@
 import prisma from '../config/database';
 import { NotFoundError } from '../middleware/errorHandler';
 import axios from 'axios';
+import {
+  calculateNEWS2RiskLevel,
+  getNEWS2ClinicalResponse,
+  getNEWS2TimeToReassessment,
+  NEWS2RiskLevel,
+} from '../utils/news2';
 
 const EWS_AI_SERVICE = process.env.EWS_AI_SERVICE_URL || 'http://localhost:8012';
 
@@ -328,39 +334,18 @@ export class EarlyWarningService {
     const totalScore = Object.values(scores).reduce((a, b) => a + b, 0);
     const hasExtremeScore = Object.values(scores).some(s => s === 3);
 
-    let riskLevel: string;
-    let clinicalResponse: string;
-    let severity: string;
-    let timeToReassessment: string;
+    // Use centralized NEWS2 utility for risk classification (NHS guidelines)
+    const riskLevel: NEWS2RiskLevel = calculateNEWS2RiskLevel(totalScore, hasExtremeScore);
+    const clinicalResponse = getNEWS2ClinicalResponse(totalScore, hasExtremeScore);
+    const timeToReassessment = totalScore === 0 ? '12 hours' : getNEWS2TimeToReassessment(riskLevel);
 
-    // NEWS2 Risk Classification (per NHS guidelines):
-    // - Score 0-4: LOW risk (routine monitoring)
-    // - Score 5-6 OR single parameter = 3: MODERATE risk (urgent response)
-    // - Score >= 7: HIGH/CRITICAL risk (emergency response)
-    if (totalScore >= 7) {
-      riskLevel = 'CRITICAL';
-      severity = 'critical';
-      clinicalResponse = 'Emergency response - continuous monitoring, immediate senior review, consider ICU';
-      timeToReassessment = 'Continuous';
-    } else if (totalScore >= 5 || hasExtremeScore) {
-      // Score 5-6 OR any single parameter scoring 3 requires urgent response (MODERATE risk)
-      riskLevel = 'MODERATE';
-      severity = 'medium';
-      clinicalResponse = 'Urgent response - increase monitoring to at least hourly, urgent clinical review within 30 minutes';
-      timeToReassessment = '1 hour';
-    } else if (totalScore >= 1) {
-      // Score 1-4: Low-medium risk, increase monitoring
-      riskLevel = 'LOW';
-      severity = 'low';
-      clinicalResponse = 'Low-medium clinical risk - inform registered nurse, increase monitoring frequency';
-      timeToReassessment = '4-6 hours';
-    } else {
-      // Score 0: Minimal risk
-      riskLevel = 'LOW';
-      severity = 'low';
-      clinicalResponse = 'Routine monitoring - minimum 12 hourly';
-      timeToReassessment = '12 hours';
-    }
+    // Map risk level to severity (lowercase for frontend compatibility)
+    const severityMap: Record<NEWS2RiskLevel, string> = {
+      LOW: 'low',
+      MODERATE: 'medium',
+      CRITICAL: 'critical',
+    };
+    const severity = severityMap[riskLevel];
 
     return {
       totalScore,
