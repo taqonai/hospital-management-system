@@ -36,6 +36,21 @@ class SpeechToTextService:
         myocardial infarction, stroke, sepsis, triage, emergency, ICU, ward, OPD, IPD.
         """
 
+        # Pharmacy-specific prompt with common drug names for medication transcription
+        self.pharmacy_prompt = """
+        Medication and drug names transcription. Common medications include:
+        Paracetamol, Panadol, Brufen, Ibuprofen, Aspirin, Amoxicillin, Augmentin,
+        Azithromycin, Ciprofloxacin, Metformin, Omeprazole, Pantoprazole, Losartan,
+        Amlodipine, Atenolol, Lisinopril, Metoprolol, Atorvastatin, Simvastatin,
+        Clopidogrel, Warfarin, Enoxaparin, Insulin, Salbutamol, Ventolin, Symbicort,
+        Prednisolone, Hydrocortisone, Dexamethasone, Diclofenac, Voltaren, Tramadol,
+        Morphine, Codeine, Gabapentin, Pregabalin, Sertraline, Escitalopram,
+        Diazepam, Lorazepam, Alprazolam, Cetirizine, Loratadine, Ranitidine,
+        Domperidone, Metoclopramide, Lactulose, Bisacodyl, Multivitamin, Folic acid,
+        Vitamin D, Calcium, Iron, Zinc. Dosage forms: tablet, capsule, syrup, injection,
+        cream, ointment, drops, inhaler, suppository. Dosages: mg, ml, mcg, IU, units.
+        """
+
     def transcribe_audio(
         self,
         audio_data: bytes,
@@ -160,14 +175,18 @@ class SpeechToTextService:
             Dict with transcript and metadata
         """
         # Build context-aware prompt
-        prompt_parts = [self.medical_prompt]
+        # Use pharmacy-specific prompt for medication transcription
+        if context and context.get("currentModule", "").lower() == "pharmacy":
+            prompt_parts = [self.pharmacy_prompt]
+        else:
+            prompt_parts = [self.medical_prompt]
 
         if context:
             if context.get("currentModule"):
                 module = context["currentModule"]
                 module_terms = {
                     "laboratory": "lab tests, CBC, BMP, cultures, specimens",
-                    "pharmacy": "medications, prescriptions, dosages, drug interactions",
+                    "pharmacy": "",  # Already using pharmacy_prompt
                     "radiology": "imaging, X-ray, CT, MRI, ultrasound, findings",
                     "emergency": "triage, ESI level, trauma, resuscitation",
                     "ipd": "admission, discharge, bed, ward, nursing",
@@ -175,7 +194,7 @@ class SpeechToTextService:
                     "surgery": "operation, anesthesia, pre-op, post-op, OT",
                     "billing": "invoice, payment, insurance, claims",
                 }
-                if module.lower() in module_terms:
+                if module.lower() in module_terms and module_terms[module.lower()]:
                     prompt_parts.append(f"Current context: {module_terms[module.lower()]}")
 
             if context.get("currentPatient"):
