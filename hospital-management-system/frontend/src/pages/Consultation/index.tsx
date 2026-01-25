@@ -102,7 +102,7 @@ interface Vitals {
 
 interface NEWS2Result {
   score: number;
-  riskLevel: 'LOW' | 'LOW_MEDIUM' | 'MEDIUM' | 'HIGH';
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   clinicalResponse: string;
   breakdown?: Record<string, number>;
 }
@@ -226,9 +226,10 @@ const getNEWS2Color = (score: number): string => {
 const getRiskLevelColor = (level: string): string => {
   switch (level?.toUpperCase()) {
     case 'LOW': return 'text-green-700 bg-green-100';
-    case 'LOW_MEDIUM': return 'text-yellow-700 bg-yellow-100';
-    case 'MEDIUM': return 'text-amber-700 bg-amber-100';
-    case 'HIGH': return 'text-red-700 bg-red-100';
+    case 'MEDIUM':
+    case 'MODERATE': return 'text-amber-700 bg-amber-100';
+    case 'HIGH': return 'text-orange-700 bg-orange-100';
+    case 'CRITICAL': return 'text-red-700 bg-red-100';
     default: return 'text-gray-700 bg-gray-100';
   }
 };
@@ -243,13 +244,15 @@ const getInteractionSeverityColor = (severity: string): string => {
   }
 };
 
-// Map backend risk level (LOW, MODERATE, HIGH, CRITICAL) to NEWS2 format
-const mapRiskLevelToNEWS2 = (level: string): 'LOW' | 'LOW_MEDIUM' | 'MEDIUM' | 'HIGH' => {
+// Map backend risk level (LOW, MODERATE, HIGH, CRITICAL) to NEWS2 display format
+// Backend uses MODERATE for medium risk, we normalize to MEDIUM for display
+const mapRiskLevelToNEWS2 = (level: string): 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' => {
   switch (level?.toUpperCase()) {
-    case 'LOW': return 'LOW';
-    case 'MODERATE': return 'LOW_MEDIUM';
-    case 'HIGH': return 'MEDIUM';
-    case 'CRITICAL': return 'HIGH';
+    case 'CRITICAL': return 'CRITICAL';
+    case 'HIGH': return 'HIGH';
+    case 'MODERATE':
+    case 'MEDIUM': return 'MEDIUM';
+    case 'LOW':
     default: return 'LOW';
   }
 };
@@ -3177,21 +3180,22 @@ export default function Consultation() {
           </h4>
           {(() => {
             // Determine risk level from NEWS2 result (pre-filled from booking data or calculated)
+            // NHS NEWS2 Guidelines: Score 0-4 (no extreme) = LOW, Score 5-6 OR extreme = MEDIUM, Score >= 7 = CRITICAL
             const riskLevel = news2Result?.riskLevel?.toUpperCase() ||
                               bookingData?.riskPrediction?.riskLevel?.toUpperCase() ||
-                              (patientData.allergies && patientData.allergies.length > 0 ? 'MODERATE' : 'LOW');
-            const isHigh = riskLevel === 'HIGH' || riskLevel === 'CRITICAL' || (news2Result && news2Result.score >= 5);
-            const isModerate = riskLevel === 'MODERATE' || riskLevel === 'MEDIUM' || riskLevel === 'LOW_MEDIUM';
+                              (patientData.allergies && patientData.allergies.length > 0 ? 'MEDIUM' : 'LOW');
+            const isCritical = riskLevel === 'CRITICAL' || (news2Result && news2Result.score >= 7);
+            const isMedium = riskLevel === 'MODERATE' || riskLevel === 'MEDIUM' || riskLevel === 'HIGH' || (news2Result && news2Result.score >= 5);
             return (
               <div className={clsx(
                 'px-4 py-3 rounded-xl text-center',
-                isHigh ? 'bg-red-100' : isModerate ? 'bg-amber-100' : 'bg-green-100'
+                isCritical ? 'bg-red-100' : isMedium ? 'bg-amber-100' : 'bg-green-100'
               )}>
                 <p className={clsx(
                   'text-2xl font-bold',
-                  isHigh ? 'text-red-700' : isModerate ? 'text-amber-700' : 'text-green-700'
+                  isCritical ? 'text-red-700' : isMedium ? 'text-amber-700' : 'text-green-700'
                 )}>
-                  {isHigh ? 'HIGH' : isModerate ? 'MODERATE' : 'LOW'}
+                  {isCritical ? 'CRITICAL' : isMedium ? 'MEDIUM' : 'LOW'}
                 </p>
                 {news2Result && (
                   <p className="text-sm mt-1 opacity-75">NEWS2: {news2Result.score}</p>

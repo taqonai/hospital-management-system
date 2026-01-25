@@ -174,22 +174,25 @@ export default function EWSCalculator({
     let clinicalResponse: string;
     let severity: string;
 
+    // NEWS2 Risk Classification (NHS guidelines):
+    // - Score 0-4 (no extreme): LOW risk
+    // - Score 1-4 with any single parameter = 3: MEDIUM risk (urgent response)
+    // - Score 5-6: MEDIUM risk
+    // - Score >= 7: CRITICAL risk
     if (totalScore >= 7) {
       riskLevel = 'critical';
       severity = 'critical';
       clinicalResponse = 'Emergency response - continuous monitoring, immediate senior review, consider ICU';
     } else if (totalScore >= 5 || hasExtremeScore) {
-      riskLevel = 'high';
-      severity = 'high';
-      clinicalResponse = 'Urgent response - increase monitoring to at least hourly, urgent clinical review within 30 minutes';
-    } else if (totalScore >= 3) {
       riskLevel = 'medium';
       severity = 'medium';
-      clinicalResponse = 'Ward-based response - increase monitoring to 4-6 hourly, inform nurse-in-charge';
+      clinicalResponse = 'Urgent response - increase monitoring to at least hourly, urgent clinical review within 30 minutes';
     } else {
       riskLevel = 'low';
       severity = 'low';
-      clinicalResponse = 'Continue routine monitoring - minimum 12 hourly';
+      clinicalResponse = totalScore >= 1
+        ? 'Low-medium clinical risk - inform registered nurse, increase monitoring to 4-6 hourly'
+        : 'Continue routine monitoring - minimum 12 hourly';
     }
 
     return {
