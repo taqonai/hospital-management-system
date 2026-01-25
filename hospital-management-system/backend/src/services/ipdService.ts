@@ -1,5 +1,9 @@
 import prisma from '../config/database';
 import { NotFoundError } from '../middleware/errorHandler';
+import {
+  calculateNEWS2RiskLevel,
+  getNEWS2ClinicalResponse,
+} from '../utils/news2';
 
 export class IPDService {
   // Ward Management
@@ -406,26 +410,11 @@ export class IPDService {
       components.push(`Consciousness (${consciousness.toUpperCase()}): +3`);
     }
 
-    // Determine risk level and clinical response
-    let riskLevel: string;
-    let clinicalResponse: string;
-
-    if (score >= 7 || components.some(c => c.includes('+3'))) {
-      riskLevel = 'HIGH';
-      clinicalResponse = 'Emergency response - continuous monitoring, immediate senior review';
-    } else if (score >= 5) {
-      riskLevel = 'MEDIUM-HIGH';
-      clinicalResponse = 'Urgent response - hourly monitoring, urgent clinical review';
-    } else if (score >= 3) {
-      riskLevel = 'MEDIUM';
-      clinicalResponse = 'Increased monitoring - 4-6 hourly, inform nurse-in-charge';
-    } else if (score >= 1) {
-      riskLevel = 'LOW-MEDIUM';
-      clinicalResponse = 'Ward-based response - 4-6 hourly monitoring';
-    } else {
-      riskLevel = 'LOW';
-      clinicalResponse = 'Standard monitoring - minimum 12 hourly';
-    }
+    // Determine risk level using centralized NEWS2 utility (NHS guidelines)
+    // Check if any parameter scored 3 (extreme value)
+    const hasExtremeScore = components.some(c => c.includes('+3'));
+    const riskLevel = calculateNEWS2RiskLevel(score, hasExtremeScore);
+    const clinicalResponse = getNEWS2ClinicalResponse(score, hasExtremeScore);
 
     return { score, riskLevel, components, clinicalResponse };
   }
@@ -568,16 +557,17 @@ export class IPDService {
     });
 
     // Sort by NEWS2 score (highest first) and risk level
+    // Risk levels now use NHS-compliant values: CRITICAL, MODERATE, LOW
     patientsWithScores.sort((a, b) => {
-      const riskOrder = { 'HIGH': 0, 'MEDIUM-HIGH': 1, 'MEDIUM': 2, 'LOW-MEDIUM': 3, 'LOW': 4 };
-      const aRisk = riskOrder[a.riskLevel as keyof typeof riskOrder] ?? 5;
-      const bRisk = riskOrder[b.riskLevel as keyof typeof riskOrder] ?? 5;
+      const riskOrder = { 'CRITICAL': 0, 'MODERATE': 1, 'LOW': 2 };
+      const aRisk = riskOrder[a.riskLevel as keyof typeof riskOrder] ?? 3;
+      const bRisk = riskOrder[b.riskLevel as keyof typeof riskOrder] ?? 3;
       if (aRisk !== bRisk) return aRisk - bRisk;
       return b.news2Score - a.news2Score;
     });
 
     // Calculate summary stats
-    const highRisk = patientsWithScores.filter(p => p.riskLevel === 'HIGH' || p.riskLevel === 'MEDIUM-HIGH').length;
+    const highRisk = patientsWithScores.filter(p => p.riskLevel === 'CRITICAL' || p.riskLevel === 'MODERATE').length;
     const vitalsOverdue = patientsWithScores.filter(p => p.vitalsOverdue).length;
     const worsening = patientsWithScores.filter(p => p.trend === 'worsening').length;
 
