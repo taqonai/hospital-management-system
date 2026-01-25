@@ -423,6 +423,9 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
   const [riskAssessment, setRiskAssessment] = useState<any>(null);
   const [showRiskAssessment, setShowRiskAssessment] = useState(false);
 
+  // State for patient's booking notes (read-only display)
+  const [patientBookingNotes, setPatientBookingNotes] = useState<string | null>(null);
+
   // State for patient medical summary (read-only display from MedicalHistory model)
   const [medicalSummary, setMedicalSummary] = useState<{
     medicalHistory: {
@@ -505,10 +508,18 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
         let existingVitals = null;
         let patientStatus = null;
 
-        // 1. Fetch current appointment's vitals if they exist
-        if (appointment.vitalsRecordedAt) {
-          const response = await opdApi.getBookingTicket(appointment.id);
-          existingVitals = response.data?.data?.vitals;
+        // Always fetch booking ticket to get patient's booking notes
+        const bookingResponse = await opdApi.getBookingTicket(appointment.id);
+        const bookingData = bookingResponse.data?.data;
+
+        // Store patient's additional notes from booking (read-only for nurse)
+        if (bookingData?.appointment?.notes) {
+          setPatientBookingNotes(bookingData.appointment.notes);
+        }
+
+        // 1. Get vitals from booking ticket if they exist
+        if (appointment.vitalsRecordedAt && bookingData?.vitals) {
+          existingVitals = bookingData.vitals;
         }
 
         // 2. Fetch patient's latest status from Medical History (single source of truth)
@@ -1158,16 +1169,28 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
               </div>
             </div>
 
-            {/* Notes */}
+            {/* Patient's Booking Notes (Read-only) */}
+            {patientBookingNotes && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                <label className="block text-xs font-medium text-blue-700 mb-1">
+                  Patient's Notes from Booking
+                </label>
+                <div className="text-sm text-gray-800 whitespace-pre-wrap">
+                  {patientBookingNotes}
+                </div>
+              </div>
+            )}
+
+            {/* Nurse Notes */}
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">
-                Notes (Optional)
+                Nurse Notes (Optional)
               </label>
               <textarea
                 name="notes"
                 value={vitals.notes}
                 onChange={handleChange}
-                placeholder="Any additional observations..."
+                placeholder="Any additional observations from nurse assessment..."
                 rows={2}
                 className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500/50 focus:border-gray-500 resize-none"
               />

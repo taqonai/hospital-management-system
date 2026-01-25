@@ -28,6 +28,7 @@ import {
   CalendarIcon,
   MicrophoneIcon,
   StopIcon,
+  ChatBubbleBottomCenterTextIcon,
 } from '@heroicons/react/24/outline';
 import { patientApi, aiApi, smartOrderApi, medSafetyApi, ipdApi, appointmentApi, opdApi, insuranceCodingApi, aiConsultationApi } from '../../services/api';
 import { useAIHealth } from '../../hooks/useAI';
@@ -1571,6 +1572,32 @@ export default function Consultation() {
                 <p className="text-gray-400 italic">None recorded</p>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notes Section - Patient booking notes and Nurse notes */}
+      {(bookingData?.appointment?.notes || bookingData?.vitals?.notes) && (
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <ChatBubbleBottomCenterTextIcon className="h-5 w-5 text-gray-500" />
+            Additional Notes
+          </h3>
+          <div className="grid md:grid-cols-2 gap-4">
+            {/* Patient's Booking Notes */}
+            {bookingData?.appointment?.notes && (
+              <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+                <h4 className="text-sm font-medium text-blue-700 mb-2">Patient Notes (from booking)</h4>
+                <p className="text-sm text-gray-800 whitespace-pre-wrap">{bookingData.appointment.notes}</p>
+              </div>
+            )}
+            {/* Nurse Notes from Vital Recording */}
+            {bookingData?.vitals?.notes && (
+              <div className="bg-green-50 rounded-xl p-4 border border-green-200">
+                <h4 className="text-sm font-medium text-green-700 mb-2">Nurse Notes (from vitals)</h4>
+                <p className="text-sm text-gray-800 whitespace-pre-wrap">{bookingData.vitals.notes}</p>
+              </div>
+            )}
           </div>
         </div>
       )}

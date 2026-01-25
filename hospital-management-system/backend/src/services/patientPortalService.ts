@@ -288,6 +288,7 @@ export class PatientPortalService {
     startTime: string;
     type?: string;
     reason?: string;
+    notes?: string; // Patient's additional notes from booking
   }) {
     // Validate doctor exists and is available
     const doctor = await prisma.doctor.findFirst({
@@ -412,6 +413,7 @@ export class PatientPortalService {
           endTime,
           type: (data.type || 'CONSULTATION') as AppointmentType,
           reason: data.reason || 'Patient portal booking',
+          notes: data.notes || null, // Patient's additional notes from booking
           status: 'SCHEDULED',
           tokenNumber: nextTokenNumber,
         },

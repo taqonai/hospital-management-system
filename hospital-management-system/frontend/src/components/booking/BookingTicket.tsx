@@ -248,6 +248,7 @@ export function BookingTicket({
               vitals={vitals}
               riskPrediction={riskPrediction}
               patient={{ gender: patient.gender, dateOfBirth: patient.dateOfBirth }}
+              appointmentNotes={appointment.notes}
             />
 
             {/* Consultation Summary */}

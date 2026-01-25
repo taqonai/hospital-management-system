@@ -4,6 +4,7 @@ import {
   ArrowTrendingUpIcon,
   ExclamationTriangleIcon,
   UserIcon,
+  ChatBubbleBottomCenterTextIcon,
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
@@ -21,6 +22,8 @@ interface VitalsData {
   painLevel: number | null;
   recordedBy: string;
   recordedAt: string;
+  // Nurse notes
+  notes?: string | null;
   // Patient status from nurse entry
   isPregnant?: boolean | null;
   expectedDueDate?: string | null;
@@ -43,6 +46,7 @@ interface VitalsSummaryCardProps {
   vitals: VitalsData | null;
   riskPrediction: RiskPrediction | null;
   patient?: PatientInfo | null;
+  appointmentNotes?: string | null; // Patient's additional notes from booking
   className?: string;
 }
 
@@ -110,7 +114,7 @@ function isVitalAbnormal(type: string, value: number | null): boolean {
   }
 }
 
-export function VitalsSummaryCard({ vitals, riskPrediction, patient, className }: VitalsSummaryCardProps) {
+export function VitalsSummaryCard({ vitals, riskPrediction, patient, appointmentNotes, className }: VitalsSummaryCardProps) {
   // Determine if pregnancy status should be shown based on patient gender/age
   const showPregnancy = shouldShowPregnancyStatus(patient);
   if (!vitals) {
@@ -307,6 +311,32 @@ export function VitalsSummaryCard({ vitals, riskPrediction, patient, className }
             </div>
           </div>
         ) : null}
+
+        {/* Notes Section - Patient booking notes and Nurse notes */}
+        {(appointmentNotes || vitals?.notes) && (
+          <div className="mt-3 p-3 rounded-lg border border-gray-200 bg-gray-50">
+            <div className="flex items-center gap-2 mb-3">
+              <ChatBubbleBottomCenterTextIcon className="w-4 h-4 text-gray-600" />
+              <span className="font-medium text-sm text-gray-800">Notes</span>
+            </div>
+            <div className="space-y-3">
+              {/* Patient's Additional Notes from Booking */}
+              {appointmentNotes && (
+                <div className="p-2 rounded-lg bg-blue-50 border border-blue-200">
+                  <div className="text-xs font-medium text-blue-700 mb-1">Patient Notes (from booking)</div>
+                  <div className="text-sm text-gray-800 whitespace-pre-wrap">{appointmentNotes}</div>
+                </div>
+              )}
+              {/* Nurse Notes from Vital Recording */}
+              {vitals?.notes && (
+                <div className="p-2 rounded-lg bg-green-50 border border-green-200">
+                  <div className="text-xs font-medium text-green-700 mb-1">Nurse Notes (from vitals)</div>
+                  <div className="text-sm text-gray-800 whitespace-pre-wrap">{vitals.notes}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
