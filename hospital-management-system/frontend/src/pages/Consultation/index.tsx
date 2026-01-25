@@ -222,6 +222,13 @@ const calculateAge = (dob: string): number => {
   return age;
 };
 
+// Check if patient is of childbearing age (female, 19-51 years)
+const isChildbearingAge = (gender: string | undefined, age: number): boolean => {
+  if (!gender) return false;
+  const isFemale = gender.toLowerCase() === 'female' || gender.toLowerCase() === 'f';
+  return isFemale && age >= 19 && age <= 51;
+};
+
 const getNEWS2Color = (score: number): string => {
   if (score <= 4) return 'text-green-700 bg-green-100 border-green-300';
   if (score <= 6) return 'text-amber-700 bg-amber-100 border-amber-300';
@@ -1296,8 +1303,8 @@ export default function Consultation() {
                 </div>
               )}
 
-              {/* Pregnancy Status from MedicalHistory */}
-              {patientData.medicalHistory.isPregnant === true && (
+              {/* Pregnancy Status from MedicalHistory - Only show for females of childbearing age (19-51) */}
+              {isChildbearingAge(patientData.gender, patientAge) && patientData.medicalHistory.isPregnant === true && (
                 <div className="p-3 bg-pink-500/20 rounded-xl col-span-2 border border-pink-400/30">
                   <div className="flex items-center gap-2 text-pink-100">
                     <span className="text-xl">🤰</span>
@@ -1505,7 +1512,8 @@ export default function Consultation() {
 
       {/* Patient Status - Pregnancy, Current Medications, Ongoing Treatment (from nurse entry) */}
       {vitalsPrefilledByNurse && bookingData?.vitals && (
-        bookingData.vitals.isPregnant !== null ||
+        // Show section if: pregnancy info for childbearing females, OR medications, OR treatment
+        (isChildbearingAge(patientData?.gender, patientAge) && bookingData.vitals.isPregnant !== null) ||
         (bookingData.vitals.currentMedications && bookingData.vitals.currentMedications.length > 0) ||
         bookingData.vitals.currentTreatment
       ) && (
@@ -1514,25 +1522,27 @@ export default function Consultation() {
             <ClipboardDocumentListIcon className="h-5 w-5 text-purple-500" />
             Patient Status (Recorded by Nurse)
           </h3>
-          <div className="grid md:grid-cols-3 gap-4">
-            {/* Pregnancy Status */}
-            <div className="bg-pink-50 rounded-xl p-4 border border-pink-200">
-              <h4 className="text-sm font-medium text-pink-700 mb-2">Pregnancy Status</h4>
-              {bookingData.vitals.isPregnant ? (
-                <div className="space-y-1">
-                  <p className="text-lg font-semibold text-pink-800">Pregnant</p>
-                  {bookingData.vitals.expectedDueDate && (
-                    <p className="text-sm text-pink-600">
-                      Due: {new Date(bookingData.vitals.expectedDueDate).toLocaleDateString()}
-                    </p>
-                  )}
-                </div>
-              ) : bookingData.vitals.isPregnant === false ? (
-                <p className="text-lg font-semibold text-gray-600">Not Pregnant</p>
-              ) : (
-                <p className="text-gray-400 italic">Not recorded</p>
-              )}
-            </div>
+          <div className={`grid gap-4 ${isChildbearingAge(patientData?.gender, patientAge) ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+            {/* Pregnancy Status - Only show for females of childbearing age (19-51) */}
+            {isChildbearingAge(patientData?.gender, patientAge) && (
+              <div className="bg-pink-50 rounded-xl p-4 border border-pink-200">
+                <h4 className="text-sm font-medium text-pink-700 mb-2">Pregnancy Status</h4>
+                {bookingData.vitals.isPregnant ? (
+                  <div className="space-y-1">
+                    <p className="text-lg font-semibold text-pink-800">Pregnant</p>
+                    {bookingData.vitals.expectedDueDate && (
+                      <p className="text-sm text-pink-600">
+                        Due: {new Date(bookingData.vitals.expectedDueDate).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                ) : bookingData.vitals.isPregnant === false ? (
+                  <p className="text-lg font-semibold text-gray-600">Not Pregnant</p>
+                ) : (
+                  <p className="text-gray-400 italic">Not recorded</p>
+                )}
+              </div>
+            )}
 
             {/* Current Medications */}
             <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
