@@ -173,6 +173,28 @@ async function main() {
 
   console.log(`Created lab technician user: ${labTechUser.email}`);
 
+  // Create Pathologist User
+  const pathologistPassword = await bcrypt.hash('password123', 12);
+  const pathologistUser = await prisma.user.upsert({
+    where: {
+      hospitalId_email: { hospitalId: hospital.id, email: 'pathologist@hospital.com' },
+    },
+    update: {},
+    create: {
+      hospitalId: hospital.id,
+      email: 'pathologist@hospital.com',
+      password: pathologistPassword,
+      firstName: 'Sarah',
+      lastName: 'Anderson',
+      phone: '+1-555-100-0008',
+      role: UserRole.PATHOLOGIST,
+      isActive: true,
+      isEmailVerified: true,
+    },
+  });
+
+  console.log(`Created pathologist user: ${pathologistUser.email}`);
+
   // Create Lab Tests Catalog
   const labTestsData = [
     { name: 'Complete Blood Count (CBC)', code: 'CBC001', category: 'Hematology', sampleType: 'Blood', price: 50, turnaroundTime: 4 },

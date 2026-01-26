@@ -2,42 +2,6 @@ import prisma from '../config/database';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler';
 import { notificationService } from './notificationService';
 
-// Sample tracking data structure (stored in memory - in production would be in database)
-interface SampleData {
-  sampleId: string;
-  barcode: string;
-  orderId: string;
-  testId: string;
-  sampleType: string;
-  sampleVolume?: number;
-  sampleCondition: string;
-  specialHandling?: string[];
-  collectedBy: string;
-  collectionTime: Date;
-  notes?: string;
-  status: string;
-  isVerified: boolean;
-  verifiedBy?: string;
-  verifiedAt?: Date;
-  rejectionReason?: string;
-  requiresColdChain: boolean;
-  hospitalId: string;
-  createdAt: Date;
-}
-
-interface SampleStatusHistory {
-  status: string;
-  location: string;
-  handledBy: string;
-  timestamp: Date;
-  notes?: string;
-  temperature?: number;
-}
-
-// In-memory storage for sample tracking (would be database tables in production)
-const sampleStorage: Map<string, SampleData> = new Map();
-const sampleHistoryStorage: Map<string, SampleStatusHistory[]> = new Map();
-
 export class LaboratoryService {
   private generateOrderNumber(): string {
     const timestamp = Date.now().toString(36).toUpperCase();
@@ -184,6 +148,7 @@ export class LaboratoryService {
         orderBy: [{ priority: 'asc' }, { orderedAt: 'desc' }],
         include: {
           patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
+          orderedByUser: { select: { id: true, firstName: true, lastName: true, role: true } },
           tests: { include: { labTest: true } },
           consultation: { select: { id: true, appointmentId: true } },
         },
@@ -199,6 +164,7 @@ export class LaboratoryService {
       where: { id, hospitalId },
       include: {
         patient: true,
+        orderedByUser: { select: { id: true, firstName: true, lastName: true, role: true } },
         tests: { include: { labTest: true } },
         consultation: true,
       },
@@ -382,10 +348,12 @@ export class LaboratoryService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const [totalOrders, pendingOrders, completedToday, criticalResults] = await Promise.all([
-      prisma.labOrder.count({ where: { hospitalId } }),
+    const [pendingOrders, inProgressOrders, completedToday, criticalResults] = await Promise.all([
       prisma.labOrder.count({
-        where: { hospitalId, status: { in: ['ORDERED', 'SAMPLE_COLLECTED', 'IN_PROGRESS'] } },
+        where: { hospitalId, status: 'ORDERED' },
+      }),
+      prisma.labOrder.count({
+        where: { hospitalId, status: { in: ['SAMPLE_COLLECTED', 'IN_PROGRESS'] } },
       }),
       prisma.labOrder.count({
         where: { hospitalId, completedAt: { gte: today } },
@@ -395,7 +363,7 @@ export class LaboratoryService {
       }),
     ]);
 
-    return { totalOrders, pendingOrders, completedToday, criticalResults };
+    return { pendingOrders, inProgressOrders, completedToday, criticalResults };
   }
 
   // ==================== AI SMART LAB ORDERING ====================
@@ -847,7 +815,7 @@ export class LaboratoryService {
   // Collect sample (phlebotomy)
   async collectSample(hospitalId: string, data: {
     orderId: string;
-    testId: string;
+    testId?: string;
     collectedBy: string;
     collectionTime: Date;
     sampleType: string; // BLOOD, URINE, STOOL, SWAB, TISSUE, CSF, etc.
@@ -870,51 +838,42 @@ export class LaboratoryService {
       throw new NotFoundError('Lab order not found');
     }
 
-    // Verify the test exists in this order
-    const orderTest = order.tests.find(t => t.id === data.testId || t.labTestId === data.testId);
-    if (!orderTest) {
-      throw new NotFoundError('Test not found in this order');
-    }
-
-    // Generate barcode and sample ID
-    const barcode = this.generateSampleBarcode(data.orderId, data.testId);
-    const sampleId = `SMP-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
+    // Generate barcode
+    const barcode = this.generateSampleBarcode(data.orderId, data.testId || 'ALL');
 
     // Determine if cold chain is required based on sample type
     const coldChainTypes = ['CSF', 'TISSUE', 'PLASMA', 'SERUM'];
     const requiresColdChain = coldChainTypes.includes(data.sampleType.toUpperCase()) ||
       (data.specialHandling && data.specialHandling.some(h => h.toLowerCase().includes('cold') || h.toLowerCase().includes('refrigerat')));
 
-    // Store sample data
-    const sampleData: SampleData = {
-      sampleId,
-      barcode,
-      orderId: data.orderId,
-      testId: data.testId,
-      sampleType: data.sampleType,
-      sampleVolume: data.sampleVolume,
-      sampleCondition: data.sampleCondition,
-      specialHandling: data.specialHandling,
-      collectedBy: data.collectedBy,
-      collectionTime: new Date(data.collectionTime),
-      notes: data.notes,
-      status: 'COLLECTED',
-      isVerified: false,
-      requiresColdChain,
-      hospitalId,
-      createdAt: new Date()
-    };
+    // Create sample in database
+    const sample = await prisma.labSample.create({
+      data: {
+        labOrderId: data.orderId,
+        barcode,
+        sampleType: data.sampleType as any,
+        sampleVolume: data.sampleVolume,
+        sampleCondition: data.sampleCondition as any,
+        specialHandling: data.specialHandling || [],
+        collectedBy: data.collectedBy,
+        collectionTime: new Date(data.collectionTime),
+        notes: data.notes,
+        status: 'COLLECTED',
+        requiresColdChain
+      }
+    });
 
-    sampleStorage.set(barcode, sampleData);
-
-    // Initialize history with collection event
-    sampleHistoryStorage.set(barcode, [{
-      status: 'COLLECTED',
-      location: 'Collection Point',
-      handledBy: data.collectedBy,
-      timestamp: new Date(data.collectionTime),
-      notes: data.notes
-    }]);
+    // Create custody log entry
+    await prisma.sampleCustodyLog.create({
+      data: {
+        sampleId: sample.id,
+        status: 'COLLECTED',
+        location: 'Collection Point',
+        handledBy: data.collectedBy,
+        notes: data.notes,
+        timestamp: new Date(data.collectionTime)
+      }
+    });
 
     // Update the lab order status
     await prisma.labOrder.update({
@@ -926,9 +885,9 @@ export class LaboratoryService {
     });
 
     return {
-      sampleId,
-      barcode,
-      status: 'COLLECTED'
+      sampleId: sample.id,
+      barcode: sample.barcode,
+      status: sample.status
     };
   }
 
@@ -939,69 +898,112 @@ export class LaboratoryService {
     handledBy: string;
     notes?: string;
     temperature?: number; // for cold chain
-  }): Promise<SampleData> {
-    const sample = sampleStorage.get(sampleBarcode);
+  }) {
+    const sample = await prisma.labSample.findUnique({
+      where: { barcode: sampleBarcode }
+    });
+
     if (!sample) {
       throw new NotFoundError('Sample not found');
     }
 
-    // Update sample status
-    sample.status = data.status;
+    // Update sample status and received info if status is RECEIVED
+    const updateData: any = { status: data.status as any };
+    if (data.status === 'RECEIVED') {
+      updateData.receivedBy = data.handledBy;
+      updateData.receivedAt = new Date();
+    }
 
-    // Add to history
-    const history = sampleHistoryStorage.get(sampleBarcode) || [];
-    history.push({
-      status: data.status,
-      location: data.location,
-      handledBy: data.handledBy,
-      timestamp: new Date(),
-      notes: data.notes,
-      temperature: data.temperature
+    const updatedSample = await prisma.labSample.update({
+      where: { barcode: sampleBarcode },
+      data: updateData
     });
-    sampleHistoryStorage.set(sampleBarcode, history);
 
-    // Update lab order status if sample is being processed
+    // Add to custody log
+    await prisma.sampleCustodyLog.create({
+      data: {
+        sampleId: sample.id,
+        status: data.status,
+        location: data.location,
+        handledBy: data.handledBy,
+        notes: data.notes,
+        temperature: data.temperature
+      }
+    });
+
+    // Update lab order status if sample is being processed or received
     if (data.status === 'PROCESSING') {
       await prisma.labOrder.update({
-        where: { id: sample.orderId },
+        where: { id: sample.labOrderId },
         data: { status: 'IN_PROGRESS' }
       });
+    } else if (data.status === 'RECEIVED') {
+      await prisma.labOrder.update({
+        where: { id: sample.labOrderId },
+        data: {
+          status: 'RECEIVED',
+          receivedAt: new Date()
+        }
+      });
+    }
+
+    return updatedSample;
+  }
+
+  // Get sample tracking history (chain of custody log)
+  async getSampleHistory(sampleBarcode: string) {
+    const sample = await prisma.labSample.findUnique({
+      where: { barcode: sampleBarcode },
+      include: {
+        custodyLog: {
+          include: {
+            handler: {
+              select: { firstName: true, lastName: true, role: true }
+            }
+          },
+          orderBy: { timestamp: 'asc' }
+        }
+      }
+    });
+
+    if (!sample) {
+      throw new NotFoundError('Sample not found');
+    }
+
+    return sample.custodyLog;
+  }
+
+  // Get sample by barcode
+  async getSampleByBarcode(sampleBarcode: string) {
+    const sample = await prisma.labSample.findUnique({
+      where: { barcode: sampleBarcode },
+      include: {
+        labOrder: {
+          include: {
+            patient: { select: { firstName: true, lastName: true, mrn: true } }
+          }
+        },
+        collectedByUser: { select: { firstName: true, lastName: true, role: true } },
+        receivedByUser: { select: { firstName: true, lastName: true, role: true } },
+        verifiedByUser: { select: { firstName: true, lastName: true, role: true } },
+        custodyLog: {
+          include: {
+            handler: { select: { firstName: true, lastName: true, role: true } }
+          },
+          orderBy: { timestamp: 'asc' }
+        }
+      }
+    });
+
+    if (!sample) {
+      throw new NotFoundError('Sample not found');
     }
 
     return sample;
   }
 
-  // Get sample tracking history (chain of custody log)
-  async getSampleHistory(sampleBarcode: string): Promise<Array<{
-    status: string;
-    location: string;
-    handledBy: string;
-    timestamp: Date;
-    notes?: string;
-    temperature?: number;
-  }>> {
-    const sample = sampleStorage.get(sampleBarcode);
-    if (!sample) {
-      throw new NotFoundError('Sample not found');
-    }
-
-    const history = sampleHistoryStorage.get(sampleBarcode) || [];
-    return history;
-  }
-
-  // Get sample by barcode
-  async getSampleByBarcode(sampleBarcode: string): Promise<SampleData & { history: SampleStatusHistory[] }> {
-    const sample = sampleStorage.get(sampleBarcode);
-    if (!sample) {
-      throw new NotFoundError('Sample not found');
-    }
-
-    const history = sampleHistoryStorage.get(sampleBarcode) || [];
-    return { ...sample, history };
-  }
-
   // Get samples by order
-  async getOrderSamples(orderId: string, hospitalId: string): Promise<SampleData[]> {
+  async getOrderSamples(orderId: string, hospitalId: string) {
     // Verify order exists
     const order = await prisma.labOrder.findFirst({
       where: { id: orderId, hospitalId }
@@ -1011,11 +1013,17 @@ export class LaboratoryService {
       throw new NotFoundError('Lab order not found');
     }
 
-    const samples: SampleData[] = [];
-    sampleStorage.forEach((sample) => {
-      if (sample.orderId === orderId) {
-        samples.push(sample);
-      }
+    const samples = await prisma.labSample.findMany({
+      where: { labOrderId: orderId },
+      include: {
+        collectedByUser: { select: { firstName: true, lastName: true, role: true } },
+        receivedByUser: { select: { firstName: true, lastName: true, role: true } },
+        custodyLog: {
+          orderBy: { timestamp: 'desc' },
+          take: 1
+        }
+      },
+      orderBy: { collectionTime: 'asc' }
     });
 
     return samples;
@@ -1026,80 +1034,95 @@ export class LaboratoryService {
     verifiedBy: string;
     isAcceptable: boolean;
     rejectionReason?: string;
-  }): Promise<SampleData> {
-    const sample = sampleStorage.get(sampleBarcode);
+  }) {
+    const sample = await prisma.labSample.findUnique({
+      where: { barcode: sampleBarcode }
+    });
+
     if (!sample) {
       throw new NotFoundError('Sample not found');
     }
 
-    sample.isVerified = true;
-    sample.verifiedBy = data.verifiedBy;
-    sample.verifiedAt = new Date();
-
-    if (!data.isAcceptable) {
-      sample.rejectionReason = data.rejectionReason;
-      sample.status = 'REJECTED';
-
-      // Add rejection to history
-      const history = sampleHistoryStorage.get(sampleBarcode) || [];
-      history.push({
-        status: 'REJECTED',
-        location: 'Quality Control',
-        handledBy: data.verifiedBy,
-        timestamp: new Date(),
-        notes: `Sample rejected: ${data.rejectionReason || 'Quality issue'}`
-      });
-      sampleHistoryStorage.set(sampleBarcode, history);
-    } else {
-      // Add verification to history
-      const history = sampleHistoryStorage.get(sampleBarcode) || [];
-      history.push({
-        status: 'VERIFIED',
-        location: 'Quality Control',
-        handledBy: data.verifiedBy,
-        timestamp: new Date(),
-        notes: 'Sample passed quality verification'
-      });
-      sampleHistoryStorage.set(sampleBarcode, history);
-    }
-
-    return sample;
-  }
-
-  // Get pending samples (for lab dashboard)
-  async getPendingSamples(hospitalId: string): Promise<SampleData[]> {
-    const pendingStatuses = ['COLLECTED', 'IN_TRANSIT', 'RECEIVED'];
-    const samples: SampleData[] = [];
-
-    sampleStorage.forEach((sample) => {
-      if (sample.hospitalId === hospitalId && pendingStatuses.includes(sample.status)) {
-        samples.push(sample);
+    const updatedSample = await prisma.labSample.update({
+      where: { barcode: sampleBarcode },
+      data: {
+        isVerified: true,
+        verifiedBy: data.verifiedBy,
+        verifiedAt: new Date(),
+        ...(data.isAcceptable ? {} : {
+          status: 'REJECTED',
+          rejectionReason: data.rejectionReason
+        })
       }
     });
 
-    // Sort by collection time (oldest first)
-    samples.sort((a, b) => a.collectionTime.getTime() - b.collectionTime.getTime());
+    // Add to custody log
+    await prisma.sampleCustodyLog.create({
+      data: {
+        sampleId: sample.id,
+        status: data.isAcceptable ? 'VERIFIED' : 'REJECTED',
+        location: 'Quality Control',
+        handledBy: data.verifiedBy,
+        notes: data.isAcceptable
+          ? 'Sample passed quality verification'
+          : `Sample rejected: ${data.rejectionReason || 'Quality issue'}`
+      }
+    });
+
+    return updatedSample;
+  }
+
+  // Get pending samples (for lab dashboard)
+  async getPendingSamples(hospitalId: string) {
+    const pendingStatuses = ['COLLECTED', 'IN_TRANSIT', 'RECEIVED'];
+
+    const samples = await prisma.labSample.findMany({
+      where: {
+        labOrder: { hospitalId },
+        status: { in: pendingStatuses as any[] }
+      },
+      include: {
+        labOrder: {
+          include: {
+            patient: { select: { firstName: true, lastName: true, mrn: true } }
+          }
+        },
+        collectedByUser: { select: { firstName: true, lastName: true } }
+      },
+      orderBy: { collectionTime: 'asc' }
+    });
 
     return samples;
   }
 
   // Get samples requiring cold chain monitoring
-  async getColdChainSamples(hospitalId: string): Promise<Array<SampleData & { latestTemperature?: number }>> {
-    const samples: Array<SampleData & { latestTemperature?: number }> = [];
-
-    sampleStorage.forEach((sample) => {
-      if (sample.hospitalId === hospitalId && sample.requiresColdChain && sample.status !== 'DISPOSED') {
-        const history = sampleHistoryStorage.get(sample.barcode) || [];
-        const latestWithTemp = [...history].reverse().find(h => h.temperature !== undefined);
-
-        samples.push({
-          ...sample,
-          latestTemperature: latestWithTemp?.temperature
-        });
-      }
+  async getColdChainSamples(hospitalId: string) {
+    const samples = await prisma.labSample.findMany({
+      where: {
+        labOrder: { hospitalId },
+        requiresColdChain: true,
+        status: { not: 'DISPOSED' }
+      },
+      include: {
+        labOrder: {
+          include: {
+            patient: { select: { firstName: true, lastName: true, mrn: true } }
+          }
+        },
+        custodyLog: {
+          where: { temperature: { not: null } },
+          orderBy: { timestamp: 'desc' },
+          take: 1
+        }
+      },
+      orderBy: { collectionTime: 'asc' }
     });
 
-    return samples;
+    // Map to include latest temperature
+    return samples.map(sample => ({
+      ...sample,
+      latestTemperature: sample.custodyLog[0]?.temperature || undefined
+    }));
   }
 }
 

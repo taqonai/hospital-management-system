@@ -183,6 +183,14 @@ model User {
   crmCampaignsCreated   CRMCampaign[]       @relation("CRMCampaignCreator")
   crmSurveysCreated     CRMSurvey[]         @relation("CRMSurveyCreator")
 
+  // Laboratory Module
+  orderedLabOrders      LabOrder[]          @relation("LabOrderOrderedBy")
+  verifiedLabOrders     LabOrder[]          @relation("LabOrderVerifiedBy")
+  collectedSamples      LabSample[]         @relation("SampleCollectedBy")
+  receivedSamples       LabSample[]         @relation("SampleReceivedBy")
+  verifiedSamples       LabSample[]         @relation("SampleVerifiedBy")
+  sampleCustodyLogs     SampleCustodyLog[]
+
   @@unique([hospitalId, email])
   @@map("users")
 }
@@ -194,6 +202,7 @@ enum UserRole {
   NURSE
   RECEPTIONIST
   LAB_TECHNICIAN
+  PATHOLOGIST
   PHARMACIST
   RADIOLOGIST
   ACCOUNTANT
@@ -1129,15 +1138,21 @@ model LabOrder {
   specialInstructions String?
   orderedAt      DateTime      @default(now())
   collectedAt    DateTime?
+  receivedAt     DateTime?     // When lab received samples
   completedAt    DateTime?
+  verifiedAt     DateTime?     // When pathologist verified
+  verifiedBy     String?       // Pathologist userId
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
   // Relations
-  hospital     Hospital       @relation(fields: [hospitalId], references: [id])
-  patient      Patient        @relation(fields: [patientId], references: [id])
-  consultation Consultation?  @relation(fields: [consultationId], references: [id])
-  tests        LabOrderTest[]
+  hospital       Hospital       @relation(fields: [hospitalId], references: [id])
+  patient        Patient        @relation(fields: [patientId], references: [id])
+  consultation   Consultation?  @relation(fields: [consultationId], references: [id])
+  orderedByUser  User           @relation("LabOrderOrderedBy", fields: [orderedBy], references: [id])
+  verifiedByUser User?          @relation("LabOrderVerifiedBy", fields: [verifiedBy], references: [id])
+  tests          LabOrderTest[]
+  samples        LabSample[]
 
   @@map("lab_orders")
 }
@@ -1151,9 +1166,13 @@ enum LabPriority {
 enum LabOrderStatus {
   ORDERED
   SAMPLE_COLLECTED
+  RECEIVED            // Lab received the sample
   IN_PROGRESS
+  RESULTED            // Results entered, pending verification
+  VERIFIED            // Pathologist verified
   COMPLETED
   CANCELLED
+  PARTIALLY_COMPLETED // Some tests done, some cancelled/pending
 }
 
 model LabOrderTest {
@@ -1182,8 +1201,94 @@ model LabOrderTest {
 enum LabTestStatus {
   PENDING
   IN_PROGRESS
+  RESULTED        // Result entered, awaiting verification
+  VERIFIED        // Pathologist verified
   COMPLETED
   CANCELLED
+  RERUN_REQUESTED // Pathologist requested re-run
+}
+
+model LabSample {
+  id                String           @id @default(uuid())
+  labOrderId        String
+  barcode           String           @unique
+  sampleType        SampleType
+  sampleVolume      Decimal?         @db.Decimal(6, 2) // in mL
+  sampleCondition   SampleCondition  @default(ADEQUATE)
+  specialHandling   String[]         // ["REFRIGERATE", "LIGHT_SENSITIVE", "TIMED"]
+  collectedBy       String
+  collectionTime    DateTime
+  receivedBy        String?
+  receivedAt        DateTime?
+  status            SampleStatus     @default(COLLECTED)
+  isVerified        Boolean          @default(false)
+  verifiedBy        String?
+  verifiedAt        DateTime?
+  rejectionReason   String?
+  requiresColdChain Boolean          @default(false)
+  notes             String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  // Relations
+  labOrder         LabOrder             @relation(fields: [labOrderId], references: [id])
+  collectedByUser  User                 @relation("SampleCollectedBy", fields: [collectedBy], references: [id])
+  receivedByUser   User?                @relation("SampleReceivedBy", fields: [receivedBy], references: [id])
+  verifiedByUser   User?                @relation("SampleVerifiedBy", fields: [verifiedBy], references: [id])
+  custodyLog       SampleCustodyLog[]
+
+  @@map("lab_samples")
+}
+
+enum SampleType {
+  BLOOD
+  SERUM
+  PLASMA
+  URINE
+  STOOL
+  SWAB
+  TISSUE
+  CSF
+  SPUTUM
+  FLUID
+  OTHER
+}
+
+enum SampleCondition {
+  ADEQUATE
+  HEMOLYZED
+  LIPEMIC
+  CLOTTED
+  INSUFFICIENT
+  CONTAMINATED
+}
+
+enum SampleStatus {
+  COLLECTED
+  IN_TRANSIT
+  RECEIVED
+  PROCESSING
+  ANALYZED
+  STORED
+  DISPOSED
+  REJECTED
+}
+
+model SampleCustodyLog {
+  id            String   @id @default(uuid())
+  sampleId      String
+  status        String
+  location      String
+  handledBy     String
+  temperature   Decimal? @db.Decimal(4, 1) // for cold chain
+  notes         String?
+  timestamp     DateTime @default(now())
+
+  // Relations
+  sample        LabSample @relation(fields: [sampleId], references: [id])
+  handler       User      @relation(fields: [handledBy], references: [id])
+
+  @@map("sample_custody_logs")
 }
 
 // ==================== RADIOLOGY ====================
