@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
-import whatsappBotService from '@services/whatsappBotService';
-import whatsappSessionService from '@services/whatsappSessionService';
-import { authenticate, authorize } from '@middleware/auth';
+import whatsappBotService from '../services/whatsappBotService';
+import whatsappSessionService from '../services/whatsappSessionService';
+import { authenticate, authorize } from '../middleware/auth';
 import { TwilioWebhookPayload, WhatsAppMessage } from '../types/whatsapp';
 
 const router = express.Router();
@@ -68,7 +68,7 @@ router.post(
       }
 
       // Send via WhatsApp service
-      const whatsappService = require('@services/whatsappService').default;
+      const whatsappService = require('../services/whatsappService').default;
       await whatsappService.sendMessage(to, message);
 
       res.status(200).json({
