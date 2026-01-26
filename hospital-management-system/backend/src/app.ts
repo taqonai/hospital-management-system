@@ -38,13 +38,17 @@ app.use(cors({
 // Trust proxy - required when behind ALB/nginx for correct IP identification
 app.set('trust proxy', 1);
 
-// Rate limiting
+// Rate limiting - use CF-Connecting-IP when behind Cloudflare for accurate per-client limits
 const limiter = rateLimit({
   windowMs: config.rateLimit.windowMs,
   max: config.rateLimit.max,
   message: { success: false, message: 'Too many requests, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => {
+    // Cloudflare sends real client IP in CF-Connecting-IP header
+    return (req.headers['cf-connecting-ip'] as string) || req.ip || req.socket.remoteAddress || 'unknown';
+  },
 });
 app.use('/api', limiter);
 
