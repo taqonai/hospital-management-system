@@ -16,30 +16,38 @@ import { procurementApi } from '../../services/procurementApi';
 // ==================== Interfaces ====================
 interface POItem {
   id?: string;
+  itemType: string;
   itemName: string;
-  description: string;
-  quantity: number;
+  itemCode: string;
   unit: string;
+  orderedQty: number;
   unitPrice: number;
   totalPrice: number;
-  receivedQuantity?: number;
+  receivedQty?: number;
+  notes: string;
 }
 
 interface PurchaseOrder {
   id: string;
   poNumber: string;
-  supplier: { id: string; companyName: string };
+  supplier: { id: string; companyName: string; code: string };
+  requisition?: { id: string; prNumber: string; status: string };
+  type: string;
   status: string;
   totalAmount: number;
+  subtotal: number;
+  discount: number;
+  tax: number;
   orderDate: string;
-  expectedDeliveryDate: string;
-  deliveryAddress: string;
+  expectedDate: string;
   paymentTerms: string;
+  shippingTerms: string;
+  deliveryAddress: string;
+  specialInstructions: string;
   notes: string;
   items: POItem[];
-  linkedPRs: string[];
-  linkedGRNs: Array<{ id: string; grnNumber: string; status: string }>;
-  linkedInvoices: Array<{ id: string; invoiceNumber: string; status: string }>;
+  grns: Array<{ id: string; grnNumber: string; status: string }>;
+  invoices: Array<{ id: string; invoiceNumber: string; totalAmount: number; matchStatus: string }>;
   createdAt: string;
   approvedBy?: string;
   approvedAt?: string;
@@ -48,26 +56,52 @@ interface PurchaseOrder {
 interface Supplier {
   id: string;
   companyName: string;
-  supplierCode: string;
+  code: string;
 }
 
-const poStatuses = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'SENT', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CANCELLED', 'CLOSED'];
+const poStatuses = ['DRAFT_PO', 'PENDING_APPROVAL_PO', 'APPROVED_PO', 'SENT_TO_SUPPLIER', 'PARTIALLY_RECEIVED', 'FULLY_RECEIVED', 'CANCELLED_PO', 'CLOSED_PO'];
+
+const poTypes = [
+  { value: 'STANDARD', label: 'Standard' },
+  { value: 'BLANKET', label: 'Blanket' },
+  { value: 'EMERGENCY', label: 'Emergency' },
+  { value: 'CONTRACT', label: 'Contract' },
+];
+
+const paymentTermsOptions = [
+  { value: 'IMMEDIATE', label: 'Immediate' },
+  { value: 'NET_15', label: 'Net 15' },
+  { value: 'NET_30', label: 'Net 30' },
+  { value: 'NET_45', label: 'Net 45' },
+  { value: 'NET_60', label: 'Net 60' },
+  { value: 'NET_90', label: 'Net 90' },
+];
+
+const itemTypes = [
+  { value: 'DRUG', label: 'Drug' },
+  { value: 'CONSUMABLE', label: 'Consumable' },
+  { value: 'EQUIPMENT', label: 'Equipment' },
+  { value: 'ASSET', label: 'Asset' },
+  { value: 'SERVICE', label: 'Service' },
+  { value: 'OTHER', label: 'Other' },
+];
 
 const statusConfig: Record<string, { bg: string; text: string }> = {
-  DRAFT: { bg: 'bg-gray-100', text: 'text-gray-700' },
-  PENDING_APPROVAL: { bg: 'bg-yellow-100', text: 'text-yellow-700' },
-  APPROVED: { bg: 'bg-blue-100', text: 'text-blue-700' },
-  SENT: { bg: 'bg-indigo-100', text: 'text-indigo-700' },
+  DRAFT_PO: { bg: 'bg-gray-100', text: 'text-gray-700' },
+  PENDING_APPROVAL_PO: { bg: 'bg-yellow-100', text: 'text-yellow-700' },
+  APPROVED_PO: { bg: 'bg-blue-100', text: 'text-blue-700' },
+  SENT_TO_SUPPLIER: { bg: 'bg-indigo-100', text: 'text-indigo-700' },
   PARTIALLY_RECEIVED: { bg: 'bg-orange-100', text: 'text-orange-700' },
-  RECEIVED: { bg: 'bg-green-100', text: 'text-green-700' },
-  CANCELLED: { bg: 'bg-red-100', text: 'text-red-700' },
-  CLOSED: { bg: 'bg-gray-100', text: 'text-gray-500' },
+  FULLY_RECEIVED: { bg: 'bg-green-100', text: 'text-green-700' },
+  CANCELLED_PO: { bg: 'bg-red-100', text: 'text-red-700' },
+  CLOSED_PO: { bg: 'bg-gray-100', text: 'text-gray-500' },
+  AMENDED: { bg: 'bg-purple-100', text: 'text-purple-700' },
 };
 
-const timelineSteps = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'SENT', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CLOSED'];
+const timelineSteps = ['DRAFT_PO', 'PENDING_APPROVAL_PO', 'APPROVED_PO', 'SENT_TO_SUPPLIER', 'PARTIALLY_RECEIVED', 'FULLY_RECEIVED', 'CLOSED_PO'];
 
 const emptyItem: POItem = {
-  itemName: '', description: '', quantity: 1, unit: 'PCS', unitPrice: 0, totalPrice: 0,
+  itemType: 'CONSUMABLE', itemName: '', itemCode: '', unit: 'PCS', orderedQty: 1, unitPrice: 0, totalPrice: 0, notes: '',
 };
 
 export default function PurchaseOrders() {
@@ -83,9 +117,12 @@ export default function PurchaseOrders() {
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     supplierId: '',
-    expectedDeliveryDate: '',
+    type: 'STANDARD',
+    expectedDate: '',
     deliveryAddress: '',
     paymentTerms: 'NET_30',
+    shippingTerms: '',
+    specialInstructions: '',
     notes: '',
     items: [{ ...emptyItem }],
   });
@@ -150,8 +187,8 @@ export default function PurchaseOrders() {
   const updateItem = (index: number, field: keyof POItem, value: any) => {
     const updated = [...formData.items];
     (updated[index] as any)[field] = value;
-    if (field === 'quantity' || field === 'unitPrice') {
-      updated[index].totalPrice = Number(updated[index].quantity) * Number(updated[index].unitPrice);
+    if (field === 'orderedQty' || field === 'unitPrice') {
+      updated[index].totalPrice = Number(updated[index].orderedQty) * Number(updated[index].unitPrice);
     }
     setFormData({ ...formData, items: updated });
   };
@@ -168,10 +205,29 @@ export default function PurchaseOrders() {
     }
     setSubmitting(true);
     try {
-      await procurementApi.createPurchaseOrder(formData);
+      const payload = {
+        supplierId: formData.supplierId,
+        type: formData.type,
+        expectedDate: formData.expectedDate || undefined,
+        deliveryAddress: formData.deliveryAddress || undefined,
+        paymentTerms: formData.paymentTerms,
+        shippingTerms: formData.shippingTerms || undefined,
+        specialInstructions: formData.specialInstructions || undefined,
+        notes: formData.notes || undefined,
+        items: formData.items.map(item => ({
+          itemType: item.itemType,
+          itemName: item.itemName,
+          itemCode: item.itemCode || undefined,
+          unit: item.unit,
+          orderedQty: Number(item.orderedQty),
+          unitPrice: Number(item.unitPrice),
+          notes: item.notes || undefined,
+        })),
+      };
+      await procurementApi.createPurchaseOrder(payload);
       toast.success('Purchase Order created');
       setShowCreate(false);
-      setFormData({ supplierId: '', expectedDeliveryDate: '', deliveryAddress: '', paymentTerms: 'NET_30', notes: '', items: [{ ...emptyItem }] });
+      setFormData({ supplierId: '', type: 'STANDARD', expectedDate: '', deliveryAddress: '', paymentTerms: 'NET_30', shippingTerms: '', specialInstructions: '', notes: '', items: [{ ...emptyItem }] });
       fetchPurchaseOrders();
     } catch (error) {
       toast.error('Failed to create purchase order');
@@ -213,12 +269,12 @@ export default function PurchaseOrders() {
     );
   });
 
-  const totalFormAmount = formData.items.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unitPrice)), 0);
+  const totalFormAmount = formData.items.reduce((sum, item) => sum + (Number(item.orderedQty) * Number(item.unitPrice)), 0);
 
   // Detail View
   if (selectedPO) {
     const po = selectedPO;
-    const style = statusConfig[po.status] || statusConfig.DRAFT;
+    const style = statusConfig[po.status] || statusConfig.DRAFT_PO;
     const currentStepIndex = timelineSteps.indexOf(po.status);
 
     return (
@@ -239,6 +295,9 @@ export default function PurchaseOrders() {
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900">{po.poNumber}</h2>
                   <p className="text-sm text-gray-500 mt-1">Supplier: {po.supplier?.companyName || '—'}</p>
+                  {po.requisition && (
+                    <p className="text-sm text-gray-500">Linked PR: {po.requisition.prNumber}</p>
+                  )}
                   <div className="flex items-center gap-3 mt-2">
                     <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${style.bg} ${style.text}`}>
                       {po.status?.replace(/_/g, ' ')}
@@ -246,21 +305,21 @@ export default function PurchaseOrders() {
                     <span className="text-sm text-gray-500">
                       Order: {new Date(po.orderDate || po.createdAt).toLocaleDateString()}
                     </span>
-                    {po.expectedDeliveryDate && (
+                    {po.expectedDate && (
                       <span className="text-sm text-gray-500 flex items-center gap-1">
                         <ClockIcon className="h-4 w-4" />
-                        Expected: {new Date(po.expectedDeliveryDate).toLocaleDateString()}
+                        Expected: {new Date(po.expectedDate).toLocaleDateString()}
                       </span>
                     )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {po.status === 'APPROVED' && (
+                  {po.status === 'APPROVED_PO' && (
                     <button onClick={() => handleSend(po.id)} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-sm font-medium flex items-center gap-2">
                       <PaperAirplaneIcon className="h-4 w-4" /> Send to Supplier
                     </button>
                   )}
-                  {['DRAFT', 'PENDING_APPROVAL', 'APPROVED'].includes(po.status) && (
+                  {['DRAFT_PO', 'PENDING_APPROVAL_PO', 'APPROVED_PO'].includes(po.status) && (
                     <button onClick={() => handleCancel(po.id)} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-medium">
                       Cancel
                     </button>
@@ -317,8 +376,8 @@ export default function PurchaseOrders() {
                   {(po.items || []).map((item, idx) => (
                     <tr key={idx} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{item.itemName}</td>
-                      <td className="px-4 py-3 text-sm text-right">{item.quantity}</td>
-                      <td className="px-4 py-3 text-sm text-right">{item.receivedQuantity ?? '—'}</td>
+                      <td className="px-4 py-3 text-sm text-right">{item.orderedQty}</td>
+                      <td className="px-4 py-3 text-sm text-right">{item.receivedQty ?? '—'}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{item.unit}</td>
                       <td className="px-4 py-3 text-sm text-right">${Number(item.unitPrice || 0).toFixed(2)}</td>
                       <td className="px-4 py-3 text-sm text-right font-medium">${Number(item.totalPrice || 0).toFixed(2)}</td>
@@ -337,11 +396,11 @@ export default function PurchaseOrders() {
               {/* Linked GRNs */}
               <div className="bg-white rounded-lg shadow p-6">
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Linked GRNs</h3>
-                {(po.linkedGRNs || []).length === 0 ? (
+                {(po.grns || []).length === 0 ? (
                   <p className="text-sm text-gray-500">No goods receipts yet</p>
                 ) : (
                   <div className="space-y-2">
-                    {po.linkedGRNs.map((grn) => (
+                    {po.grns.map((grn) => (
                       <div key={grn.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
                         <span className="text-sm font-medium">{grn.grnNumber}</span>
                         <span className="text-xs text-gray-500">{grn.status}</span>
@@ -354,14 +413,14 @@ export default function PurchaseOrders() {
               {/* Linked Invoices */}
               <div className="bg-white rounded-lg shadow p-6">
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Linked Invoices</h3>
-                {(po.linkedInvoices || []).length === 0 ? (
+                {(po.invoices || []).length === 0 ? (
                   <p className="text-sm text-gray-500">No invoices yet</p>
                 ) : (
                   <div className="space-y-2">
-                    {po.linkedInvoices.map((inv) => (
+                    {po.invoices.map((inv) => (
                       <div key={inv.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
                         <span className="text-sm font-medium">{inv.invoiceNumber}</span>
-                        <span className="text-xs text-gray-500">{inv.status}</span>
+                        <span className="text-xs text-gray-500">{inv.matchStatus}</span>
                       </div>
                     ))}
                   </div>
@@ -438,7 +497,7 @@ export default function PurchaseOrders() {
                   <tr><td colSpan={7} className="px-4 py-12 text-center text-gray-500">No purchase orders found</td></tr>
                 ) : (
                   filteredPOs.map((po) => {
-                    const style = statusConfig[po.status] || statusConfig.DRAFT;
+                    const style = statusConfig[po.status] || statusConfig.DRAFT_PO;
                     return (
                       <tr key={po.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">{po.poNumber}</td>
@@ -451,14 +510,14 @@ export default function PurchaseOrders() {
                         <td className="px-4 py-3 text-sm text-right font-medium">${Number(po.totalAmount || 0).toFixed(2)}</td>
                         <td className="px-4 py-3 text-sm text-gray-500">{new Date(po.orderDate || po.createdAt).toLocaleDateString()}</td>
                         <td className="px-4 py-3 text-sm text-gray-500">
-                          {po.expectedDeliveryDate ? new Date(po.expectedDeliveryDate).toLocaleDateString() : '—'}
+                          {po.expectedDate ? new Date(po.expectedDate).toLocaleDateString() : '—'}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <button onClick={() => viewPODetail(po)} className="text-blue-600 hover:text-blue-800" title="View">
                               <EyeIcon className="h-5 w-5" />
                             </button>
-                            {po.status === 'APPROVED' && (
+                            {po.status === 'APPROVED_PO' && (
                               <button onClick={() => handleSend(po.id)} className="text-indigo-600 hover:text-indigo-800" title="Send">
                                 <PaperAirplaneIcon className="h-5 w-5" />
                               </button>
@@ -496,15 +555,25 @@ export default function PurchaseOrders() {
                     required
                   >
                     <option value="">Select Supplier</option>
-                    {suppliers.map((s) => <option key={s.id} value={s.id}>{s.companyName} ({s.supplierCode})</option>)}
+                    {suppliers.map((s) => <option key={s.id} value={s.id}>{s.companyName} ({s.code})</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">PO Type</label>
+                  <select
+                    value={formData.type}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {poTypes.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Expected Delivery</label>
                   <input
                     type="date"
-                    value={formData.expectedDeliveryDate}
-                    onChange={(e) => setFormData({ ...formData, expectedDeliveryDate: e.target.value })}
+                    value={formData.expectedDate}
+                    onChange={(e) => setFormData({ ...formData, expectedDate: e.target.value })}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -515,12 +584,7 @@ export default function PurchaseOrders() {
                     onChange={(e) => setFormData({ ...formData, paymentTerms: e.target.value })}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="NET_15">Net 15</option>
-                    <option value="NET_30">Net 30</option>
-                    <option value="NET_45">Net 45</option>
-                    <option value="NET_60">Net 60</option>
-                    <option value="COD">Cash on Delivery</option>
-                    <option value="PREPAID">Prepaid</option>
+                    {paymentTermsOptions.map((pt) => <option key={pt.value} value={pt.value}>{pt.label}</option>)}
                   </select>
                 </div>
                 <div>
@@ -531,6 +595,16 @@ export default function PurchaseOrders() {
                     onChange={(e) => setFormData({ ...formData, deliveryAddress: e.target.value })}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Delivery address"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Shipping Terms</label>
+                  <input
+                    type="text"
+                    value={formData.shippingTerms}
+                    onChange={(e) => setFormData({ ...formData, shippingTerms: e.target.value })}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., FOB, CIF"
                   />
                 </div>
               </div>
@@ -555,6 +629,16 @@ export default function PurchaseOrders() {
                 <div className="space-y-3">
                   {formData.items.map((item, index) => (
                     <div key={index} className="grid grid-cols-12 gap-2 items-end bg-gray-50 p-3 rounded-lg">
+                      <div className="col-span-2">
+                        {index === 0 && <label className="block text-xs font-medium text-gray-500 mb-1">Type *</label>}
+                        <select
+                          value={item.itemType}
+                          onChange={(e) => updateItem(index, 'itemType', e.target.value)}
+                          className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          {itemTypes.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                        </select>
+                      </div>
                       <div className="col-span-3">
                         {index === 0 && <label className="block text-xs font-medium text-gray-500 mb-1">Item Name *</label>}
                         <input
@@ -566,22 +650,13 @@ export default function PurchaseOrders() {
                           required
                         />
                       </div>
-                      <div className="col-span-2">
-                        {index === 0 && <label className="block text-xs font-medium text-gray-500 mb-1">Description</label>}
-                        <input
-                          type="text"
-                          value={item.description}
-                          onChange={(e) => updateItem(index, 'description', e.target.value)}
-                          className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
                       <div className="col-span-1">
                         {index === 0 && <label className="block text-xs font-medium text-gray-500 mb-1">Qty</label>}
                         <input
                           type="number"
                           min="1"
-                          value={item.quantity}
-                          onChange={(e) => updateItem(index, 'quantity', Number(e.target.value))}
+                          value={item.orderedQty}
+                          onChange={(e) => updateItem(index, 'orderedQty', Number(e.target.value))}
                           className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
@@ -614,7 +689,7 @@ export default function PurchaseOrders() {
                       <div className="col-span-2">
                         {index === 0 && <label className="block text-xs font-medium text-gray-500 mb-1">Total</label>}
                         <span className="block px-2 py-1.5 text-sm font-medium text-gray-700">
-                          ${Number(item.quantity * item.unitPrice).toFixed(2)}
+                          ${Number(item.orderedQty * item.unitPrice).toFixed(2)}
                         </span>
                       </div>
                       <div className="col-span-1">

@@ -96,19 +96,22 @@ const poStatusConfig: Record<string, { bg: string; text: string; label: string }
   APPROVED_PO: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Approved' },
   SENT_TO_SUPPLIER: { bg: 'bg-indigo-100', text: 'text-indigo-700', label: 'Sent' },
   PARTIALLY_RECEIVED: { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Partial' },
-  RECEIVED: { bg: 'bg-green-100', text: 'text-green-700', label: 'Received' },
+  FULLY_RECEIVED: { bg: 'bg-green-100', text: 'text-green-700', label: 'Received' },
   CANCELLED_PO: { bg: 'bg-red-100', text: 'text-red-700', label: 'Cancelled' },
-  COMPLETED_PO: { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Completed' },
+  CLOSED_PO: { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Closed' },
+  AMENDED: { bg: 'bg-purple-100', text: 'text-purple-700', label: 'Amended' },
 };
 
 const prStatusConfig: Record<string, { bg: string; text: string; label: string }> = {
-  DRAFT: { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Draft' },
+  DRAFT_PR: { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Draft' },
   SUBMITTED: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Submitted' },
   PENDING_APPROVAL: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Pending' },
-  APPROVED: { bg: 'bg-green-100', text: 'text-green-700', label: 'Approved' },
-  REJECTED: { bg: 'bg-red-100', text: 'text-red-700', label: 'Rejected' },
-  CANCELLED: { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Cancelled' },
-  PO_CREATED: { bg: 'bg-indigo-100', text: 'text-indigo-700', label: 'PO Created' },
+  APPROVED_PR: { bg: 'bg-green-100', text: 'text-green-700', label: 'Approved' },
+  REJECTED_PR: { bg: 'bg-red-100', text: 'text-red-700', label: 'Rejected' },
+  CANCELLED_PR: { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Cancelled' },
+  PARTIALLY_ORDERED: { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Partial Order' },
+  FULLY_ORDERED: { bg: 'bg-indigo-100', text: 'text-indigo-700', label: 'Fully Ordered' },
+  CLOSED_PR: { bg: 'bg-gray-100', text: 'text-gray-500', label: 'Closed' },
 };
 
 // ==================== Procurement Manager Dashboard ====================
@@ -463,7 +466,7 @@ function ProcurementStaffDashboard() {
 
   const totalPOCount = poStatusBreakdown.reduce((sum, item) => sum + item.count, 0);
   const pendingPRs = myPRs.filter(pr => pr.status === 'SUBMITTED' || pr.status === 'PENDING_APPROVAL').length;
-  const approvedPRs = myPRs.filter(pr => pr.status === 'APPROVED').length;
+  const approvedPRs = myPRs.filter(pr => pr.status === 'APPROVED_PR').length;
   const grnsThisMonth = recentGRNs.length;
 
   if (loading) {
@@ -525,7 +528,7 @@ function ProcurementStaffDashboard() {
               <div className="px-6 py-8 text-center text-gray-500">No requisitions found</div>
             ) : (
               myPRs.map((pr) => {
-                const statusStyle = prStatusConfig[pr.status] || prStatusConfig.DRAFT;
+                const statusStyle = prStatusConfig[pr.status] || prStatusConfig.DRAFT_PR;
                 return (
                   <div key={pr.id} className="px-6 py-3 hover:bg-gray-50">
                     <div className="flex items-center justify-between">
@@ -609,11 +612,12 @@ function ProcurementStaffDashboard() {
                     </div>
                     <div className="text-right">
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                        grn.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
+                        grn.status === 'APPROVED_GRN' ? 'bg-green-100 text-green-700' :
                         grn.status === 'DRAFT_GRN' ? 'bg-gray-100 text-gray-700' :
-                        'bg-blue-100 text-blue-700'
+                        grn.status === 'REJECTED_GRN' ? 'bg-red-100 text-red-700' :
+                        'bg-yellow-100 text-yellow-700'
                       }`}>
-                        {grn.status.replace('_', ' ')}
+                        {grn.status.replace(/_/g, ' ')}
                       </span>
                       <p className="text-xs text-gray-500 mt-0.5">{new Date(grn.receiptDate).toLocaleDateString()}</p>
                     </div>

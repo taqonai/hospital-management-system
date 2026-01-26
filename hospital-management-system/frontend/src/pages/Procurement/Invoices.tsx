@@ -15,8 +15,8 @@ import { procurementApi } from '../../services/procurementApi';
 interface Invoice {
   id: string;
   invoiceNumber: string;
-  supplier: { id: string; companyName: string };
-  purchaseOrder: { id: string; poNumber: string };
+  supplier: { id: string; companyName: string; code: string };
+  purchaseOrder: { id: string; poNumber: string; totalAmount: number };
   amount: number;
   taxAmount: number;
   totalAmount: number;
@@ -24,7 +24,10 @@ interface Invoice {
   paymentStatus: string;
   dueDate: string;
   invoiceDate: string;
+  documentPath: string;
+  paidAmount: number;
   notes: string;
+  discrepancyNotes: string;
   createdAt: string;
 }
 
@@ -54,22 +57,27 @@ interface ThreeWayMatch {
 interface Supplier {
   id: string;
   companyName: string;
+  code: string;
+}
+
+interface PORef {
+  id: string;
+  poNumber: string;
+  totalAmount: number;
 }
 
 const matchStatusConfig: Record<string, { bg: string; text: string }> = {
-  PENDING: { bg: 'bg-gray-100', text: 'text-gray-600' },
+  UNMATCHED: { bg: 'bg-gray-100', text: 'text-gray-600' },
   MATCHED: { bg: 'bg-green-100', text: 'text-green-700' },
   PARTIAL_MATCH: { bg: 'bg-yellow-100', text: 'text-yellow-700' },
-  MISMATCH: { bg: 'bg-red-100', text: 'text-red-700' },
-  EXCEPTION: { bg: 'bg-orange-100', text: 'text-orange-700' },
+  DISCREPANCY: { bg: 'bg-red-100', text: 'text-red-700' },
 };
 
 const paymentStatusConfig: Record<string, { bg: string; text: string }> = {
-  UNPAID: { bg: 'bg-red-100', text: 'text-red-700' },
-  PARTIALLY_PAID: { bg: 'bg-yellow-100', text: 'text-yellow-700' },
-  PAID: { bg: 'bg-green-100', text: 'text-green-700' },
-  OVERDUE: { bg: 'bg-red-100', text: 'text-red-700' },
-  VOIDED: { bg: 'bg-gray-100', text: 'text-gray-500' },
+  PENDING: { bg: 'bg-gray-100', text: 'text-gray-600' },
+  APPROVED_PAYMENT: { bg: 'bg-blue-100', text: 'text-blue-700' },
+  PARTIALLY_PAID_INV: { bg: 'bg-yellow-100', text: 'text-yellow-700' },
+  PAID_INV: { bg: 'bg-green-100', text: 'text-green-700' },
 };
 
 export default function Invoices() {
@@ -83,10 +91,11 @@ export default function Invoices() {
   const [showCreate, setShowCreate] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [supplierPOs, setSupplierPOs] = useState<PORef[]>([]);
   const [formData, setFormData] = useState({
-    supplierInvoiceNumber: '',
+    invoiceNumber: '',
     supplierId: '',
-    purchaseOrderId: '',
+    poId: '',
     amount: 0,
     taxAmount: 0,
     invoiceDate: '',
@@ -131,18 +140,51 @@ export default function Invoices() {
     }
   };
 
+  const fetchSupplierPOs = async (supplierId: string) => {
+    if (!supplierId) {
+      setSupplierPOs([]);
+      return;
+    }
+    try {
+      const response = await procurementApi.getPurchaseOrders({ supplierId });
+      const pd = response.data.data;
+      const orders = Array.isArray(pd) ? pd : pd?.orders || [];
+      setSupplierPOs(orders);
+    } catch (error) {
+      console.error('Failed to fetch supplier POs:', error);
+      setSupplierPOs([]);
+    }
+  };
+
+  const handleSupplierChange = (supplierId: string) => {
+    setFormData({ ...formData, supplierId, poId: '' });
+    fetchSupplierPOs(supplierId);
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.supplierId || !formData.supplierInvoiceNumber) {
-      toast.error('Supplier and invoice number are required');
+    if (!formData.supplierId || !formData.invoiceNumber || !formData.poId) {
+      toast.error('Supplier, invoice number, and PO are required');
       return;
     }
     setSubmitting(true);
     try {
-      await procurementApi.createInvoice(formData);
+      const totalAmount = Number(formData.amount) + Number(formData.taxAmount);
+      const payload = {
+        invoiceNumber: formData.invoiceNumber,
+        supplierId: formData.supplierId,
+        poId: formData.poId,
+        invoiceDate: formData.invoiceDate || new Date().toISOString(),
+        dueDate: formData.dueDate || undefined,
+        amount: Number(formData.amount),
+        taxAmount: Number(formData.taxAmount),
+        totalAmount,
+      };
+      await procurementApi.createInvoice(payload);
       toast.success('Invoice recorded successfully');
       setShowCreate(false);
-      setFormData({ supplierInvoiceNumber: '', supplierId: '', purchaseOrderId: '', amount: 0, taxAmount: 0, invoiceDate: '', dueDate: '', notes: '' });
+      setFormData({ invoiceNumber: '', supplierId: '', poId: '', amount: 0, taxAmount: 0, invoiceDate: '', dueDate: '', notes: '' });
+      setSupplierPOs([]);
       fetchInvoices();
     } catch (error) {
       toast.error('Failed to record invoice');
@@ -162,6 +204,16 @@ export default function Invoices() {
       setShowMatchView(false);
     } finally {
       setLoadingMatch(false);
+    }
+  };
+
+  const handlePerformMatch = async (id: string) => {
+    try {
+      await procurementApi.matchInvoice(id);
+      toast.success('3-way match performed');
+      fetchInvoices();
+    } catch (error) {
+      toast.error('Failed to perform match');
     }
   };
 
@@ -199,18 +251,17 @@ export default function Invoices() {
         </div>
         <select value={filterMatchStatus} onChange={(e) => setFilterMatchStatus(e.target.value)} className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
           <option value="">All Match Statuses</option>
-          <option value="PENDING">Pending</option>
+          <option value="UNMATCHED">Unmatched</option>
           <option value="MATCHED">Matched</option>
           <option value="PARTIAL_MATCH">Partial Match</option>
-          <option value="MISMATCH">Mismatch</option>
-          <option value="EXCEPTION">Exception</option>
+          <option value="DISCREPANCY">Discrepancy</option>
         </select>
         <select value={filterPaymentStatus} onChange={(e) => setFilterPaymentStatus(e.target.value)} className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
           <option value="">All Payment Statuses</option>
-          <option value="UNPAID">Unpaid</option>
-          <option value="PARTIALLY_PAID">Partially Paid</option>
-          <option value="PAID">Paid</option>
-          <option value="OVERDUE">Overdue</option>
+          <option value="PENDING">Pending</option>
+          <option value="APPROVED_PAYMENT">Approved</option>
+          <option value="PARTIALLY_PAID_INV">Partially Paid</option>
+          <option value="PAID_INV">Paid</option>
         </select>
         <button
           onClick={() => setShowCreate(true)}
@@ -248,9 +299,9 @@ export default function Invoices() {
                   <tr><td colSpan={8} className="px-4 py-12 text-center text-gray-500">No invoices found</td></tr>
                 ) : (
                   filteredInvoices.map((inv) => {
-                    const mStyle = matchStatusConfig[inv.matchStatus] || matchStatusConfig.PENDING;
-                    const pStyle = paymentStatusConfig[inv.paymentStatus] || paymentStatusConfig.UNPAID;
-                    const isOverdue = inv.dueDate && new Date(inv.dueDate) < new Date() && inv.paymentStatus !== 'PAID';
+                    const mStyle = matchStatusConfig[inv.matchStatus] || matchStatusConfig.UNMATCHED;
+                    const pStyle = paymentStatusConfig[inv.paymentStatus] || paymentStatusConfig.PENDING;
+                    const isOverdue = inv.dueDate && new Date(inv.dueDate) < new Date() && inv.paymentStatus !== 'PAID_INV';
                     return (
                       <tr key={inv.id} className={`hover:bg-gray-50 ${isOverdue ? 'bg-red-50' : ''}`}>
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">{inv.invoiceNumber}</td>
@@ -272,10 +323,17 @@ export default function Invoices() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
-                            <button onClick={() => viewThreeWayMatch(inv.id)} className="text-indigo-600 hover:text-indigo-800" title="3-Way Match">
-                              <DocumentDuplicateIcon className="h-5 w-5" />
-                            </button>
-                            {inv.matchStatus === 'MATCHED' && inv.paymentStatus === 'UNPAID' && (
+                            {inv.matchStatus === 'UNMATCHED' && (
+                              <button onClick={() => handlePerformMatch(inv.id)} className="text-indigo-600 hover:text-indigo-800" title="Perform 3-Way Match">
+                                <DocumentDuplicateIcon className="h-5 w-5" />
+                              </button>
+                            )}
+                            {inv.matchStatus !== 'UNMATCHED' && (
+                              <button onClick={() => viewThreeWayMatch(inv.id)} className="text-indigo-600 hover:text-indigo-800" title="View Match">
+                                <EyeIcon className="h-5 w-5" />
+                              </button>
+                            )}
+                            {(inv.matchStatus === 'MATCHED' || inv.matchStatus === 'PARTIAL_MATCH') && inv.paymentStatus === 'PENDING' && (
                               <button onClick={() => handleApprove(inv.id)} className="text-green-600 hover:text-green-800" title="Approve for Payment">
                                 <CheckCircleIcon className="h-5 w-5" />
                               </button>
@@ -304,11 +362,11 @@ export default function Invoices() {
             </div>
             <form onSubmit={handleCreate} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Invoice Number *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Number *</label>
                 <input
                   type="text"
-                  value={formData.supplierInvoiceNumber}
-                  onChange={(e) => setFormData({ ...formData, supplierInvoiceNumber: e.target.value })}
+                  value={formData.invoiceNumber}
+                  onChange={(e) => setFormData({ ...formData, invoiceNumber: e.target.value })}
                   className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 />
@@ -317,7 +375,7 @@ export default function Invoices() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Supplier *</label>
                 <select
                   value={formData.supplierId}
-                  onChange={(e) => setFormData({ ...formData, supplierId: e.target.value })}
+                  onChange={(e) => handleSupplierChange(e.target.value)}
                   className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 >
@@ -325,9 +383,25 @@ export default function Invoices() {
                   {suppliers.map((s) => <option key={s.id} value={s.id}>{s.companyName}</option>)}
                 </select>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Purchase Order *</label>
+                <select
+                  value={formData.poId}
+                  onChange={(e) => setFormData({ ...formData, poId: e.target.value })}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Select PO</option>
+                  {supplierPOs.map((po) => (
+                    <option key={po.id} value={po.id}>
+                      {po.poNumber} — ${Number(po.totalAmount || 0).toFixed(2)}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount (Subtotal)</label>
                   <input
                     type="number"
                     min="0"
@@ -373,15 +447,6 @@ export default function Invoices() {
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  rows={2}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
               </div>
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
                 <button type="button" onClick={() => setShowCreate(false)} className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md text-sm font-medium">

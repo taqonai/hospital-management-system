@@ -14,57 +14,94 @@ import { procurementApi } from '../../services/procurementApi';
 // ==================== Interfaces ====================
 interface GRNItem {
   id?: string;
-  itemName: string;
-  orderedQuantity: number;
-  receivedQuantity: number;
-  unit: string;
+  poItemId: string;
+  poItem?: {
+    id: string;
+    itemName: string;
+    itemCode: string;
+    orderedQty: number;
+    unit: string;
+    receivedQty?: number;
+  };
+  receivedQty: number;
+  acceptedQty: number;
+  rejectedQty: number;
+  rejectionReason: string;
   batchNumber: string;
   expiryDate: string;
-  inspectionStatus: string;
-  inspectionNotes: string;
+  manufacturingDate: string;
+  storageLocation: string;
+  condition: string;
+  notes: string;
 }
 
 interface GoodsReceipt {
   id: string;
   grnNumber: string;
-  purchaseOrder: { id: string; poNumber: string };
-  supplier: { companyName: string };
+  purchaseOrder: {
+    id: string;
+    poNumber: string;
+    supplier?: { id: string; companyName: string };
+  };
   status: string;
   receiptDate: string;
-  receivedBy: string;
+  deliveryNoteRef: string;
+  receivedBy: { id: string; firstName: string; lastName: string };
   items: GRNItem[];
   notes: string;
   createdAt: string;
 }
 
+interface POItemForGRN {
+  id: string;
+  itemName: string;
+  itemCode: string;
+  orderedQty: number;
+  receivedQty: number;
+  unit: string;
+  itemType: string;
+}
+
 interface PurchaseOrderRef {
   id: string;
   poNumber: string;
-  supplier: { companyName: string };
-  items: Array<{
-    itemName: string;
-    quantity: number;
-    receivedQuantity: number;
-    unit: string;
-  }>;
+  supplier: { id: string; companyName: string };
+  items: POItemForGRN[];
 }
 
-const grnStatuses = ['PENDING_INSPECTION', 'INSPECTED', 'APPROVED', 'REJECTED', 'PARTIAL'];
+const grnStatuses = ['DRAFT_GRN', 'PENDING_INSPECTION', 'APPROVED_GRN', 'REJECTED_GRN'];
 
 const statusConfig: Record<string, { bg: string; text: string }> = {
+  DRAFT_GRN: { bg: 'bg-gray-100', text: 'text-gray-700' },
   PENDING_INSPECTION: { bg: 'bg-yellow-100', text: 'text-yellow-700' },
-  INSPECTED: { bg: 'bg-blue-100', text: 'text-blue-700' },
-  APPROVED: { bg: 'bg-green-100', text: 'text-green-700' },
-  REJECTED: { bg: 'bg-red-100', text: 'text-red-700' },
-  PARTIAL: { bg: 'bg-orange-100', text: 'text-orange-700' },
+  APPROVED_GRN: { bg: 'bg-green-100', text: 'text-green-700' },
+  REJECTED_GRN: { bg: 'bg-red-100', text: 'text-red-700' },
 };
 
-const inspectionConfig: Record<string, { bg: string; text: string }> = {
-  PENDING: { bg: 'bg-gray-100', text: 'text-gray-600' },
-  PASSED: { bg: 'bg-green-100', text: 'text-green-700' },
-  FAILED: { bg: 'bg-red-100', text: 'text-red-700' },
-  CONDITIONAL: { bg: 'bg-yellow-100', text: 'text-yellow-700' },
-};
+const conditionOptions = [
+  { value: 'GOOD', label: 'Good' },
+  { value: 'DAMAGED', label: 'Damaged' },
+  { value: 'EXPIRED', label: 'Expired' },
+  { value: 'DEFECTIVE', label: 'Defective' },
+];
+
+interface GRNFormItem {
+  poItemId: string;
+  itemName: string;
+  orderedQty: number;
+  remainingQty: number;
+  unit: string;
+  receivedQty: number;
+  acceptedQty: number;
+  rejectedQty: number;
+  rejectionReason: string;
+  batchNumber: string;
+  expiryDate: string;
+  manufacturingDate: string;
+  storageLocation: string;
+  condition: string;
+  notes: string;
+}
 
 export default function GoodsReceipt() {
   const [goodsReceipts, setGoodsReceipts] = useState<GoodsReceipt[]>([]);
@@ -77,8 +114,9 @@ export default function GoodsReceipt() {
   const [submitting, setSubmitting] = useState(false);
   const [availablePOs, setAvailablePOs] = useState<PurchaseOrderRef[]>([]);
   const [selectedPOId, setSelectedPOId] = useState('');
-  const [grnItems, setGRNItems] = useState<GRNItem[]>([]);
+  const [grnItems, setGRNItems] = useState<GRNFormItem[]>([]);
   const [grnNotes, setGRNNotes] = useState('');
+  const [deliveryNoteRef, setDeliveryNoteRef] = useState('');
 
   // Detail view
   const [selectedGRN, setSelectedGRN] = useState<GoodsReceipt | null>(null);
@@ -105,9 +143,25 @@ export default function GoodsReceipt() {
 
   const openCreateForm = async () => {
     try {
-      const response = await procurementApi.getPurchaseOrders({ status: 'SENT' });
-      const pd = response.data.data;
-      setAvailablePOs(Array.isArray(pd) ? pd : pd?.orders || []);
+      // Get POs that are approved, sent, or partially received
+      const responses = await Promise.allSettled([
+        procurementApi.getPurchaseOrders({ status: 'SENT_TO_SUPPLIER' }),
+        procurementApi.getPurchaseOrders({ status: 'APPROVED_PO' }),
+        procurementApi.getPurchaseOrders({ status: 'PARTIALLY_RECEIVED' }),
+      ]);
+
+      const allPOs: PurchaseOrderRef[] = [];
+      for (const r of responses) {
+        if (r.status === 'fulfilled') {
+          const pd = r.value.data.data;
+          const orders = Array.isArray(pd) ? pd : pd?.orders || [];
+          allPOs.push(...orders);
+        }
+      }
+
+      // Deduplicate by id
+      const uniquePOs = Array.from(new Map(allPOs.map(po => [po.id, po])).values());
+      setAvailablePOs(uniquePOs);
     } catch (error) {
       toast.error('Failed to load purchase orders');
       return;
@@ -115,33 +169,62 @@ export default function GoodsReceipt() {
     setSelectedPOId('');
     setGRNItems([]);
     setGRNNotes('');
+    setDeliveryNoteRef('');
     setShowCreate(true);
   };
 
-  const handlePOSelect = (poId: string) => {
+  const handlePOSelect = async (poId: string) => {
     setSelectedPOId(poId);
-    const po = availablePOs.find((p) => p.id === poId);
-    if (po) {
+    if (!poId) {
+      setGRNItems([]);
+      return;
+    }
+
+    // Fetch full PO details to get item IDs
+    try {
+      const response = await procurementApi.getPurchaseOrderById(poId);
+      const po = response.data.data || response.data;
+      const items = po.items || [];
+
       setGRNItems(
-        (po.items || []).map((item) => ({
-          itemName: item.itemName,
-          orderedQuantity: item.quantity,
-          receivedQuantity: 0,
-          unit: item.unit,
-          batchNumber: '',
-          expiryDate: '',
-          inspectionStatus: 'PENDING',
-          inspectionNotes: '',
-        }))
+        items.map((item: POItemForGRN) => {
+          const remaining = item.orderedQty - (item.receivedQty || 0);
+          return {
+            poItemId: item.id,
+            itemName: item.itemName,
+            orderedQty: item.orderedQty,
+            remainingQty: remaining,
+            unit: item.unit,
+            receivedQty: 0,
+            acceptedQty: 0,
+            rejectedQty: 0,
+            rejectionReason: '',
+            batchNumber: '',
+            expiryDate: '',
+            manufacturingDate: '',
+            storageLocation: '',
+            condition: 'GOOD',
+            notes: '',
+          };
+        })
       );
-    } else {
+    } catch (error) {
+      toast.error('Failed to load PO details');
       setGRNItems([]);
     }
   };
 
-  const updateGRNItem = (index: number, field: keyof GRNItem, value: any) => {
+  const updateGRNItem = (index: number, field: keyof GRNFormItem, value: any) => {
     const updated = [...grnItems];
     (updated[index] as any)[field] = value;
+
+    // Auto-calculate accepted = received - rejected
+    if (field === 'receivedQty' || field === 'rejectedQty') {
+      const received = Number(updated[index].receivedQty) || 0;
+      const rejected = Number(updated[index].rejectedQty) || 0;
+      updated[index].acceptedQty = Math.max(0, received - rejected);
+    }
+
     setGRNItems(updated);
   };
 
@@ -151,17 +234,33 @@ export default function GoodsReceipt() {
       toast.error('Please select a Purchase Order');
       return;
     }
-    if (grnItems.every((item) => item.receivedQuantity <= 0)) {
+    if (grnItems.every((item) => item.receivedQty <= 0)) {
       toast.error('At least one item must have a received quantity');
       return;
     }
     setSubmitting(true);
     try {
-      await procurementApi.createGoodsReceipt({
-        purchaseOrderId: selectedPOId,
-        items: grnItems,
-        notes: grnNotes,
-      });
+      const payload = {
+        poId: selectedPOId,
+        deliveryNoteRef: deliveryNoteRef || undefined,
+        notes: grnNotes || undefined,
+        items: grnItems
+          .filter(item => item.receivedQty > 0)
+          .map(item => ({
+            poItemId: item.poItemId,
+            receivedQty: Number(item.receivedQty),
+            acceptedQty: Number(item.acceptedQty),
+            rejectedQty: Number(item.rejectedQty) || 0,
+            rejectionReason: item.rejectionReason || undefined,
+            batchNumber: item.batchNumber || undefined,
+            expiryDate: item.expiryDate || undefined,
+            manufacturingDate: item.manufacturingDate || undefined,
+            storageLocation: item.storageLocation || undefined,
+            condition: item.condition || 'GOOD',
+            notes: item.notes || undefined,
+          })),
+      };
+      await procurementApi.createGoodsReceipt(payload);
       toast.success('Goods Receipt created successfully');
       setShowCreate(false);
       fetchGoodsReceipts();
@@ -196,18 +295,29 @@ export default function GoodsReceipt() {
     }
   };
 
+  const getSupplierName = (g: GoodsReceipt) => {
+    return g.purchaseOrder?.supplier?.companyName || '—';
+  };
+
+  const getReceivedByName = (g: GoodsReceipt) => {
+    if (g.receivedBy && typeof g.receivedBy === 'object') {
+      return `${g.receivedBy.firstName || ''} ${g.receivedBy.lastName || ''}`.trim();
+    }
+    return String(g.receivedBy || '—');
+  };
+
   const filteredGRNs = goodsReceipts.filter((g) => {
     return (
       g.grnNumber?.toLowerCase().includes(search.toLowerCase()) ||
       g.purchaseOrder?.poNumber?.toLowerCase().includes(search.toLowerCase()) ||
-      g.supplier?.companyName?.toLowerCase().includes(search.toLowerCase())
+      getSupplierName(g)?.toLowerCase().includes(search.toLowerCase())
     );
   });
 
   // Detail View
   if (selectedGRN) {
     const g = selectedGRN;
-    const style = statusConfig[g.status] || statusConfig.PENDING_INSPECTION;
+    const style = statusConfig[g.status] || statusConfig.DRAFT_GRN;
     return (
       <div className="space-y-6">
         <button onClick={() => setSelectedGRN(null)} className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1">
@@ -217,7 +327,8 @@ export default function GoodsReceipt() {
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">{g.grnNumber}</h2>
-              <p className="text-sm text-gray-500 mt-1">PO: {g.purchaseOrder?.poNumber} • Supplier: {g.supplier?.companyName}</p>
+              <p className="text-sm text-gray-500 mt-1">PO: {g.purchaseOrder?.poNumber} • Supplier: {getSupplierName(g)}</p>
+              {g.deliveryNoteRef && <p className="text-sm text-gray-500">Delivery Note: {g.deliveryNoteRef}</p>}
               <div className="flex items-center gap-3 mt-2">
                 <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${style.bg} ${style.text}`}>
                   {g.status?.replace(/_/g, ' ')}
@@ -225,9 +336,12 @@ export default function GoodsReceipt() {
                 <span className="text-sm text-gray-500">
                   Received: {new Date(g.receiptDate || g.createdAt).toLocaleDateString()}
                 </span>
+                <span className="text-sm text-gray-500">
+                  By: {getReceivedByName(g)}
+                </span>
               </div>
             </div>
-            {(g.status === 'PENDING_INSPECTION' || g.status === 'INSPECTED') && (
+            {(g.status === 'DRAFT_GRN' || g.status === 'PENDING_INSPECTION') && (
               <div className="flex items-center gap-2">
                 <button onClick={() => handleApprove(g.id)} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium flex items-center gap-2">
                   <CheckCircleIcon className="h-4 w-4" /> Approve GRN
@@ -250,34 +364,37 @@ export default function GoodsReceipt() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ordered</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Received</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Accepted</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Rejected</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expiry</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Inspection</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Condition</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {(g.items || []).map((item, idx) => {
-                const iStyle = inspectionConfig[item.inspectionStatus] || inspectionConfig.PENDING;
+                const condStyle = item.condition === 'GOOD' ? 'bg-green-100 text-green-700' :
+                  item.condition === 'DAMAGED' ? 'bg-red-100 text-red-700' :
+                  'bg-yellow-100 text-yellow-700';
                 return (
                   <tr key={idx} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{item.itemName}</td>
-                    <td className="px-4 py-3 text-sm text-right">{item.orderedQuantity} {item.unit}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                      {item.poItem?.itemName || item.poItemId}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right">
+                      {item.poItem?.orderedQty ?? '—'} {item.poItem?.unit || ''}
+                    </td>
                     <td className="px-4 py-3 text-sm text-right font-medium">
-                      <span className={item.receivedQuantity < item.orderedQuantity ? 'text-orange-600' : 'text-green-600'}>
-                        {item.receivedQuantity} {item.unit}
+                      <span className={item.receivedQty < (item.poItem?.orderedQty || 0) ? 'text-orange-600' : 'text-green-600'}>
+                        {item.receivedQty}
                       </span>
                     </td>
+                    <td className="px-4 py-3 text-sm text-right text-green-600">{item.acceptedQty}</td>
+                    <td className="px-4 py-3 text-sm text-right text-red-600">{item.rejectedQty || 0}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{item.batchNumber || '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : '—'}
-                    </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${iStyle.bg} ${iStyle.text}`}>
-                        {item.inspectionStatus}
+                      <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${condStyle}`}>
+                        {item.condition || 'GOOD'}
                       </span>
-                      {item.inspectionNotes && (
-                        <p className="text-xs text-gray-500 mt-1">{item.inspectionNotes}</p>
-                      )}
                     </td>
                   </tr>
                 );
@@ -348,12 +465,12 @@ export default function GoodsReceipt() {
                   <tr><td colSpan={6} className="px-4 py-12 text-center text-gray-500">No goods receipts found</td></tr>
                 ) : (
                   filteredGRNs.map((g) => {
-                    const style = statusConfig[g.status] || statusConfig.PENDING_INSPECTION;
+                    const style = statusConfig[g.status] || statusConfig.DRAFT_GRN;
                     return (
                       <tr key={g.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">{g.grnNumber}</td>
                         <td className="px-4 py-3 text-sm text-gray-600">{g.purchaseOrder?.poNumber || '—'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{g.supplier?.companyName || '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{getSupplierName(g)}</td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${style.bg} ${style.text}`}>
                             {g.status?.replace(/_/g, ' ')}
@@ -367,7 +484,7 @@ export default function GoodsReceipt() {
                             <button onClick={() => setSelectedGRN(g)} className="text-blue-600 hover:text-blue-800" title="View">
                               <EyeIcon className="h-5 w-5" />
                             </button>
-                            {(g.status === 'PENDING_INSPECTION' || g.status === 'INSPECTED') && (
+                            {(g.status === 'DRAFT_GRN' || g.status === 'PENDING_INSPECTION') && (
                               <button onClick={() => handleApprove(g.id)} className="text-green-600 hover:text-green-800" title="Approve">
                                 <CheckCircleIcon className="h-5 w-5" />
                               </button>
@@ -387,7 +504,7 @@ export default function GoodsReceipt() {
       {/* Create GRN Modal */}
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-y-auto mx-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-y-auto mx-4">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900">Create Goods Receipt Note</h2>
               <button onClick={() => setShowCreate(false)} className="text-gray-400 hover:text-gray-600">
@@ -395,21 +512,33 @@ export default function GoodsReceipt() {
               </button>
             </div>
             <form onSubmit={handleCreate} className="p-6 space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Select Purchase Order *</label>
-                <select
-                  value={selectedPOId}
-                  onChange={(e) => handlePOSelect(e.target.value)}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  <option value="">Select PO</option>
-                  {availablePOs.map((po) => (
-                    <option key={po.id} value={po.id}>
-                      {po.poNumber} — {po.supplier?.companyName}
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Select Purchase Order *</label>
+                  <select
+                    value={selectedPOId}
+                    onChange={(e) => handlePOSelect(e.target.value)}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">Select PO</option>
+                    {availablePOs.map((po) => (
+                      <option key={po.id} value={po.id}>
+                        {po.poNumber} — {po.supplier?.companyName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Delivery Note Reference</label>
+                  <input
+                    type="text"
+                    value={deliveryNoteRef}
+                    onChange={(e) => setDeliveryNoteRef(e.target.value)}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., DN-2024-001"
+                  />
+                </div>
               </div>
 
               {grnItems.length > 0 && (
@@ -421,10 +550,13 @@ export default function GoodsReceipt() {
                         <tr>
                           <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
                           <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Ordered</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Remaining</th>
                           <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Received *</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Rejected</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Accepted</th>
                           <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Batch #</th>
                           <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Expiry</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Inspection</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Condition</th>
                           <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
                         </tr>
                       </thead>
@@ -432,23 +564,35 @@ export default function GoodsReceipt() {
                         {grnItems.map((item, index) => (
                           <tr key={index}>
                             <td className="px-3 py-2 text-sm font-medium text-gray-900">{item.itemName}</td>
-                            <td className="px-3 py-2 text-sm text-right">{item.orderedQuantity} {item.unit}</td>
+                            <td className="px-3 py-2 text-sm text-right">{item.orderedQty} {item.unit}</td>
+                            <td className="px-3 py-2 text-sm text-right text-orange-600">{item.remainingQty}</td>
                             <td className="px-3 py-2">
                               <input
                                 type="number"
                                 min="0"
-                                max={item.orderedQuantity}
-                                value={item.receivedQuantity}
-                                onChange={(e) => updateGRNItem(index, 'receivedQuantity', Number(e.target.value))}
+                                max={item.remainingQty}
+                                value={item.receivedQty}
+                                onChange={(e) => updateGRNItem(index, 'receivedQty', Number(e.target.value))}
                                 className="w-20 border border-gray-300 rounded-md px-2 py-1 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
                               />
                             </td>
                             <td className="px-3 py-2">
                               <input
+                                type="number"
+                                min="0"
+                                max={item.receivedQty}
+                                value={item.rejectedQty}
+                                onChange={(e) => updateGRNItem(index, 'rejectedQty', Number(e.target.value))}
+                                className="w-16 border border-gray-300 rounded-md px-2 py-1 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-sm text-right font-medium text-green-600">{item.acceptedQty}</td>
+                            <td className="px-3 py-2">
+                              <input
                                 type="text"
                                 value={item.batchNumber}
                                 onChange={(e) => updateGRNItem(index, 'batchNumber', e.target.value)}
-                                className="w-28 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-24 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 placeholder="Batch #"
                               />
                             </td>
@@ -462,22 +606,21 @@ export default function GoodsReceipt() {
                             </td>
                             <td className="px-3 py-2">
                               <select
-                                value={item.inspectionStatus}
-                                onChange={(e) => updateGRNItem(index, 'inspectionStatus', e.target.value)}
-                                className="w-28 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                value={item.condition}
+                                onChange={(e) => updateGRNItem(index, 'condition', e.target.value)}
+                                className="w-24 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                               >
-                                <option value="PENDING">Pending</option>
-                                <option value="PASSED">Passed</option>
-                                <option value="FAILED">Failed</option>
-                                <option value="CONDITIONAL">Conditional</option>
+                                {conditionOptions.map((c) => (
+                                  <option key={c.value} value={c.value}>{c.label}</option>
+                                ))}
                               </select>
                             </td>
                             <td className="px-3 py-2">
                               <input
                                 type="text"
-                                value={item.inspectionNotes}
-                                onChange={(e) => updateGRNItem(index, 'inspectionNotes', e.target.value)}
-                                className="w-32 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                value={item.notes}
+                                onChange={(e) => updateGRNItem(index, 'notes', e.target.value)}
+                                className="w-28 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 placeholder="Notes"
                               />
                             </td>

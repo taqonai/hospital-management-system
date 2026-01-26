@@ -11,56 +11,89 @@ import {
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { procurementApi } from '../../services/procurementApi';
+import { api } from '../../services/api';
 
 // ==================== Interfaces ====================
 interface RequisitionItem {
   id?: string;
+  itemType: string;
   itemName: string;
-  description: string;
+  itemCode: string;
+  specification: string;
   quantity: number;
   unit: string;
-  estimatedUnitPrice: number;
-  totalPrice: number;
+  estimatedUnitCost: number;
+  estimatedTotal: number;
+  preferredSupplier: string;
+  notes: string;
 }
 
 interface Requisition {
   id: string;
   prNumber: string;
-  department: string;
-  requestedBy: string;
+  departmentId: string;
+  department: { id: string; name: string; code: string };
+  requestedBy: { id: string; firstName: string; lastName: string };
   urgency: string;
   status: string;
-  totalAmount: number;
+  totalEstimated: number;
   justification: string;
+  requiredDate: string;
+  notes: string;
   items: RequisitionItem[];
   createdAt: string;
   approvedBy?: string;
   approvedAt?: string;
   rejectionReason?: string;
+  _count?: { items: number };
 }
 
-const urgencies = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
-const prStatuses = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'CANCELLED', 'CONVERTED'];
-const departments = ['Administration', 'Emergency', 'ICU', 'Laboratory', 'OPD', 'Pharmacy', 'Radiology', 'Surgery', 'Nursing', 'IT', 'Maintenance'];
+interface Department {
+  id: string;
+  name: string;
+  code: string;
+}
+
+const urgencies = [
+  { value: 'LOW', label: 'Low' },
+  { value: 'NORMAL', label: 'Normal' },
+  { value: 'HIGH', label: 'High' },
+  { value: 'CRITICAL', label: 'Critical' },
+];
+
+const itemTypes = [
+  { value: 'DRUG', label: 'Drug' },
+  { value: 'CONSUMABLE', label: 'Consumable' },
+  { value: 'EQUIPMENT', label: 'Equipment' },
+  { value: 'ASSET', label: 'Asset' },
+  { value: 'SERVICE', label: 'Service' },
+  { value: 'OTHER', label: 'Other' },
+];
+
+const prStatuses = ['DRAFT_PR', 'SUBMITTED', 'PENDING_APPROVAL', 'APPROVED_PR', 'REJECTED_PR', 'CANCELLED_PR', 'PARTIALLY_ORDERED', 'FULLY_ORDERED', 'CLOSED_PR'];
 
 const statusConfig: Record<string, { bg: string; text: string }> = {
-  DRAFT: { bg: 'bg-gray-100', text: 'text-gray-700' },
+  DRAFT_PR: { bg: 'bg-gray-100', text: 'text-gray-700' },
+  SUBMITTED: { bg: 'bg-blue-100', text: 'text-blue-700' },
   PENDING_APPROVAL: { bg: 'bg-yellow-100', text: 'text-yellow-700' },
-  APPROVED: { bg: 'bg-green-100', text: 'text-green-700' },
-  REJECTED: { bg: 'bg-red-100', text: 'text-red-700' },
-  CANCELLED: { bg: 'bg-gray-100', text: 'text-gray-500' },
-  CONVERTED: { bg: 'bg-blue-100', text: 'text-blue-700' },
+  APPROVED_PR: { bg: 'bg-green-100', text: 'text-green-700' },
+  REJECTED_PR: { bg: 'bg-red-100', text: 'text-red-700' },
+  CANCELLED_PR: { bg: 'bg-gray-100', text: 'text-gray-500' },
+  PARTIALLY_ORDERED: { bg: 'bg-orange-100', text: 'text-orange-700' },
+  FULLY_ORDERED: { bg: 'bg-indigo-100', text: 'text-indigo-700' },
+  CLOSED_PR: { bg: 'bg-gray-100', text: 'text-gray-500' },
 };
 
 const urgencyConfig: Record<string, { bg: string; text: string }> = {
   LOW: { bg: 'bg-gray-100', text: 'text-gray-600' },
-  MEDIUM: { bg: 'bg-blue-100', text: 'text-blue-700' },
+  NORMAL: { bg: 'bg-blue-100', text: 'text-blue-700' },
   HIGH: { bg: 'bg-orange-100', text: 'text-orange-700' },
-  URGENT: { bg: 'bg-red-100', text: 'text-red-700' },
+  CRITICAL: { bg: 'bg-red-100', text: 'text-red-700' },
 };
 
 const emptyItem: RequisitionItem = {
-  itemName: '', description: '', quantity: 1, unit: 'PCS', estimatedUnitPrice: 0, totalPrice: 0,
+  itemType: 'CONSUMABLE', itemName: '', itemCode: '', specification: '', quantity: 1, unit: 'PCS',
+  estimatedUnitCost: 0, estimatedTotal: 0, preferredSupplier: '', notes: '',
 };
 
 export default function Requisitions() {
@@ -70,14 +103,17 @@ export default function Requisitions() {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [filterUrgency, setFilterUrgency] = useState('');
+  const [departments, setDepartments] = useState<Department[]>([]);
 
   // Create form
   const [showCreate, setShowCreate] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
-    department: '',
-    urgency: 'MEDIUM',
+    departmentId: '',
+    urgency: 'NORMAL',
     justification: '',
+    requiredDate: '',
+    notes: '',
     items: [{ ...emptyItem }],
   });
 
@@ -86,14 +122,25 @@ export default function Requisitions() {
 
   useEffect(() => {
     fetchRequisitions();
+    fetchDepartments();
   }, [filterStatus, filterDepartment, filterUrgency]);
+
+  const fetchDepartments = async () => {
+    try {
+      const response = await api.get('/departments');
+      const d = response.data.data;
+      setDepartments(Array.isArray(d) ? d : d?.departments || []);
+    } catch (error) {
+      console.error('Failed to fetch departments:', error);
+    }
+  };
 
   const fetchRequisitions = async () => {
     try {
       setLoading(true);
       const params: any = {};
       if (filterStatus) params.status = filterStatus;
-      if (filterDepartment) params.department = filterDepartment;
+      if (filterDepartment) params.departmentId = filterDepartment;
       if (filterUrgency) params.urgency = filterUrgency;
       const response = await procurementApi.getRequisitions(params);
       const d = response.data.data;
@@ -118,15 +165,15 @@ export default function Requisitions() {
   const updateItem = (index: number, field: keyof RequisitionItem, value: any) => {
     const updated = [...formData.items];
     (updated[index] as any)[field] = value;
-    if (field === 'quantity' || field === 'estimatedUnitPrice') {
-      updated[index].totalPrice = Number(updated[index].quantity) * Number(updated[index].estimatedUnitPrice);
+    if (field === 'quantity' || field === 'estimatedUnitCost') {
+      updated[index].estimatedTotal = Number(updated[index].quantity) * Number(updated[index].estimatedUnitCost);
     }
     setFormData({ ...formData, items: updated });
   };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.department) {
+    if (!formData.departmentId) {
       toast.error('Department is required');
       return;
     }
@@ -136,10 +183,28 @@ export default function Requisitions() {
     }
     setSubmitting(true);
     try {
-      await procurementApi.createRequisition(formData);
+      const payload = {
+        departmentId: formData.departmentId,
+        urgency: formData.urgency,
+        justification: formData.justification,
+        requiredDate: formData.requiredDate || undefined,
+        notes: formData.notes || undefined,
+        items: formData.items.map(item => ({
+          itemType: item.itemType,
+          itemName: item.itemName,
+          itemCode: item.itemCode || undefined,
+          specification: item.specification || undefined,
+          unit: item.unit,
+          quantity: Number(item.quantity),
+          estimatedUnitCost: Number(item.estimatedUnitCost),
+          preferredSupplier: item.preferredSupplier || undefined,
+          notes: item.notes || undefined,
+        })),
+      };
+      await procurementApi.createRequisition(payload);
       toast.success('Purchase Requisition created');
       setShowCreate(false);
-      setFormData({ department: '', urgency: 'MEDIUM', justification: '', items: [{ ...emptyItem }] });
+      setFormData({ departmentId: '', urgency: 'NORMAL', justification: '', requiredDate: '', notes: '', items: [{ ...emptyItem }] });
       fetchRequisitions();
     } catch (error) {
       toast.error('Failed to create requisition');
@@ -172,21 +237,37 @@ export default function Requisitions() {
     }
   };
 
+  const getRequestedByName = (r: Requisition) => {
+    if (r.requestedBy && typeof r.requestedBy === 'object') {
+      return `${r.requestedBy.firstName || ''} ${r.requestedBy.lastName || ''}`.trim();
+    }
+    return String(r.requestedBy || '—');
+  };
+
+  const getDepartmentName = (r: Requisition) => {
+    if (r.department && typeof r.department === 'object') {
+      return r.department.name;
+    }
+    return String((r as any).department || '—');
+  };
+
   const filteredRequisitions = requisitions.filter((r) => {
+    const deptName = getDepartmentName(r);
+    const reqBy = getRequestedByName(r);
     return (
       r.prNumber?.toLowerCase().includes(search.toLowerCase()) ||
-      r.department?.toLowerCase().includes(search.toLowerCase()) ||
-      r.requestedBy?.toLowerCase().includes(search.toLowerCase())
+      deptName?.toLowerCase().includes(search.toLowerCase()) ||
+      reqBy?.toLowerCase().includes(search.toLowerCase())
     );
   });
 
-  const totalFormAmount = formData.items.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.estimatedUnitPrice)), 0);
+  const totalFormAmount = formData.items.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.estimatedUnitCost)), 0);
 
   // Detail View
   if (selectedPR) {
     const r = selectedPR;
-    const style = statusConfig[r.status] || statusConfig.DRAFT;
-    const uStyle = urgencyConfig[r.urgency] || urgencyConfig.MEDIUM;
+    const style = statusConfig[r.status] || statusConfig.DRAFT_PR;
+    const uStyle = urgencyConfig[r.urgency] || urgencyConfig.NORMAL;
     return (
       <div className="space-y-6">
         <button onClick={() => setSelectedPR(null)} className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1">
@@ -203,12 +284,14 @@ export default function Requisitions() {
                 <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${uStyle.bg} ${uStyle.text}`}>
                   {r.urgency}
                 </span>
-                <span className="text-sm text-gray-500">{r.department}</span>
+                <span className="text-sm text-gray-500">{getDepartmentName(r)}</span>
               </div>
-              <p className="text-sm text-gray-500 mt-2">Requested by: {r.requestedBy} • {new Date(r.createdAt).toLocaleDateString()}</p>
+              <p className="text-sm text-gray-500 mt-2">
+                Requested by: {getRequestedByName(r)} • {new Date(r.createdAt).toLocaleDateString()}
+              </p>
               {r.justification && <p className="text-sm text-gray-600 mt-2 italic">"{r.justification}"</p>}
             </div>
-            {r.status === 'PENDING_APPROVAL' && (
+            {(r.status === 'PENDING_APPROVAL' || r.status === 'SUBMITTED') && (
               <div className="flex items-center gap-2">
                 <button onClick={() => handleApprove(r.id)} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium flex items-center gap-2">
                   <CheckCircleIcon className="h-4 w-4" /> Approve
@@ -228,10 +311,11 @@ export default function Requisitions() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Specification</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Unit Price</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Est. Cost</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
               </tr>
             </thead>
@@ -239,16 +323,17 @@ export default function Requisitions() {
               {(r.items || []).map((item, idx) => (
                 <tr key={idx} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{item.itemName}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{item.description || '—'}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{item.itemType || '—'}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{item.specification || '—'}</td>
                   <td className="px-4 py-3 text-sm text-right">{item.quantity}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">{item.unit}</td>
-                  <td className="px-4 py-3 text-sm text-right">${Number(item.estimatedUnitPrice || 0).toFixed(2)}</td>
-                  <td className="px-4 py-3 text-sm text-right font-medium">${Number(item.totalPrice || 0).toFixed(2)}</td>
+                  <td className="px-4 py-3 text-sm text-right">${Number(item.estimatedUnitCost || 0).toFixed(2)}</td>
+                  <td className="px-4 py-3 text-sm text-right font-medium">${Number(item.estimatedTotal || 0).toFixed(2)}</td>
                 </tr>
               ))}
               <tr className="bg-gray-50 font-semibold">
-                <td colSpan={5} className="px-4 py-3 text-sm text-right">Total:</td>
-                <td className="px-4 py-3 text-sm text-right">${Number(r.totalAmount || 0).toFixed(2)}</td>
+                <td colSpan={6} className="px-4 py-3 text-sm text-right">Total:</td>
+                <td className="px-4 py-3 text-sm text-right">${Number(r.totalEstimated || 0).toFixed(2)}</td>
               </tr>
             </tbody>
           </table>
@@ -283,11 +368,11 @@ export default function Requisitions() {
         </select>
         <select value={filterDepartment} onChange={(e) => setFilterDepartment(e.target.value)} className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
           <option value="">All Departments</option>
-          {departments.map((d) => <option key={d} value={d}>{d}</option>)}
+          {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
         </select>
         <select value={filterUrgency} onChange={(e) => setFilterUrgency(e.target.value)} className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
           <option value="">All Urgencies</option>
-          {urgencies.map((u) => <option key={u} value={u}>{u}</option>)}
+          {urgencies.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
         </select>
         <button
           onClick={() => setShowCreate(true)}
@@ -325,13 +410,13 @@ export default function Requisitions() {
                   <tr><td colSpan={8} className="px-4 py-12 text-center text-gray-500">No requisitions found</td></tr>
                 ) : (
                   filteredRequisitions.map((r) => {
-                    const style = statusConfig[r.status] || statusConfig.DRAFT;
-                    const uStyle = urgencyConfig[r.urgency] || urgencyConfig.MEDIUM;
+                    const style = statusConfig[r.status] || statusConfig.DRAFT_PR;
+                    const uStyle = urgencyConfig[r.urgency] || urgencyConfig.NORMAL;
                     return (
                       <tr key={r.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">{r.prNumber}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{r.department}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{r.requestedBy}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{getDepartmentName(r)}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{getRequestedByName(r)}</td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${uStyle.bg} ${uStyle.text}`}>
                             {r.urgency}
@@ -342,14 +427,14 @@ export default function Requisitions() {
                             {r.status?.replace(/_/g, ' ')}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-sm text-right font-medium">${Number(r.totalAmount || 0).toFixed(2)}</td>
+                        <td className="px-4 py-3 text-sm text-right font-medium">${Number(r.totalEstimated || 0).toFixed(2)}</td>
                         <td className="px-4 py-3 text-sm text-gray-500">{new Date(r.createdAt).toLocaleDateString()}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <button onClick={() => setSelectedPR(r)} className="text-blue-600 hover:text-blue-800" title="View">
                               <EyeIcon className="h-5 w-5" />
                             </button>
-                            {r.status === 'PENDING_APPROVAL' && (
+                            {(r.status === 'PENDING_APPROVAL' || r.status === 'SUBMITTED') && (
                               <>
                                 <button onClick={() => handleApprove(r.id)} className="text-green-600 hover:text-green-800" title="Approve">
                                   <CheckCircleIcon className="h-5 w-5" />
@@ -386,13 +471,13 @@ export default function Requisitions() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Department *</label>
                   <select
-                    value={formData.department}
-                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                    value={formData.departmentId}
+                    onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   >
                     <option value="">Select Department</option>
-                    {departments.map((d) => <option key={d} value={d}>{d}</option>)}
+                    {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
                 </div>
                 <div>
@@ -402,19 +487,28 @@ export default function Requisitions() {
                     onChange={(e) => setFormData({ ...formData, urgency: e.target.value })}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    {urgencies.map((u) => <option key={u} value={u}>{u}</option>)}
+                    {urgencies.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Justification</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Required Date</label>
                   <input
-                    type="text"
-                    value={formData.justification}
-                    onChange={(e) => setFormData({ ...formData, justification: e.target.value })}
+                    type="date"
+                    value={formData.requiredDate}
+                    onChange={(e) => setFormData({ ...formData, requiredDate: e.target.value })}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Reason for request"
                   />
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Justification</label>
+                <input
+                  type="text"
+                  value={formData.justification}
+                  onChange={(e) => setFormData({ ...formData, justification: e.target.value })}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Reason for request"
+                />
               </div>
 
               {/* Items */}
@@ -428,7 +522,17 @@ export default function Requisitions() {
                 <div className="space-y-3">
                   {formData.items.map((item, index) => (
                     <div key={index} className="grid grid-cols-12 gap-2 items-end bg-gray-50 p-3 rounded-lg">
-                      <div className="col-span-3">
+                      <div className="col-span-2">
+                        {index === 0 && <label className="block text-xs font-medium text-gray-500 mb-1">Type *</label>}
+                        <select
+                          value={item.itemType}
+                          onChange={(e) => updateItem(index, 'itemType', e.target.value)}
+                          className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          {itemTypes.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                        </select>
+                      </div>
+                      <div className="col-span-2">
                         {index === 0 && <label className="block text-xs font-medium text-gray-500 mb-1">Item Name *</label>}
                         <input
                           type="text"
@@ -440,13 +544,13 @@ export default function Requisitions() {
                         />
                       </div>
                       <div className="col-span-2">
-                        {index === 0 && <label className="block text-xs font-medium text-gray-500 mb-1">Description</label>}
+                        {index === 0 && <label className="block text-xs font-medium text-gray-500 mb-1">Specification</label>}
                         <input
                           type="text"
-                          value={item.description}
-                          onChange={(e) => updateItem(index, 'description', e.target.value)}
+                          value={item.specification}
+                          onChange={(e) => updateItem(index, 'specification', e.target.value)}
                           className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          placeholder="Description"
+                          placeholder="Spec"
                         />
                       </div>
                       <div className="col-span-1">
@@ -475,20 +579,20 @@ export default function Requisitions() {
                         </select>
                       </div>
                       <div className="col-span-2">
-                        {index === 0 && <label className="block text-xs font-medium text-gray-500 mb-1">Est. Price</label>}
+                        {index === 0 && <label className="block text-xs font-medium text-gray-500 mb-1">Est. Cost</label>}
                         <input
                           type="number"
                           min="0"
                           step="0.01"
-                          value={item.estimatedUnitPrice}
-                          onChange={(e) => updateItem(index, 'estimatedUnitPrice', Number(e.target.value))}
+                          value={item.estimatedUnitCost}
+                          onChange={(e) => updateItem(index, 'estimatedUnitCost', Number(e.target.value))}
                           className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
-                      <div className="col-span-2">
+                      <div className="col-span-1">
                         {index === 0 && <label className="block text-xs font-medium text-gray-500 mb-1">Total</label>}
                         <span className="block px-2 py-1.5 text-sm font-medium text-gray-700">
-                          ${Number(item.quantity * item.estimatedUnitPrice).toFixed(2)}
+                          ${Number(item.quantity * item.estimatedUnitCost).toFixed(2)}
                         </span>
                       </div>
                       <div className="col-span-1">

@@ -16,52 +16,102 @@ import { procurementApi } from '../../services/procurementApi';
 // ==================== Interfaces ====================
 interface Supplier {
   id: string;
-  supplierCode: string;
+  code: string;
   companyName: string;
   category: string;
+  classification: string;
   status: string;
   rating: number;
   contactPerson: string;
   email: string;
   phone: string;
-  address: string;
+  website: string;
+  addressLine1: string;
+  addressLine2: string;
   city: string;
+  state: string;
   country: string;
-  taxNumber: string;
+  postalCode: string;
+  taxRegistrationNo: string;
+  tradeLicenseNo: string;
   bankName: string;
-  bankAccountNumber: string;
-  bankRoutingNumber: string;
+  bankAccountNo: string;
+  iban: string;
+  swiftCode: string;
   paymentTerms: string;
+  creditLimit: number;
+  currency: string;
+  leadTimeDays: number;
   notes: string;
   createdAt: string;
+  contacts?: Array<{
+    id: string;
+    name: string;
+    designation: string;
+    email: string;
+    phone: string;
+    isPrimary: boolean;
+  }>;
 }
 
 interface SupplierFormData {
   companyName: string;
   category: string;
+  classification: string;
   contactPerson: string;
   email: string;
   phone: string;
-  address: string;
+  website: string;
+  addressLine1: string;
+  addressLine2: string;
   city: string;
+  state: string;
   country: string;
-  taxNumber: string;
+  postalCode: string;
+  taxRegistrationNo: string;
   bankName: string;
-  bankAccountNumber: string;
-  bankRoutingNumber: string;
+  bankAccountNo: string;
+  iban: string;
+  swiftCode: string;
   paymentTerms: string;
   notes: string;
 }
 
 const emptyForm: SupplierFormData = {
-  companyName: '', category: '', contactPerson: '', email: '', phone: '',
-  address: '', city: '', country: '', taxNumber: '',
-  bankName: '', bankAccountNumber: '', bankRoutingNumber: '',
+  companyName: '', category: '', classification: '', contactPerson: '', email: '', phone: '',
+  website: '', addressLine1: '', addressLine2: '', city: '', state: '', country: '', postalCode: '',
+  taxRegistrationNo: '',
+  bankName: '', bankAccountNo: '', iban: '', swiftCode: '',
   paymentTerms: 'NET_30', notes: '',
 };
 
-const categories = ['Medical Supplies', 'Pharmaceuticals', 'Equipment', 'IT Services', 'Consumables', 'Furniture', 'Maintenance', 'Other'];
-const statuses = ['APPROVED', 'PENDING', 'SUSPENDED', 'BLACKLISTED'];
+const categories = [
+  { value: 'PHARMACEUTICALS', label: 'Pharmaceuticals' },
+  { value: 'MEDICAL_DEVICES', label: 'Medical Devices' },
+  { value: 'LAB_CONSUMABLES', label: 'Lab Consumables' },
+  { value: 'SURGICAL_SUPPLIES', label: 'Surgical Supplies' },
+  { value: 'HOUSEKEEPING', label: 'Housekeeping' },
+  { value: 'IT_EQUIPMENT', label: 'IT Equipment' },
+  { value: 'FOOD_DIETARY', label: 'Food & Dietary' },
+  { value: 'GENERAL', label: 'General' },
+];
+
+const classifications = [
+  { value: 'A', label: 'Class A' },
+  { value: 'B', label: 'Class B' },
+  { value: 'C', label: 'Class C' },
+];
+
+const statuses = ['PENDING', 'APPROVED', 'SUSPENDED', 'BLACKLISTED'];
+
+const paymentTermsOptions = [
+  { value: 'IMMEDIATE', label: 'Immediate' },
+  { value: 'NET_15', label: 'Net 15' },
+  { value: 'NET_30', label: 'Net 30' },
+  { value: 'NET_45', label: 'Net 45' },
+  { value: 'NET_60', label: 'Net 60' },
+  { value: 'NET_90', label: 'Net 90' },
+];
 
 const statusConfig: Record<string, { bg: string; text: string }> = {
   APPROVED: { bg: 'bg-green-100', text: 'text-green-700' },
@@ -69,6 +119,8 @@ const statusConfig: Record<string, { bg: string; text: string }> = {
   SUSPENDED: { bg: 'bg-red-100', text: 'text-red-700' },
   BLACKLISTED: { bg: 'bg-gray-100', text: 'text-gray-700' },
 };
+
+const getCategoryLabel = (value: string) => categories.find(c => c.value === value)?.label || value;
 
 export default function Suppliers() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -120,16 +172,22 @@ export default function Suppliers() {
     setFormData({
       companyName: supplier.companyName || '',
       category: supplier.category || '',
+      classification: supplier.classification || '',
       contactPerson: supplier.contactPerson || '',
       email: supplier.email || '',
       phone: supplier.phone || '',
-      address: supplier.address || '',
+      website: supplier.website || '',
+      addressLine1: supplier.addressLine1 || '',
+      addressLine2: supplier.addressLine2 || '',
       city: supplier.city || '',
+      state: supplier.state || '',
       country: supplier.country || '',
-      taxNumber: supplier.taxNumber || '',
+      postalCode: supplier.postalCode || '',
+      taxRegistrationNo: supplier.taxRegistrationNo || '',
       bankName: supplier.bankName || '',
-      bankAccountNumber: supplier.bankAccountNumber || '',
-      bankRoutingNumber: supplier.bankRoutingNumber || '',
+      bankAccountNo: supplier.bankAccountNo || '',
+      iban: supplier.iban || '',
+      swiftCode: supplier.swiftCode || '',
       paymentTerms: supplier.paymentTerms || 'NET_30',
       notes: supplier.notes || '',
     });
@@ -164,7 +222,7 @@ export default function Suppliers() {
   const filteredSuppliers = suppliers.filter((s) => {
     const matchesSearch =
       s.companyName?.toLowerCase().includes(search.toLowerCase()) ||
-      s.supplierCode?.toLowerCase().includes(search.toLowerCase()) ||
+      s.code?.toLowerCase().includes(search.toLowerCase()) ||
       s.contactPerson?.toLowerCase().includes(search.toLowerCase());
     return matchesSearch;
   });
@@ -194,12 +252,13 @@ export default function Suppliers() {
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">{s.companyName}</h2>
-              <p className="text-sm text-gray-500 mt-1">Code: {s.supplierCode}</p>
+              <p className="text-sm text-gray-500 mt-1">Code: {s.code}</p>
               <div className="flex items-center gap-3 mt-2">
                 <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${style.bg} ${style.text}`}>
                   {s.status}
                 </span>
-                <span className="text-sm text-gray-500">{s.category}</span>
+                <span className="text-sm text-gray-500">{getCategoryLabel(s.category)}</span>
+                {s.classification && <span className="text-sm text-gray-500">Class {s.classification}</span>}
                 <div className="flex items-center gap-0.5">{renderStars(s.rating || 0)}</div>
               </div>
             </div>
@@ -229,20 +288,29 @@ export default function Suppliers() {
                 <PhoneIcon className="h-4 w-4 text-gray-400" />
                 <span>{s.phone || '—'}</span>
               </div>
+              {s.website && (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-gray-500">Web:</span>
+                  <span>{s.website}</span>
+                </div>
+              )}
             </div>
           </div>
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Address</h3>
-            <p className="text-sm text-gray-700">{s.address || '—'}</p>
-            <p className="text-sm text-gray-700">{s.city}{s.country ? `, ${s.country}` : ''}</p>
-            <p className="text-sm text-gray-500 mt-2">Tax #: {s.taxNumber || '—'}</p>
+            <p className="text-sm text-gray-700">{s.addressLine1 || '—'}</p>
+            {s.addressLine2 && <p className="text-sm text-gray-700">{s.addressLine2}</p>}
+            <p className="text-sm text-gray-700">{s.city}{s.state ? `, ${s.state}` : ''}{s.country ? `, ${s.country}` : ''}</p>
+            {s.postalCode && <p className="text-sm text-gray-700">{s.postalCode}</p>}
+            <p className="text-sm text-gray-500 mt-2">Tax Reg #: {s.taxRegistrationNo || '—'}</p>
           </div>
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Bank Details</h3>
             <div className="space-y-2 text-sm">
               <p><span className="text-gray-500">Bank:</span> {s.bankName || '—'}</p>
-              <p><span className="text-gray-500">Account:</span> {s.bankAccountNumber || '—'}</p>
-              <p><span className="text-gray-500">Routing:</span> {s.bankRoutingNumber || '—'}</p>
+              <p><span className="text-gray-500">Account:</span> {s.bankAccountNo || '—'}</p>
+              <p><span className="text-gray-500">IBAN:</span> {s.iban || '—'}</p>
+              <p><span className="text-gray-500">SWIFT:</span> {s.swiftCode || '—'}</p>
               <p><span className="text-gray-500">Terms:</span> {s.paymentTerms || '—'}</p>
             </div>
           </div>
@@ -277,7 +345,7 @@ export default function Suppliers() {
           className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="">All Categories</option>
-          {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+          {categories.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
         </select>
         <select
           value={filterStatus}
@@ -334,9 +402,9 @@ export default function Suppliers() {
                         className="hover:bg-gray-50 cursor-pointer"
                         onClick={() => setSelectedSupplier(supplier)}
                       >
-                        <td className="px-4 py-3 text-sm font-mono text-gray-600">{supplier.supplierCode}</td>
+                        <td className="px-4 py-3 text-sm font-mono text-gray-600">{supplier.code}</td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">{supplier.companyName}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{supplier.category || '—'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{getCategoryLabel(supplier.category) || '—'}</td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${style.bg} ${style.text}`}>
                             {supplier.status}
@@ -411,23 +479,36 @@ export default function Suppliers() {
                       required
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                    <select
-                      value={formData.category}
-                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Select category</option>
-                      {categories.map((c) => <option key={c} value={c}>{c}</option>)}
-                    </select>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                      <select
+                        value={formData.category}
+                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Select category</option>
+                        {categories.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Classification</label>
+                      <select
+                        value={formData.classification}
+                        onChange={(e) => setFormData({ ...formData, classification: e.target.value })}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Select classification</option>
+                        {classifications.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                      </select>
+                    </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Tax Number</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Tax Registration No</label>
                     <input
                       type="text"
-                      value={formData.taxNumber}
-                      onChange={(e) => setFormData({ ...formData, taxNumber: e.target.value })}
+                      value={formData.taxRegistrationNo}
+                      onChange={(e) => setFormData({ ...formData, taxRegistrationNo: e.target.value })}
                       className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -438,12 +519,7 @@ export default function Suppliers() {
                       onChange={(e) => setFormData({ ...formData, paymentTerms: e.target.value })}
                       className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="NET_15">Net 15</option>
-                      <option value="NET_30">Net 30</option>
-                      <option value="NET_45">Net 45</option>
-                      <option value="NET_60">Net 60</option>
-                      <option value="COD">Cash on Delivery</option>
-                      <option value="PREPAID">Prepaid</option>
+                      {paymentTermsOptions.map((pt) => <option key={pt.value} value={pt.value}>{pt.label}</option>)}
                     </select>
                   </div>
                   <div>
@@ -488,11 +564,29 @@ export default function Suppliers() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Website</label>
                     <input
                       type="text"
-                      value={formData.address}
-                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                      value={formData.website}
+                      onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Address Line 1</label>
+                    <input
+                      type="text"
+                      value={formData.addressLine1}
+                      onChange={(e) => setFormData({ ...formData, addressLine1: e.target.value })}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Address Line 2</label>
+                    <input
+                      type="text"
+                      value={formData.addressLine2}
+                      onChange={(e) => setFormData({ ...formData, addressLine2: e.target.value })}
                       className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -507,11 +601,31 @@ export default function Suppliers() {
                       />
                     </div>
                     <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                      <input
+                        type="text"
+                        value={formData.state}
+                        onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
                       <input
                         type="text"
                         value={formData.country}
                         onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Postal Code</label>
+                      <input
+                        type="text"
+                        value={formData.postalCode}
+                        onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
                         className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
@@ -534,17 +648,26 @@ export default function Suppliers() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
                     <input
                       type="text"
-                      value={formData.bankAccountNumber}
-                      onChange={(e) => setFormData({ ...formData, bankAccountNumber: e.target.value })}
+                      value={formData.bankAccountNo}
+                      onChange={(e) => setFormData({ ...formData, bankAccountNo: e.target.value })}
                       className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Routing Number</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">IBAN</label>
                     <input
                       type="text"
-                      value={formData.bankRoutingNumber}
-                      onChange={(e) => setFormData({ ...formData, bankRoutingNumber: e.target.value })}
+                      value={formData.iban}
+                      onChange={(e) => setFormData({ ...formData, iban: e.target.value })}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">SWIFT Code</label>
+                    <input
+                      type="text"
+                      value={formData.swiftCode}
+                      onChange={(e) => setFormData({ ...formData, swiftCode: e.target.value })}
                       className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
