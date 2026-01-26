@@ -96,7 +96,8 @@ export default function Requisitions() {
       if (filterDepartment) params.department = filterDepartment;
       if (filterUrgency) params.urgency = filterUrgency;
       const response = await procurementApi.getRequisitions(params);
-      setRequisitions(response.data.data || response.data || []);
+      const d = response.data.data;
+      setRequisitions(Array.isArray(d) ? d : d?.requisitions || []);
     } catch (error) {
       console.error('Failed to fetch requisitions:', error);
       toast.error('Failed to load requisitions');

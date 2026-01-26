@@ -93,7 +93,8 @@ export default function GoodsReceipt() {
       const params: any = {};
       if (filterStatus) params.status = filterStatus;
       const response = await procurementApi.getGoodsReceipts(params);
-      setGoodsReceipts(response.data.data || response.data || []);
+      const d = response.data.data;
+      setGoodsReceipts(Array.isArray(d) ? d : d?.grns || []);
     } catch (error) {
       console.error('Failed to fetch goods receipts:', error);
       toast.error('Failed to load goods receipts');
@@ -105,7 +106,8 @@ export default function GoodsReceipt() {
   const openCreateForm = async () => {
     try {
       const response = await procurementApi.getPurchaseOrders({ status: 'SENT' });
-      setAvailablePOs(response.data.data || response.data || []);
+      const pd = response.data.data;
+      setAvailablePOs(Array.isArray(pd) ? pd : pd?.orders || []);
     } catch (error) {
       toast.error('Failed to load purchase orders');
       return;

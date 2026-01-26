@@ -98,7 +98,8 @@ export default function Suppliers() {
       if (filterCategory) params.category = filterCategory;
       if (filterStatus) params.status = filterStatus;
       const response = await procurementApi.getSuppliers(params);
-      setSuppliers(response.data.data || response.data || []);
+      const d = response.data.data;
+      setSuppliers(Array.isArray(d) ? d : d?.suppliers || []);
     } catch (error) {
       console.error('Failed to fetch suppliers:', error);
       toast.error('Failed to load suppliers');

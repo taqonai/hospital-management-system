@@ -111,7 +111,8 @@ export default function Invoices() {
       if (filterMatchStatus) params.matchStatus = filterMatchStatus;
       if (filterPaymentStatus) params.paymentStatus = filterPaymentStatus;
       const response = await procurementApi.getInvoices(params);
-      setInvoices(response.data.data || response.data || []);
+      const d = response.data.data;
+      setInvoices(Array.isArray(d) ? d : d?.invoices || []);
     } catch (error) {
       console.error('Failed to fetch invoices:', error);
       toast.error('Failed to load invoices');
@@ -123,7 +124,8 @@ export default function Invoices() {
   const fetchSuppliers = async () => {
     try {
       const response = await procurementApi.getSuppliers({ status: 'APPROVED' });
-      setSuppliers(response.data.data || response.data || []);
+      const sd = response.data.data;
+      setSuppliers(Array.isArray(sd) ? sd : sd?.suppliers || []);
     } catch (error) {
       console.error('Failed to fetch suppliers:', error);
     }

@@ -106,7 +106,8 @@ export default function PurchaseOrders() {
       if (filterStatus) params.status = filterStatus;
       if (filterSupplier) params.supplierId = filterSupplier;
       const response = await procurementApi.getPurchaseOrders(params);
-      setPurchaseOrders(response.data.data || response.data || []);
+      const d = response.data.data;
+      setPurchaseOrders(Array.isArray(d) ? d : d?.orders || []);
     } catch (error) {
       console.error('Failed to fetch purchase orders:', error);
       toast.error('Failed to load purchase orders');
@@ -118,7 +119,8 @@ export default function PurchaseOrders() {
   const fetchSuppliers = async () => {
     try {
       const response = await procurementApi.getSuppliers({ status: 'APPROVED' });
-      setSuppliers(response.data.data || response.data || []);
+      const sd = response.data.data;
+      setSuppliers(Array.isArray(sd) ? sd : sd?.suppliers || []);
     } catch (error) {
       console.error('Failed to fetch suppliers:', error);
     }
