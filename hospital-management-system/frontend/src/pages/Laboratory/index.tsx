@@ -471,7 +471,14 @@ export default function Laboratory() {
     const fetchCritical = async () => {
       try {
         const response = await laboratoryApi.getCriticalResults();
-        setCriticalResults(response.data.data || []);
+        const mapped = (response.data.data || []).map((cv: any) => ({
+          ...cv,
+          patient: cv.labOrder?.patient || cv.patient,
+          test: cv.labTest || cv.test,
+          value: cv.resultValue || cv.result || cv.value,
+          referenceRange: cv.normalRange || cv.referenceRange,
+        }));
+        setCriticalResults(mapped);
       } catch (error) {
         console.error('Failed to fetch critical results:', error);
       }
@@ -554,7 +561,7 @@ export default function Laboratory() {
     setSelectedOrderForResults({
       orderId: order.id,
       testId: firstTest.id,
-      testName: firstTest.test?.name || 'Unknown Test',
+      testName: firstTest.labTest?.name || firstTest.test?.name || 'Unknown Test',
       patientName: `${order.patient?.firstName || ''} ${order.patient?.lastName || ''}`.trim(),
     });
   };
@@ -782,14 +789,14 @@ export default function Laboratory() {
                           <div className="mt-3 flex flex-wrap gap-2">
                             {order.tests?.map((test) => (
                               <span key={test.id} className="px-2.5 py-1 bg-amber-500/10 text-amber-700 text-xs rounded-lg font-medium">
-                                {test.test?.name || 'Unknown Test'}
+                                {(test.labTest?.name || test.test?.name || 'Unknown Test')}
                               </span>
                             ))}
                           </div>
                         </div>
                         <div className="text-right text-sm space-y-2">
                           <p className="text-gray-500">
-                            Dr. {order.orderedBy?.firstName || ''} {order.orderedBy?.lastName || ''}
+                            Dr. {(order.orderedByUser?.firstName || order.orderedBy?.firstName || '')} {(order.orderedByUser?.lastName || order.orderedBy?.lastName || '')}
                           </p>
                           <p className="text-gray-400">{new Date(order.createdAt).toLocaleString()}</p>
                           <div className="flex flex-wrap gap-2 justify-end mt-3">
