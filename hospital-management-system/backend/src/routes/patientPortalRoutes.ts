@@ -73,12 +73,45 @@ router.post(
     const hospitalId = req.patient?.hospitalId || '';
     const patientId = req.patient?.patientId || '';
 
+    // Validate required fields
+    if (!req.body.doctorId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Doctor ID is required',
+        error: 'MISSING_DOCTOR_ID'
+      });
+    }
+
+    if (!req.body.appointmentDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Appointment date is required',
+        error: 'MISSING_APPOINTMENT_DATE'
+      });
+    }
+
+    if (!req.body.appointmentTime && !req.body.startTime) {
+      return res.status(400).json({
+        success: false,
+        message: 'Appointment time is required',
+        error: 'MISSING_APPOINTMENT_TIME'
+      });
+    }
+
     // Validate that patient exists before booking
     if (!patientId) {
       return res.status(400).json({
         success: false,
         message: 'Patient profile not found. Please complete your registration first.',
         error: 'PATIENT_NOT_FOUND'
+      });
+    }
+
+    if (!hospitalId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Hospital ID not found in session',
+        error: 'MISSING_HOSPITAL_ID'
       });
     }
 
