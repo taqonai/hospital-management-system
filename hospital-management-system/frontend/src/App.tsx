@@ -108,6 +108,7 @@ import PatientPortalHealthSync from './pages/PatientPortal/HealthSync';
 import PatientPortalFitnessTracker from './pages/PatientPortal/FitnessTracker';
 import PatientPortalNutritionPlan from './pages/PatientPortal/NutritionPlan';
 import PatientPortalWellnessHub from './pages/PatientPortal/WellnessHub';
+import PatientPortalMessages from './pages/PatientPortal/components/Messages';
 import PatientPortalLayout from './components/layout/PatientPortalLayout';
 
 // Asset Management
@@ -329,6 +330,7 @@ function App() {
         <Route path="fitness" element={<PatientPortalFitnessTracker />} />
         <Route path="nutrition" element={<PatientPortalNutritionPlan />} />
         <Route path="wellness" element={<PatientPortalWellnessHub />} />
+        <Route path="messages" element={<PatientPortalMessages />} />
       </Route>
 
       {/* Redirects */}
