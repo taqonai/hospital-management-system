@@ -1164,18 +1164,54 @@ export default function Consultation() {
         notes: soapData ? `SOAP Notes:\nS: ${soapData.subjective}\nO: ${soapData.objective}\nA: ${soapData.assessment}\nP: ${soapData.plan}` : undefined,
       });
 
-      // Submit lab orders if any
-      if (labOrders.length > 0) {
+      // Auto-convert recommended tests to lab orders if they haven't been manually added
+      const allLabOrders = [...labOrders];
+
+      if (recommendedTests.length > 0) {
+        for (const testName of recommendedTests) {
+          // Check if this test is already in labOrders
+          const alreadyAdded = labOrders.some(order =>
+            order.testName.toLowerCase() === testName.toLowerCase()
+          );
+
+          if (!alreadyAdded) {
+            // Try to find matching test in available lab tests
+            const matchingTest = availableLabTests.find(test =>
+              test.name.toLowerCase() === testName.toLowerCase() ||
+              test.name.toLowerCase().includes(testName.toLowerCase()) ||
+              testName.toLowerCase().includes(test.name.toLowerCase())
+            );
+
+            if (matchingTest) {
+              allLabOrders.push({
+                id: `auto-${Date.now()}-${Math.random()}`,
+                testId: matchingTest.id,
+                testName: matchingTest.name,
+                priority: 'ROUTINE' as const,
+                clinicalNotes: 'Auto-generated from recommended tests',
+              });
+            }
+          }
+        }
+      }
+
+      // Submit lab orders if any (includes both manual and auto-generated from recommended tests)
+      if (allLabOrders.length > 0) {
         const consultationId = consultationResponse?.data?.consultation?.id;
         try {
           await laboratoryApi.createOrder({
             patientId: selectedPatientId,
             consultationId: consultationId,
-            testIds: labOrders.map(o => o.testId),
-            priority: labOrders[0].priority, // Use first order's priority
-            clinicalNotes: labOrders.map(o => `${o.testName}: ${o.clinicalNotes || 'N/A'}`).join('\n'),
+            testIds: allLabOrders.map(o => o.testId),
+            priority: allLabOrders[0].priority, // Use first order's priority
+            clinicalNotes: allLabOrders.map(o => `${o.testName}: ${o.clinicalNotes || 'N/A'}`).join('\n'),
           });
-          toast.success(`Consultation completed with ${labOrders.length} lab order(s)`);
+          const autoGenCount = allLabOrders.length - labOrders.length;
+          if (autoGenCount > 0) {
+            toast.success(`Consultation completed with ${allLabOrders.length} lab order(s) (${autoGenCount} auto-generated from recommended tests)`);
+          } else {
+            toast.success(`Consultation completed with ${allLabOrders.length} lab order(s)`);
+          }
         } catch (labError) {
           console.error('Failed to create lab orders:', labError);
           toast.error('Consultation saved but lab orders failed');
