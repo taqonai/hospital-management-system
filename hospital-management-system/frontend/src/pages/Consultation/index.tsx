@@ -30,7 +30,7 @@ import {
   StopIcon,
   ChatBubbleBottomCenterTextIcon,
 } from '@heroicons/react/24/outline';
-import { patientApi, aiApi, smartOrderApi, medSafetyApi, ipdApi, appointmentApi, opdApi, insuranceCodingApi, aiConsultationApi } from '../../services/api';
+import { patientApi, aiApi, smartOrderApi, medSafetyApi, ipdApi, appointmentApi, opdApi, insuranceCodingApi, aiConsultationApi, laboratoryApi } from '../../services/api';
 import { useAIHealth } from '../../hooks/useAI';
 import { useWhisperRecorder, formatDuration } from '../../hooks/useWhisperRecorder';
 import {
@@ -467,6 +467,21 @@ export default function Consultation() {
     action?: string;
   }>>([]);
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
+  const [labOrders, setLabOrders] = useState<{
+    id: string;
+    testId: string;
+    testName: string;
+    priority: 'ROUTINE' | 'URGENT' | 'STAT';
+    clinicalNotes?: string;
+  }[]>([]);
+  const [availableLabTests, setAvailableLabTests] = useState<Array<{
+    id: string;
+    name: string;
+    code: string;
+    category: string;
+  }>>([]);
+  const [labTestSearch, setLabTestSearch] = useState('');
+  const [showLabTestPicker, setShowLabTestPicker] = useState(false);
   const [clinicalNotes, setClinicalNotes] = useState('');
   const [soapNotes, setSoapNotes] = useState<SOAPNote>({
     subjective: '',
@@ -607,6 +622,43 @@ export default function Consultation() {
     10,
     !!selectedPatientId && showPatientHistory
   );
+
+  // Fetch available lab tests
+  useEffect(() => {
+    const fetchLabTests = async () => {
+      try {
+        const response = await laboratoryApi.getTests({ limit: 100 });
+        setAvailableLabTests(response.data.data || []);
+      } catch (error) {
+        console.error('Failed to fetch lab tests:', error);
+      }
+    };
+    fetchLabTests();
+  }, []);
+
+  // State for existing lab orders from consultation
+  const [existingLabOrders, setExistingLabOrders] = useState<Array<{
+    id: string;
+    tests: Array<{ test: { name: string }; status: string }>;
+    status: string;
+  }>>([]);
+
+  // Fetch existing lab orders when booking data loads
+  useEffect(() => {
+    const consultation = bookingData?.consultation;
+    if (consultation?.id) {
+      // Check if consultation has lab orders
+      const fetchExistingOrders = async () => {
+        try {
+          const response = await laboratoryApi.getOrders({ consultationId: consultation.id });
+          setExistingLabOrders(response.data.data || []);
+        } catch (error) {
+          console.error('Failed to fetch existing lab orders:', error);
+        }
+      };
+      fetchExistingOrders();
+    }
+  }, [bookingData]);
 
   // Patient Search Query
   const { data: searchResults, isLoading: searchingPatients } = useQuery({
@@ -1008,6 +1060,30 @@ export default function Consultation() {
     setPrescriptions(prev => prev.filter(rx => rx.id !== id));
   };
 
+  // Lab Order Handlers
+  const addLabOrder = (testId: string, testName: string) => {
+    const newOrder = {
+      id: Math.random().toString(36).substr(2, 9),
+      testId,
+      testName,
+      priority: 'ROUTINE' as const,
+      clinicalNotes: '',
+    };
+    setLabOrders(prev => [...prev, newOrder]);
+  };
+
+  const removeLabOrder = (id: string) => {
+    setLabOrders(prev => prev.filter(order => order.id !== id));
+  };
+
+  const updateLabOrder = (id: string, field: 'priority' | 'clinicalNotes', value: string) => {
+    setLabOrders(prev =>
+      prev.map(order =>
+        order.id === id ? { ...order, [field]: value } : order
+      )
+    );
+  };
+
   const selectDiagnosis = (diagnosis: Diagnosis) => {
     setSelectedDiagnoses(prev => {
       const exists = prev.find(d => d.icd10 === diagnosis.icd10);
@@ -1077,7 +1153,7 @@ export default function Consultation() {
         : undefined;
 
       // Save and complete consultation via new API endpoint
-      await aiConsultationApi.complete({
+      const consultationResponse = await aiConsultationApi.complete({
         appointmentId,
         patientId: selectedPatientId,
         chiefComplaint: chiefComplaint || symptoms.map(s => s.name).join(', ') || 'General consultation',
@@ -1088,7 +1164,25 @@ export default function Consultation() {
         notes: soapData ? `SOAP Notes:\nS: ${soapData.subjective}\nO: ${soapData.objective}\nA: ${soapData.assessment}\nP: ${soapData.plan}` : undefined,
       });
 
-      toast.success('Consultation completed successfully');
+      // Submit lab orders if any
+      if (labOrders.length > 0) {
+        const consultationId = consultationResponse?.data?.consultation?.id;
+        try {
+          await laboratoryApi.createOrder({
+            patientId: selectedPatientId,
+            consultationId: consultationId,
+            testIds: labOrders.map(o => o.testId),
+            priority: labOrders[0].priority, // Use first order's priority
+            clinicalNotes: labOrders.map(o => `${o.testName}: ${o.clinicalNotes || 'N/A'}`).join('\n'),
+          });
+          toast.success(`Consultation completed with ${labOrders.length} lab order(s)`);
+        } catch (labError) {
+          console.error('Failed to create lab orders:', labError);
+          toast.error('Consultation saved but lab orders failed');
+        }
+      } else {
+        toast.success('Consultation completed successfully');
+      }
 
       // Invalidate appointment queries to refresh data
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
@@ -2980,6 +3074,153 @@ export default function Consultation() {
           ))}
         </div>
       )}
+
+      {/* Lab Orders Section */}
+      <div className="mt-8">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Laboratory Orders</h3>
+            <p className="text-sm text-gray-500">Order lab tests for this patient</p>
+          </div>
+          <button
+            onClick={() => setShowLabTestPicker(!showLabTestPicker)}
+            className="px-4 py-2 bg-amber-500 text-white rounded-xl text-sm font-medium hover:bg-amber-600 transition-colors flex items-center gap-2"
+          >
+            <BeakerIcon className="h-4 w-4" />
+            Add Lab Test
+          </button>
+        </div>
+
+        {/* Existing Lab Orders */}
+        {existingLabOrders.length > 0 && (
+          <div className="mb-4 bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <h4 className="text-sm font-semibold text-blue-900 mb-2">Existing Lab Orders for this Consultation</h4>
+            <div className="space-y-2">
+              {existingLabOrders.map(order => (
+                <div key={order.id} className="flex items-center justify-between bg-white rounded-lg p-3">
+                  <div>
+                    {order.tests.map((t, idx) => (
+                      <span key={idx} className="text-sm text-gray-700">
+                        {t.test?.name}
+                        {idx < order.tests.length - 1 ? ', ' : ''}
+                      </span>
+                    ))}
+                  </div>
+                  <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded font-medium">
+                    {order.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Lab Test Picker */}
+        {showLabTestPicker && (
+          <div className="mb-4 bg-white rounded-2xl p-4 border border-gray-200 shadow-sm">
+            <input
+              type="text"
+              value={labTestSearch}
+              onChange={(e) => setLabTestSearch(e.target.value)}
+              placeholder="Search lab tests..."
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 mb-3"
+            />
+            <div className="max-h-48 overflow-y-auto space-y-1">
+              {availableLabTests
+                .filter(test =>
+                  test.name.toLowerCase().includes(labTestSearch.toLowerCase()) ||
+                  test.code.toLowerCase().includes(labTestSearch.toLowerCase())
+                )
+                .map(test => (
+                  <button
+                    key={test.id}
+                    onClick={() => {
+                      addLabOrder(test.id, test.name);
+                      setShowLabTestPicker(false);
+                      setLabTestSearch('');
+                      toast.success(`${test.name} added to lab orders`);
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-amber-50 rounded-lg transition-colors flex justify-between items-center"
+                  >
+                    <div>
+                      <span className="font-medium text-gray-900">{test.name}</span>
+                      <span className="ml-2 text-xs text-gray-500">({test.code})</span>
+                    </div>
+                    <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">{test.category}</span>
+                  </button>
+                ))}
+              {availableLabTests.filter(test =>
+                test.name.toLowerCase().includes(labTestSearch.toLowerCase()) ||
+                test.code.toLowerCase().includes(labTestSearch.toLowerCase())
+              ).length === 0 && (
+                <p className="text-center text-gray-500 py-4">No tests found</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Lab Orders List */}
+        {labOrders.length === 0 ? (
+          <div className="bg-white rounded-2xl p-12 border border-gray-200 text-center">
+            <BeakerIcon className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+            <p className="text-gray-500">No lab tests ordered yet</p>
+            <button
+              onClick={() => setShowLabTestPicker(true)}
+              className="mt-4 text-amber-600 hover:underline font-medium"
+            >
+              Order first lab test
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {labOrders.map((order, index) => (
+              <div key={order.id} className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-amber-100 rounded-lg">
+                      <BeakerIcon className="h-5 w-5 text-amber-600" />
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-900">{order.testName}</span>
+                      <span className="ml-2 text-xs text-gray-500">Lab Test #{index + 1}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => removeLabOrder(order.id)}
+                    className="text-red-500 hover:text-red-700 p-1"
+                  >
+                    <TrashIcon className="h-5 w-5" />
+                  </button>
+                </div>
+                <div className="grid md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                    <select
+                      value={order.priority}
+                      onChange={(e) => updateLabOrder(order.id, 'priority', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
+                    >
+                      <option value="ROUTINE">Routine</option>
+                      <option value="URGENT">Urgent</option>
+                      <option value="STAT">STAT (Immediate)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Clinical Notes</label>
+                    <input
+                      type="text"
+                      value={order.clinicalNotes || ''}
+                      onChange={(e) => updateLabOrder(order.id, 'clinicalNotes', e.target.value)}
+                      placeholder="Reason for ordering..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 
