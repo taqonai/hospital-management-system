@@ -150,7 +150,19 @@ export class IPDService {
       prisma.admission.count({ where }),
     ]);
 
-    return { admissions, total, page, limit };
+    // Calculate length of stay for each admission
+    const admissionsWithLOS = admissions.map(admission => {
+      const endDate = admission.dischargeDate || new Date();
+      const startDate = admission.admissionDate;
+      const lengthOfStay = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      return {
+        ...admission,
+        lengthOfStay: lengthOfStay >= 0 ? lengthOfStay : 0,
+      };
+    });
+
+    return { admissions: admissionsWithLOS, total, page, limit };
   }
 
   async getAdmissionById(id: string, hospitalId: string) {
