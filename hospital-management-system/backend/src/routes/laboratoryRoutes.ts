@@ -156,7 +156,7 @@ router.get(
 router.post(
   '/critical/:testId/acknowledge',
   authenticate,
-  authorize(UserRole.DOCTOR, UserRole.PATHOLOGIST, UserRole.LAB_TECHNICIAN),
+  authorize('DOCTOR', 'PATHOLOGIST', 'LAB_TECHNICIAN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await laboratoryService.verifyTestResult(req.params.testId, req.user!.id);
     sendSuccess(res, result, 'Critical result acknowledged successfully');
