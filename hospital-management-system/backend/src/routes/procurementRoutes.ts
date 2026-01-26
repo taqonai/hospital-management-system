@@ -284,7 +284,7 @@ router.post(
 
 // List POs
 router.get(
-  '/orders',
+  '/purchase-orders',
   authorize(...PROCUREMENT_ROLES),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await poService.listPOs(req.user!.hospitalId, {
@@ -303,7 +303,7 @@ router.get(
 
 // Create PO (Only Manager, Admins, and Pharmacist can create - NOT Staff)
 router.post(
-  '/orders',
+  '/purchase-orders',
   authorize(...ADMIN_ROLES, 'PHARMACIST'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const po = await poService.createPO(req.user!.hospitalId, req.user!.userId, req.body);
@@ -313,7 +313,7 @@ router.post(
 
 // Get PO details
 router.get(
-  '/orders/:id',
+  '/purchase-orders/:id',
   authorize(...PROCUREMENT_ROLES),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const po = await poService.getPOById(req.user!.hospitalId, req.params.id);
@@ -323,7 +323,7 @@ router.get(
 
 // Update PO (draft only - Only Manager, Admins, and Pharmacist can edit - NOT Staff)
 router.put(
-  '/orders/:id',
+  '/purchase-orders/:id',
   authorize(...ADMIN_ROLES, 'PHARMACIST'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const po = await poService.updatePO(req.user!.hospitalId, req.params.id, req.body);
@@ -333,7 +333,7 @@ router.put(
 
 // Submit PO for approval (Only Manager, Admins, and Pharmacist - NOT Staff)
 router.post(
-  '/orders/:id/submit',
+  '/purchase-orders/:id/submit',
   authorize(...ADMIN_ROLES, 'PHARMACIST'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const po = await poService.submitPO(req.user!.hospitalId, req.params.id);
@@ -343,7 +343,7 @@ router.post(
 
 // Approve PO (Only Manager and Admins - NOT Staff)
 router.post(
-  '/orders/:id/approve',
+  '/purchase-orders/:id/approve',
   authorize(...ADMIN_ROLES),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const po = await poService.approvePO(
@@ -358,7 +358,7 @@ router.post(
 
 // Send PO to supplier (Only Manager, Admins, and Pharmacist - NOT Staff)
 router.post(
-  '/orders/:id/send',
+  '/purchase-orders/:id/send',
   authorize(...ADMIN_ROLES, 'PHARMACIST'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const po = await poService.sendPOToSupplier(req.user!.hospitalId, req.params.id);
@@ -368,7 +368,7 @@ router.post(
 
 // Cancel PO
 router.post(
-  '/orders/:id/cancel',
+  '/purchase-orders/:id/cancel',
   authorize(...ADMIN_ROLES),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     if (!req.body.reason) {
@@ -386,7 +386,7 @@ router.post(
 
 // Amend PO
 router.post(
-  '/orders/:id/amend',
+  '/purchase-orders/:id/amend',
   authorize(...ADMIN_ROLES),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const po = await poService.amendPO(
@@ -401,7 +401,7 @@ router.post(
 
 // Generate PO PDF
 router.get(
-  '/orders/:id/pdf',
+  '/purchase-orders/:id/pdf',
   authorize(...PROCUREMENT_ROLES),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const pdfBuffer = await poService.generatePOPdf(req.user!.hospitalId, req.params.id);
@@ -421,7 +421,7 @@ router.get(
 
 // List GRNs
 router.get(
-  '/grn',
+  '/goods-receipts',
   authorize(...PROCUREMENT_ROLES),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await grnService.listGRNs(req.user!.hospitalId, {
@@ -437,7 +437,7 @@ router.get(
 
 // Create GRN (Staff can create, Manager can create)
 router.post(
-  '/grn',
+  '/goods-receipts',
   authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const grn = await grnService.createGRN(req.user!.hospitalId, req.user!.userId, req.body);
@@ -447,7 +447,7 @@ router.post(
 
 // Get GRN details
 router.get(
-  '/grn/:id',
+  '/goods-receipts/:id',
   authorize(...PROCUREMENT_ROLES),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const grn = await grnService.getGRNById(req.user!.hospitalId, req.params.id);
@@ -457,7 +457,7 @@ router.get(
 
 // Update GRN (draft only - Staff and Manager can edit)
 router.put(
-  '/grn/:id',
+  '/goods-receipts/:id',
   authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const grn = await grnService.updateGRN(req.user!.hospitalId, req.params.id, req.body);
@@ -467,7 +467,7 @@ router.put(
 
 // Approve GRN (triggers inventory update - Only Manager, Admins, and Pharmacist - NOT Staff)
 router.post(
-  '/grn/:id/approve',
+  '/goods-receipts/:id/approve',
   authorize(...ADMIN_ROLES, 'PHARMACIST'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const grn = await grnService.approveGRN(req.user!.hospitalId, req.params.id);
@@ -477,7 +477,7 @@ router.post(
 
 // Record inspection (Staff and Manager can inspect)
 router.post(
-  '/grn/:id/inspect',
+  '/goods-receipts/:id/inspect',
   authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const grn = await grnService.recordInspection(
