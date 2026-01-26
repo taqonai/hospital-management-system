@@ -1430,7 +1430,8 @@ model DrugInventory {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  drug Drug @relation(fields: [drugId], references: [id])
+  drug     Drug      @relation(fields: [drugId], references: [id])
+  supplier Supplier? @relation(fields: [supplierId], references: [id])
 
   @@map("drug_inventory")
 }
@@ -2346,6 +2347,7 @@ model HousekeepingInventory {
   updatedAt       DateTime  @updatedAt
 
   usageRecords    InventoryUsage[]
+  supplier        Supplier? @relation(fields: [supplierId], references: [id])
 
   @@unique([hospitalId, code])
   @@map("housekeeping_inventory")
@@ -6447,6 +6449,8 @@ model Supplier {
   contracts         SupplierContract[]
   invoices          SupplierInvoice[]
   returns           SupplierReturn[]
+  drugInventory     DrugInventory[]
+  housekeepingInventory HousekeepingInventory[]
 
   @@unique([hospitalId, code])
   @@index([hospitalId, category])

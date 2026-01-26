@@ -2,6 +2,25 @@ import prisma from '../config/database';
 import { NotFoundError, AppError } from '../middleware/errorHandler';
 import { PRUrgency, PRStatus, ProcurementItemType, ApprovalStatus } from '@prisma/client';
 
+// Helper function to create notification
+async function createNotification(userId: string, title: string, message: string, data?: any) {
+  try {
+    await prisma.notification.create({
+      data: {
+        userId,
+        title,
+        message,
+        type: 'SYSTEM',
+        data,
+        isRead: false,
+      },
+    });
+  } catch (error) {
+    console.error('[NOTIFICATION] Failed to create notification:', error);
+    // Don't throw - notification failure shouldn't block main operation
+  }
+}
+
 // ==================== Purchase Requisition CRUD ====================
 
 export async function createPR(hospitalId: string, userId: string, data: {
@@ -233,6 +252,7 @@ export async function submitPR(hospitalId: string, prId: string, userId: string)
       });
     } else {
       // Create approval records for each level
+      const approverIds: string[] = [];
       for (const level of workflow.levels) {
         if (level.approverId) {
           await tx.pRApproval.create({
@@ -243,12 +263,23 @@ export async function submitPR(hospitalId: string, prId: string, userId: string)
               status: 'PENDING_APPROVAL_STATUS',
             },
           });
+          approverIds.push(level.approverId);
         }
       }
       await tx.purchaseRequisition.update({
         where: { id: prId },
         data: { status: 'PENDING_APPROVAL' },
       });
+
+      // Send notifications to approvers
+      for (const approverId of approverIds) {
+        await createNotification(
+          approverId,
+          'New Purchase Requisition for Approval',
+          `Purchase Requisition ${pr.prNumber} has been submitted and requires your approval.`,
+          { prId, prNumber: pr.prNumber, action: 'PR_SUBMITTED' }
+        );
+      }
     }
 
     return updated;
@@ -297,7 +328,7 @@ export async function approvePR(hospitalId: string, prId: string, approverId: st
 
     const newStatus = pendingApprovals === 0 ? 'APPROVED_PR' : 'PENDING_APPROVAL';
 
-    return tx.purchaseRequisition.update({
+    const updated = await tx.purchaseRequisition.update({
       where: { id: prId },
       data: {
         status: newStatus as PRStatus,
@@ -315,6 +346,24 @@ export async function approvePR(hospitalId: string, prId: string, approverId: st
         },
       },
     });
+
+    // Send notification to requester when fully approved
+    if (newStatus === 'APPROVED_PR') {
+      const approver = await tx.user.findUnique({
+        where: { id: approverId },
+        select: { firstName: true, lastName: true },
+      });
+      const approverName = approver ? `${approver.firstName} ${approver.lastName}` : 'Admin';
+
+      await createNotification(
+        pr.requestedById,
+        'Purchase Requisition Approved',
+        `Your Purchase Requisition ${pr.prNumber} has been approved by ${approverName}.`,
+        { prId, prNumber: pr.prNumber, action: 'PR_APPROVED' }
+      );
+    }
+
+    return updated;
   });
 }
 

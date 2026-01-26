@@ -2,6 +2,25 @@ import prisma from '../config/database';
 import { NotFoundError, AppError } from '../middleware/errorHandler';
 import { POType, POStatus, PaymentTerms, ProcurementItemType, ApprovalStatus } from '@prisma/client';
 
+// Helper function to create notification
+async function createNotification(userId: string, title: string, message: string, data?: any) {
+  try {
+    await prisma.notification.create({
+      data: {
+        userId,
+        title,
+        message,
+        type: 'SYSTEM',
+        data,
+        isRead: false,
+      },
+    });
+  } catch (error) {
+    console.error('[NOTIFICATION] Failed to create notification:', error);
+    // Don't throw - notification failure shouldn't block main operation
+  }
+}
+
 // ==================== Purchase Order CRUD ====================
 
 export async function createPO(hospitalId: string, createdById: string, data: {
@@ -41,11 +60,52 @@ export async function createPO(hospitalId: string, createdById: string, data: {
   const seq = String(count + 1).padStart(5, '0');
   const poNumber = `PO-${hospital?.code || 'HOS'}-${year}-${seq}`;
 
-  // Calculate amounts
-  const items = data.items.map(item => ({
-    ...item,
-    totalPrice: item.orderedQty * item.unitPrice,
-  }));
+  // Check for active contracts with this supplier
+  const activeContracts = await prisma.supplierContract.findMany({
+    where: {
+      hospitalId,
+      supplierId: data.supplierId,
+      status: 'ACTIVE',
+      startDate: { lte: new Date() },
+      endDate: { gte: new Date() },
+    },
+    include: {
+      contractItems: true,
+    },
+  });
+
+  // Build a map of contracted rates by itemCode and itemName
+  const contractRatesMap = new Map<string, number>();
+  for (const contract of activeContracts) {
+    for (const contractItem of contract.contractItems) {
+      // Map by both code and name for flexible matching
+      if (contractItem.itemCode) {
+        contractRatesMap.set(contractItem.itemCode.toLowerCase(), Number(contractItem.agreedPrice));
+      }
+      contractRatesMap.set(contractItem.itemName.toLowerCase(), Number(contractItem.agreedPrice));
+    }
+  }
+
+  // Calculate amounts and apply contract rates where available
+  const items = data.items.map(item => {
+    let unitPrice = item.unitPrice;
+
+    // Try to find contracted rate
+    const codeMatch = item.itemCode ? contractRatesMap.get(item.itemCode.toLowerCase()) : undefined;
+    const nameMatch = contractRatesMap.get(item.itemName.toLowerCase());
+    const contractRate = codeMatch || nameMatch;
+
+    if (contractRate) {
+      unitPrice = contractRate;
+      console.log(`[PO] Applied contract rate ${contractRate} for item ${item.itemName}`);
+    }
+
+    return {
+      ...item,
+      unitPrice,
+      totalPrice: item.orderedQty * unitPrice,
+    };
+  });
   const subtotal = items.reduce((sum, i) => sum + i.totalPrice, 0);
   const discount = data.discount || 0;
   const tax = data.tax || 0;
@@ -218,6 +278,7 @@ export async function submitPO(hospitalId: string, poId: string) {
       include: { levels: { orderBy: { level: 'asc' } } },
     });
 
+    const approverIds: string[] = [];
     if (workflow?.levels.length) {
       for (const level of workflow.levels) {
         if (level.approverId) {
@@ -229,11 +290,12 @@ export async function submitPO(hospitalId: string, poId: string) {
               status: 'PENDING_APPROVAL_STATUS',
             },
           });
+          approverIds.push(level.approverId);
         }
       }
     }
 
-    return tx.purchaseOrder.update({
+    const updated = await tx.purchaseOrder.update({
       where: { id: poId },
       data: { status: 'PENDING_APPROVAL_PO' },
       include: {
@@ -241,6 +303,18 @@ export async function submitPO(hospitalId: string, poId: string) {
         supplier: { select: { id: true, companyName: true, code: true } },
       },
     });
+
+    // Send notifications to approvers
+    for (const approverId of approverIds) {
+      await createNotification(
+        approverId,
+        'New Purchase Order for Approval',
+        `Purchase Order ${po.poNumber} has been submitted and requires your approval.`,
+        { poId, poNumber: po.poNumber, action: 'PO_SUBMITTED' }
+      );
+    }
+
+    return updated;
   });
 }
 
@@ -294,6 +368,22 @@ export async function approvePO(hospitalId: string, poId: string, approverId: st
         supplier: { select: { id: true, companyName: true, code: true } },
       },
     });
+
+    // Send notification to creator when fully approved
+    if (newStatus === 'APPROVED_PO') {
+      const approver = await tx.user.findUnique({
+        where: { id: approverId },
+        select: { firstName: true, lastName: true },
+      });
+      const approverName = approver ? `${approver.firstName} ${approver.lastName}` : 'Admin';
+
+      await createNotification(
+        po.createdById,
+        'Purchase Order Approved',
+        `Purchase Order ${po.poNumber} has been approved by ${approverName}.`,
+        { poId, poNumber: po.poNumber, action: 'PO_APPROVED' }
+      );
+    }
 
     // Update PR status if linked
     if (updated.prId && newStatus === 'APPROVED_PO') {
@@ -448,35 +538,315 @@ export async function amendPO(hospitalId: string, poId: string, createdById: str
   });
 }
 
-// ==================== PO PDF Generation (Stub) ====================
+// ==================== PO PDF Generation ====================
 
 export async function generatePOPdf(hospitalId: string, poId: string) {
   const po = await getPOById(hospitalId, poId);
 
-  // Stub: In production, use a PDF library (e.g., pdfkit, puppeteer)
-  const pdfData = {
-    poNumber: po.poNumber,
-    supplier: po.supplier,
-    items: po.items.map(i => ({
-      itemName: i.itemName,
-      itemCode: i.itemCode,
-      unit: i.unit,
-      quantity: i.orderedQty,
-      unitPrice: Number(i.unitPrice),
-      total: Number(i.totalPrice),
-    })),
-    subtotal: Number(po.subtotal),
-    discount: Number(po.discount),
-    tax: Number(po.tax),
-    totalAmount: Number(po.totalAmount),
-    paymentTerms: po.paymentTerms,
-    expectedDate: po.expectedDate,
-    notes: po.notes,
-    generatedAt: new Date().toISOString(),
-  };
+  // Get hospital details
+  const hospital = await prisma.hospital.findUnique({
+    where: { id: hospitalId },
+    select: { name: true, address: true, phone: true, email: true, code: true },
+  });
+
+  // Generate HTML that can be converted to PDF on frontend or via puppeteer
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Purchase Order - ${po.poNumber}</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 40px;
+      color: #333;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+      border-bottom: 3px solid #2563eb;
+      padding-bottom: 20px;
+    }
+    .header h1 {
+      margin: 0;
+      color: #2563eb;
+      font-size: 28px;
+    }
+    .header p {
+      margin: 5px 0;
+      color: #666;
+    }
+    .section {
+      margin-bottom: 25px;
+    }
+    .section-title {
+      font-weight: bold;
+      font-size: 16px;
+      margin-bottom: 10px;
+      color: #2563eb;
+      border-bottom: 2px solid #e5e7eb;
+      padding-bottom: 5px;
+    }
+    .info-row {
+      display: flex;
+      margin-bottom: 8px;
+    }
+    .info-label {
+      font-weight: bold;
+      width: 150px;
+    }
+    .info-value {
+      flex: 1;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    th {
+      background-color: #2563eb;
+      color: white;
+      padding: 12px;
+      text-align: left;
+      font-weight: bold;
+    }
+    td {
+      padding: 10px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    tr:nth-child(even) {
+      background-color: #f9fafb;
+    }
+    .text-right {
+      text-align: right;
+    }
+    .totals {
+      margin-top: 20px;
+      float: right;
+      width: 300px;
+    }
+    .totals table {
+      margin-top: 0;
+    }
+    .totals td {
+      padding: 8px;
+    }
+    .totals .total-row {
+      font-weight: bold;
+      font-size: 16px;
+      background-color: #2563eb;
+      color: white;
+    }
+    .footer {
+      clear: both;
+      margin-top: 50px;
+      padding-top: 20px;
+      border-top: 2px solid #e5e7eb;
+      font-size: 12px;
+      color: #666;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 5px 15px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: bold;
+      margin-left: 10px;
+    }
+    .status-approved {
+      background-color: #10b981;
+      color: white;
+    }
+    .status-pending {
+      background-color: #f59e0b;
+      color: white;
+    }
+    .status-draft {
+      background-color: #6b7280;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>${hospital?.name || 'Hospital'}</h1>
+    <p>${hospital?.address || ''}</p>
+    <p>Phone: ${hospital?.phone || ''} | Email: ${hospital?.email || ''}</p>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Purchase Order Details</div>
+    <div class="info-row">
+      <div class="info-label">PO Number:</div>
+      <div class="info-value">
+        ${po.poNumber}
+        <span class="status-badge status-${po.status.toLowerCase().replace('_', '-')}">${po.status.replace(/_/g, ' ')}</span>
+      </div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Order Date:</div>
+      <div class="info-value">${new Date(po.orderDate).toLocaleDateString()}</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Expected Delivery:</div>
+      <div class="info-value">${po.expectedDate ? new Date(po.expectedDate).toLocaleDateString() : 'N/A'}</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Payment Terms:</div>
+      <div class="info-value">${po.paymentTerms.replace(/_/g, ' ')}</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Supplier Information</div>
+    <div class="info-row">
+      <div class="info-label">Company:</div>
+      <div class="info-value">${po.supplier.companyName}</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Contact Person:</div>
+      <div class="info-value">${po.supplier.contactPerson || 'N/A'}</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Email:</div>
+      <div class="info-value">${po.supplier.email || 'N/A'}</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Phone:</div>
+      <div class="info-value">${po.supplier.phone || 'N/A'}</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Line Items</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Item Code</th>
+          <th>Item Name</th>
+          <th>Unit</th>
+          <th class="text-right">Quantity</th>
+          <th class="text-right">Unit Price</th>
+          <th class="text-right">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${po.items.map(item => `
+        <tr>
+          <td>${item.itemCode || 'N/A'}</td>
+          <td>${item.itemName}</td>
+          <td>${item.unit}</td>
+          <td class="text-right">${item.orderedQty}</td>
+          <td class="text-right">${Number(item.unitPrice).toFixed(2)}</td>
+          <td class="text-right">${Number(item.totalPrice).toFixed(2)}</td>
+        </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="totals">
+    <table>
+      <tr>
+        <td>Subtotal:</td>
+        <td class="text-right">${Number(po.subtotal).toFixed(2)}</td>
+      </tr>
+      <tr>
+        <td>Discount:</td>
+        <td class="text-right">-${Number(po.discount).toFixed(2)}</td>
+      </tr>
+      <tr>
+        <td>Tax:</td>
+        <td class="text-right">${Number(po.tax).toFixed(2)}</td>
+      </tr>
+      <tr class="total-row">
+        <td>Total Amount:</td>
+        <td class="text-right">${Number(po.totalAmount).toFixed(2)}</td>
+      </tr>
+    </table>
+  </div>
+
+  ${po.deliveryAddress ? `
+  <div class="section" style="clear: both;">
+    <div class="section-title">Delivery Address</div>
+    <p>${po.deliveryAddress}</p>
+  </div>
+  ` : ''}
+
+  ${po.specialInstructions ? `
+  <div class="section">
+    <div class="section-title">Special Instructions</div>
+    <p>${po.specialInstructions}</p>
+  </div>
+  ` : ''}
+
+  ${po.notes ? `
+  <div class="section">
+    <div class="section-title">Notes</div>
+    <p>${po.notes}</p>
+  </div>
+  ` : ''}
+
+  ${po.approvals && po.approvals.length > 0 ? `
+  <div class="section">
+    <div class="section-title">Approval History</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Level</th>
+          <th>Approver</th>
+          <th>Status</th>
+          <th>Date</th>
+          <th>Comments</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${po.approvals.map(approval => `
+        <tr>
+          <td>${approval.level}</td>
+          <td>${approval.approver.firstName} ${approval.approver.lastName}</td>
+          <td>${approval.status.replace(/_/g, ' ')}</td>
+          <td>${approval.actedAt ? new Date(approval.actedAt).toLocaleDateString() : 'Pending'}</td>
+          <td>${approval.comments || '-'}</td>
+        </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  </div>
+  ` : ''}
+
+  <div class="footer">
+    <p>This is a computer-generated document. No signature is required.</p>
+    <p>Generated on: ${new Date().toLocaleString()}</p>
+    <p>Purchase Order Reference: ${po.poNumber}</p>
+  </div>
+</body>
+</html>
+  `;
 
   return {
-    message: 'PDF generation stub - integrate with PDF library',
-    data: pdfData,
+    message: 'PO PDF HTML generated successfully',
+    html,
+    data: {
+      poNumber: po.poNumber,
+      supplier: po.supplier,
+      items: po.items.map(i => ({
+        itemName: i.itemName,
+        itemCode: i.itemCode,
+        unit: i.unit,
+        quantity: i.orderedQty,
+        unitPrice: Number(i.unitPrice),
+        total: Number(i.totalPrice),
+      })),
+      subtotal: Number(po.subtotal),
+      discount: Number(po.discount),
+      tax: Number(po.tax),
+      totalAmount: Number(po.totalAmount),
+      paymentTerms: po.paymentTerms,
+      expectedDate: po.expectedDate,
+      notes: po.notes,
+      generatedAt: new Date().toISOString(),
+    },
   };
 }

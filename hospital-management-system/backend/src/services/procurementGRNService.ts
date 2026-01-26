@@ -290,7 +290,45 @@ export async function approveGRN(hospitalId: string, grnId: string) {
           break;
         }
 
-        // LAB_CONSUMABLE, ASSET, OTHER - no automatic inventory update
+        case 'ASSET': {
+          // Create asset record for asset-type items
+          if (poItem.itemReferenceId) {
+            // Generate asset code
+            const assetYear = new Date().getFullYear();
+            const assetMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+            const assetDay = String(new Date().getDate()).padStart(2, '0');
+            const assetCount = await tx.asset.count({
+              where: { hospitalId },
+            });
+            const assetSeq = String(assetCount + 1).padStart(3, '0');
+            const assetCode = `AST-${assetYear}${assetMonth}${assetDay}-${assetSeq}`;
+
+            // Get supplier info
+            const supplier = await tx.supplier.findUnique({
+              where: { id: grn.purchaseOrder.supplierId },
+              select: { companyName: true },
+            });
+
+            await tx.asset.create({
+              data: {
+                hospitalId,
+                assetCode,
+                name: poItem.itemName,
+                category: 'MEDICAL_EQUIPMENT', // Default category, can be customized
+                description: poItem.notes,
+                purchaseDate: new Date(),
+                purchasePrice: Number(poItem.unitPrice) * grnItem.acceptedQty,
+                vendor: supplier?.companyName,
+                serialNumber: grnItem.batchNumber, // Using batch number as serial for tracking
+                status: 'ACTIVE',
+                condition: 'GOOD',
+              },
+            });
+          }
+          break;
+        }
+
+        // LAB_CONSUMABLE, OTHER - no automatic inventory update
         default:
           break;
       }
