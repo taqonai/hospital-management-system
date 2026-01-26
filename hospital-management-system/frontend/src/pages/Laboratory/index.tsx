@@ -36,17 +36,26 @@ interface LabOrder {
     lastName: string;
     mrn: string;
   };
-  orderedBy: {
+  orderedBy?: any;
+  orderedByUser?: {
     firstName: string;
     lastName: string;
+    role?: string;
   };
   tests: Array<{
     id: string;
-    test: {
+    test?: {
+      name: string;
+      code: string;
+    };
+    labTest?: {
       name: string;
       code: string;
     };
     status: string;
+    labTestId?: string;
+    result?: string;
+    resultValue?: string;
   }>;
   status: string;
   priority: string;
