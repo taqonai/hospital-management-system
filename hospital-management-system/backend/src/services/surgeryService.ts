@@ -210,11 +210,26 @@ export class SurgeryService {
       },
     });
 
-    // Group by OT
+    // Initialize default OTs (OT-1 through OT-4)
+    const defaultOTs = ['OT-1', 'OT-2', 'OT-3', 'OT-4'];
     const otStatus: Record<string, any> = {};
+
+    defaultOTs.forEach(otName => {
+      otStatus[otName] = {
+        id: otName,
+        name: otName,
+        status: 'AVAILABLE',
+        currentSurgery: null,
+        upcomingSurgeries: [],
+        completedSurgeries: [],
+      };
+    });
+
+    // Update OT status based on surgeries
     surgeries.forEach(s => {
       if (!otStatus[s.operationTheatre]) {
         otStatus[s.operationTheatre] = {
+          id: s.operationTheatre,
           name: s.operationTheatre,
           status: 'AVAILABLE',
           currentSurgery: null,
@@ -230,6 +245,9 @@ export class SurgeryService {
         otStatus[s.operationTheatre].completedSurgeries.push(s);
       } else if (['SCHEDULED', 'IN_PREPARATION'].includes(s.status)) {
         otStatus[s.operationTheatre].upcomingSurgeries.push(s);
+        if (otStatus[s.operationTheatre].status === 'AVAILABLE') {
+          otStatus[s.operationTheatre].status = 'PREPARING';
+        }
       }
     });
 
