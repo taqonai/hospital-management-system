@@ -55,6 +55,7 @@ import nutritionAiRoutes from './nutritionAiRoutes';
 import crmRoutes from './crmRoutes';
 import noShowRoutes from './noShowRoutes';
 import referralRoutes from './referralRoutes';
+import whatsappBotRoutes from './whatsappBotRoutes';
 
 const router = Router();
 
@@ -71,6 +72,7 @@ router.get('/health', (req, res) => {
 router.use('/public', publicRoutes);
 router.use('/kiosk', kioskRoutes);
 router.use('/patient-auth', patientAuthRoutes);
+router.use('/whatsapp-bot', whatsappBotRoutes);
 
 // API routes (authentication required)
 router.use('/auth', authRoutes);

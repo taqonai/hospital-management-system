@@ -24,6 +24,7 @@ model Hospital {
   zipCode         String
   phone           String
   email           String
+  whatsappNumber  String?
   website         String?
   logo            String?
   licenseNumber   String
@@ -514,6 +515,7 @@ model Patient {
   referrals            ConsultantReferral[]
 
   @@unique([hospitalId, mrn])
+  @@unique([hospitalId, phone])
   @@map("patients")
 }
 
@@ -6349,4 +6351,24 @@ model ConsultantReferral {
   @@index([patientId])
   @@index([targetDepartmentId, status])
   @@map("consultant_referrals")
+}
+
+// ==================== WHATSAPP BOT ====================
+
+model WhatsAppSession {
+  id                String   @id @default(uuid())
+  phoneNumber       String   // User's WhatsApp number (E.164 format)
+  hospitalId        String?  // Selected hospital ID
+  patientId         String?  // Linked patient ID after registration/login
+  conversationState Json     // Current conversation state (step, collected data, context)
+  lastMessageAt     DateTime @default(now())
+  expiresAt         DateTime // Session expires after 24 hours
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([phoneNumber])
+  @@index([expiresAt])
+  @@index([hospitalId])
+  @@index([patientId])
+  @@map("whatsapp_sessions")
 }
