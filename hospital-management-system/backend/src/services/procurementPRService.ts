@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { NotFoundError, AppError } from '../middleware/errorHandler';
 import { PRUrgency, PRStatus, ProcurementItemType, ApprovalStatus } from '@prisma/client';
+import { sendEmail } from './emailService';
 
 // Helper function to create notification
 async function createNotification(userId: string, title: string, message: string, data?: any) {
@@ -18,6 +19,29 @@ async function createNotification(userId: string, title: string, message: string
   } catch (error) {
     console.error('[NOTIFICATION] Failed to create notification:', error);
     // Don't throw - notification failure shouldn't block main operation
+  }
+}
+
+// Helper function to send email notification
+async function sendEmailNotification(userId: string, subject: string, htmlContent: string) {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, firstName: true, lastName: true },
+    });
+
+    if (user?.email) {
+      await sendEmail({
+        to: user.email,
+        subject,
+        html: htmlContent,
+        text: htmlContent.replace(/<[^>]*>/g, ''), // Strip HTML for plain text version
+      });
+      console.log(`[EMAIL] Sent to ${user.email}: ${subject}`);
+    }
+  } catch (error) {
+    console.error('[EMAIL] Failed to send email:', error);
+    // Don't throw - email failure shouldn't block main operation
   }
 }
 
@@ -279,6 +303,20 @@ export async function submitPR(hospitalId: string, prId: string, userId: string)
           `Purchase Requisition ${pr.prNumber} has been submitted and requires your approval.`,
           { prId, prNumber: pr.prNumber, action: 'PR_SUBMITTED' }
         );
+
+        // Send email notification
+        const emailHtml = `
+          <h2>New Purchase Requisition for Approval</h2>
+          <p>A new Purchase Requisition has been submitted and requires your approval.</p>
+          <p><strong>PR Number:</strong> ${pr.prNumber}</p>
+          <p><strong>Requested By:</strong> ${updated.requestedBy.firstName} ${updated.requestedBy.lastName}</p>
+          <p><strong>Department:</strong> ${updated.department.name}</p>
+          <p><strong>Urgency:</strong> ${pr.urgency}</p>
+          <p><strong>Total Estimated:</strong> ${Number(pr.totalEstimated).toFixed(2)}</p>
+          <p><strong>Items:</strong> ${updated.items.length}</p>
+          <p>Please log in to the procurement system to review and approve this purchase requisition.</p>
+        `;
+        await sendEmailNotification(approverId, `New Purchase Requisition for Approval - ${pr.prNumber}`, emailHtml);
       }
     }
 
@@ -361,6 +399,18 @@ export async function approvePR(hospitalId: string, prId: string, approverId: st
         `Your Purchase Requisition ${pr.prNumber} has been approved by ${approverName}.`,
         { prId, prNumber: pr.prNumber, action: 'PR_APPROVED' }
       );
+
+      // Send email notification
+      const emailHtml = `
+        <h2>Purchase Requisition Approved</h2>
+        <p>Your Purchase Requisition has been fully approved.</p>
+        <p><strong>PR Number:</strong> ${pr.prNumber}</p>
+        <p><strong>Approved By:</strong> ${approverName}</p>
+        <p><strong>Total Estimated:</strong> ${Number(updated.totalEstimated).toFixed(2)}</p>
+        <p><strong>Department:</strong> ${updated.department.name}</p>
+        <p>You can now proceed to create a Purchase Order based on this requisition.</p>
+      `;
+      await sendEmailNotification(pr.requestedById, `Purchase Requisition Approved - ${pr.prNumber}`, emailHtml);
     }
 
     return updated;

@@ -1,8 +1,9 @@
 import prisma from '../config/database';
 import { NotFoundError, AppError } from '../middleware/errorHandler';
 import { POType, POStatus, PaymentTerms, ProcurementItemType, ApprovalStatus } from '@prisma/client';
+import { sendEmail } from './emailService';
 
-// Helper function to create notification
+// Helper function to create notification and send email
 async function createNotification(userId: string, title: string, message: string, data?: any) {
   try {
     await prisma.notification.create({
@@ -18,6 +19,29 @@ async function createNotification(userId: string, title: string, message: string
   } catch (error) {
     console.error('[NOTIFICATION] Failed to create notification:', error);
     // Don't throw - notification failure shouldn't block main operation
+  }
+}
+
+// Helper function to send email notification
+async function sendEmailNotification(userId: string, subject: string, htmlContent: string) {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, firstName: true, lastName: true },
+    });
+
+    if (user?.email) {
+      await sendEmail({
+        to: user.email,
+        subject,
+        html: htmlContent,
+        text: htmlContent.replace(/<[^>]*>/g, ''), // Strip HTML for plain text version
+      });
+      console.log(`[EMAIL] Sent to ${user.email}: ${subject}`);
+    }
+  } catch (error) {
+    console.error('[EMAIL] Failed to send email:', error);
+    // Don't throw - email failure shouldn't block main operation
   }
 }
 
@@ -312,6 +336,18 @@ export async function submitPO(hospitalId: string, poId: string) {
         `Purchase Order ${po.poNumber} has been submitted and requires your approval.`,
         { poId, poNumber: po.poNumber, action: 'PO_SUBMITTED' }
       );
+
+      // Send email notification
+      const emailHtml = `
+        <h2>New Purchase Order for Approval</h2>
+        <p>A new Purchase Order has been submitted and requires your approval.</p>
+        <p><strong>PO Number:</strong> ${po.poNumber}</p>
+        <p><strong>Total Amount:</strong> ${Number(updated.totalAmount).toFixed(2)}</p>
+        <p><strong>Supplier:</strong> ${updated.supplier.companyName}</p>
+        <p><strong>Items:</strong> ${updated.items.length}</p>
+        <p>Please log in to the procurement system to review and approve this purchase order.</p>
+      `;
+      await sendEmailNotification(approverId, `New Purchase Order for Approval - ${po.poNumber}`, emailHtml);
     }
 
     return updated;
@@ -383,6 +419,18 @@ export async function approvePO(hospitalId: string, poId: string, approverId: st
         `Purchase Order ${po.poNumber} has been approved by ${approverName}.`,
         { poId, poNumber: po.poNumber, action: 'PO_APPROVED' }
       );
+
+      // Send email notification
+      const emailHtml = `
+        <h2>Purchase Order Approved</h2>
+        <p>Your Purchase Order has been fully approved and is ready to be sent to the supplier.</p>
+        <p><strong>PO Number:</strong> ${po.poNumber}</p>
+        <p><strong>Approved By:</strong> ${approverName}</p>
+        <p><strong>Total Amount:</strong> ${Number(updated.totalAmount).toFixed(2)}</p>
+        <p><strong>Supplier:</strong> ${updated.supplier.companyName}</p>
+        <p>You can now proceed to send this purchase order to the supplier.</p>
+      `;
+      await sendEmailNotification(po.createdById, `Purchase Order Approved - ${po.poNumber}`, emailHtml);
     }
 
     // Update PR status if linked
@@ -540,7 +588,7 @@ export async function amendPO(hospitalId: string, poId: string, createdById: str
 
 // ==================== PO PDF Generation ====================
 
-export async function generatePOPdf(hospitalId: string, poId: string) {
+export async function generatePOPdf(hospitalId: string, poId: string): Promise<Buffer> {
   const po = await getPOById(hospitalId, poId);
 
   // Get hospital details
@@ -549,304 +597,170 @@ export async function generatePOPdf(hospitalId: string, poId: string) {
     select: { name: true, address: true, phone: true, email: true, code: true },
   });
 
-  // Generate HTML that can be converted to PDF on frontend or via puppeteer
-  const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Purchase Order - ${po.poNumber}</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 40px;
-      color: #333;
-    }
-    .header {
-      text-align: center;
-      margin-bottom: 30px;
-      border-bottom: 3px solid #2563eb;
-      padding-bottom: 20px;
-    }
-    .header h1 {
-      margin: 0;
-      color: #2563eb;
-      font-size: 28px;
-    }
-    .header p {
-      margin: 5px 0;
-      color: #666;
-    }
-    .section {
-      margin-bottom: 25px;
-    }
-    .section-title {
-      font-weight: bold;
-      font-size: 16px;
-      margin-bottom: 10px;
-      color: #2563eb;
-      border-bottom: 2px solid #e5e7eb;
-      padding-bottom: 5px;
-    }
-    .info-row {
-      display: flex;
-      margin-bottom: 8px;
-    }
-    .info-label {
-      font-weight: bold;
-      width: 150px;
-    }
-    .info-value {
-      flex: 1;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 15px;
-    }
-    th {
-      background-color: #2563eb;
-      color: white;
-      padding: 12px;
-      text-align: left;
-      font-weight: bold;
-    }
-    td {
-      padding: 10px;
-      border-bottom: 1px solid #e5e7eb;
-    }
-    tr:nth-child(even) {
-      background-color: #f9fafb;
-    }
-    .text-right {
-      text-align: right;
-    }
-    .totals {
-      margin-top: 20px;
-      float: right;
-      width: 300px;
-    }
-    .totals table {
-      margin-top: 0;
-    }
-    .totals td {
-      padding: 8px;
-    }
-    .totals .total-row {
-      font-weight: bold;
-      font-size: 16px;
-      background-color: #2563eb;
-      color: white;
-    }
-    .footer {
-      clear: both;
-      margin-top: 50px;
-      padding-top: 20px;
-      border-top: 2px solid #e5e7eb;
-      font-size: 12px;
-      color: #666;
-    }
-    .status-badge {
-      display: inline-block;
-      padding: 5px 15px;
-      border-radius: 20px;
-      font-size: 14px;
-      font-weight: bold;
-      margin-left: 10px;
-    }
-    .status-approved {
-      background-color: #10b981;
-      color: white;
-    }
-    .status-pending {
-      background-color: #f59e0b;
-      color: white;
-    }
-    .status-draft {
-      background-color: #6b7280;
-      color: white;
-    }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <h1>${hospital?.name || 'Hospital'}</h1>
-    <p>${hospital?.address || ''}</p>
-    <p>Phone: ${hospital?.phone || ''} | Email: ${hospital?.email || ''}</p>
-  </div>
+  // Import PDFKit dynamically
+  const PDFDocument = require('pdfkit');
 
-  <div class="section">
-    <div class="section-title">Purchase Order Details</div>
-    <div class="info-row">
-      <div class="info-label">PO Number:</div>
-      <div class="info-value">
-        ${po.poNumber}
-        <span class="status-badge status-${po.status.toLowerCase().replace('_', '-')}">${po.status.replace(/_/g, ' ')}</span>
-      </div>
-    </div>
-    <div class="info-row">
-      <div class="info-label">Order Date:</div>
-      <div class="info-value">${new Date(po.orderDate).toLocaleDateString()}</div>
-    </div>
-    <div class="info-row">
-      <div class="info-label">Expected Delivery:</div>
-      <div class="info-value">${po.expectedDate ? new Date(po.expectedDate).toLocaleDateString() : 'N/A'}</div>
-    </div>
-    <div class="info-row">
-      <div class="info-label">Payment Terms:</div>
-      <div class="info-value">${po.paymentTerms.replace(/_/g, ' ')}</div>
-    </div>
-  </div>
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ size: 'A4', margin: 50 });
+      const chunks: Buffer[] = [];
 
-  <div class="section">
-    <div class="section-title">Supplier Information</div>
-    <div class="info-row">
-      <div class="info-label">Company:</div>
-      <div class="info-value">${po.supplier.companyName}</div>
-    </div>
-    <div class="info-row">
-      <div class="info-label">Contact Person:</div>
-      <div class="info-value">${po.supplier.contactPerson || 'N/A'}</div>
-    </div>
-    <div class="info-row">
-      <div class="info-label">Email:</div>
-      <div class="info-value">${po.supplier.email || 'N/A'}</div>
-    </div>
-    <div class="info-row">
-      <div class="info-label">Phone:</div>
-      <div class="info-value">${po.supplier.phone || 'N/A'}</div>
-    </div>
-  </div>
+      // Collect PDF data
+      doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
 
-  <div class="section">
-    <div class="section-title">Line Items</div>
-    <table>
-      <thead>
-        <tr>
-          <th>Item Code</th>
-          <th>Item Name</th>
-          <th>Unit</th>
-          <th class="text-right">Quantity</th>
-          <th class="text-right">Unit Price</th>
-          <th class="text-right">Total</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${po.items.map(item => `
-        <tr>
-          <td>${item.itemCode || 'N/A'}</td>
-          <td>${item.itemName}</td>
-          <td>${item.unit}</td>
-          <td class="text-right">${item.orderedQty}</td>
-          <td class="text-right">${Number(item.unitPrice).toFixed(2)}</td>
-          <td class="text-right">${Number(item.totalPrice).toFixed(2)}</td>
-        </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  </div>
+      // Define colors
+      const primaryColor = '#2563eb';
+      const textColor = '#333333';
+      const grayColor = '#666666';
+      const lightGray = '#e5e7eb';
 
-  <div class="totals">
-    <table>
-      <tr>
-        <td>Subtotal:</td>
-        <td class="text-right">${Number(po.subtotal).toFixed(2)}</td>
-      </tr>
-      <tr>
-        <td>Discount:</td>
-        <td class="text-right">-${Number(po.discount).toFixed(2)}</td>
-      </tr>
-      <tr>
-        <td>Tax:</td>
-        <td class="text-right">${Number(po.tax).toFixed(2)}</td>
-      </tr>
-      <tr class="total-row">
-        <td>Total Amount:</td>
-        <td class="text-right">${Number(po.totalAmount).toFixed(2)}</td>
-      </tr>
-    </table>
-  </div>
+      // Header with hospital info
+      doc.fontSize(24).fillColor(primaryColor).text(hospital?.name || 'Hospital', { align: 'center' });
+      doc.fontSize(10).fillColor(grayColor);
+      if (hospital?.address) doc.text(hospital.address, { align: 'center' });
+      doc.text(`Phone: ${hospital?.phone || 'N/A'} | Email: ${hospital?.email || 'N/A'}`, { align: 'center' });
 
-  ${po.deliveryAddress ? `
-  <div class="section" style="clear: both;">
-    <div class="section-title">Delivery Address</div>
-    <p>${po.deliveryAddress}</p>
-  </div>
-  ` : ''}
+      doc.moveTo(50, doc.y + 10).lineTo(545, doc.y + 10).strokeColor(primaryColor).lineWidth(2).stroke();
+      doc.moveDown(2);
 
-  ${po.specialInstructions ? `
-  <div class="section">
-    <div class="section-title">Special Instructions</div>
-    <p>${po.specialInstructions}</p>
-  </div>
-  ` : ''}
+      // Title
+      doc.fontSize(18).fillColor(primaryColor).text('PURCHASE ORDER', { align: 'center' });
+      doc.moveDown(1);
 
-  ${po.notes ? `
-  <div class="section">
-    <div class="section-title">Notes</div>
-    <p>${po.notes}</p>
-  </div>
-  ` : ''}
+      // PO Details section
+      doc.fontSize(12).fillColor(primaryColor).text('Purchase Order Details', { underline: true });
+      doc.moveDown(0.5);
+      doc.fontSize(10).fillColor(textColor);
 
-  ${po.approvals && po.approvals.length > 0 ? `
-  <div class="section">
-    <div class="section-title">Approval History</div>
-    <table>
-      <thead>
-        <tr>
-          <th>Level</th>
-          <th>Approver</th>
-          <th>Status</th>
-          <th>Date</th>
-          <th>Comments</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${po.approvals.map(approval => `
-        <tr>
-          <td>${approval.level}</td>
-          <td>${approval.approver.firstName} ${approval.approver.lastName}</td>
-          <td>${approval.status.replace(/_/g, ' ')}</td>
-          <td>${approval.actedAt ? new Date(approval.actedAt).toLocaleDateString() : 'Pending'}</td>
-          <td>${approval.comments || '-'}</td>
-        </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  </div>
-  ` : ''}
+      const startY = doc.y;
+      doc.text(`PO Number: `, 50, startY, { continued: true }).font('Helvetica-Bold').text(po.poNumber);
+      doc.font('Helvetica').text(`Status: `, 50, doc.y, { continued: true }).font('Helvetica-Bold').text(po.status.replace(/_/g, ' '));
+      doc.font('Helvetica').text(`Order Date: ${new Date(po.orderDate).toLocaleDateString()}`, 50, doc.y);
+      doc.text(`Expected Delivery: ${po.expectedDate ? new Date(po.expectedDate).toLocaleDateString() : 'N/A'}`, 50, doc.y);
+      doc.text(`Payment Terms: ${po.paymentTerms.replace(/_/g, ' ')}`, 50, doc.y);
+      doc.moveDown(1.5);
 
-  <div class="footer">
-    <p>This is a computer-generated document. No signature is required.</p>
-    <p>Generated on: ${new Date().toLocaleString()}</p>
-    <p>Purchase Order Reference: ${po.poNumber}</p>
-  </div>
-</body>
-</html>
-  `;
+      // Supplier Information
+      doc.fontSize(12).fillColor(primaryColor).text('Supplier Information', { underline: true });
+      doc.moveDown(0.5);
+      doc.fontSize(10).fillColor(textColor);
+      doc.text(`Company: ${po.supplier.companyName}`, 50, doc.y);
+      if (po.supplier.contactPerson) doc.text(`Contact Person: ${po.supplier.contactPerson}`, 50, doc.y);
+      if (po.supplier.email) doc.text(`Email: ${po.supplier.email}`, 50, doc.y);
+      if (po.supplier.phone) doc.text(`Phone: ${po.supplier.phone}`, 50, doc.y);
+      doc.moveDown(1.5);
 
-  return {
-    message: 'PO PDF HTML generated successfully',
-    html,
-    data: {
-      poNumber: po.poNumber,
-      supplier: po.supplier,
-      items: po.items.map(i => ({
-        itemName: i.itemName,
-        itemCode: i.itemCode,
-        unit: i.unit,
-        quantity: i.orderedQty,
-        unitPrice: Number(i.unitPrice),
-        total: Number(i.totalPrice),
-      })),
-      subtotal: Number(po.subtotal),
-      discount: Number(po.discount),
-      tax: Number(po.tax),
-      totalAmount: Number(po.totalAmount),
-      paymentTerms: po.paymentTerms,
-      expectedDate: po.expectedDate,
-      notes: po.notes,
-      generatedAt: new Date().toISOString(),
-    },
-  };
+      // Line Items Table
+      doc.fontSize(12).fillColor(primaryColor).text('Line Items', { underline: true });
+      doc.moveDown(0.5);
+
+      // Table header
+      const tableTop = doc.y;
+      const colWidths = [70, 150, 60, 60, 70, 80];
+      const colPositions = [50, 120, 270, 330, 390, 460];
+
+      doc.rect(50, tableTop, 495, 25).fillColor(primaryColor).fill();
+      doc.fontSize(9).fillColor('white');
+      doc.text('Item Code', colPositions[0] + 5, tableTop + 8, { width: colWidths[0] });
+      doc.text('Item Name', colPositions[1] + 5, tableTop + 8, { width: colWidths[1] });
+      doc.text('Unit', colPositions[2] + 5, tableTop + 8, { width: colWidths[2] });
+      doc.text('Quantity', colPositions[3] + 5, tableTop + 8, { width: colWidths[3], align: 'right' });
+      doc.text('Unit Price', colPositions[4] + 5, tableTop + 8, { width: colWidths[4], align: 'right' });
+      doc.text('Total', colPositions[5] + 5, tableTop + 8, { width: colWidths[5], align: 'right' });
+
+      // Table rows
+      let y = tableTop + 25;
+      doc.fillColor(textColor).fontSize(9);
+
+      for (const item of po.items) {
+        // Check if we need a new page
+        if (y > 700) {
+          doc.addPage();
+          y = 50;
+        }
+
+        doc.text(item.itemCode || 'N/A', colPositions[0] + 5, y, { width: colWidths[0] });
+        doc.text(item.itemName, colPositions[1] + 5, y, { width: colWidths[1] });
+        doc.text(item.unit, colPositions[2] + 5, y, { width: colWidths[2] });
+        doc.text(String(item.orderedQty), colPositions[3] + 5, y, { width: colWidths[3], align: 'right' });
+        doc.text(Number(item.unitPrice).toFixed(2), colPositions[4] + 5, y, { width: colWidths[4], align: 'right' });
+        doc.text(Number(item.totalPrice).toFixed(2), colPositions[5] + 5, y, { width: colWidths[5], align: 'right' });
+
+        y += 20;
+        doc.moveTo(50, y).lineTo(545, y).strokeColor(lightGray).lineWidth(0.5).stroke();
+      }
+
+      // Totals
+      doc.moveDown(2);
+      const totalsX = 400;
+      doc.fontSize(10).fillColor(textColor);
+      doc.text(`Subtotal:`, totalsX, doc.y, { width: 80, align: 'left', continued: true });
+      doc.text(Number(po.subtotal).toFixed(2), { width: 60, align: 'right' });
+      doc.text(`Discount:`, totalsX, doc.y, { width: 80, align: 'left', continued: true });
+      doc.text(`-${Number(po.discount).toFixed(2)}`, { width: 60, align: 'right' });
+      doc.text(`Tax:`, totalsX, doc.y, { width: 80, align: 'left', continued: true });
+      doc.text(Number(po.tax).toFixed(2), { width: 60, align: 'right' });
+
+      doc.rect(totalsX, doc.y + 5, 145, 20).fillColor(primaryColor).fill();
+      doc.fontSize(11).fillColor('white').font('Helvetica-Bold');
+      doc.text(`Total Amount:`, totalsX + 5, doc.y + 10, { width: 80, align: 'left', continued: true });
+      doc.text(Number(po.totalAmount).toFixed(2), { width: 55, align: 'right' });
+
+      doc.font('Helvetica').fillColor(textColor);
+      doc.moveDown(2);
+
+      // Additional sections
+      if (po.deliveryAddress) {
+        doc.fontSize(11).fillColor(primaryColor).text('Delivery Address', { underline: true });
+        doc.moveDown(0.3);
+        doc.fontSize(9).fillColor(textColor).text(po.deliveryAddress);
+        doc.moveDown(1);
+      }
+
+      if (po.specialInstructions) {
+        doc.fontSize(11).fillColor(primaryColor).text('Special Instructions', { underline: true });
+        doc.moveDown(0.3);
+        doc.fontSize(9).fillColor(textColor).text(po.specialInstructions);
+        doc.moveDown(1);
+      }
+
+      if (po.notes) {
+        doc.fontSize(11).fillColor(primaryColor).text('Notes', { underline: true });
+        doc.moveDown(0.3);
+        doc.fontSize(9).fillColor(textColor).text(po.notes);
+        doc.moveDown(1);
+      }
+
+      // Approval History
+      if (po.approvals && po.approvals.length > 0) {
+        if (doc.y > 600) doc.addPage();
+        doc.fontSize(11).fillColor(primaryColor).text('Approval History', { underline: true });
+        doc.moveDown(0.5);
+        doc.fontSize(9).fillColor(textColor);
+
+        for (const approval of po.approvals) {
+          doc.text(
+            `Level ${approval.level}: ${approval.approver.firstName} ${approval.approver.lastName} - ` +
+            `${approval.status.replace(/_/g, ' ')} - ` +
+            `${approval.actedAt ? new Date(approval.actedAt).toLocaleDateString() : 'Pending'}` +
+            (approval.comments ? ` - ${approval.comments}` : '')
+          );
+        }
+        doc.moveDown(1);
+      }
+
+      // Footer
+      doc.fontSize(8).fillColor(grayColor);
+      doc.text('This is a computer-generated document. No signature is required.', 50, 750, { align: 'center' });
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, { align: 'center' });
+      doc.text(`Purchase Order Reference: ${po.poNumber}`, { align: 'center' });
+
+      // Finalize PDF
+      doc.end();
+    } catch (error) {
+      reject(error);
+    }
+  });
 }

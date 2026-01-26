@@ -400,8 +400,16 @@ router.get(
   '/orders/:id/pdf',
   authorize(...PROCUREMENT_ROLES),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const pdf = await poService.generatePOPdf(req.user!.hospitalId, req.params.id);
-    sendSuccess(res, pdf);
+    const pdfBuffer = await poService.generatePOPdf(req.user!.hospitalId, req.params.id);
+
+    // Get PO details for filename
+    const po = await poService.getPOById(req.user!.hospitalId, req.params.id);
+    const filename = `PO-${po.poNumber.replace(/\//g, '-')}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
   })
 );
 
