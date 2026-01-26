@@ -13,6 +13,10 @@ import {
   ChartBarIcon,
   QrCodeIcon,
   EyeIcon,
+  TruckIcon,
+  InboxArrowDownIcon,
+  CogIcon,
+  PencilSquareIcon,
 } from '@heroicons/react/24/outline';
 import { useAIHealth } from '../../hooks/useAI';
 import { laboratoryApi } from '../../services/api';
@@ -22,6 +26,7 @@ import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import { CurrencyDisplay } from '../../components/common';
 import SampleTracker from '../../components/laboratory/SampleTracker';
+import ResultsEntryForm from '../../components/laboratory/ResultsEntryForm';
 
 interface LabOrder {
   id: string;
@@ -418,6 +423,7 @@ export default function Laboratory() {
   const [totalPages, setTotalPages] = useState(1);
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+  const [selectedOrderForResults, setSelectedOrderForResults] = useState<{ orderId: string; testId: string; testName: string; patientName: string } | null>(null);
   const { data: healthStatus } = useAIHealth();
 
   const isAIOnline = healthStatus?.status === 'connected';
@@ -503,6 +509,54 @@ export default function Laboratory() {
 
   const handleInterpretResults = (_orderId: string) => {
     toast.success('AI is interpreting lab results...');
+  };
+
+  const handleCollectSample = async (orderId: string) => {
+    try {
+      await laboratoryApi.updateOrderStatus(orderId, 'SAMPLE_COLLECTED');
+      toast.success('Sample collected successfully');
+      fetchOrders();
+    } catch (error: any) {
+      console.error('Failed to collect sample:', error);
+      toast.error(error.response?.data?.message || 'Failed to collect sample');
+    }
+  };
+
+  const handleReceiveSample = async (orderId: string) => {
+    try {
+      await laboratoryApi.updateOrderStatus(orderId, 'RECEIVED');
+      toast.success('Sample received successfully');
+      fetchOrders();
+    } catch (error: any) {
+      console.error('Failed to receive sample:', error);
+      toast.error(error.response?.data?.message || 'Failed to receive sample');
+    }
+  };
+
+  const handleProcessSample = async (orderId: string) => {
+    try {
+      await laboratoryApi.updateOrderStatus(orderId, 'PROCESSING');
+      toast.success('Sample processing started');
+      fetchOrders();
+    } catch (error: any) {
+      console.error('Failed to process sample:', error);
+      toast.error(error.response?.data?.message || 'Failed to process sample');
+    }
+  };
+
+  const handleEnterResults = (order: LabOrder) => {
+    // For simplicity, use the first test in the order
+    const firstTest = order.tests?.[0];
+    if (!firstTest) {
+      toast.error('No tests found in this order');
+      return;
+    }
+    setSelectedOrderForResults({
+      orderId: order.id,
+      testId: firstTest.id,
+      testName: firstTest.test?.name || 'Unknown Test',
+      patientName: `${order.patient?.firstName || ''} ${order.patient?.lastName || ''}`.trim(),
+    });
   };
 
   const statCards = [
@@ -725,7 +779,44 @@ export default function Laboratory() {
                             Dr. {order.orderedBy?.firstName || ''} {order.orderedBy?.lastName || ''}
                           </p>
                           <p className="text-gray-400">{new Date(order.createdAt).toLocaleString()}</p>
-                          <div className="flex gap-2 justify-end mt-3">
+                          <div className="flex flex-wrap gap-2 justify-end mt-3">
+                            {/* Contextual action buttons based on status */}
+                            {order.status === 'PENDING' && (
+                              <button
+                                onClick={() => handleCollectSample(order.id)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 transition-all"
+                              >
+                                <TruckIcon className="h-3.5 w-3.5" />
+                                Collect Sample
+                              </button>
+                            )}
+                            {order.status === 'SAMPLE_COLLECTED' && (
+                              <button
+                                onClick={() => handleReceiveSample(order.id)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-indigo-600 bg-indigo-500/10 hover:bg-indigo-500/20 transition-all"
+                              >
+                                <InboxArrowDownIcon className="h-3.5 w-3.5" />
+                                Receive Sample
+                              </button>
+                            )}
+                            {order.status === 'RECEIVED' && (
+                              <button
+                                onClick={() => handleProcessSample(order.id)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-purple-600 bg-purple-500/10 hover:bg-purple-500/20 transition-all"
+                              >
+                                <CogIcon className="h-3.5 w-3.5" />
+                                Process
+                              </button>
+                            )}
+                            {order.status === 'PROCESSING' && (
+                              <button
+                                onClick={() => handleEnterResults(order)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-green-600 bg-green-500/10 hover:bg-green-500/20 transition-all"
+                              >
+                                <PencilSquareIcon className="h-3.5 w-3.5" />
+                                Enter Results
+                              </button>
+                            )}
                             {order.status === 'COMPLETED' && isAIOnline && (
                               <button
                                 onClick={() => handleInterpretResults(order.id)}
@@ -744,9 +835,6 @@ export default function Laboratory() {
                                 View Booking
                               </button>
                             )}
-                            <button className="px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-all">
-                              View Details
-                            </button>
                           </div>
                         </div>
                       </div>
@@ -877,6 +965,27 @@ export default function Laboratory() {
                 onRefresh={() => refetchBookingTicket()}
                 onClose={() => setSelectedBookingId(null)}
                 showActions={true}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Results Entry Modal */}
+      {selectedOrderForResults && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setSelectedOrderForResults(null)} />
+            <div className="relative w-full max-w-4xl">
+              <ResultsEntryForm
+                testId={selectedOrderForResults.testId}
+                testName={selectedOrderForResults.testName}
+                patientName={selectedOrderForResults.patientName}
+                onSuccess={() => {
+                  setSelectedOrderForResults(null);
+                  fetchOrders();
+                }}
+                onCancel={() => setSelectedOrderForResults(null)}
               />
             </div>
           </div>
