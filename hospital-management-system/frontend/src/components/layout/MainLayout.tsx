@@ -37,6 +37,7 @@ import {
   WrenchScrewdriverIcon,
   CakeIcon,
   ReceiptPercentIcon,
+  ShoppingCartIcon,
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../../hooks/useAuth';
 import AICreationAssistant from '../ai/AICreationAssistant';
@@ -131,6 +132,8 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
       { name: 'Billing', href: '/billing', icon: CreditCardIcon, color: 'from-green-500 to-green-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT', 'RECEPTIONIST'] },
       { name: 'Insurance Coding', href: '/insurance-coding', icon: ReceiptPercentIcon, color: 'from-teal-500 to-cyan-600',
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT'] },
+      { name: 'Procurement', href: '/procurement', icon: ShoppingCartIcon, color: 'from-indigo-500 to-blue-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT'] },
       { name: 'HR', href: '/hr', icon: BriefcaseIcon, color: 'from-slate-500 to-slate-600',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'HR_MANAGER', 'HR_STAFF'] },

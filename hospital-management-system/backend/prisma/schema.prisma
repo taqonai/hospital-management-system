@@ -89,6 +89,11 @@ model Hospital {
   // Consultant Referrals
   referrals            ConsultantReferral[]
 
+  // Procurement Module
+  suppliers              Supplier[]
+  purchaseRequisitions   PurchaseRequisition[]
+  purchaseOrders         PurchaseOrder[]
+
   @@map("hospitals")
 }
 
@@ -113,6 +118,9 @@ model Department {
   beds            Bed[]
   specializations Specialization[]
   referrals       ConsultantReferral[]
+
+  // Procurement Module
+  purchaseRequisitions PurchaseRequisition[]
 
   @@unique([hospitalId, code])
   @@map("departments")
@@ -191,6 +199,12 @@ model User {
   receivedSamples       LabSample[]         @relation("SampleReceivedBy")
   verifiedSamples       LabSample[]         @relation("SampleVerifiedBy")
   sampleCustodyLogs     SampleCustodyLog[]
+
+  // Procurement Module
+  prRequestedBy         PurchaseRequisition[] @relation("PRRequestedBy")
+  prApprovals           PRApproval[]          @relation("PRApprover")
+  poApprovals           POApproval[]          @relation("POApprover")
+  grnReceivedBy         GoodsReceiptNote[]    @relation("GRNReceivedBy")
 
   @@unique([hospitalId, email])
   @@map("users")
@@ -6371,4 +6385,736 @@ model WhatsAppSession {
   @@index([hospitalId])
   @@index([patientId])
   @@map("whatsapp_sessions")
+}
+
+// ==================== PROCUREMENT MODULE ====================
+
+model Supplier {
+  id                String   @id @default(uuid())
+  hospitalId        String
+  code              String   // auto-generated: SUP-001
+  companyName       String
+  tradeLicenseNo    String?
+  taxRegistrationNo String?  // TRN/VAT
+  category          SupplierCategory
+  classification    SupplierClassification @default(C)
+  status            SupplierStatus @default(PENDING)
+
+  // Primary Contact
+  contactPerson     String
+  email             String
+  phone             String
+  website           String?
+
+  // Address
+  addressLine1      String
+  addressLine2      String?
+  city              String
+  state             String?
+  country           String   @default("UAE")
+  postalCode        String?
+
+  // Financial
+  bankName          String?
+  bankAccountNo     String?
+  iban              String?
+  swiftCode         String?
+  paymentTerms      PaymentTerms @default(NET_30)
+  creditLimit       Decimal? @db.Decimal(12, 2)
+  currency          String   @default("AED")
+
+  // Performance
+  rating            Decimal  @default(0) @db.Decimal(3, 2)
+  deliveryScore     Decimal  @default(0) @db.Decimal(3, 2)
+  qualityScore      Decimal  @default(0) @db.Decimal(3, 2)
+  priceScore        Decimal  @default(0) @db.Decimal(3, 2)
+  totalOrders       Int      @default(0)
+
+  // Meta
+  leadTimeDays      Int      @default(7)
+  notes             String?
+  isBlacklisted     Boolean  @default(false)
+  blacklistReason   String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  hospital          Hospital @relation(fields: [hospitalId], references: [id])
+  contacts          SupplierContact[]
+  documents         SupplierDocument[]
+  purchaseOrders    PurchaseOrder[]
+  quotations        RFQQuotation[]
+  contracts         SupplierContract[]
+  invoices          SupplierInvoice[]
+  returns           SupplierReturn[]
+
+  @@unique([hospitalId, code])
+  @@index([hospitalId, category])
+  @@index([hospitalId, status])
+  @@map("suppliers")
+}
+
+model SupplierContact {
+  id          String @id @default(uuid())
+  supplierId  String
+  name        String
+  designation String?
+  email       String?
+  phone       String?
+  isPrimary   Boolean @default(false)
+  createdAt   DateTime @default(now())
+
+  supplier    Supplier @relation(fields: [supplierId], references: [id])
+
+  @@map("supplier_contacts")
+}
+
+model SupplierDocument {
+  id          String   @id @default(uuid())
+  supplierId  String
+  type        SupplierDocType
+  name        String
+  filePath    String
+  expiryDate  DateTime?
+  isVerified  Boolean  @default(false)
+  uploadedAt  DateTime @default(now())
+
+  supplier    Supplier @relation(fields: [supplierId], references: [id])
+
+  @@map("supplier_documents")
+}
+
+model SupplierContract {
+  id            String   @id @default(uuid())
+  hospitalId    String
+  supplierId    String
+  contractNo    String
+  type          ContractType
+  startDate     DateTime
+  endDate       DateTime
+  value         Decimal? @db.Decimal(12, 2)
+  terms         String?
+  status        ContractStatus @default(ACTIVE)
+  documentPath  String?
+  renewalAlert  Boolean  @default(true)
+  alertDaysBefore Int    @default(30)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  supplier      Supplier @relation(fields: [supplierId], references: [id])
+  contractItems ContractItem[]
+
+  @@unique([hospitalId, contractNo])
+  @@map("supplier_contracts")
+}
+
+model ContractItem {
+  id          String  @id @default(uuid())
+  contractId  String
+  itemName    String
+  itemCode    String?
+  unit        String
+  agreedPrice Decimal @db.Decimal(10, 2)
+  minQty      Int?
+  maxQty      Int?
+
+  contract    SupplierContract @relation(fields: [contractId], references: [id])
+
+  @@map("contract_items")
+}
+
+model PurchaseRequisition {
+  id              String   @id @default(uuid())
+  hospitalId      String
+  prNumber        String   // PR-{HOSP}-{YYYY}-{SEQ}
+  requestedById   String
+  departmentId    String
+  urgency         PRUrgency @default(ROUTINE)
+  status          PRStatus  @default(DRAFT_PR)
+  justification   String?
+  requiredDate    DateTime?
+  totalEstimated  Decimal  @db.Decimal(12, 2) @default(0)
+  approvedAt      DateTime?
+  approvedById    String?
+  rejectedAt      DateTime?
+  rejectedById    String?
+  rejectionReason String?
+  notes           String?
+  isAutoGenerated Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  hospital        Hospital @relation(fields: [hospitalId], references: [id])
+  requestedBy     User     @relation("PRRequestedBy", fields: [requestedById], references: [id])
+  department      Department @relation(fields: [departmentId], references: [id])
+  items           PRItem[]
+  approvals       PRApproval[]
+  purchaseOrders  PurchaseOrder[]
+
+  @@unique([hospitalId, prNumber])
+  @@index([hospitalId, status])
+  @@index([hospitalId, departmentId])
+  @@map("purchase_requisitions")
+}
+
+model PRItem {
+  id                String  @id @default(uuid())
+  prId              String
+  itemType          ProcurementItemType
+  itemReferenceId   String?
+  itemName          String
+  itemCode          String?
+  specification     String?
+  unit              String
+  quantity          Int
+  estimatedUnitCost Decimal @db.Decimal(10, 2)
+  estimatedTotal    Decimal @db.Decimal(12, 2)
+  preferredSupplier String?
+  notes             String?
+
+  requisition       PurchaseRequisition @relation(fields: [prId], references: [id], onDelete: Cascade)
+  poItems           POItem[]
+
+  @@map("pr_items")
+}
+
+model PRApproval {
+  id         String   @id @default(uuid())
+  prId       String
+  approverId String
+  level      Int
+  status     ApprovalStatus @default(PENDING_APPROVAL_STATUS)
+  comments   String?
+  actedAt    DateTime?
+  createdAt  DateTime @default(now())
+
+  requisition PurchaseRequisition @relation(fields: [prId], references: [id])
+  approver    User @relation("PRApprover", fields: [approverId], references: [id])
+
+  @@map("pr_approvals")
+}
+
+model RequestForQuotation {
+  id            String   @id @default(uuid())
+  hospitalId    String
+  rfqNumber     String
+  prId          String?
+  status        RFQStatus @default(OPEN)
+  deadline      DateTime
+  notes         String?
+  createdById   String
+  evaluatedById String?
+  evaluatedAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  items         RFQItem[]
+  quotations    RFQQuotation[]
+  suppliers     RFQSupplier[]
+
+  @@unique([hospitalId, rfqNumber])
+  @@map("request_for_quotations")
+}
+
+model RFQItem {
+  id            String @id @default(uuid())
+  rfqId         String
+  itemName      String
+  itemCode      String?
+  specification String?
+  unit          String
+  quantity      Int
+
+  rfq           RequestForQuotation @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  quotationItems RFQQuotationItem[]
+
+  @@map("rfq_items")
+}
+
+model RFQSupplier {
+  id         String   @id @default(uuid())
+  rfqId      String
+  supplierId String
+  invitedAt  DateTime @default(now())
+  respondedAt DateTime?
+
+  rfq        RequestForQuotation @relation(fields: [rfqId], references: [id])
+
+  @@map("rfq_suppliers")
+}
+
+model RFQQuotation {
+  id            String   @id @default(uuid())
+  rfqId         String
+  supplierId    String
+  quotationRef  String?
+  totalAmount   Decimal  @db.Decimal(12, 2)
+  deliveryDays  Int?
+  paymentTerms  String?
+  validUntil    DateTime?
+  documentPath  String?
+  isSelected    Boolean  @default(false)
+  notes         String?
+  submittedAt   DateTime @default(now())
+
+  rfq           RequestForQuotation @relation(fields: [rfqId], references: [id])
+  supplier      Supplier @relation(fields: [supplierId], references: [id])
+  items         RFQQuotationItem[]
+
+  @@map("rfq_quotations")
+}
+
+model RFQQuotationItem {
+  id          String  @id @default(uuid())
+  quotationId String
+  rfqItemId   String
+  unitPrice   Decimal @db.Decimal(10, 2)
+  totalPrice  Decimal @db.Decimal(12, 2)
+  leadDays    Int?
+  notes       String?
+
+  quotation   RFQQuotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  rfqItem     RFQItem @relation(fields: [rfqItemId], references: [id])
+
+  @@map("rfq_quotation_items")
+}
+
+model PurchaseOrder {
+  id              String   @id @default(uuid())
+  hospitalId      String
+  poNumber        String
+  supplierId      String
+  prId            String?
+  type            POType   @default(STANDARD)
+  status          POStatus @default(DRAFT_PO)
+
+  // Dates
+  orderDate       DateTime @default(now())
+  expectedDate    DateTime?
+  deliveryDate    DateTime?
+
+  // Amounts
+  subtotal        Decimal  @db.Decimal(12, 2)
+  discount        Decimal  @default(0) @db.Decimal(10, 2)
+  tax             Decimal  @default(0) @db.Decimal(10, 2)
+  totalAmount     Decimal  @db.Decimal(12, 2)
+
+  // Terms
+  paymentTerms    PaymentTerms @default(NET_30)
+  shippingTerms   String?
+  deliveryAddress String?
+  specialInstructions String?
+
+  // Approval
+  approvedAt      DateTime?
+  approvedById    String?
+  cancelledAt     DateTime?
+  cancelledById   String?
+  cancellationReason String?
+
+  // Versioning
+  version         Int      @default(1)
+  isAmended       Boolean  @default(false)
+  parentPOId      String?
+
+  notes           String?
+  createdById     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  hospital        Hospital @relation(fields: [hospitalId], references: [id])
+  supplier        Supplier @relation(fields: [supplierId], references: [id])
+  requisition     PurchaseRequisition? @relation(fields: [prId], references: [id])
+  items           POItem[]
+  grns            GoodsReceiptNote[]
+  invoices        SupplierInvoice[]
+  approvals       POApproval[]
+
+  @@unique([hospitalId, poNumber])
+  @@index([hospitalId, status])
+  @@index([hospitalId, supplierId])
+  @@map("purchase_orders")
+}
+
+model POItem {
+  id            String  @id @default(uuid())
+  poId          String
+  prItemId      String?
+  itemType      ProcurementItemType
+  itemReferenceId String?
+  itemName      String
+  itemCode      String?
+  unit          String
+  orderedQty    Int
+  receivedQty   Int     @default(0)
+  unitPrice     Decimal @db.Decimal(10, 2)
+  totalPrice    Decimal @db.Decimal(12, 2)
+  notes         String?
+
+  purchaseOrder PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  prItem        PRItem? @relation(fields: [prItemId], references: [id])
+  grnItems      GRNItem[]
+
+  @@map("po_items")
+}
+
+model POApproval {
+  id         String   @id @default(uuid())
+  poId       String
+  approverId String
+  level      Int
+  status     ApprovalStatus @default(PENDING_APPROVAL_STATUS)
+  comments   String?
+  actedAt    DateTime?
+  createdAt  DateTime @default(now())
+
+  purchaseOrder PurchaseOrder @relation(fields: [poId], references: [id])
+  approver      User @relation("POApprover", fields: [approverId], references: [id])
+
+  @@map("po_approvals")
+}
+
+model GoodsReceiptNote {
+  id              String   @id @default(uuid())
+  hospitalId      String
+  grnNumber       String
+  poId            String
+  receivedById    String
+  receiptDate     DateTime @default(now())
+  status          GRNStatus @default(DRAFT_GRN)
+  deliveryNoteRef String?
+  notes           String?
+  inspectedById   String?
+  inspectedAt     DateTime?
+  inspectionStatus InspectionStatus?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  purchaseOrder   PurchaseOrder @relation(fields: [poId], references: [id])
+  receivedBy      User @relation("GRNReceivedBy", fields: [receivedById], references: [id])
+  items           GRNItem[]
+
+  @@unique([hospitalId, grnNumber])
+  @@map("goods_receipt_notes")
+}
+
+model GRNItem {
+  id              String  @id @default(uuid())
+  grnId           String
+  poItemId        String
+  receivedQty     Int
+  acceptedQty     Int
+  rejectedQty     Int     @default(0)
+  rejectionReason String?
+  batchNumber     String?
+  expiryDate      DateTime?
+  manufacturingDate DateTime?
+  storageLocation String?
+  condition       ItemCondition @default(GOOD)
+  notes           String?
+
+  grn             GoodsReceiptNote @relation(fields: [grnId], references: [id], onDelete: Cascade)
+  poItem          POItem @relation(fields: [poItemId], references: [id])
+
+  @@map("grn_items")
+}
+
+model SupplierInvoice {
+  id              String  @id @default(uuid())
+  hospitalId      String
+  invoiceNumber   String
+  supplierId      String
+  poId            String
+  invoiceDate     DateTime
+  dueDate         DateTime?
+  amount          Decimal @db.Decimal(12, 2)
+  taxAmount       Decimal @default(0) @db.Decimal(10, 2)
+  totalAmount     Decimal @db.Decimal(12, 2)
+  matchStatus     InvoiceMatchStatus @default(UNMATCHED)
+  paymentStatus   InvoicePaymentStatus @default(PENDING)
+  paidAmount      Decimal @default(0) @db.Decimal(12, 2)
+  paidAt          DateTime?
+  documentPath    String?
+  matchedById     String?
+  matchedAt       DateTime?
+  discrepancyNotes String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  supplier        Supplier @relation(fields: [supplierId], references: [id])
+  purchaseOrder   PurchaseOrder @relation(fields: [poId], references: [id])
+
+  @@unique([hospitalId, invoiceNumber, supplierId])
+  @@map("supplier_invoices")
+}
+
+model SupplierReturn {
+  id            String   @id @default(uuid())
+  hospitalId    String
+  returnNumber  String
+  supplierId    String
+  poId          String?
+  grnId         String?
+  reason        ReturnReason
+  status        ReturnStatus @default(DRAFT_RETURN)
+  totalAmount   Decimal  @db.Decimal(12, 2)
+  notes         String?
+  approvedById  String?
+  approvedAt    DateTime?
+  shippedAt     DateTime?
+  creditNoteRef String?
+  creditAmount  Decimal? @db.Decimal(12, 2)
+  createdById   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  supplier      Supplier @relation(fields: [supplierId], references: [id])
+  items         SupplierReturnItem[]
+
+  @@unique([hospitalId, returnNumber])
+  @@map("supplier_returns")
+}
+
+model SupplierReturnItem {
+  id          String  @id @default(uuid())
+  returnId    String
+  itemName    String
+  itemCode    String?
+  quantity    Int
+  unitPrice   Decimal @db.Decimal(10, 2)
+  totalPrice  Decimal @db.Decimal(12, 2)
+  reason      String?
+
+  return      SupplierReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+
+  @@map("supplier_return_items")
+}
+
+model ApprovalWorkflow {
+  id          String   @id @default(uuid())
+  hospitalId  String
+  name        String
+  type        WorkflowType
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  levels      ApprovalLevel[]
+
+  @@map("approval_workflows")
+}
+
+model ApprovalLevel {
+  id           String   @id @default(uuid())
+  workflowId   String
+  level        Int
+  approverRole String
+  approverId   String?
+  amountMin    Decimal? @db.Decimal(12, 2)
+  amountMax    Decimal? @db.Decimal(12, 2)
+  department   String?
+  isRequired   Boolean  @default(true)
+
+  workflow     ApprovalWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@map("approval_levels")
+}
+
+// ==================== PROCUREMENT ENUMS ====================
+
+enum SupplierCategory {
+  PHARMACEUTICALS
+  MEDICAL_DEVICES
+  LAB_CONSUMABLES
+  SURGICAL_SUPPLIES
+  HOUSEKEEPING
+  IT_EQUIPMENT
+  FOOD_DIETARY
+  GENERAL
+  @@map("supplier_category")
+}
+
+enum SupplierClassification {
+  A
+  B
+  C
+  @@map("supplier_classification")
+}
+
+enum SupplierStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+  BLACKLISTED
+  @@map("supplier_status")
+}
+
+enum SupplierDocType {
+  TRADE_LICENSE
+  TAX_CERTIFICATE
+  INSURANCE
+  QUALITY_CERT
+  ISO_CERT
+  OTHER
+  @@map("supplier_doc_type")
+}
+
+enum ContractType {
+  RATE_AGREEMENT
+  AMC
+  SERVICE_LEVEL
+  SUPPLY_AGREEMENT
+  @@map("contract_type")
+}
+
+enum ContractStatus {
+  DRAFT_CONTRACT
+  ACTIVE
+  EXPIRED
+  TERMINATED
+  @@map("contract_status")
+}
+
+enum PRUrgency {
+  ROUTINE
+  URGENT
+  EMERGENCY_PR
+  @@map("pr_urgency")
+}
+
+enum PRStatus {
+  DRAFT_PR
+  SUBMITTED
+  PENDING_APPROVAL
+  APPROVED_PR
+  PARTIALLY_ORDERED
+  FULLY_ORDERED
+  CLOSED_PR
+  REJECTED_PR
+  CANCELLED_PR
+  @@map("pr_status")
+}
+
+enum RFQStatus {
+  OPEN
+  CLOSED_RFQ
+  EVALUATED
+  CANCELLED_RFQ
+  @@map("rfq_status")
+}
+
+enum POType {
+  STANDARD
+  BLANKET
+  EMERGENCY_PO
+  CONTRACT_RELEASE
+  @@map("po_type")
+}
+
+enum POStatus {
+  DRAFT_PO
+  PENDING_APPROVAL_PO
+  APPROVED_PO
+  SENT_TO_SUPPLIER
+  PARTIALLY_RECEIVED
+  FULLY_RECEIVED
+  CLOSED_PO
+  CANCELLED_PO
+  AMENDED
+  @@map("po_status")
+}
+
+enum GRNStatus {
+  DRAFT_GRN
+  PENDING_INSPECTION
+  APPROVED_GRN
+  REJECTED_GRN
+  @@map("grn_status")
+}
+
+enum InspectionStatus {
+  PASSED
+  FAILED
+  CONDITIONAL
+  @@map("inspection_status")
+}
+
+enum ItemCondition {
+  GOOD
+  DAMAGED
+  EXPIRED_ITEM
+  WRONG_ITEM
+  @@map("item_condition")
+}
+
+enum InvoiceMatchStatus {
+  UNMATCHED
+  MATCHED
+  PARTIAL_MATCH
+  DISCREPANCY
+  @@map("invoice_match_status")
+}
+
+enum InvoicePaymentStatus {
+  PENDING
+  APPROVED_PAYMENT
+  PARTIALLY_PAID_INV
+  PAID_INV
+  OVERDUE
+  @@map("invoice_payment_status")
+}
+
+enum PaymentTerms {
+  IMMEDIATE
+  NET_15
+  NET_30
+  NET_45
+  NET_60
+  NET_90
+  @@map("payment_terms")
+}
+
+enum ReturnReason {
+  DEFECTIVE
+  EXPIRED_RETURN
+  WRONG_ITEM_RETURN
+  EXCESS
+  QUALITY_ISSUE
+  OTHER_RETURN
+  @@map("return_reason")
+}
+
+enum ReturnStatus {
+  DRAFT_RETURN
+  PENDING_APPROVAL_RETURN
+  APPROVED_RETURN
+  SHIPPED
+  CREDIT_RECEIVED
+  CLOSED_RETURN
+  CANCELLED_RETURN
+  @@map("return_status")
+}
+
+enum ProcurementItemType {
+  DRUG
+  INVENTORY
+  HOUSEKEEPING_ITEM
+  ASSET
+  LAB_CONSUMABLE
+  OTHER_ITEM
+  @@map("procurement_item_type")
+}
+
+enum WorkflowType {
+  PR_WORKFLOW
+  PO_WORKFLOW
+  @@map("workflow_type")
+}
+
+enum ApprovalStatus {
+  PENDING_APPROVAL_STATUS
+  APPROVED_STATUS
+  REJECTED_STATUS
+  ESCALATED
+  @@map("approval_status")
 }

@@ -56,6 +56,7 @@ import crmRoutes from './crmRoutes';
 import noShowRoutes from './noShowRoutes';
 import referralRoutes from './referralRoutes';
 import whatsappBotRoutes from './whatsappBotRoutes';
+import procurementRoutes from './procurementRoutes';
 
 const router = Router();
 
@@ -148,5 +149,8 @@ router.use('/no-show', noShowRoutes);
 
 // Consultant Referrals
 router.use('/referrals', referralRoutes);
+
+// Procurement Module
+router.use('/procurement', procurementRoutes);
 
 export default router;

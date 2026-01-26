@@ -126,6 +126,9 @@ import InsuranceCoding from './pages/InsuranceCoding';
 // CRM Module
 import CRM from './pages/CRM';
 
+// Procurement Module
+import Procurement from './pages/Procurement';
+
 // Clinician Dashboard (A'mad Precision Health Platform)
 import ClinicianDashboard from './pages/Clinician';
 import ClinicianPatientSummary from './pages/Clinician/PatientSummary';
@@ -216,6 +219,7 @@ function App() {
         <Route path="/my-leave" element={<EmployeeLeave />} />
         <Route path="/housekeeping" element={<Housekeeping />} />
         <Route path="/dietary" element={<Dietary />} />
+        <Route path="/procurement" element={<Procurement />} />
 
         {/* New Enterprise Modules */}
         <Route path="/blood-bank" element={<BloodBank />} />
