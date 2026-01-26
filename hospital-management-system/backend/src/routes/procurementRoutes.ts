@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -34,7 +34,7 @@ const PROCUREMENT_STAFF_ROLES = ['PROCUREMENT_STAFF'] as const;
 // List suppliers
 router.get(
   '/suppliers',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await supplierService.listSuppliers(req.user!.hospitalId, {
       search: req.query.search as string,
@@ -52,7 +52,7 @@ router.get(
 // Create supplier
 router.post(
   '/suppliers',
-  authorize(...ADMIN_ROLES),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const supplier = await supplierService.createSupplier(req.user!.hospitalId, req.body);
     sendCreated(res, supplier, 'Supplier created successfully');
@@ -62,7 +62,7 @@ router.post(
 // Get supplier details
 router.get(
   '/suppliers/:id',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const supplier = await supplierService.getSupplierById(req.user!.hospitalId, req.params.id);
     sendSuccess(res, supplier);
@@ -72,7 +72,7 @@ router.get(
 // Update supplier
 router.put(
   '/suppliers/:id',
-  authorize(...ADMIN_ROLES),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const supplier = await supplierService.updateSupplier(req.user!.hospitalId, req.params.id, req.body);
     sendSuccess(res, supplier, 'Supplier updated successfully');
@@ -82,7 +82,7 @@ router.put(
 // Deactivate supplier
 router.delete(
   '/suppliers/:id',
-  authorize(...ADMIN_ROLES),
+  authorizeWithPermission('procurement:delete', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const supplier = await supplierService.deactivateSupplier(req.user!.hospitalId, req.params.id);
     sendSuccess(res, supplier, 'Supplier deactivated');
@@ -92,7 +92,7 @@ router.delete(
 // Supplier performance scorecard
 router.get(
   '/suppliers/:id/performance',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const performance = await supplierService.getSupplierPerformance(req.user!.hospitalId, req.params.id);
     sendSuccess(res, performance);
@@ -102,7 +102,7 @@ router.get(
 // Upload supplier document
 router.post(
   '/suppliers/:id/documents',
-  authorize(...ADMIN_ROLES),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const doc = await supplierService.addDocument(req.params.id, req.body);
     sendCreated(res, doc, 'Document uploaded successfully');
@@ -112,7 +112,7 @@ router.post(
 // Blacklist supplier
 router.post(
   '/suppliers/:id/blacklist',
-  authorize(...ADMIN_ROLES),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const supplier = await supplierService.blacklistSupplier(
       req.user!.hospitalId,
@@ -126,7 +126,7 @@ router.post(
 // Unblacklist supplier
 router.post(
   '/suppliers/:id/unblacklist',
-  authorize(...ADMIN_ROLES),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const supplier = await supplierService.unblacklistSupplier(req.user!.hospitalId, req.params.id);
     sendSuccess(res, supplier, 'Supplier unblacklisted');
@@ -136,7 +136,7 @@ router.post(
 // Add supplier contact
 router.post(
   '/suppliers/:id/contacts',
-  authorize(...ADMIN_ROLES),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const contact = await supplierService.addContact(req.params.id, req.body);
     sendCreated(res, contact, 'Contact added');
@@ -146,7 +146,7 @@ router.post(
 // Update supplier performance scores
 router.put(
   '/suppliers/:id/scores',
-  authorize(...ADMIN_ROLES),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const supplier = await supplierService.updatePerformanceScores(
       req.user!.hospitalId,
@@ -160,7 +160,7 @@ router.put(
 // Expiring documents
 router.get(
   '/suppliers-documents/expiring',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const days = req.query.days ? Number(req.query.days) : 30;
     const docs = await supplierService.getExpiringDocuments(req.user!.hospitalId, days);
@@ -173,7 +173,7 @@ router.get(
 // List PRs
 router.get(
   '/requisitions',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await prService.listPRs(req.user!.hospitalId, {
       status: req.query.status as any,
@@ -191,7 +191,7 @@ router.get(
 // Create PR (Staff can create, Manager can create)
 router.post(
   '/requisitions',
-  authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST'),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF', 'PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const pr = await prService.createPR(req.user!.hospitalId, req.user!.userId, req.body);
     sendCreated(res, pr, 'Purchase requisition created');
@@ -201,7 +201,7 @@ router.post(
 // Get PR details
 router.get(
   '/requisitions/pending-approvals',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await prService.getPendingApprovals(req.user!.hospitalId, req.user!.userId);
     sendSuccess(res, result);
@@ -210,7 +210,7 @@ router.get(
 
 router.get(
   '/requisitions/:id',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const pr = await prService.getPRById(req.user!.hospitalId, req.params.id);
     sendSuccess(res, pr);
@@ -220,7 +220,7 @@ router.get(
 // Update PR (draft only - Staff and Manager can edit)
 router.put(
   '/requisitions/:id',
-  authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST'),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF', 'PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const pr = await prService.updatePR(req.user!.hospitalId, req.params.id, req.body);
     sendSuccess(res, pr, 'Requisition updated');
@@ -230,7 +230,7 @@ router.put(
 // Submit PR for approval (Staff and Manager can submit)
 router.post(
   '/requisitions/:id/submit',
-  authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST'),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF', 'PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const pr = await prService.submitPR(req.user!.hospitalId, req.params.id, req.user!.userId);
     sendSuccess(res, pr, 'Requisition submitted for approval');
@@ -240,7 +240,7 @@ router.post(
 // Approve PR (Only Manager and Admins can approve, NOT Staff)
 router.post(
   '/requisitions/:id/approve',
-  authorize(...ADMIN_ROLES),
+  authorizeWithPermission('procurement:approve', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const pr = await prService.approvePR(
       req.user!.hospitalId,
@@ -255,7 +255,7 @@ router.post(
 // Reject PR
 router.post(
   '/requisitions/:id/reject',
-  authorize(...ADMIN_ROLES),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     if (!req.body.reason) {
       return res.status(400).json({ success: false, message: 'Rejection reason is required' });
@@ -273,7 +273,7 @@ router.post(
 // Cancel PR (Staff and Manager can cancel)
 router.post(
   '/requisitions/:id/cancel',
-  authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST'),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF', 'PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const pr = await prService.cancelPR(req.user!.hospitalId, req.params.id);
     sendSuccess(res, pr, 'Requisition cancelled');
@@ -285,7 +285,7 @@ router.post(
 // List POs
 router.get(
   '/purchase-orders',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await poService.listPOs(req.user!.hospitalId, {
       status: req.query.status as any,
@@ -304,7 +304,7 @@ router.get(
 // Create PO (Only Manager, Admins, and Pharmacist can create - NOT Staff)
 router.post(
   '/purchase-orders',
-  authorize(...ADMIN_ROLES, 'PHARMACIST'),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER', 'PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const po = await poService.createPO(req.user!.hospitalId, req.user!.userId, req.body);
     sendCreated(res, po, 'Purchase order created');
@@ -314,7 +314,7 @@ router.post(
 // Get PO details
 router.get(
   '/purchase-orders/:id',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const po = await poService.getPOById(req.user!.hospitalId, req.params.id);
     sendSuccess(res, po);
@@ -324,7 +324,7 @@ router.get(
 // Update PO (draft only - Only Manager, Admins, and Pharmacist can edit - NOT Staff)
 router.put(
   '/purchase-orders/:id',
-  authorize(...ADMIN_ROLES, 'PHARMACIST'),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER', 'PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const po = await poService.updatePO(req.user!.hospitalId, req.params.id, req.body);
     sendSuccess(res, po, 'Purchase order updated');
@@ -334,7 +334,7 @@ router.put(
 // Submit PO for approval (Only Manager, Admins, and Pharmacist - NOT Staff)
 router.post(
   '/purchase-orders/:id/submit',
-  authorize(...ADMIN_ROLES, 'PHARMACIST'),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER', 'PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const po = await poService.submitPO(req.user!.hospitalId, req.params.id);
     sendSuccess(res, po, 'Purchase order submitted for approval');
@@ -344,7 +344,7 @@ router.post(
 // Approve PO (Only Manager and Admins - NOT Staff)
 router.post(
   '/purchase-orders/:id/approve',
-  authorize(...ADMIN_ROLES),
+  authorizeWithPermission('procurement:approve', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const po = await poService.approvePO(
       req.user!.hospitalId,
@@ -359,7 +359,7 @@ router.post(
 // Send PO to supplier (Only Manager, Admins, and Pharmacist - NOT Staff)
 router.post(
   '/purchase-orders/:id/send',
-  authorize(...ADMIN_ROLES, 'PHARMACIST'),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER', 'PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const po = await poService.sendPOToSupplier(req.user!.hospitalId, req.params.id);
     sendSuccess(res, po, 'Purchase order sent to supplier');
@@ -369,7 +369,7 @@ router.post(
 // Cancel PO
 router.post(
   '/purchase-orders/:id/cancel',
-  authorize(...ADMIN_ROLES),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     if (!req.body.reason) {
       return res.status(400).json({ success: false, message: 'Cancellation reason is required' });
@@ -387,7 +387,7 @@ router.post(
 // Amend PO
 router.post(
   '/purchase-orders/:id/amend',
-  authorize(...ADMIN_ROLES),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const po = await poService.amendPO(
       req.user!.hospitalId,
@@ -402,7 +402,7 @@ router.post(
 // Generate PO PDF
 router.get(
   '/purchase-orders/:id/pdf',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const pdfBuffer = await poService.generatePOPdf(req.user!.hospitalId, req.params.id);
 
@@ -422,7 +422,7 @@ router.get(
 // List GRNs
 router.get(
   '/goods-receipts',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await grnService.listGRNs(req.user!.hospitalId, {
       status: req.query.status as any,
@@ -438,7 +438,7 @@ router.get(
 // Create GRN (Staff can create, Manager can create)
 router.post(
   '/goods-receipts',
-  authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST'),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF', 'PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const grn = await grnService.createGRN(req.user!.hospitalId, req.user!.userId, req.body);
     sendCreated(res, grn, 'Goods receipt note created');
@@ -448,7 +448,7 @@ router.post(
 // Get GRN details
 router.get(
   '/goods-receipts/:id',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const grn = await grnService.getGRNById(req.user!.hospitalId, req.params.id);
     sendSuccess(res, grn);
@@ -458,7 +458,7 @@ router.get(
 // Update GRN (draft only - Staff and Manager can edit)
 router.put(
   '/goods-receipts/:id',
-  authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST'),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF', 'PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const grn = await grnService.updateGRN(req.user!.hospitalId, req.params.id, req.body);
     sendSuccess(res, grn, 'GRN updated');
@@ -468,7 +468,7 @@ router.put(
 // Approve GRN (triggers inventory update - Only Manager, Admins, and Pharmacist - NOT Staff)
 router.post(
   '/goods-receipts/:id/approve',
-  authorize(...ADMIN_ROLES, 'PHARMACIST'),
+  authorizeWithPermission('procurement:approve', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER', 'PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const grn = await grnService.approveGRN(req.user!.hospitalId, req.params.id);
     sendSuccess(res, grn, 'GRN approved and inventory updated');
@@ -478,7 +478,7 @@ router.post(
 // Record inspection (Staff and Manager can inspect)
 router.post(
   '/goods-receipts/:id/inspect',
-  authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST'),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF', 'PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const grn = await grnService.recordInspection(
       req.user!.hospitalId,
@@ -495,7 +495,7 @@ router.post(
 // List invoices
 router.get(
   '/invoices',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await invoiceService.listInvoices(req.user!.hospitalId, {
       supplierId: req.query.supplierId as string,
@@ -512,7 +512,7 @@ router.get(
 // Record invoice (Staff can create, Manager can create)
 router.post(
   '/invoices',
-  authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST', 'ACCOUNTANT'),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF', 'PHARMACIST', 'ACCOUNTANT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const invoice = await invoiceService.createInvoice(req.user!.hospitalId, req.body);
     sendCreated(res, invoice, 'Invoice recorded');
@@ -522,7 +522,7 @@ router.post(
 // Get invoice details
 router.get(
   '/invoices/:id',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const invoice = await invoiceService.getInvoiceById(req.user!.hospitalId, req.params.id);
     sendSuccess(res, invoice);
@@ -532,7 +532,7 @@ router.get(
 // 3-way match
 router.post(
   '/invoices/:id/match',
-  authorize(...ADMIN_ROLES, 'ACCOUNTANT'),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER', 'ACCOUNTANT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await invoiceService.performThreeWayMatch(
       req.user!.hospitalId,
@@ -546,7 +546,7 @@ router.post(
 // Approve invoice for payment
 router.post(
   '/invoices/:id/approve',
-  authorize(...ADMIN_ROLES, 'ACCOUNTANT'),
+  authorizeWithPermission('procurement:approve', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER', 'ACCOUNTANT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const invoice = await invoiceService.approveInvoiceForPayment(
       req.user!.hospitalId,
@@ -559,7 +559,7 @@ router.post(
 // Get overdue invoices
 router.get(
   '/invoices-overdue',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const invoices = await invoiceService.getOverdueInvoices(req.user!.hospitalId);
     sendSuccess(res, invoices);
@@ -571,7 +571,7 @@ router.get(
 // List returns
 router.get(
   '/returns',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await returnService.listReturns(req.user!.hospitalId, {
       status: req.query.status as any,
@@ -587,7 +587,7 @@ router.get(
 // Create return (Staff can create, Manager can create)
 router.post(
   '/returns',
-  authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST'),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF', 'PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const returnRecord = await returnService.createReturn(
       req.user!.hospitalId,
@@ -601,7 +601,7 @@ router.post(
 // Get return details
 router.get(
   '/returns/:id',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const returnRecord = await returnService.getReturnById(req.user!.hospitalId, req.params.id);
     sendSuccess(res, returnRecord);
@@ -611,7 +611,7 @@ router.get(
 // Approve return (Only Manager and Admins - NOT Staff)
 router.post(
   '/returns/:id/approve',
-  authorize(...ADMIN_ROLES),
+  authorizeWithPermission('procurement:approve', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const returnRecord = await returnService.approveReturn(
       req.user!.hospitalId,
@@ -625,7 +625,7 @@ router.post(
 // Mark return as shipped (Staff and Manager can ship)
 router.post(
   '/returns/:id/ship',
-  authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST'),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF', 'PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const returnRecord = await returnService.markReturnShipped(req.user!.hospitalId, req.params.id);
     sendSuccess(res, returnRecord, 'Return marked as shipped');
@@ -635,7 +635,7 @@ router.post(
 // Record credit note
 router.post(
   '/returns/:id/credit',
-  authorize(...ADMIN_ROLES, 'ACCOUNTANT'),
+  authorizeWithPermission('procurement:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER', 'ACCOUNTANT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const returnRecord = await returnService.recordCreditNote(
       req.user!.hospitalId,
@@ -651,7 +651,7 @@ router.post(
 // Dashboard metrics
 router.get(
   '/analytics/dashboard',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const metrics = await analyticsService.getDashboardMetrics(req.user!.hospitalId);
     sendSuccess(res, metrics);
@@ -661,7 +661,7 @@ router.get(
 // Spend analysis
 router.get(
   '/analytics/spend',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await analyticsService.getSpendAnalysis(req.user!.hospitalId, {
       dateFrom: req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined,
@@ -675,7 +675,7 @@ router.get(
 // Supplier performance report
 router.get(
   '/analytics/supplier-performance',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await analyticsService.getSupplierPerformanceReport(req.user!.hospitalId, {
       limit: req.query.limit ? Number(req.query.limit) : undefined,
@@ -687,7 +687,7 @@ router.get(
 // All pending items
 router.get(
   '/analytics/pending',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await analyticsService.getPendingItems(req.user!.hospitalId);
     sendSuccess(res, result);
@@ -697,7 +697,7 @@ router.get(
 // PO status breakdown
 router.get(
   '/analytics/po-status-breakdown',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await analyticsService.getPOStatusBreakdown(req.user!.hospitalId);
     sendSuccess(res, result);
@@ -707,7 +707,7 @@ router.get(
 // Recent POs
 router.get(
   '/analytics/recent-pos',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const limit = req.query.limit ? Number(req.query.limit) : 10;
     const result = await analyticsService.getRecentPOs(req.user!.hospitalId, limit);
@@ -718,7 +718,7 @@ router.get(
 // Low stock alerts
 router.get(
   '/analytics/low-stock',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const limit = req.query.limit ? Number(req.query.limit) : 20;
     const result = await analyticsService.getLowStockAlerts(req.user!.hospitalId, limit);
@@ -729,7 +729,7 @@ router.get(
 // My PRs (for staff dashboard)
 router.get(
   '/analytics/my-prs',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const limit = req.query.limit ? Number(req.query.limit) : 10;
     const result = await analyticsService.getMyPRs(req.user!.hospitalId, req.user!.userId, limit);
@@ -740,7 +740,7 @@ router.get(
 // Recent GRNs
 router.get(
   '/analytics/recent-grns',
-  authorize(...PROCUREMENT_ROLES),
+  authorizeWithPermission('procurement:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const limit = req.query.limit ? Number(req.query.limit) : 10;
     const result = await analyticsService.getRecentGRNs(req.user!.hospitalId, limit);

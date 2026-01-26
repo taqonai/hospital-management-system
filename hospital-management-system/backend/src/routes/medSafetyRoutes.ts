@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { medSafetyService } from '../services/medSafetyService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -16,7 +16,7 @@ const router = Router();
 router.post(
   '/verify',
   authenticate,
-  authorize('NURSE', 'DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:med_safety', ['NURSE', 'DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await medSafetyService.verifyFiveRights(req.body);
     sendSuccess(res, result);
@@ -32,7 +32,7 @@ router.post(
 router.post(
   '/scan',
   authenticate,
-  authorize('NURSE', 'DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:med_safety', ['NURSE', 'DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { barcode, expectedType } = req.body;
     const result = await medSafetyService.processBarcodeScan(barcode, expectedType);
@@ -49,7 +49,7 @@ router.post(
 router.get(
   '/patient/:id/medications',
   authenticate,
-  authorize('NURSE', 'DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:med_safety', ['NURSE', 'DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await medSafetyService.getPatientDueMedications(req.params.id);
     sendSuccess(res, result);
@@ -65,7 +65,7 @@ router.get(
 router.post(
   '/administer',
   authenticate,
-  authorize('NURSE', 'DOCTOR'),
+  authorizeWithPermission('ai:med_safety', ['NURSE', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const administrationData = {
       ...req.body,
@@ -85,7 +85,7 @@ router.post(
 router.get(
   '/alerts/:patientId',
   authenticate,
-  authorize('NURSE', 'DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:med_safety', ['NURSE', 'DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await medSafetyService.getPatientAlerts(req.params.patientId);
     sendSuccess(res, result);
@@ -101,7 +101,7 @@ router.get(
 router.post(
   '/override',
   authenticate,
-  authorize('NURSE', 'DOCTOR'),
+  authorizeWithPermission('ai:med_safety', ['NURSE', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const overrideData = {
       ...req.body,
@@ -136,7 +136,7 @@ router.get(
 router.post(
   '/iv-compatibility',
   authenticate,
-  authorize('NURSE', 'DOCTOR', 'PHARMACIST'),
+  authorizeWithPermission('ai:med_safety', ['NURSE', 'DOCTOR', 'PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { drug1, drug2 } = req.body;
     const result = await medSafetyService.checkIVCompatibility(drug1, drug2);
@@ -153,7 +153,7 @@ router.post(
 router.post(
   '/calculate-dose',
   authenticate,
-  authorize('NURSE', 'DOCTOR', 'PHARMACIST'),
+  authorizeWithPermission('ai:med_safety', ['NURSE', 'DOCTOR', 'PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await medSafetyService.calculateDose(req.body);
     sendSuccess(res, result);
@@ -169,7 +169,7 @@ router.post(
 router.get(
   '/due',
   authenticate,
-  authorize('NURSE', 'DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:med_safety', ['NURSE', 'DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { shift, wardId, nurseId } = req.query;
     const result = await medSafetyService.getDueMedications({
@@ -188,7 +188,7 @@ router.get(
 router.post(
   '/safety-verify',
   authenticate,
-  authorize('NURSE', 'DOCTOR'),
+  authorizeWithPermission('ai:med_safety', ['NURSE', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await medSafetyService.performSafetyVerification({
       ...req.body,

@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { laboratoryService } from '../services/laboratoryService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -28,7 +28,7 @@ router.get(
 router.post(
   '/tests',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'LAB_TECHNICIAN'),
+  authorizeWithPermission('lab:tests:manage', ['HOSPITAL_ADMIN', 'LAB_TECHNICIAN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const test = await laboratoryService.createLabTest(req.body);
     sendCreated(res, test, 'Lab test created successfully');
@@ -49,7 +49,7 @@ router.get(
 router.put(
   '/tests/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'LAB_TECHNICIAN'),
+  authorizeWithPermission('lab:tests:manage', ['HOSPITAL_ADMIN', 'LAB_TECHNICIAN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const test = await laboratoryService.updateLabTest(req.params.id, req.body);
     sendSuccess(res, test, 'Lab test updated successfully');
@@ -82,7 +82,7 @@ router.get(
 router.post(
   '/orders',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN'),
+  authorizeWithPermission('lab:orders:write', ['HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const order = await laboratoryService.createLabOrder(req.user!.hospitalId, {
       ...req.body,
@@ -106,7 +106,7 @@ router.get(
 router.patch(
   '/orders/:id/status',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'LAB_TECHNICIAN'),
+  authorizeWithPermission('lab:orders:write', ['HOSPITAL_ADMIN', 'LAB_TECHNICIAN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const order = await laboratoryService.updateLabOrderStatus(
       req.params.id,
@@ -121,7 +121,7 @@ router.patch(
 router.post(
   '/results/:testId',
   authenticate,
-  authorize('LAB_TECHNICIAN'),
+  authorizeWithPermission('lab:results:write', ['LAB_TECHNICIAN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await laboratoryService.enterTestResult(req.params.testId, {
       ...req.body,
@@ -135,7 +135,7 @@ router.post(
 router.patch(
   '/results/:testId/verify',
   authenticate,
-  authorize('LAB_TECHNICIAN', 'DOCTOR'),
+  authorizeWithPermission('lab:results:verify', ['LAB_TECHNICIAN', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await laboratoryService.verifyTestResult(req.params.testId, req.user!.userId);
     sendSuccess(res, result, 'Result verified');
@@ -156,7 +156,7 @@ router.get(
 router.post(
   '/critical/:testId/acknowledge',
   authenticate,
-  authorize('DOCTOR', 'PATHOLOGIST', 'LAB_TECHNICIAN'),
+  authorizeWithPermission('lab:tests:manage', ['DOCTOR', 'PATHOLOGIST', 'LAB_TECHNICIAN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await laboratoryService.verifyTestResult(req.params.testId, req.user!.userId);
     sendSuccess(res, result, 'Critical result acknowledged successfully');
@@ -211,7 +211,7 @@ router.post(
 router.post(
   '/samples/collect',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'LAB_TECHNICIAN', 'NURSE'),
+  authorizeWithPermission('lab:orders:write', ['HOSPITAL_ADMIN', 'LAB_TECHNICIAN', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await laboratoryService.collectSample(req.user!.hospitalId, {
       ...req.body,
@@ -226,7 +226,7 @@ router.post(
 router.get(
   '/samples/pending',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'LAB_TECHNICIAN', 'NURSE'),
+  authorizeWithPermission('lab:orders:read', ['HOSPITAL_ADMIN', 'LAB_TECHNICIAN', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const samples = await laboratoryService.getPendingSamples(req.user!.hospitalId);
     sendSuccess(res, samples);
@@ -237,7 +237,7 @@ router.get(
 router.get(
   '/samples/cold-chain',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'LAB_TECHNICIAN'),
+  authorizeWithPermission('lab:orders:read', ['HOSPITAL_ADMIN', 'LAB_TECHNICIAN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const samples = await laboratoryService.getColdChainSamples(req.user!.hospitalId);
     sendSuccess(res, samples);
@@ -268,7 +268,7 @@ router.get(
 router.patch(
   '/samples/:barcode/status',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'LAB_TECHNICIAN', 'NURSE'),
+  authorizeWithPermission('lab:orders:write', ['HOSPITAL_ADMIN', 'LAB_TECHNICIAN', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const sample = await laboratoryService.updateSampleStatus(req.params.barcode, {
       ...req.body,
@@ -282,7 +282,7 @@ router.patch(
 router.post(
   '/samples/:barcode/verify',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'LAB_TECHNICIAN'),
+  authorizeWithPermission('lab:orders:write', ['HOSPITAL_ADMIN', 'LAB_TECHNICIAN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const sample = await laboratoryService.verifySample(req.params.barcode, {
       ...req.body,

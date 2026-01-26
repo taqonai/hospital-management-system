@@ -65,6 +65,10 @@ export const config = {
     symptomCheckerUrl: process.env.SYMPTOM_CHECKER_URL || 'http://localhost:8010',
   },
 
+  rbac: {
+    mode: (process.env.RBAC_MODE || 'hybrid') as 'legacy' | 'dynamic' | 'hybrid',
+  },
+
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10),
     max: parseInt(process.env.RATE_LIMIT_MAX || '100', 10),

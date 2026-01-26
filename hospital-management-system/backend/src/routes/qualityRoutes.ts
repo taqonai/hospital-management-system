@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { qualityService } from '../services/qualityService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -13,7 +13,7 @@ const router = Router();
 router.post(
   '/indicators',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('quality:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const indicator = await qualityService.createIndicator(req.user!.hospitalId, req.body);
     sendCreated(res, indicator, 'Quality indicator created');
@@ -45,7 +45,7 @@ router.get(
 router.put(
   '/indicators/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('quality:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const indicator = await qualityService.updateIndicator(req.params.id, req.body);
     sendSuccess(res, indicator, 'Indicator updated');
@@ -129,7 +129,7 @@ router.patch(
 router.post(
   '/incidents/:id/investigate',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('quality:incidents', ['HOSPITAL_ADMIN', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const incident = await qualityService.investigateIncident(req.params.id, {
       ...req.body,
@@ -143,7 +143,7 @@ router.post(
 router.post(
   '/incidents/:id/close',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('quality:incidents', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const incident = await qualityService.closeIncident(req.params.id, {
       ...req.body,

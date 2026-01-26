@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { ambulanceService } from '../services/ambulanceService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -13,7 +13,7 @@ const router = Router();
 router.post(
   '/',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('ambulance:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const ambulance = await ambulanceService.addAmbulance(req.user!.hospitalId, req.body);
     sendCreated(res, ambulance, 'Ambulance added successfully');
@@ -103,7 +103,7 @@ router.get(
 router.post(
   '/trips/:id/dispatch',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'NURSE'),
+  authorizeWithPermission('ambulance:write', ['HOSPITAL_ADMIN', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { ambulanceId, driverId, paramedicId, estimatedArrival } = req.body;
     const trip = await ambulanceService.dispatchAmbulance(req.params.id, {

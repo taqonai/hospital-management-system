@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { earlyWarningService } from '../services/earlyWarningService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -84,7 +84,7 @@ router.post(
 router.post(
   '/monitor',
   authenticate,
-  authorize('NURSE', 'DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:early_warning', ['NURSE', 'DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId, vitals, vitalsHistory, patientData } = req.body;
     const result = await earlyWarningService.monitorVitals(
@@ -106,7 +106,7 @@ router.post(
 router.post(
   '/vitals',
   authenticate,
-  authorize('NURSE', 'DOCTOR'),
+  authorizeWithPermission('ai:early_warning', ['NURSE', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId, ...vitalsData } = req.body;
     const result = await earlyWarningService.recordVitalsWithEWS(
@@ -126,7 +126,7 @@ router.post(
 router.post(
   '/record',
   authenticate,
-  authorize('NURSE', 'DOCTOR'),
+  authorizeWithPermission('ai:early_warning', ['NURSE', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId, vitals } = req.body;
     const result = await earlyWarningService.recordVitalsWithEWS(
@@ -235,7 +235,7 @@ router.get(
 router.put(
   '/alerts/:alertId/acknowledge',
   authenticate,
-  authorize('NURSE', 'DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:early_warning', ['NURSE', 'DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { notes } = req.body;
     const result = await earlyWarningService.acknowledgeAlert(
@@ -254,7 +254,7 @@ router.put(
 router.post(
   '/acknowledge/:alertId',
   authenticate,
-  authorize('NURSE', 'DOCTOR'),
+  authorizeWithPermission('ai:early_warning', ['NURSE', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { notes } = req.body;
     const result = await earlyWarningService.acknowledgeAlert(

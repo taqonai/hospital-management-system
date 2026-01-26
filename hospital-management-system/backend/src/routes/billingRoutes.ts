@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { billingService } from '../services/billingService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -32,7 +32,7 @@ router.get(
 router.post(
   '/invoices',
   authenticate,
-  authorize('ACCOUNTANT', 'HOSPITAL_ADMIN', 'RECEPTIONIST'),
+  authorizeWithPermission('billing:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN', 'RECEPTIONIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const invoice = await billingService.createInvoice(req.user!.hospitalId, req.body);
     sendCreated(res, invoice, 'Invoice created');
@@ -53,7 +53,7 @@ router.get(
 router.delete(
   '/invoices/:id',
   authenticate,
-  authorize('ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('billing:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const invoice = await billingService.cancelInvoice(req.params.id, req.user!.hospitalId);
     sendSuccess(res, invoice, 'Invoice cancelled');
@@ -66,7 +66,7 @@ router.delete(
 router.post(
   '/invoices/:invoiceId/payments',
   authenticate,
-  authorize('ACCOUNTANT', 'RECEPTIONIST', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('billing:write', ['ACCOUNTANT', 'RECEPTIONIST', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const payment = await billingService.addPayment(req.params.invoiceId, {
       ...req.body,
@@ -98,7 +98,7 @@ router.get(
 router.post(
   '/invoices/:invoiceId/claims',
   authenticate,
-  authorize('ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('billing:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const claim = await billingService.submitInsuranceClaim(req.params.invoiceId, req.body);
     sendCreated(res, claim, 'Insurance claim submitted');
@@ -109,7 +109,7 @@ router.post(
 router.patch(
   '/claims/:claimId/status',
   authenticate,
-  authorize('ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('billing:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const claim = await billingService.updateClaimStatus(
       req.params.claimId,

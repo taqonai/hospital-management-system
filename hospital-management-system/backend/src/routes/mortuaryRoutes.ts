@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { mortuaryService } from '../services/mortuaryService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -13,7 +13,7 @@ const router = Router();
 router.post(
   '/records',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('mortuary:write', ['HOSPITAL_ADMIN', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const record = await mortuaryService.registerDeath(req.user!.hospitalId, req.body);
     sendCreated(res, record, 'Death registered');
@@ -45,7 +45,7 @@ router.get(
 router.put(
   '/records/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('mortuary:write', ['HOSPITAL_ADMIN', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const record = await mortuaryService.updateRecord(req.params.id, req.body);
     sendSuccess(res, record, 'Record updated');
@@ -56,7 +56,7 @@ router.put(
 router.patch(
   '/records/:id/status',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('mortuary:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { status, ...data } = req.body;
     const record = await mortuaryService.updateStatus(req.params.id, status, data);
@@ -70,7 +70,7 @@ router.patch(
 router.post(
   '/records/:id/certificate',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('mortuary:write', ['HOSPITAL_ADMIN', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const record = await mortuaryService.issueDeathCertificate(req.params.id, {
       ...req.body,
@@ -86,7 +86,7 @@ router.post(
 router.post(
   '/records/:id/autopsy/schedule',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('mortuary:write', ['HOSPITAL_ADMIN', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const record = await mortuaryService.scheduleAutopsy(req.params.id, req.body);
     sendSuccess(res, record, 'Autopsy scheduled');
@@ -97,7 +97,7 @@ router.post(
 router.patch(
   '/records/:id/autopsy/complete',
   authenticate,
-  authorize('DOCTOR'),
+  authorizeWithPermission('mortuary:write', ['DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const record = await mortuaryService.completeAutopsy(req.params.id, {
       ...req.body,
@@ -113,7 +113,7 @@ router.patch(
 router.post(
   '/records/:id/release',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('mortuary:release', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const record = await mortuaryService.releaseBody(req.params.id, {
       ...req.body,
@@ -129,7 +129,7 @@ router.post(
 router.post(
   '/records/:id/organ-donation',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('mortuary:write', ['HOSPITAL_ADMIN', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const record = await mortuaryService.registerOrganDonation(req.params.id, req.body);
     sendSuccess(res, record, 'Organ donation registered');
@@ -142,7 +142,7 @@ router.post(
 router.post(
   '/ai/mortality-analysis',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('mortuary:write', ['HOSPITAL_ADMIN', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const analysis = mortuaryService.analyzeMortalityPatterns(req.body);
     sendSuccess(res, analysis);
@@ -153,7 +153,7 @@ router.post(
 router.post(
   '/ai/death-summary',
   authenticate,
-  authorize('DOCTOR'),
+  authorizeWithPermission('mortuary:write', ['DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const summary = mortuaryService.generateDeathSummary(req.body);
     sendSuccess(res, summary);

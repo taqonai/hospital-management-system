@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { radiologyService } from '../services/radiologyService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -32,7 +32,7 @@ router.get(
 router.post(
   '/orders',
   authenticate,
-  authorize('DOCTOR', 'RADIOLOGIST', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('radiology:orders:write', ['DOCTOR', 'RADIOLOGIST', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const order = await radiologyService.createImagingOrder(req.user!.hospitalId, {
       ...req.body,
@@ -56,7 +56,7 @@ router.get(
 router.patch(
   '/orders/:id/status',
   authenticate,
-  authorize('RADIOLOGIST', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('radiology:orders:write', ['RADIOLOGIST', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const order = await radiologyService.updateOrderStatus(req.params.id, req.user!.hospitalId, req.body.status);
     sendSuccess(res, order, 'Status updated');
@@ -67,7 +67,7 @@ router.patch(
 router.patch(
   '/orders/:id/schedule',
   authenticate,
-  authorize('RADIOLOGIST', 'RECEPTIONIST', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('radiology:orders:write', ['RADIOLOGIST', 'RECEPTIONIST', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const order = await radiologyService.scheduleStudy(
       req.params.id,
@@ -82,7 +82,7 @@ router.patch(
 router.post(
   '/orders/:orderId/study',
   authenticate,
-  authorize('RADIOLOGIST'),
+  authorizeWithPermission('radiology:orders:write', ['RADIOLOGIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const study = await radiologyService.createStudy(req.params.orderId, req.body);
     sendCreated(res, study, 'Study created');
@@ -93,7 +93,7 @@ router.post(
 router.post(
   '/studies/:studyId/report',
   authenticate,
-  authorize('RADIOLOGIST'),
+  authorizeWithPermission('radiology:results:write', ['RADIOLOGIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const study = await radiologyService.addReport(req.params.studyId, {
       ...req.body,
@@ -117,7 +117,7 @@ router.post(
 router.patch(
   '/ai-analysis/:analysisId/review',
   authenticate,
-  authorize('RADIOLOGIST', 'DOCTOR'),
+  authorizeWithPermission('radiology:orders:write', ['RADIOLOGIST', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const analysis = await radiologyService.reviewAIAnalysis(
       req.params.analysisId,

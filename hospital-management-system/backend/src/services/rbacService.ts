@@ -207,6 +207,26 @@ export const PERMISSIONS = {
   CRM_WRITE: 'crm:write',
   CRM_CAMPAIGNS: 'crm:campaigns',
   CRM_SURVEYS: 'crm:surveys',
+
+  // Procurement
+  PROCUREMENT_READ: 'procurement:read',
+  PROCUREMENT_WRITE: 'procurement:write',
+  PROCUREMENT_APPROVE: 'procurement:approve',
+  PROCUREMENT_DELETE: 'procurement:delete',
+  PROCUREMENT_ANALYTICS: 'procurement:analytics',
+
+  // Referrals
+  REFERRALS_READ: 'referrals:read',
+  REFERRALS_WRITE: 'referrals:write',
+
+  // Insurance & Coding
+  INSURANCE_CODING_READ: 'insurance_coding:read',
+  INSURANCE_CODING_WRITE: 'insurance_coding:write',
+
+  // WhatsApp Bot / Messaging
+  MESSAGING_READ: 'messaging:read',
+  MESSAGING_WRITE: 'messaging:write',
+  MESSAGING_MANAGE: 'messaging:manage',
 } as const;
 
 export type Permission = typeof PERMISSIONS[keyof typeof PERMISSIONS];
@@ -275,8 +295,27 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     PERMISSIONS.TELEMEDICINE_READ,
     PERMISSIONS.TELEMEDICINE_WRITE,
     PERMISSIONS.TELEMEDICINE_HOST,
+    // Blood Bank
+    PERMISSIONS.BLOOD_BANK_READ,
+    PERMISSIONS.BLOOD_BANK_REQUESTS,
+    // Dietary
+    PERMISSIONS.DIETARY_READ,
+    PERMISSIONS.DIETARY_WRITE,
+    // Doctors (own profile management)
+    PERMISSIONS.DOCTORS_WRITE,
+    PERMISSIONS.DOCTORS_DELETE,
+    // Lab (verification & test management)
+    PERMISSIONS.LAB_RESULTS_VERIFY,
+    PERMISSIONS.LAB_TESTS_MANAGE,
+    // Mortuary (death certification)
+    PERMISSIONS.MORTUARY_READ,
+    PERMISSIONS.MORTUARY_WRITE,
+    // Quality
+    PERMISSIONS.QUALITY_READ,
+    PERMISSIONS.QUALITY_INCIDENTS,
     // Queue
     PERMISSIONS.QUEUE_READ,
+    PERMISSIONS.QUEUE_WRITE,
     // Reports
     PERMISSIONS.REPORTS_VIEW,
     PERMISSIONS.REPORTS_CLINICAL,
@@ -289,8 +328,19 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     PERMISSIONS.AI_EARLY_WARNING,
     PERMISSIONS.AI_MED_SAFETY,
     PERMISSIONS.AI_SMART_ORDERS,
+    // Referrals
+    PERMISSIONS.REFERRALS_READ,
+    PERMISSIONS.REFERRALS_WRITE,
+    // Insurance Coding
+    PERMISSIONS.INSURANCE_CODING_READ,
+    PERMISSIONS.INSURANCE_CODING_WRITE,
+    // Medical Records Export
+    PERMISSIONS.MEDICAL_RECORDS_EXPORT,
     // Notifications
     PERMISSIONS.NOTIFICATIONS_READ,
+    // Messaging
+    PERMISSIONS.MESSAGING_READ,
+    PERMISSIONS.MESSAGING_WRITE,
   ],
 
   NURSE: [
@@ -300,37 +350,68 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     PERMISSIONS.PATIENTS_MEDICAL_HISTORY,
     // Appointments
     PERMISSIONS.APPOINTMENTS_READ,
+    PERMISSIONS.APPOINTMENTS_WRITE,
     // Doctors
     PERMISSIONS.DOCTORS_READ,
     // Departments
     PERMISSIONS.DEPARTMENTS_READ,
     // Lab
     PERMISSIONS.LAB_ORDERS_READ,
+    PERMISSIONS.LAB_ORDERS_WRITE,
     // Radiology
     PERMISSIONS.RADIOLOGY_ORDERS_READ,
     // Pharmacy
     PERMISSIONS.PHARMACY_READ,
     // IPD
     PERMISSIONS.IPD_ADMISSIONS_READ,
+    PERMISSIONS.IPD_ADMISSIONS_WRITE,
     PERMISSIONS.IPD_BEDS_MANAGE,
     PERMISSIONS.IPD_NURSING_NOTES,
     // OPD
     PERMISSIONS.OPD_VISITS_READ,
+    PERMISSIONS.OPD_VISITS_WRITE,
     // Emergency
     PERMISSIONS.EMERGENCY_READ,
     PERMISSIONS.EMERGENCY_WRITE,
     PERMISSIONS.EMERGENCY_TRIAGE,
+    // Surgery
+    PERMISSIONS.SURGERY_READ,
+    PERMISSIONS.SURGERY_WRITE,
     // Blood Bank
     PERMISSIONS.BLOOD_BANK_READ,
+    PERMISSIONS.BLOOD_BANK_WRITE,
+    PERMISSIONS.BLOOD_BANK_DONATIONS,
     PERMISSIONS.BLOOD_BANK_REQUESTS,
+    // CSSD
+    PERMISSIONS.CSSD_READ,
+    PERMISSIONS.CSSD_WRITE,
+    // Dietary
+    PERMISSIONS.DIETARY_READ,
+    PERMISSIONS.DIETARY_WRITE,
+    // Housekeeping
+    PERMISSIONS.HOUSEKEEPING_READ,
+    PERMISSIONS.HOUSEKEEPING_WRITE,
+    // Ambulance
+    PERMISSIONS.AMBULANCE_READ,
+    PERMISSIONS.AMBULANCE_WRITE,
     // Medical Records
     PERMISSIONS.MEDICAL_RECORDS_READ,
+    PERMISSIONS.MEDICAL_RECORDS_EXPORT,
     // Queue
     PERMISSIONS.QUEUE_READ,
     PERMISSIONS.QUEUE_WRITE,
     // AI
+    PERMISSIONS.AI_DIAGNOSTIC,
+    PERMISSIONS.AI_IMAGING,
+    PERMISSIONS.AI_SCRIBE,
     PERMISSIONS.AI_EARLY_WARNING,
     PERMISSIONS.AI_MED_SAFETY,
+    PERMISSIONS.AI_SMART_ORDERS,
+    // Insurance Coding
+    PERMISSIONS.INSURANCE_CODING_READ,
+    PERMISSIONS.INSURANCE_CODING_WRITE,
+    // Referrals
+    PERMISSIONS.REFERRALS_READ,
     // Notifications
     PERMISSIONS.NOTIFICATIONS_READ,
   ],
@@ -352,13 +433,28 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     PERMISSIONS.BILLING_WRITE,
     // IPD
     PERMISSIONS.IPD_ADMISSIONS_READ,
+    PERMISSIONS.IPD_ADMISSIONS_WRITE,
     // OPD
     PERMISSIONS.OPD_VISITS_READ,
     PERMISSIONS.OPD_VISITS_WRITE,
+    // Emergency
+    PERMISSIONS.EMERGENCY_READ,
+    PERMISSIONS.EMERGENCY_WRITE,
+    // Radiology
+    PERMISSIONS.RADIOLOGY_ORDERS_READ,
+    PERMISSIONS.RADIOLOGY_ORDERS_WRITE,
+    // CRM
+    PERMISSIONS.CRM_READ,
     // Queue
     PERMISSIONS.QUEUE_READ,
     PERMISSIONS.QUEUE_WRITE,
     PERMISSIONS.QUEUE_MANAGE,
+    // Referrals
+    PERMISSIONS.REFERRALS_READ,
+    PERMISSIONS.REFERRALS_WRITE,
+    // Messaging
+    PERMISSIONS.MESSAGING_READ,
+    PERMISSIONS.MESSAGING_WRITE,
     // Notifications
     PERMISSIONS.NOTIFICATIONS_READ,
   ],
@@ -370,7 +466,18 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     PERMISSIONS.LAB_ORDERS_READ,
     PERMISSIONS.LAB_ORDERS_WRITE,
     PERMISSIONS.LAB_RESULTS_WRITE,
+    PERMISSIONS.LAB_RESULTS_VERIFY,
     PERMISSIONS.LAB_TESTS_MANAGE,
+    // Blood Bank
+    PERMISSIONS.BLOOD_BANK_READ,
+    PERMISSIONS.BLOOD_BANK_WRITE,
+    PERMISSIONS.BLOOD_BANK_DONATIONS,
+    PERMISSIONS.BLOOD_BANK_REQUESTS,
+    // OPD (view visits for order context)
+    PERMISSIONS.OPD_VISITS_READ,
+    // Medical Records
+    PERMISSIONS.MEDICAL_RECORDS_READ,
+    PERMISSIONS.MEDICAL_RECORDS_EXPORT,
     // Reports
     PERMISSIONS.REPORTS_VIEW,
     // Notifications
@@ -386,8 +493,13 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     PERMISSIONS.PHARMACY_INVENTORY,
     PERMISSIONS.PHARMACY_DRUGS_MANAGE,
     PERMISSIONS.PHARMACY_PRESCRIPTIONS,
+    // Procurement (for PO/GRN of pharmacy supplies)
+    PERMISSIONS.PROCUREMENT_READ,
+    PERMISSIONS.PROCUREMENT_WRITE,
+    PERMISSIONS.PROCUREMENT_APPROVE,
     // AI
     PERMISSIONS.AI_MED_SAFETY,
+    PERMISSIONS.AI_SMART_ORDERS,
     // Reports
     PERMISSIONS.REPORTS_VIEW,
     // Notifications
@@ -403,6 +515,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     PERMISSIONS.RADIOLOGY_ORDERS_WRITE,
     PERMISSIONS.RADIOLOGY_RESULTS_WRITE,
     PERMISSIONS.RADIOLOGY_RESULTS_VERIFY,
+    // OPD (view visits for imaging context)
+    PERMISSIONS.OPD_VISITS_READ,
+    // Medical Records
+    PERMISSIONS.MEDICAL_RECORDS_READ,
+    PERMISSIONS.MEDICAL_RECORDS_EXPORT,
     // AI
     PERMISSIONS.AI_IMAGING,
     // Reports
@@ -419,6 +536,15 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     PERMISSIONS.BILLING_REFUND,
     PERMISSIONS.BILLING_DISCOUNTS,
     PERMISSIONS.BILLING_REPORTS,
+    // Insurance & Coding
+    PERMISSIONS.INSURANCE_CODING_READ,
+    PERMISSIONS.INSURANCE_CODING_WRITE,
+    // Procurement (invoice reconciliation & approval)
+    PERMISSIONS.PROCUREMENT_READ,
+    PERMISSIONS.PROCUREMENT_WRITE,
+    PERMISSIONS.PROCUREMENT_APPROVE,
+    // HR (payroll access)
+    PERMISSIONS.HR_PAYROLL,
     // Reports
     PERMISSIONS.REPORTS_VIEW,
     PERMISSIONS.REPORTS_EXPORT,
@@ -433,6 +559,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     PERMISSIONS.PATIENT_PORTAL_APPOINTMENTS,
     PERMISSIONS.PATIENT_PORTAL_RECORDS,
     PERMISSIONS.PATIENT_PORTAL_BILLING,
+    // Appointments (cancel own)
+    PERMISSIONS.APPOINTMENTS_READ,
+    PERMISSIONS.APPOINTMENTS_WRITE,
+    // Referrals (self-referral)
+    PERMISSIONS.REFERRALS_READ,
+    PERMISSIONS.REFERRALS_WRITE,
     // Telemedicine
     PERMISSIONS.TELEMEDICINE_READ,
     // Queue
@@ -469,6 +601,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     PERMISSIONS.HR_EMPLOYEES_WRITE,
     PERMISSIONS.HR_ATTENDANCE,
     PERMISSIONS.HR_LEAVE_MANAGE,
+    PERMISSIONS.HR_PAYROLL,
     PERMISSIONS.HR_TRAINING,
     // Reports
     PERMISSIONS.REPORTS_VIEW,
@@ -562,6 +695,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ],
   PROCUREMENT_MANAGER: [
     // Procurement manager has full procurement access
+    PERMISSIONS.PROCUREMENT_READ,
+    PERMISSIONS.PROCUREMENT_WRITE,
+    PERMISSIONS.PROCUREMENT_APPROVE,
+    PERMISSIONS.PROCUREMENT_DELETE,
+    PERMISSIONS.PROCUREMENT_ANALYTICS,
     // Reports
     PERMISSIONS.REPORTS_VIEW,
     PERMISSIONS.REPORTS_EXPORT,
@@ -572,6 +710,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ] as Permission[],
   PROCUREMENT_STAFF: [
     // Procurement staff has limited access
+    PERMISSIONS.PROCUREMENT_READ,
+    PERMISSIONS.PROCUREMENT_WRITE,
     // Reports
     PERMISSIONS.REPORTS_VIEW,
     // Pharmacy Inventory (for viewing stock levels)
@@ -873,6 +1013,38 @@ export const PERMISSION_CATEGORIES: Record<string, { permissions: Permission[]; 
     ],
     description: 'Patient self-service portal access',
   },
+  'Procurement': {
+    permissions: [
+      PERMISSIONS.PROCUREMENT_READ,
+      PERMISSIONS.PROCUREMENT_WRITE,
+      PERMISSIONS.PROCUREMENT_APPROVE,
+      PERMISSIONS.PROCUREMENT_DELETE,
+      PERMISSIONS.PROCUREMENT_ANALYTICS,
+    ],
+    description: 'Manage procurement operations',
+  },
+  'Referrals': {
+    permissions: [
+      PERMISSIONS.REFERRALS_READ,
+      PERMISSIONS.REFERRALS_WRITE,
+    ],
+    description: 'Manage patient referrals',
+  },
+  'Insurance & Coding': {
+    permissions: [
+      PERMISSIONS.INSURANCE_CODING_READ,
+      PERMISSIONS.INSURANCE_CODING_WRITE,
+    ],
+    description: 'Insurance coding and claim management',
+  },
+  'Messaging': {
+    permissions: [
+      PERMISSIONS.MESSAGING_READ,
+      PERMISSIONS.MESSAGING_WRITE,
+      PERMISSIONS.MESSAGING_MANAGE,
+    ],
+    description: 'WhatsApp and messaging management',
+  },
 };
 
 // ==================== PERMISSION DESCRIPTIONS ====================
@@ -1047,6 +1219,22 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   [PERMISSIONS.CRM_WRITE]: 'Create and update CRM records',
   [PERMISSIONS.CRM_CAMPAIGNS]: 'Manage marketing campaigns',
   [PERMISSIONS.CRM_SURVEYS]: 'Create and manage surveys',
+
+  [PERMISSIONS.PROCUREMENT_READ]: 'View procurement data',
+  [PERMISSIONS.PROCUREMENT_WRITE]: 'Create and edit procurement records',
+  [PERMISSIONS.PROCUREMENT_APPROVE]: 'Approve purchase orders and requests',
+  [PERMISSIONS.PROCUREMENT_DELETE]: 'Delete procurement records',
+  [PERMISSIONS.PROCUREMENT_ANALYTICS]: 'View procurement analytics',
+
+  [PERMISSIONS.REFERRALS_READ]: 'View patient referrals',
+  [PERMISSIONS.REFERRALS_WRITE]: 'Create and manage referrals',
+
+  [PERMISSIONS.INSURANCE_CODING_READ]: 'View insurance coding data',
+  [PERMISSIONS.INSURANCE_CODING_WRITE]: 'Manage insurance coding and claims',
+
+  [PERMISSIONS.MESSAGING_READ]: 'View messaging and bot data',
+  [PERMISSIONS.MESSAGING_WRITE]: 'Send messages via bot channels',
+  [PERMISSIONS.MESSAGING_MANAGE]: 'Manage messaging settings and bots',
 };
 
 // ==================== INTERFACES ====================

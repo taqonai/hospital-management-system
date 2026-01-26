@@ -6,7 +6,7 @@
 import { Router, Response } from 'express';
 import multer from 'multer';
 import { pdfService } from '../services/pdfService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -60,7 +60,7 @@ router.get(
 router.post(
   '/analyze',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'LAB_TECHNICIAN', 'RADIOLOGIST', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('medical_records:export', ['DOCTOR', 'NURSE', 'LAB_TECHNICIAN', 'RADIOLOGIST', 'HOSPITAL_ADMIN']),
   upload.single('file'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     if (!req.file) {
@@ -101,7 +101,7 @@ router.post(
 router.post(
   '/analyze-url',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'LAB_TECHNICIAN', 'RADIOLOGIST', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('medical_records:export', ['DOCTOR', 'NURSE', 'LAB_TECHNICIAN', 'RADIOLOGIST', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { url, documentType, extractEntities, patientAge, patientGender, patientConditions } = req.body;
 

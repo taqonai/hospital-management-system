@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { doctorService } from '../services/doctorService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { validate, uuidParamSchema, paginationSchema } from '../middleware/validation';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
@@ -33,7 +33,7 @@ router.get(
 router.post(
   '/',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('doctors:write', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     // Convert numeric fields from string to number
     const data = { ...req.body };
@@ -83,7 +83,7 @@ router.post(
 router.get(
   '/me',
   authenticate,
-  authorize('DOCTOR'),
+  authorizeWithPermission('doctors:read', ['DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const doctor = await doctorService.findByUserId(req.user!.userId, req.user!.hospitalId);
     if (!doctor) {
@@ -108,7 +108,7 @@ router.get(
 router.put(
   '/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('doctors:write', ['HOSPITAL_ADMIN', 'SUPER_ADMIN', 'DOCTOR']),
   validate(uuidParamSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     // Convert numeric fields from string to number
@@ -170,7 +170,7 @@ router.get(
 router.put(
   '/:id/schedule',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('doctors:schedule', ['HOSPITAL_ADMIN', 'DOCTOR']),
   validate(uuidParamSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const schedule = await doctorService.updateSchedule(
@@ -186,7 +186,7 @@ router.put(
 router.patch(
   '/:id/availability',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('doctors:write', ['HOSPITAL_ADMIN', 'DOCTOR']),
   validate(uuidParamSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { isAvailable } = req.body;
@@ -203,7 +203,7 @@ router.patch(
 router.get(
   '/:id/dashboard',
   authenticate,
-  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('doctors:read', ['DOCTOR', 'HOSPITAL_ADMIN']),
   validate(uuidParamSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const stats = await doctorService.getDashboardStats(req.params.id);
@@ -250,7 +250,7 @@ router.get(
 router.post(
   '/:id/absences',
   authenticate,
-  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('doctors:write', ['DOCTOR', 'HOSPITAL_ADMIN']),
   validate(uuidParamSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const absence = await doctorService.createAbsence(
@@ -267,7 +267,7 @@ router.post(
 router.patch(
   '/:id/absences/:absenceId',
   authenticate,
-  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('doctors:write', ['DOCTOR', 'HOSPITAL_ADMIN']),
   validate(uuidParamSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const absence = await doctorService.updateAbsence(
@@ -283,7 +283,7 @@ router.patch(
 router.delete(
   '/:id/absences/:absenceId',
   authenticate,
-  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('doctors:delete', ['DOCTOR', 'HOSPITAL_ADMIN']),
   validate(uuidParamSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await doctorService.cancelAbsence(

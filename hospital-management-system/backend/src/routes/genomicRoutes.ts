@@ -4,7 +4,7 @@ import { validate } from '../middleware/validation';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendError } from '../utils/response';
 import { patientAuthenticate, PatientAuthenticatedRequest } from '../middleware/patientAuth';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { AuthenticatedRequest } from '../types';
 import prisma from '../config/database';
 import crypto from 'crypto';
@@ -523,7 +523,7 @@ router.delete(
 router.get(
   '/patients/:patientId/profile',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:diagnostic', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId } = req.params;
 

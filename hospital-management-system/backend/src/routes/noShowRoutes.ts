@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { noShowService } from '../services/noShowService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler, ValidationError } from '../middleware/errorHandler';
 import { sendSuccess } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -24,7 +24,7 @@ const validateUUID = (id: string, field: string) => {
 router.get(
   '/logs',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR', 'RECEPTIONIST'),
+  authorizeWithPermission('appointments:read', ['HOSPITAL_ADMIN', 'DOCTOR', 'RECEPTIONIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { startDate, endDate, doctorId, patientId, reason, limit, offset } = req.query;
 
@@ -55,7 +55,7 @@ router.get(
 router.get(
   '/stats',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('appointments:read', ['HOSPITAL_ADMIN', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { startDate, endDate } = req.query;
 
@@ -80,7 +80,7 @@ router.get(
 router.get(
   '/alerts',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'),
+  authorizeWithPermission('appointments:read', ['HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const alerts = await noShowService.getActiveAlerts(req.user!.hospitalId);
     sendSuccess(res, alerts);
@@ -94,7 +94,7 @@ router.get(
 router.put(
   '/alerts/:alertId/acknowledge',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'),
+  authorizeWithPermission('appointments:write', ['HOSPITAL_ADMIN', 'DOCTOR', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     validateUUID(req.params.alertId, 'alertId');
 
@@ -110,7 +110,7 @@ router.put(
 router.put(
   '/alerts/:alertId/resolve',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'),
+  authorizeWithPermission('appointments:write', ['HOSPITAL_ADMIN', 'DOCTOR', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     validateUUID(req.params.alertId, 'alertId');
 
@@ -126,7 +126,7 @@ router.put(
 router.post(
   '/trigger',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('appointments:write', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await triggerNoShowCheck();
     sendSuccess(res, result, 'NO_SHOW check triggered');
@@ -140,7 +140,7 @@ router.post(
 router.get(
   '/cron-health',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('appointments:read', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const health = await getCronHealth();
     sendSuccess(res, health);
@@ -181,7 +181,7 @@ router.post(
 router.post(
   '/:appointmentId',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR', 'RECEPTIONIST', 'NURSE'),
+  authorizeWithPermission('appointments:write', ['HOSPITAL_ADMIN', 'DOCTOR', 'RECEPTIONIST', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     validateUUID(req.params.appointmentId, 'appointmentId');
 

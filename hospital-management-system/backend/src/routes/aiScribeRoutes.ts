@@ -6,7 +6,7 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { aiScribeService } from '../services/aiScribeService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -52,7 +52,7 @@ router.get(
 router.post(
   '/start-session',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:scribe', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const {
       patientId,
@@ -90,7 +90,7 @@ router.post(
 router.get(
   '/session/:id',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:scribe', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { id } = req.params;
     const session = await aiScribeService.getSession(id);
@@ -107,7 +107,7 @@ router.get(
 router.post(
   '/transcribe',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:scribe', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   upload.single('audio'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     if (!req.file) {
@@ -136,7 +136,7 @@ router.post(
 router.post(
   '/upload-audio',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:scribe', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   upload.single('audio'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { sessionId, chunkNumber, isFinal } = req.body;
@@ -175,7 +175,7 @@ router.post(
 router.post(
   '/generate-note',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:scribe', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { text, noteType, patientInfo, extractEntities, suggestCodes } = req.body;
 
@@ -205,7 +205,7 @@ router.post(
 router.post(
   '/process',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:scribe', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   upload.single('audio'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const {
@@ -251,7 +251,7 @@ router.post(
 router.post(
   '/extract-entities',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:scribe', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { text, includeVitals, includeMedications, includeSymptoms, includeDiagnoses } = req.body;
 
@@ -283,7 +283,7 @@ router.post(
 router.post(
   '/save-note',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:scribe', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const {
       sessionId,
@@ -365,7 +365,7 @@ router.get(
 router.post(
   '/transcribe-and-generate',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:scribe', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   upload.single('audio'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const {
@@ -445,7 +445,7 @@ router.post(
 router.get(
   '/notes',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:scribe', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId, authorId, noteType, status, startDate, endDate, page, limit } = req.query;
 
@@ -471,7 +471,7 @@ router.get(
 router.get(
   '/notes/:noteId',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:scribe', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { noteId } = req.params;
     const note = await aiScribeService.getClinicalNoteById(req.user?.hospitalId || '', noteId);
@@ -486,7 +486,7 @@ router.get(
 router.put(
   '/notes/:noteId',
   authenticate,
-  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:scribe', ['DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { noteId } = req.params;
     const { subjective, objective, assessment, plan } = req.body;
@@ -509,7 +509,7 @@ router.put(
 router.post(
   '/notes/:noteId/sign',
   authenticate,
-  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:scribe', ['DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { noteId } = req.params;
 
@@ -530,7 +530,7 @@ router.post(
 router.post(
   '/notes/save',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:scribe', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const {
       sessionId,
@@ -593,7 +593,7 @@ router.post(
 router.get(
   '/sessions',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:scribe', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId, status, page, limit } = req.query;
 
@@ -619,7 +619,7 @@ router.get(
 router.post(
   '/sessions',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:scribe', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const {
       patientId,
@@ -680,7 +680,7 @@ router.post(
 router.get(
   '/patients/:patientId/notes',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:scribe', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId } = req.params;
     const { noteType, status, page, limit } = req.query;

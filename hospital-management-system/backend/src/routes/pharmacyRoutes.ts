@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import multer from 'multer';
 import { pharmacyService } from '../services/pharmacyService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -42,7 +42,7 @@ router.get(
 router.post(
   '/drugs',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'PHARMACIST'),
+  authorizeWithPermission('pharmacy:drugs:manage', ['HOSPITAL_ADMIN', 'PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const drug = await pharmacyService.createDrug(req.body);
     sendCreated(res, drug, 'Drug created successfully');
@@ -63,7 +63,7 @@ router.get(
 router.put(
   '/drugs/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'PHARMACIST'),
+  authorizeWithPermission('pharmacy:drugs:manage', ['HOSPITAL_ADMIN', 'PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const drug = await pharmacyService.updateDrug(req.params.id, req.body);
     sendSuccess(res, drug, 'Drug updated successfully');
@@ -76,7 +76,7 @@ router.put(
 router.post(
   '/inventory',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'PHARMACIST'),
+  authorizeWithPermission('pharmacy:inventory', ['HOSPITAL_ADMIN', 'PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const inventory = await pharmacyService.addInventory(req.body);
     sendCreated(res, inventory, 'Inventory added successfully');
@@ -87,7 +87,7 @@ router.post(
 router.patch(
   '/inventory/:id/quantity',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'PHARMACIST'),
+  authorizeWithPermission('pharmacy:inventory', ['HOSPITAL_ADMIN', 'PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const inventory = await pharmacyService.updateInventoryQuantity(req.params.id, req.body.quantity);
     sendSuccess(res, inventory, 'Inventory updated');
@@ -132,7 +132,7 @@ router.get(
 router.post(
   '/dispense/:medicationId',
   authenticate,
-  authorize('PHARMACIST'),
+  authorizeWithPermission('pharmacy:dispense', ['PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await pharmacyService.dispenseMedication(req.params.medicationId, req.user!.userId);
     sendSuccess(res, result, 'Medication dispensed');
@@ -143,7 +143,7 @@ router.post(
 router.post(
   '/prescriptions/:prescriptionId/dispense',
   authenticate,
-  authorize('PHARMACIST'),
+  authorizeWithPermission('pharmacy:dispense', ['PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await pharmacyService.dispensePrescription(req.params.prescriptionId, req.user!.userId);
     sendSuccess(res, result, 'Prescription dispensed');
@@ -201,7 +201,7 @@ router.get(
 router.get(
   '/drugs/csv-template',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'PHARMACIST'),
+  authorizeWithPermission('pharmacy:read', ['HOSPITAL_ADMIN', 'PHARMACIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const template = pharmacyService.getDrugCSVTemplate();
     res.setHeader('Content-Type', 'text/csv');
@@ -214,7 +214,7 @@ router.get(
 router.post(
   '/drugs/bulk-import',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'PHARMACIST'),
+  authorizeWithPermission('pharmacy:drugs:manage', ['HOSPITAL_ADMIN', 'PHARMACIST']),
   upload.single('file'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     if (!req.file) {

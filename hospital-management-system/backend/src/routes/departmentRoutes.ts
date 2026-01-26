@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -64,7 +64,7 @@ router.get(
 router.post(
   '/',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('departments:write', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   [
     body('name').trim().notEmpty().withMessage('Name is required'),
     body('code').trim().notEmpty().withMessage('Code is required'),
@@ -88,7 +88,7 @@ router.post(
 router.put(
   '/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('departments:write', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   [
     param('id').isUUID().withMessage('Invalid department ID'),
     body('name').optional().trim().notEmpty().withMessage('Name cannot be empty'),
@@ -115,7 +115,7 @@ router.put(
 router.delete(
   '/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('departments:delete', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   param('id').isUUID().withMessage('Invalid department ID'),
   validate,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
@@ -148,7 +148,7 @@ router.get(
 router.post(
   '/:id/specializations',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('departments:write', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   [
     param('id').isUUID().withMessage('Invalid department ID'),
     body('name').trim().notEmpty().withMessage('Name is required'),
@@ -170,7 +170,7 @@ router.post(
 router.put(
   '/:id/specializations/:specId',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('departments:write', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   [
     param('id').isUUID().withMessage('Invalid department ID'),
     param('specId').isUUID().withMessage('Invalid specialization ID'),
@@ -195,7 +195,7 @@ router.put(
 router.delete(
   '/:id/specializations/:specId',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('departments:delete', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   [
     param('id').isUUID().withMessage('Invalid department ID'),
     param('specId').isUUID().withMessage('Invalid specialization ID'),

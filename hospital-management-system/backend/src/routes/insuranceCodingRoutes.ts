@@ -10,7 +10,7 @@ import { consultationCodingService } from '../services/consultationCodingService
 import { dischargeCodingService } from '../services/dischargeCodingService';
 import { codingAnalyticsService } from '../services/codingAnalyticsService';
 import { eclaimLinkService } from '../services/eclaimLinkService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -124,7 +124,7 @@ router.get(
 router.post(
   '/icd10',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'ACCOUNTANT'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const code = await icdService.create(req.user!.hospitalId, req.body, req.user!.userId);
     sendCreated(res, code, 'ICD-10 code created');
@@ -135,7 +135,7 @@ router.post(
 router.post(
   '/icd10/bulk',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { codes } = req.body;
     const result = await icdService.bulkImport(req.user!.hospitalId, codes, req.user!.userId);
@@ -147,7 +147,7 @@ router.post(
 router.post(
   '/icd10/import-csv',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN']),
   upload.single('file'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     if (!req.file) {
@@ -188,7 +188,7 @@ router.get(
 router.put(
   '/icd10/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'ACCOUNTANT'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const code = await icdService.update(req.params.id, req.user!.hospitalId, req.body);
     sendSuccess(res, code, 'ICD-10 code updated');
@@ -199,7 +199,7 @@ router.put(
 router.delete(
   '/icd10/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const code = await icdService.delete(req.params.id, req.user!.hospitalId);
     sendSuccess(res, code, 'ICD-10 code deactivated');
@@ -305,7 +305,7 @@ router.get(
 router.post(
   '/cpt',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'ACCOUNTANT'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const code = await cptService.create(req.user!.hospitalId, req.body, req.user!.userId);
     sendCreated(res, code, 'CPT code created');
@@ -316,7 +316,7 @@ router.post(
 router.post(
   '/cpt/bulk',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { codes } = req.body;
     const result = await cptService.bulkImport(req.user!.hospitalId, codes, req.user!.userId);
@@ -328,7 +328,7 @@ router.post(
 router.post(
   '/cpt/import-csv',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN']),
   upload.single('file'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     if (!req.file) {
@@ -369,7 +369,7 @@ router.get(
 router.put(
   '/cpt/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'ACCOUNTANT'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const code = await cptService.update(req.params.id, req.user!.hospitalId, req.body);
     sendSuccess(res, code, 'CPT code updated');
@@ -380,7 +380,7 @@ router.put(
 router.delete(
   '/cpt/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const code = await cptService.delete(req.params.id, req.user!.hospitalId);
     sendSuccess(res, code, 'CPT code deactivated');
@@ -403,7 +403,7 @@ router.get(
 router.post(
   '/modifiers',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'ACCOUNTANT'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const modifier = await cptService.createModifier(req.user!.hospitalId, req.body);
     sendCreated(res, modifier, 'CPT modifier created');
@@ -414,7 +414,7 @@ router.post(
 router.post(
   '/modifiers/bulk',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { modifiers } = req.body;
     const result = await cptService.bulkImportModifiers(req.user!.hospitalId, modifiers);
@@ -426,7 +426,7 @@ router.post(
 router.put(
   '/modifiers/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'ACCOUNTANT'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const modifier = await cptService.updateModifier(req.params.id, req.user!.hospitalId, req.body);
     sendSuccess(res, modifier, 'CPT modifier updated');
@@ -437,7 +437,7 @@ router.put(
 router.delete(
   '/modifiers/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     await cptService.deleteModifier(req.params.id, req.user!.hospitalId);
     sendSuccess(res, null, 'CPT modifier deleted');
@@ -488,7 +488,7 @@ router.get(
 router.post(
   '/payers',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'ACCOUNTANT'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const payer = await payerService.create(req.user!.hospitalId, req.body, req.user!.userId);
     sendCreated(res, payer, 'Insurance payer created');
@@ -499,7 +499,7 @@ router.post(
 router.put(
   '/payers/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'ACCOUNTANT'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const payer = await payerService.update(req.params.id, req.user!.hospitalId, req.body);
     sendSuccess(res, payer, 'Insurance payer updated');
@@ -510,7 +510,7 @@ router.put(
 router.delete(
   '/payers/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const payer = await payerService.delete(req.params.id, req.user!.hospitalId);
     sendSuccess(res, payer, 'Insurance payer deactivated');
@@ -547,7 +547,7 @@ router.get(
 router.post(
   '/payers/:payerId/icd-rules',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'ACCOUNTANT'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const rule = await payerRulesService.createICDRule(req.params.payerId, req.body);
     sendCreated(res, rule, 'ICD-10 payer rule created');
@@ -558,7 +558,7 @@ router.post(
 router.post(
   '/payers/:payerId/icd-rules/bulk',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { rules } = req.body;
     const result = await payerRulesService.bulkImportICDRules(req.params.payerId, rules);
@@ -570,7 +570,7 @@ router.post(
 router.put(
   '/payers/:payerId/icd-rules/:ruleId',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'ACCOUNTANT'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const rule = await payerRulesService.updateICDRule(req.params.ruleId, req.body);
     sendSuccess(res, rule, 'ICD-10 payer rule updated');
@@ -581,7 +581,7 @@ router.put(
 router.delete(
   '/payers/:payerId/icd-rules/:ruleId',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     await payerRulesService.deleteICDRule(req.params.ruleId);
     sendSuccess(res, null, 'ICD-10 payer rule deleted');
@@ -618,7 +618,7 @@ router.get(
 router.post(
   '/payers/:payerId/cpt-rules',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'ACCOUNTANT'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const rule = await payerRulesService.createCPTRule(req.params.payerId, req.body);
     sendCreated(res, rule, 'CPT payer rule created');
@@ -629,7 +629,7 @@ router.post(
 router.post(
   '/payers/:payerId/cpt-rules/bulk',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { rules } = req.body;
     const result = await payerRulesService.bulkImportCPTRules(req.params.payerId, rules);
@@ -641,7 +641,7 @@ router.post(
 router.put(
   '/payers/:payerId/cpt-rules/:ruleId',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'ACCOUNTANT'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const rule = await payerRulesService.updateCPTRule(req.params.ruleId, req.body);
     sendSuccess(res, rule, 'CPT payer rule updated');
@@ -652,7 +652,7 @@ router.put(
 router.delete(
   '/payers/:payerId/cpt-rules/:ruleId',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     await payerRulesService.deleteCPTRule(req.params.ruleId);
     sendSuccess(res, null, 'CPT payer rule deleted');
@@ -742,7 +742,7 @@ router.get(
 router.post(
   '/icd-cpt-mappings',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'ACCOUNTANT'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const mapping = await medicalNecessityService.createMapping(
       req.user!.hospitalId,
@@ -757,7 +757,7 @@ router.post(
 router.post(
   '/icd-cpt-mappings/bulk',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { mappings } = req.body;
     const result = await medicalNecessityService.bulkImport(
@@ -773,7 +773,7 @@ router.post(
 router.put(
   '/icd-cpt-mappings/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'ACCOUNTANT'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const mapping = await medicalNecessityService.updateMapping(
       req.params.id,
@@ -788,7 +788,7 @@ router.put(
 router.delete(
   '/icd-cpt-mappings/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     await medicalNecessityService.deleteMapping(req.params.id, req.user!.hospitalId);
     sendSuccess(res, null, 'ICD-CPT mapping deleted');
@@ -1049,7 +1049,7 @@ router.get(
 router.post(
   '/consultation/:consultationId/diagnoses',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const diagnosis = await consultationCodingService.addDiagnosis(
       req.params.consultationId,
@@ -1064,7 +1064,7 @@ router.post(
 router.post(
   '/consultation/:consultationId/diagnoses/bulk',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { diagnoses } = req.body;
     const results = await consultationCodingService.addDiagnoses(
@@ -1080,7 +1080,7 @@ router.post(
 router.put(
   '/consultation/diagnoses/:diagnosisId',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const diagnosis = await consultationCodingService.updateDiagnosis(
       req.params.diagnosisId,
@@ -1094,7 +1094,7 @@ router.put(
 router.delete(
   '/consultation/diagnoses/:diagnosisId',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     await consultationCodingService.removeDiagnosis(req.params.diagnosisId);
     sendSuccess(res, { deleted: true }, 'Diagnosis removed');
@@ -1115,7 +1115,7 @@ router.get(
 router.post(
   '/consultation/:consultationId/procedures',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const procedure = await consultationCodingService.addProcedure(
       req.params.consultationId,
@@ -1130,7 +1130,7 @@ router.post(
 router.post(
   '/consultation/:consultationId/procedures/bulk',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { procedures } = req.body;
     const results = await consultationCodingService.addProcedures(
@@ -1146,7 +1146,7 @@ router.post(
 router.put(
   '/consultation/procedures/:procedureId',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const procedure = await consultationCodingService.updateProcedure(
       req.params.procedureId,
@@ -1160,7 +1160,7 @@ router.put(
 router.delete(
   '/consultation/procedures/:procedureId',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     await consultationCodingService.removeProcedure(req.params.procedureId);
     sendSuccess(res, { deleted: true }, 'Procedure removed');
@@ -1171,7 +1171,7 @@ router.delete(
 router.post(
   '/consultation/:consultationId/finalize',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { generateInvoice } = req.body;
     const result = await consultationCodingService.finalizeCoding(
@@ -1208,7 +1208,7 @@ router.get(
 router.post(
   '/discharge-coding/:codingId/diagnoses',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const diagnosis = await dischargeCodingService.addDiagnosis(
       req.params.codingId,
@@ -1223,7 +1223,7 @@ router.post(
 router.post(
   '/discharge-coding/:codingId/diagnoses/bulk',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { diagnoses } = req.body;
     const results = await dischargeCodingService.addDiagnoses(
@@ -1239,7 +1239,7 @@ router.post(
 router.put(
   '/discharge-coding/diagnoses/:diagnosisId',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const diagnosis = await dischargeCodingService.updateDiagnosis(
       req.params.diagnosisId,
@@ -1253,7 +1253,7 @@ router.put(
 router.delete(
   '/discharge-coding/diagnoses/:diagnosisId',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     await dischargeCodingService.removeDiagnosis(req.params.diagnosisId);
     sendSuccess(res, { deleted: true }, 'Diagnosis removed');
@@ -1264,7 +1264,7 @@ router.delete(
 router.post(
   '/discharge-coding/:codingId/procedures',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const procedure = await dischargeCodingService.addProcedure(
       req.params.codingId,
@@ -1279,7 +1279,7 @@ router.post(
 router.post(
   '/discharge-coding/:codingId/procedures/bulk',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { procedures } = req.body;
     const results = await dischargeCodingService.addProcedures(
@@ -1295,7 +1295,7 @@ router.post(
 router.put(
   '/discharge-coding/procedures/:procedureId',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const procedure = await dischargeCodingService.updateProcedure(
       req.params.procedureId,
@@ -1309,7 +1309,7 @@ router.put(
 router.delete(
   '/discharge-coding/procedures/:procedureId',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     await dischargeCodingService.removeProcedure(req.params.procedureId);
     sendSuccess(res, { deleted: true }, 'Procedure removed');
@@ -1320,7 +1320,7 @@ router.delete(
 router.put(
   '/discharge-coding/:codingId/status',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { status } = req.body;
     const coding = await dischargeCodingService.updateStatus(
@@ -1336,7 +1336,7 @@ router.put(
 router.post(
   '/discharge-coding/:codingId/finalize',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await dischargeCodingService.finalizeCoding(
       req.params.codingId,
@@ -1350,7 +1350,7 @@ router.post(
 router.post(
   '/discharge-coding/:codingId/generate-claim',
   authenticate,
-  authorize('DOCTOR', 'ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await dischargeCodingService.generateClaim(req.params.codingId);
     sendSuccess(res, result, 'Claim generated');
@@ -1372,7 +1372,7 @@ router.put(
 router.get(
   '/discharge-codings',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:read', ['DOCTOR', 'NURSE', 'ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { status, fromDate, toDate, limit, offset } = req.query;
 
@@ -1408,7 +1408,7 @@ const parseDateRange = (startDate?: string, endDate?: string) => {
 router.get(
   '/analytics/dashboard',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:read', ['DOCTOR', 'NURSE', 'ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { startDate, endDate } = req.query;
     const dateRange = parseDateRange(startDate as string, endDate as string);
@@ -1424,7 +1424,7 @@ router.get(
 router.get(
   '/analytics/icd-usage',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:read', ['DOCTOR', 'NURSE', 'ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { startDate, endDate, limit } = req.query;
     const dateRange = parseDateRange(startDate as string, endDate as string);
@@ -1441,7 +1441,7 @@ router.get(
 router.get(
   '/analytics/cpt-usage',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:read', ['DOCTOR', 'NURSE', 'ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { startDate, endDate, limit } = req.query;
     const dateRange = parseDateRange(startDate as string, endDate as string);
@@ -1458,7 +1458,7 @@ router.get(
 router.get(
   '/analytics/revenue',
   authenticate,
-  authorize('ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:read', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { startDate, endDate } = req.query;
     const dateRange = parseDateRange(startDate as string, endDate as string);
@@ -1474,7 +1474,7 @@ router.get(
 router.get(
   '/analytics/ai-adoption',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:read', ['DOCTOR', 'NURSE', 'ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { startDate, endDate } = req.query;
     const dateRange = parseDateRange(startDate as string, endDate as string);
@@ -1490,7 +1490,7 @@ router.get(
 router.get(
   '/analytics/trends',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:read', ['DOCTOR', 'NURSE', 'ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { startDate, endDate, granularity } = req.query;
 
@@ -1517,7 +1517,7 @@ router.get(
 router.get(
   '/analytics/code-pairs',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:read', ['DOCTOR', 'NURSE', 'ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { startDate, endDate, limit } = req.query;
     const dateRange = parseDateRange(startDate as string, endDate as string);
@@ -1534,7 +1534,7 @@ router.get(
 router.get(
   '/analytics/specificity',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:read', ['DOCTOR', 'NURSE', 'ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { startDate, endDate } = req.query;
     const dateRange = parseDateRange(startDate as string, endDate as string);
@@ -1550,7 +1550,7 @@ router.get(
 router.get(
   '/analytics/discharge',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:read', ['DOCTOR', 'NURSE', 'ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { startDate, endDate } = req.query;
     const dateRange = parseDateRange(startDate as string, endDate as string);
@@ -1568,7 +1568,7 @@ router.get(
 router.get(
   '/eclaim/preview/consultation/:consultationId',
   authenticate,
-  authorize('DOCTOR', 'ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:read', ['DOCTOR', 'ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { claimData, validation } = await eclaimLinkService.previewClaim(
       'consultation',
@@ -1582,7 +1582,7 @@ router.get(
 router.get(
   '/eclaim/preview/discharge/:dischargeCodingId',
   authenticate,
-  authorize('DOCTOR', 'ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:read', ['DOCTOR', 'ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { claimData, validation } = await eclaimLinkService.previewClaim(
       'discharge',
@@ -1596,7 +1596,7 @@ router.get(
 router.get(
   '/eclaim/preview/invoice/:invoiceId',
   authenticate,
-  authorize('DOCTOR', 'ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:read', ['DOCTOR', 'ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { claimData, validation } = await eclaimLinkService.previewClaim(
       'invoice',
@@ -1610,7 +1610,7 @@ router.get(
 router.post(
   '/eclaim/generate/consultation/:consultationId',
   authenticate,
-  authorize('DOCTOR', 'ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const xml = await eclaimLinkService.generateConsultationClaimXML(req.params.consultationId);
     res.set('Content-Type', 'application/xml');
@@ -1622,7 +1622,7 @@ router.post(
 router.post(
   '/eclaim/generate/discharge/:dischargeCodingId',
   authenticate,
-  authorize('DOCTOR', 'ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const xml = await eclaimLinkService.generateDischargeCodingClaimXML(req.params.dischargeCodingId);
     res.set('Content-Type', 'application/xml');
@@ -1634,7 +1634,7 @@ router.post(
 router.post(
   '/eclaim/generate/invoice/:invoiceId',
   authenticate,
-  authorize('DOCTOR', 'ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['DOCTOR', 'ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const xml = await eclaimLinkService.generateInvoiceClaimXML(req.params.invoiceId);
     res.set('Content-Type', 'application/xml');
@@ -1646,7 +1646,7 @@ router.post(
 router.post(
   '/eclaim/generate/batch',
   authenticate,
-  authorize('ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { consultationIds } = req.body;
     if (!Array.isArray(consultationIds) || consultationIds.length === 0) {
@@ -1669,7 +1669,7 @@ router.post(
 router.get(
   '/eclaim/pending',
   authenticate,
-  authorize('DOCTOR', 'ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('insurance_coding:read', ['DOCTOR', 'ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { fromDate, toDate, limit } = req.query;
     const consultations = await eclaimLinkService.getPendingConsultationsForClaims(

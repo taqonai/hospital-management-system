@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { telemedicineService } from '../services/telemedicineService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -44,7 +44,7 @@ router.get(
 router.patch(
   '/sessions/:id/start',
   authenticate,
-  authorize('DOCTOR'),
+  authorizeWithPermission('telemedicine:write', ['DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const session = await telemedicineService.startSession(req.params.id);
     sendSuccess(res, session, 'Session started');
@@ -55,7 +55,7 @@ router.patch(
 router.patch(
   '/sessions/:id/end',
   authenticate,
-  authorize('DOCTOR'),
+  authorizeWithPermission('telemedicine:write', ['DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const session = await telemedicineService.endSession(req.params.id, req.body);
     sendSuccess(res, session, 'Session completed');
@@ -88,7 +88,7 @@ router.patch(
 router.patch(
   '/sessions/:id/notes',
   authenticate,
-  authorize('DOCTOR'),
+  authorizeWithPermission('telemedicine:write', ['DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { notes } = req.body;
     const session = await telemedicineService.updateNotes(req.params.id, notes);
@@ -112,7 +112,7 @@ router.patch(
 router.post(
   '/sessions/:id/recording/start',
   authenticate,
-  authorize('DOCTOR'),
+  authorizeWithPermission('telemedicine:write', ['DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { recordingType } = req.body;
     const result = await telemedicineService.startRecording(
@@ -127,7 +127,7 @@ router.post(
 router.post(
   '/sessions/:id/recording/stop',
   authenticate,
-  authorize('DOCTOR'),
+  authorizeWithPermission('telemedicine:write', ['DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { recordingId } = req.body;
     if (!recordingId) {
@@ -162,7 +162,7 @@ router.post(
 router.delete(
   '/recordings/:id',
   authenticate,
-  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('telemedicine:write', ['DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await telemedicineService.deleteRecording(req.params.id);
     sendSuccess(res, result, 'Recording deleted');
@@ -199,7 +199,7 @@ router.post(
 router.post(
   '/ai/summary',
   authenticate,
-  authorize('DOCTOR'),
+  authorizeWithPermission('telemedicine:write', ['DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const summary = telemedicineService.generateConsultationSummary(req.body);
     sendSuccess(res, summary);
@@ -210,7 +210,7 @@ router.post(
 router.post(
   '/ai/recommend-followup',
   authenticate,
-  authorize('DOCTOR'),
+  authorizeWithPermission('telemedicine:write', ['DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const recommendation = telemedicineService.recommendFollowUp(req.body);
     sendSuccess(res, recommendation);

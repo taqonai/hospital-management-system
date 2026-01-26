@@ -3,7 +3,7 @@ import multer from 'multer';
 import { aiService } from '../services/aiService';
 import { aiScribeService } from '../services/aiScribeService';
 import { storageService } from '../services/storageService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -131,7 +131,7 @@ router.post(
 router.post(
   '/diagnose',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:diagnostic', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId, symptoms, patientAge, gender, medicalHistory, currentMedications, allergies, vitalSigns } = req.body;
 
@@ -183,7 +183,7 @@ router.post(
 router.post(
   '/predict-risk',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:diagnostic', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId, predictionType, timeframe, patientData } = req.body;
 
@@ -225,7 +225,7 @@ router.post(
 router.post(
   '/analyze-image',
   authenticate,
-  authorize('DOCTOR', 'RADIOLOGIST', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:imaging', ['DOCTOR', 'RADIOLOGIST', 'NURSE', 'HOSPITAL_ADMIN']),
   imageUpload.single('image'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { modalityType, bodyPart, patientAge, patientGender, clinicalHistory, imageUrl, imagingOrderId } = req.body;
@@ -301,7 +301,7 @@ router.post(
 router.get(
   '/insights/:patientId',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:diagnostic', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const insights = await aiService.getPatientAIInsights(req.params.patientId);
     sendSuccess(res, insights);
@@ -354,7 +354,7 @@ router.post(
 router.post(
   '/feedback/:type/:id',
   authenticate,
-  authorize('DOCTOR'),
+  authorizeWithPermission('ai:diagnostic', ['DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { type, id } = req.params;
     const result = await aiService.provideFeedback(
@@ -504,7 +504,7 @@ router.get(
 router.post(
   '/clinical-notes/generate',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:diagnostic', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { templateType, patientData, encounterData } = req.body;
 
@@ -525,7 +525,7 @@ router.post(
 router.post(
   '/clinical-notes/enhance',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:diagnostic', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { noteText, enhancementType } = req.body;
 

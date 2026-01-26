@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { smartOrderService } from '../services/smartOrderService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -48,7 +48,7 @@ router.get(
 router.post(
   '/recommend',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:smart_orders', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { diagnosis, icdCode, symptoms, patientId, patientContext, includeAlternatives } = req.body;
 
@@ -80,7 +80,7 @@ router.post(
 router.get(
   '/bundles',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:smart_orders', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const bundles = await smartOrderService.getBundles();
     sendSuccess(res, bundles, 'Order bundles retrieved successfully');
@@ -94,7 +94,7 @@ router.get(
 router.get(
   '/bundle/:id',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:smart_orders', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { id } = req.params;
     const bundle = await smartOrderService.getBundleDetails(id);
@@ -133,7 +133,7 @@ router.get(
 router.post(
   '/customize',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:smart_orders', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { bundleId, selectedOrders, patientId, patientContext, customizations } = req.body;
 
@@ -180,7 +180,7 @@ router.post(
 router.post(
   '/place',
   authenticate,
-  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:smart_orders', ['DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId, orders, notes } = req.body;
 
@@ -216,7 +216,7 @@ router.post(
 router.get(
   '/history',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:smart_orders', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const hospitalId = req.user?.hospitalId;
     const { patientId, patientName, startDate, endDate, status, category, page, pageSize } = req.query;
@@ -250,7 +250,7 @@ router.get(
 router.get(
   '/stats',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:smart_orders', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const hospitalId = req.user?.hospitalId;
     const { startDate, endDate } = req.query;
@@ -272,7 +272,7 @@ router.get(
 router.get(
   '/orders/:orderId',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:smart_orders', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { orderId } = req.params;
     const hospitalId = req.user?.hospitalId;
@@ -289,7 +289,7 @@ router.get(
 router.patch(
   '/orders/:orderId/status',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:smart_orders', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { orderId } = req.params;
     const { status, executedBy } = req.body;
@@ -307,7 +307,7 @@ router.patch(
 router.post(
   '/orders/:orderId/cancel',
   authenticate,
-  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:smart_orders', ['DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { orderId } = req.params;
     const { reason } = req.body;
@@ -325,7 +325,7 @@ router.post(
 router.post(
   '/orders/:orderId/reorder',
   authenticate,
-  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:smart_orders', ['DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { orderId } = req.params;
     const { newPatientId } = req.body;
@@ -353,7 +353,7 @@ router.post(
 router.post(
   '/check-interactions',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'PHARMACIST', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:smart_orders', ['DOCTOR', 'NURSE', 'PHARMACIST', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { medications } = req.body;
 

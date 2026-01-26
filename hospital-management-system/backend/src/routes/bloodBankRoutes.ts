@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { bloodBankService } from '../services/bloodBankService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -13,7 +13,7 @@ const router = Router();
 router.post(
   '/donors',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'NURSE', 'LAB_TECHNICIAN'),
+  authorizeWithPermission('blood_bank:write', ['HOSPITAL_ADMIN', 'NURSE', 'LAB_TECHNICIAN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await bloodBankService.registerDonor(req.user!.hospitalId, req.body);
     sendCreated(res, result, 'Donor registered successfully');
@@ -57,7 +57,7 @@ router.post(
 router.post(
   '/donations',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'NURSE', 'LAB_TECHNICIAN'),
+  authorizeWithPermission('blood_bank:donations', ['HOSPITAL_ADMIN', 'NURSE', 'LAB_TECHNICIAN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const donation = await bloodBankService.recordDonation(req.user!.hospitalId, req.body);
     sendCreated(res, donation, 'Donation recorded successfully');
@@ -79,7 +79,7 @@ router.get(
 router.patch(
   '/donations/:id/test-results',
   authenticate,
-  authorize('LAB_TECHNICIAN'),
+  authorizeWithPermission('blood_bank:donations', ['LAB_TECHNICIAN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const donation = await bloodBankService.updateTestResults(req.params.id, req.body);
     sendSuccess(res, donation, 'Test results updated');
@@ -92,7 +92,7 @@ router.patch(
 router.post(
   '/donations/:id/process',
   authenticate,
-  authorize('LAB_TECHNICIAN'),
+  authorizeWithPermission('blood_bank:donations', ['LAB_TECHNICIAN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const components = await bloodBankService.processBloodComponents(
       req.user!.hospitalId,
@@ -119,7 +119,7 @@ router.get(
 router.post(
   '/requests',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('blood_bank:requests', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await bloodBankService.createBloodRequest(req.user!.hospitalId, {
       ...req.body,
@@ -161,7 +161,7 @@ router.post(
 router.post(
   '/requests/:requestId/crossmatch/:componentId',
   authenticate,
-  authorize('LAB_TECHNICIAN'),
+  authorizeWithPermission('blood_bank:requests', ['LAB_TECHNICIAN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await bloodBankService.performCrossMatch(
       req.params.requestId,
@@ -176,7 +176,7 @@ router.post(
 router.patch(
   '/requests/:id/approve',
   authenticate,
-  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('blood_bank:requests', ['DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const request = await bloodBankService.approveRequest(req.params.id, req.user!.userId);
     sendSuccess(res, request, 'Request approved');
@@ -189,7 +189,7 @@ router.patch(
 router.post(
   '/requests/:requestId/issue/:componentId',
   authenticate,
-  authorize('LAB_TECHNICIAN', 'NURSE'),
+  authorizeWithPermission('blood_bank:requests', ['LAB_TECHNICIAN', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const transfusion = await bloodBankService.issueBlood(
       req.user!.hospitalId,
@@ -205,7 +205,7 @@ router.post(
 router.patch(
   '/transfusions/:id/complete',
   authenticate,
-  authorize('NURSE', 'DOCTOR'),
+  authorizeWithPermission('blood_bank:requests', ['NURSE', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const transfusion = await bloodBankService.completeTransfusion(req.params.id, req.body);
     sendSuccess(res, transfusion, 'Transfusion completed');
@@ -216,7 +216,7 @@ router.patch(
 router.post(
   '/transfusions/:id/reaction',
   authenticate,
-  authorize('NURSE', 'DOCTOR'),
+  authorizeWithPermission('blood_bank:requests', ['NURSE', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const transfusion = await bloodBankService.recordReaction(req.params.id, req.body);
     sendSuccess(res, transfusion, 'Reaction recorded');

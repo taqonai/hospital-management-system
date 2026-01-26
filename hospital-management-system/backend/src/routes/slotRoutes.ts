@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { slotService } from '../services/slotService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler, ValidationError } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -83,7 +83,7 @@ router.get(
 router.post(
   '/generate/:doctorId',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('doctors:schedule', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     validateUUID(req.params.doctorId, 'doctorId');
 
@@ -108,7 +108,7 @@ router.post(
 router.post(
   '/regenerate/:doctorId',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('doctors:schedule', ['HOSPITAL_ADMIN', 'SUPER_ADMIN', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     validateUUID(req.params.doctorId, 'doctorId');
 
@@ -124,7 +124,7 @@ router.post(
 router.patch(
   '/:slotId/block',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('doctors:schedule', ['HOSPITAL_ADMIN', 'SUPER_ADMIN', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     validateUUID(req.params.slotId, 'slotId');
 

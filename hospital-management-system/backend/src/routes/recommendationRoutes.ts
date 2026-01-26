@@ -4,7 +4,7 @@ import { validate } from '../middleware/validation';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendError } from '../utils/response';
 import { patientAuthenticate, PatientAuthenticatedRequest } from '../middleware/patientAuth';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { AuthenticatedRequest } from '../types';
 import prisma from '../config/database';
 import axios from 'axios';
@@ -719,7 +719,7 @@ router.post(
 router.get(
   '/patients/:patientId',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:diagnostic', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId } = req.params;
     const { status, category } = req.query;
@@ -760,7 +760,7 @@ router.get(
 router.post(
   '/patients/:patientId',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:diagnostic', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId } = req.params;
     const { category, priority, title, description, reasoning, validDays = 30 } = req.body;

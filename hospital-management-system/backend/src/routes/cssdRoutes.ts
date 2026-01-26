@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { cssdService } from '../services/cssdService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -13,7 +13,7 @@ const router = Router();
 router.post(
   '/items',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'NURSE'),
+  authorizeWithPermission('cssd:write', ['HOSPITAL_ADMIN', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const item = await cssdService.addItem(req.user!.hospitalId, req.body);
     sendCreated(res, item, 'Item added successfully');
@@ -68,7 +68,7 @@ router.get(
 router.post(
   '/cycles',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'NURSE'),
+  authorizeWithPermission('cssd:write', ['HOSPITAL_ADMIN', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const cycle = await cssdService.createCycle(req.user!.hospitalId, {
       ...req.body,

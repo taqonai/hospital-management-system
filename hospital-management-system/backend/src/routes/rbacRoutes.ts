@@ -1,9 +1,10 @@
 import { Router, Response } from 'express';
 import { rbacService } from '../services/rbacService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
+import { invalidatePermissions, invalidateAllPermissions } from '../services/permissionCacheService';
 
 const router = Router();
 
@@ -18,7 +19,7 @@ router.use(authenticate);
  */
 router.get(
   '/permissions',
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('rbac:roles:read', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     // Return the list of available permissions from the service
     const permissions = await rbacService.getUserPermissions(req.user!.userId);
@@ -33,12 +34,13 @@ router.get(
  */
 router.post(
   '/roles',
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('rbac:roles:write', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const role = await rbacService.createRole(req.user!.hospitalId, {
       ...req.body,
       createdBy: req.user!.userId,
     });
+    await invalidateAllPermissions();
     sendCreated(res, role, 'Role created successfully');
   })
 );
@@ -48,7 +50,7 @@ router.post(
  */
 router.get(
   '/roles',
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('rbac:roles:read', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const roles = await rbacService.getRoles(req.user!.hospitalId, {
       search: req.query.search as string,
@@ -64,7 +66,7 @@ router.get(
  */
 router.get(
   '/roles/:id',
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('rbac:roles:read', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const role = await rbacService.getRoleById(req.user!.hospitalId, req.params.id);
     sendSuccess(res, role, 'Role retrieved successfully');
@@ -76,7 +78,7 @@ router.get(
  */
 router.put(
   '/roles/:id',
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('rbac:roles:write', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const role = await rbacService.updateRole(
       req.user!.hospitalId,
@@ -84,6 +86,7 @@ router.put(
       req.body,
       req.user!.userId
     );
+    await invalidateAllPermissions();
     sendSuccess(res, role, 'Role updated successfully');
   })
 );
@@ -93,9 +96,10 @@ router.put(
  */
 router.delete(
   '/roles/:id',
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('rbac:roles:write', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     await rbacService.deleteRole(req.user!.hospitalId, req.params.id, req.user!.userId);
+    await invalidateAllPermissions();
     sendSuccess(res, null, 'Role deleted successfully');
   })
 );
@@ -107,13 +111,14 @@ router.delete(
  */
 router.post(
   '/users/:userId/roles',
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('rbac:assign', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     await rbacService.assignRoleToUser(
       req.params.userId,
       req.body.roleId,
       req.user!.userId
     );
+    await invalidatePermissions(req.params.userId);
     sendCreated(res, { success: true }, 'Role assigned to user successfully');
   })
 );
@@ -123,13 +128,14 @@ router.post(
  */
 router.delete(
   '/users/:userId/roles/:roleId',
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('rbac:assign', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     await rbacService.removeRoleFromUser(
       req.params.userId,
       req.params.roleId,
       req.user!.userId
     );
+    await invalidatePermissions(req.params.userId);
     sendSuccess(res, null, 'Role removed from user successfully');
   })
 );
@@ -139,7 +145,7 @@ router.delete(
  */
 router.get(
   '/users/:userId/roles',
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('rbac:roles:read', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const roles = await rbacService.getUserRoles(req.params.userId);
     const permissions = await rbacService.getUserPermissions(req.params.userId);
@@ -152,7 +158,7 @@ router.get(
  */
 router.get(
   '/roles/:roleId/users',
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('rbac:roles:read', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const users = await rbacService.getUsersByRole(req.user!.hospitalId, req.params.roleId);
     sendSuccess(res, users, 'Users retrieved successfully');
@@ -166,13 +172,14 @@ router.get(
  */
 router.post(
   '/users/:userId/permissions',
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('rbac:assign', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     await rbacService.grantPermission(
       req.params.userId,
       req.body.permission,
       req.user!.userId
     );
+    await invalidatePermissions(req.params.userId);
     sendCreated(res, { success: true }, 'Permission granted to user successfully');
   })
 );
@@ -182,13 +189,14 @@ router.post(
  */
 router.delete(
   '/users/:userId/permissions/:permission',
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('rbac:assign', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     await rbacService.revokePermission(
       req.params.userId,
       req.params.permission,
       req.user!.userId
     );
+    await invalidatePermissions(req.params.userId);
     sendSuccess(res, null, 'Permission revoked from user successfully');
   })
 );
@@ -200,7 +208,7 @@ router.delete(
  */
 router.get(
   '/audit-logs',
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('rbac:audit', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const logs = await rbacService.getAuditLogs(req.user!.hospitalId, {
       userId: req.query.userId as string,

@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { referralService } from '../services/referralService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -17,7 +17,7 @@ const router = Router();
 router.post(
   '/',
   authenticate,
-  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('referrals:write', ['DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const {
       sourceConsultationId,
@@ -69,7 +69,7 @@ router.post(
 router.get(
   '/',
   authenticate,
-  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('referrals:read', ['DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { page = '1', limit = '20' } = req.query;
 
@@ -102,7 +102,7 @@ router.get(
 router.get(
   '/queue',
   authenticate,
-  authorize('RECEPTIONIST', 'HOSPITAL_ADMIN', 'NURSE'),
+  authorizeWithPermission('referrals:read', ['RECEPTIONIST', 'HOSPITAL_ADMIN', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { urgency, departmentId, status, page = '1', limit = '20' } = req.query;
 
@@ -126,7 +126,7 @@ router.get(
 router.get(
   '/statistics',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('referrals:read', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { startDate, endDate } = req.query;
 
@@ -208,7 +208,7 @@ router.get(
 router.get(
   '/:id/slots',
   authenticate,
-  authorize('DOCTOR', 'RECEPTIONIST', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('referrals:read', ['DOCTOR', 'RECEPTIONIST', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { date } = req.query;
 
@@ -230,7 +230,7 @@ router.get(
 router.post(
   '/:id/schedule',
   authenticate,
-  authorize('RECEPTIONIST', 'HOSPITAL_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('referrals:write', ['RECEPTIONIST', 'HOSPITAL_ADMIN', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { appointmentDate, startTime, endTime, notes } = req.body;
 
@@ -258,7 +258,7 @@ router.post(
 router.post(
   '/:id/book',
   authenticate,
-  authorize('PATIENT'),
+  authorizeWithPermission('referrals:write', ['PATIENT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { appointmentDate, startTime, endTime } = req.body;
 
@@ -295,7 +295,7 @@ router.post(
 router.patch(
   '/:id/complete',
   authenticate,
-  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('referrals:write', ['DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { notes } = req.body;
 
@@ -317,7 +317,7 @@ router.patch(
 router.patch(
   '/:id/cancel',
   authenticate,
-  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('referrals:write', ['DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { reason } = req.body;
 
@@ -344,7 +344,7 @@ router.patch(
 router.post(
   '/expire',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('referrals:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const count = await referralService.expireOldReferrals();
     sendSuccess(res, { expiredCount: count }, `Expired ${count} referrals`);

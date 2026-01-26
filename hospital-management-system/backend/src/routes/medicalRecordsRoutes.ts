@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { medicalRecordsService } from '../services/medicalRecordsService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -47,7 +47,7 @@ router.get(
 router.patch(
   '/documents/:id/verify',
   authenticate,
-  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('medical_records:write', ['DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const document = await medicalRecordsService.verifyDocument(req.params.id, req.user!.userId);
     sendSuccess(res, document, 'Document verified');

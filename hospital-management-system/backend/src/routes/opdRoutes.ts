@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { opdService } from '../services/opdService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -67,7 +67,7 @@ router.get(
 router.post(
   '/check-in/:appointmentId',
   authenticate,
-  authorize('RECEPTIONIST', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('opd:visits:write', ['RECEPTIONIST', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await opdService.checkInPatient(req.params.appointmentId, req.user!.hospitalId);
     sendSuccess(res, result, 'Patient checked in');
@@ -78,7 +78,7 @@ router.post(
 router.post(
   '/call-next',
   authenticate,
-  authorize('DOCTOR'),
+  authorizeWithPermission('opd:visits:write', ['DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     // Get doctor ID from user's doctor profile
     const doctorId = req.body.doctorId || req.user!.userId;
@@ -115,7 +115,7 @@ router.get(
 router.post(
   '/no-show/:appointmentId',
   authenticate,
-  authorize('RECEPTIONIST', 'DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('opd:visits:write', ['RECEPTIONIST', 'DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await opdService.markNoShow(req.params.appointmentId, req.user!.hospitalId);
     sendSuccess(res, result, 'Marked as no-show');
@@ -126,7 +126,7 @@ router.post(
 router.post(
   '/reschedule/:appointmentId',
   authenticate,
-  authorize('RECEPTIONIST', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('opd:visits:write', ['RECEPTIONIST', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { newDate, newStartTime, newEndTime } = req.body;
     const result = await opdService.rescheduleAppointment(
@@ -179,7 +179,7 @@ router.get(
 router.post(
   '/appointments/:appointmentId/vitals',
   authenticate,
-  authorize('NURSE', 'DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('opd:visits:write', ['NURSE', 'DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { appointmentId } = req.params;
     const {
@@ -247,7 +247,7 @@ router.get(
 router.get(
   '/booking-ticket/:appointmentId',
   authenticate,
-  authorize('RECEPTIONIST', 'NURSE', 'DOCTOR', 'LAB_TECHNICIAN', 'RADIOLOGIST', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('opd:visits:read', ['RECEPTIONIST', 'NURSE', 'DOCTOR', 'LAB_TECHNICIAN', 'RADIOLOGIST', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { appointmentId } = req.params;
     const result = await opdService.getBookingTicket(appointmentId, req.user!.hospitalId);
@@ -259,7 +259,7 @@ router.get(
 router.get(
   '/patient-history/:patientId',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('opd:visits:read', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId } = req.params;
     const limit = parseInt(req.query.limit as string) || 10;
@@ -272,7 +272,7 @@ router.get(
 router.get(
   '/patient-status/:patientId',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('opd:visits:read', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId } = req.params;
     const result = await opdService.getPatientLatestStatus(patientId, req.user!.hospitalId);
@@ -284,7 +284,7 @@ router.get(
 router.get(
   '/patient-medical-summary/:patientId',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('opd:visits:read', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId } = req.params;
     const result = await opdService.getPatientMedicalSummary(patientId, req.user!.hospitalId);

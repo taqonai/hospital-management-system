@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { assetService } from '../services/assetService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -13,7 +13,7 @@ const router = Router();
 router.post(
   '/',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('assets:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const asset = await assetService.addAsset(req.user!.hospitalId, req.body);
     sendCreated(res, asset, 'Asset added successfully');
@@ -45,7 +45,7 @@ router.get(
 router.put(
   '/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('assets:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const asset = await assetService.updateAsset(req.params.id, req.body);
     sendSuccess(res, asset, 'Asset updated');
@@ -69,7 +69,7 @@ router.patch(
 router.post(
   '/:assetId/maintenance',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('assets:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const maintenance = await assetService.scheduleMaintenance(req.params.assetId, req.body);
     sendCreated(res, maintenance, 'Maintenance scheduled');

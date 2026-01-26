@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { queueService } from '../services/queueService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -13,7 +13,7 @@ const router = Router();
 router.post(
   '/tickets',
   authenticate,
-  authorize('RECEPTIONIST', 'NURSE', 'HOSPITAL_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('queue:write', ['RECEPTIONIST', 'NURSE', 'HOSPITAL_ADMIN', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const ticket = await queueService.issueTicket(req.user!.hospitalId, req.body);
     sendCreated(res, ticket, 'Queue ticket issued successfully');
@@ -94,7 +94,7 @@ router.get(
 router.post(
   '/call-next',
   authenticate,
-  authorize('RECEPTIONIST', 'NURSE', 'HOSPITAL_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('queue:write', ['RECEPTIONIST', 'NURSE', 'HOSPITAL_ADMIN', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { counterId } = req.body;
     const ticket = await queueService.callNext(req.user!.hospitalId, {
@@ -113,7 +113,7 @@ router.post(
 router.post(
   '/tickets/:ticketId/start-serving',
   authenticate,
-  authorize('RECEPTIONIST', 'NURSE', 'HOSPITAL_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('queue:write', ['RECEPTIONIST', 'NURSE', 'HOSPITAL_ADMIN', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const ticket = await queueService.startServing(
       req.user!.hospitalId,
@@ -128,7 +128,7 @@ router.post(
 router.post(
   '/tickets/:ticketId/complete',
   authenticate,
-  authorize('RECEPTIONIST', 'NURSE', 'HOSPITAL_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('queue:write', ['RECEPTIONIST', 'NURSE', 'HOSPITAL_ADMIN', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const ticket = await queueService.completeTicket(
       req.user!.hospitalId,
@@ -142,7 +142,7 @@ router.post(
 router.post(
   '/tickets/:ticketId/no-show',
   authenticate,
-  authorize('RECEPTIONIST', 'NURSE', 'HOSPITAL_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('queue:write', ['RECEPTIONIST', 'NURSE', 'HOSPITAL_ADMIN', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const ticket = await queueService.markNoShow(
       req.user!.hospitalId,
@@ -156,7 +156,7 @@ router.post(
 router.post(
   '/tickets/:ticketId/cancel',
   authenticate,
-  authorize('RECEPTIONIST', 'NURSE', 'HOSPITAL_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('queue:write', ['RECEPTIONIST', 'NURSE', 'HOSPITAL_ADMIN', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { reason } = req.body;
     const ticket = await queueService.cancelTicket(
@@ -172,7 +172,7 @@ router.post(
 router.post(
   '/tickets/:ticketId/transfer',
   authenticate,
-  authorize('RECEPTIONIST', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('queue:write', ['RECEPTIONIST', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { newCounterId } = req.body;
     const ticket = await queueService.transferTicket(
@@ -190,7 +190,7 @@ router.post(
 router.post(
   '/counters',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('queue:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const counter = await queueService.createCounter(req.user!.hospitalId, req.body);
     sendCreated(res, counter, 'Counter created');
@@ -215,7 +215,7 @@ router.get(
 router.patch(
   '/counters/:counterId',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('queue:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const counter = await queueService.updateCounter(req.params.counterId, req.body);
     sendSuccess(res, counter, 'Counter updated');
@@ -241,7 +241,7 @@ router.get(
 router.put(
   '/config',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('queue:manage', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const config = await queueService.upsertQueueConfig(req.user!.hospitalId, req.body);
     sendSuccess(res, config, 'Queue config saved');
@@ -254,7 +254,7 @@ router.put(
 router.post(
   '/display-boards',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('queue:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const board = await queueService.createDisplayBoard(req.user!.hospitalId, req.body);
     sendCreated(res, board, 'Display board created');
@@ -277,7 +277,7 @@ router.get(
 router.get(
   '/analytics',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('queue:read', ['HOSPITAL_ADMIN', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { dateFrom, dateTo, serviceType, departmentId } = req.query;
     const analytics = await queueService.getAnalytics(req.user!.hospitalId, {

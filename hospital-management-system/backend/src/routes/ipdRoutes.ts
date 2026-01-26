@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { ipdService } from '../services/ipdService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -23,7 +23,7 @@ router.get(
 router.post(
   '/wards',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('ipd:admissions:write', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const ward = await ipdService.createWard(req.body);
     sendCreated(res, ward, 'Ward created successfully');
@@ -51,7 +51,7 @@ router.get(
 router.post(
   '/beds',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('ipd:beds:manage', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const bed = await ipdService.createBed(req.user!.hospitalId, req.body);
     sendCreated(res, bed, 'Bed created successfully');
@@ -62,7 +62,7 @@ router.post(
 router.patch(
   '/beds/:id/status',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'NURSE'),
+  authorizeWithPermission('ipd:beds:manage', ['HOSPITAL_ADMIN', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const bed = await ipdService.updateBedStatus(req.params.id, req.body.status);
     sendSuccess(res, bed, 'Bed status updated');
@@ -104,7 +104,7 @@ router.get(
 router.post(
   '/admissions',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'),
+  authorizeWithPermission('ipd:admissions:write', ['HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const admission = await ipdService.createAdmission(req.user!.hospitalId, req.body);
     sendCreated(res, admission, 'Patient admitted successfully');
@@ -125,7 +125,7 @@ router.get(
 router.put(
   '/admissions/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'),
+  authorizeWithPermission('ipd:admissions:write', ['HOSPITAL_ADMIN', 'DOCTOR', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const admission = await ipdService.updateAdmission(req.params.id, req.user!.hospitalId, req.body);
     sendSuccess(res, admission, 'Admission updated');
@@ -136,7 +136,7 @@ router.put(
 router.post(
   '/admissions/:id/transfer',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'NURSE'),
+  authorizeWithPermission('ipd:admissions:write', ['HOSPITAL_ADMIN', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const admission = await ipdService.transferBed(req.params.id, req.body.newBedId);
     sendSuccess(res, admission, 'Patient transferred');
@@ -147,7 +147,7 @@ router.post(
 router.post(
   '/admissions/:id/nursing-notes',
   authenticate,
-  authorize('NURSE'),
+  authorizeWithPermission('ipd:nursing:notes', ['NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const note = await ipdService.addNursingNote(req.params.id, req.user!.userId, req.body);
     sendCreated(res, note, 'Nursing note added');
@@ -158,7 +158,7 @@ router.post(
 router.post(
   '/admissions/:id/discharge',
   authenticate,
-  authorize('DOCTOR'),
+  authorizeWithPermission('ipd:discharge', ['DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const summary = await ipdService.createDischargeSummary(req.params.id, {
       ...req.body,
@@ -204,7 +204,7 @@ router.get(
 router.post(
   '/admissions/:id/vitals',
   authenticate,
-  authorize('NURSE', 'DOCTOR'),
+  authorizeWithPermission('ipd:admissions:write', ['NURSE', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await ipdService.recordVitals(
       req.params.id,

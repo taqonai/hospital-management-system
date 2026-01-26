@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { validate } from '../middleware/validation';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendError } from '../utils/response';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { AuthenticatedRequest } from '../types';
 import prisma from '../config/database';
 
@@ -11,7 +11,7 @@ const router = Router();
 
 // All clinician routes require authentication and appropriate role
 router.use(authenticate);
-router.use(authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'));
+router.use(authorizeWithPermission('patients:read', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']));
 
 // =============================================================================
 // PATIENT ROSTER

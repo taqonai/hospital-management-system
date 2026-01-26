@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated } from '../utils/response';
 import { housekeepingService } from '../services/housekeepingService';
@@ -15,7 +15,7 @@ router.use(authenticate);
 // Get all zones
 router.get(
   '/zones',
-  authorize('HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:read', ['HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const zones = await housekeepingService.getZones(req.user!.hospitalId);
     sendSuccess(res, zones);
@@ -25,7 +25,7 @@ router.get(
 // Create zone
 router.post(
   '/zones',
-  authorize('HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:write', ['HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const zone = await housekeepingService.createZone({
       ...req.body,
@@ -38,7 +38,7 @@ router.post(
 // Update zone
 router.put(
   '/zones/:id',
-  authorize('HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:write', ['HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const zone = await housekeepingService.updateZone(req.params.id, req.body);
     sendSuccess(res, zone, 'Zone updated successfully');
@@ -50,7 +50,7 @@ router.put(
 // Get all tasks
 router.get(
   '/tasks',
-  authorize('HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:read', ['HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await housekeepingService.getTasks({
       hospitalId: req.user!.hospitalId,
@@ -70,7 +70,7 @@ router.get(
 // Get task by ID
 router.get(
   '/tasks/:id',
-  authorize('HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:read', ['HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const task = await housekeepingService.getTaskById(req.params.id);
     sendSuccess(res, task);
@@ -80,7 +80,7 @@ router.get(
 // Create task
 router.post(
   '/tasks',
-  authorize('HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN', 'NURSE'),
+  authorizeWithPermission('housekeeping:write', ['HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const task = await housekeepingService.createTask({
       ...req.body,
@@ -93,7 +93,7 @@ router.post(
 // Update task
 router.put(
   '/tasks/:id',
-  authorize('HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:write', ['HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const task = await housekeepingService.updateTask(req.params.id, req.body);
     sendSuccess(res, task, 'Task updated successfully');
@@ -103,7 +103,7 @@ router.put(
 // Assign task
 router.post(
   '/tasks/:id/assign',
-  authorize('HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:assign', ['HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { employeeId, supervisorId } = req.body;
     const task = await housekeepingService.assignTask(req.params.id, employeeId, supervisorId);
@@ -114,7 +114,7 @@ router.post(
 // Start task
 router.post(
   '/tasks/:id/start',
-  authorize('HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF'),
+  authorizeWithPermission('housekeeping:write', ['HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const task = await housekeepingService.startTask(req.params.id);
     sendSuccess(res, task, 'Task started');
@@ -124,7 +124,7 @@ router.post(
 // Complete task
 router.post(
   '/tasks/:id/complete',
-  authorize('HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF'),
+  authorizeWithPermission('housekeeping:write', ['HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const task = await housekeepingService.completeTask(req.params.id, req.body);
     sendSuccess(res, task, 'Task completed');
@@ -134,7 +134,7 @@ router.post(
 // Verify task
 router.post(
   '/tasks/:id/verify',
-  authorize('HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:write', ['HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { qualityScore } = req.body;
     const task = await housekeepingService.verifyTask(req.params.id, req.user!.userId, qualityScore);
@@ -145,7 +145,7 @@ router.post(
 // Update checklist item
 router.patch(
   '/tasks/checklist/:itemId',
-  authorize('HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF'),
+  authorizeWithPermission('housekeeping:write', ['HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { isCompleted, notes } = req.body;
     const item = await housekeepingService.updateChecklistItem(req.params.itemId, isCompleted, notes);
@@ -156,7 +156,7 @@ router.patch(
 // Get AI prioritized tasks
 router.get(
   '/tasks/ai/prioritized',
-  authorize('HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:read', ['HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const tasks = await housekeepingService.getAIPrioritizedTasks(req.user!.hospitalId);
     sendSuccess(res, tasks);
@@ -166,7 +166,7 @@ router.get(
 // Predict cleaning time
 router.get(
   '/tasks/ai/predict-time',
-  authorize('HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:read', ['HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { taskType, zoneId } = req.query;
     const prediction = await housekeepingService.predictCleaningTime(
@@ -182,7 +182,7 @@ router.get(
 // Get schedules
 router.get(
   '/schedules',
-  authorize('HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:read', ['HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const schedules = await housekeepingService.getSchedules(
       req.user!.hospitalId,
@@ -195,7 +195,7 @@ router.get(
 // Create schedule
 router.post(
   '/schedules',
-  authorize('HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:write', ['HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const schedule = await housekeepingService.createSchedule({
       ...req.body,
@@ -208,7 +208,7 @@ router.post(
 // Generate scheduled tasks
 router.post(
   '/schedules/generate-tasks',
-  authorize('HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:write', ['HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const tasks = await housekeepingService.generateScheduledTasks(req.user!.hospitalId);
     sendSuccess(res, tasks, `Generated ${tasks.length} tasks from schedules`);
@@ -220,7 +220,7 @@ router.post(
 // Get inventory
 router.get(
   '/inventory',
-  authorize('HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:read', ['HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const inventory = await housekeepingService.getInventory(req.user!.hospitalId, {
       category: req.query.category as string,
@@ -233,7 +233,7 @@ router.get(
 // Get low stock items
 router.get(
   '/inventory/low-stock',
-  authorize('HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:read', ['HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const items = await housekeepingService.getLowStockItems(req.user!.hospitalId);
     sendSuccess(res, items);
@@ -243,7 +243,7 @@ router.get(
 // Create inventory item
 router.post(
   '/inventory',
-  authorize('HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:write', ['HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const item = await housekeepingService.createInventoryItem({
       ...req.body,
@@ -256,7 +256,7 @@ router.post(
 // Update inventory stock
 router.patch(
   '/inventory/:id/stock',
-  authorize('HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF'),
+  authorizeWithPermission('housekeeping:write', ['HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { quantity, action, taskId, notes } = req.body;
     const item = await housekeepingService.updateInventoryStock(
@@ -276,7 +276,7 @@ router.patch(
 // Get audits
 router.get(
   '/audits',
-  authorize('HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:read', ['HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await housekeepingService.getAudits({
       hospitalId: req.user!.hospitalId,
@@ -294,7 +294,7 @@ router.get(
 // Create audit
 router.post(
   '/audits',
-  authorize('HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:write', ['HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const audit = await housekeepingService.createAudit({
       ...req.body,
@@ -308,7 +308,7 @@ router.post(
 // Resolve audit
 router.patch(
   '/audits/:id/resolve',
-  authorize('HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:write', ['HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const audit = await housekeepingService.resolveAudit(req.params.id, req.user!.userId);
     sendSuccess(res, audit, 'Audit resolved');
@@ -320,7 +320,7 @@ router.patch(
 // Get checklists
 router.get(
   '/checklists',
-  authorize('HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:read', ['HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const checklists = await housekeepingService.getChecklists(
       req.user!.hospitalId,
@@ -333,7 +333,7 @@ router.get(
 // Create checklist
 router.post(
   '/checklists',
-  authorize('HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:write', ['HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const checklist = await housekeepingService.createChecklist({
       ...req.body,
@@ -346,7 +346,7 @@ router.post(
 // Update checklist
 router.put(
   '/checklists/:id',
-  authorize('HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:write', ['HOUSEKEEPING_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const checklist = await housekeepingService.updateChecklist(req.params.id, req.body);
     sendSuccess(res, checklist, 'Checklist updated successfully');
@@ -358,7 +358,7 @@ router.put(
 // Get housekeeping dashboard stats
 router.get(
   '/dashboard',
-  authorize('HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('housekeeping:read', ['HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const stats = await housekeepingService.getDashboardStats(req.user!.hospitalId);
     sendSuccess(res, stats);

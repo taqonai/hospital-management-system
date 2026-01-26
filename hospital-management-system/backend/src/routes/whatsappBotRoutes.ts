@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import whatsappBotService from '../services/whatsappBotService';
 import whatsappSessionService from '../services/whatsappSessionService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { TwilioWebhookPayload, WhatsAppMessage } from '../types/whatsapp';
 
 const router = express.Router();
@@ -55,7 +55,7 @@ router.get('/webhook', (req: Request, res: Response) => {
 router.post(
   '/send',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'RECEPTIONIST', 'DOCTOR'),
+  authorizeWithPermission('messaging:write', ['HOSPITAL_ADMIN', 'RECEPTIONIST', 'DOCTOR']),
   async (req: Request, res: Response) => {
     try {
       const { to, message } = req.body;
@@ -93,7 +93,7 @@ router.post(
 router.get(
   '/session/:phoneNumber',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'RECEPTIONIST'),
+  authorizeWithPermission('messaging:read', ['HOSPITAL_ADMIN', 'RECEPTIONIST']),
   async (req: Request, res: Response) => {
     try {
       const { phoneNumber } = req.params;
@@ -136,7 +136,7 @@ router.get(
 router.delete(
   '/session/:phoneNumber',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'RECEPTIONIST'),
+  authorizeWithPermission('messaging:write', ['HOSPITAL_ADMIN', 'RECEPTIONIST']),
   async (req: Request, res: Response) => {
     try {
       const { phoneNumber } = req.params;
@@ -166,7 +166,7 @@ router.delete(
 router.post(
   '/clean-expired',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('messaging:write', ['HOSPITAL_ADMIN']),
   async (req: Request, res: Response) => {
     try {
       const count = await whatsappSessionService.cleanExpiredSessions();

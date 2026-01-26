@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { surgeryService } from '../services/surgeryService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -31,7 +31,7 @@ router.get(
 router.post(
   '/',
   authenticate,
-  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('surgery:write', ['DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const surgery = await surgeryService.scheduleSurgery(req.body);
     sendCreated(res, surgery, 'Surgery scheduled');
@@ -52,7 +52,7 @@ router.get(
 router.patch(
   '/:id/status',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('surgery:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { status, ...data } = req.body;
     const surgery = await surgeryService.updateSurgeryStatus(req.params.id, status, data);
@@ -64,7 +64,7 @@ router.patch(
 router.post(
   '/:id/start',
   authenticate,
-  authorize('DOCTOR'),
+  authorizeWithPermission('surgery:write', ['DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const surgery = await surgeryService.startSurgery(req.params.id);
     sendSuccess(res, surgery, 'Surgery started');
@@ -75,7 +75,7 @@ router.post(
 router.post(
   '/:id/complete',
   authenticate,
-  authorize('DOCTOR'),
+  authorizeWithPermission('surgery:write', ['DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const surgery = await surgeryService.completeSurgery(req.params.id, req.body);
     sendSuccess(res, surgery, 'Surgery completed');
@@ -86,7 +86,7 @@ router.post(
 router.post(
   '/:id/cancel',
   authenticate,
-  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('surgery:write', ['DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const surgery = await surgeryService.cancelSurgery(req.params.id, req.body.reason);
     sendSuccess(res, surgery, 'Surgery cancelled');
@@ -97,7 +97,7 @@ router.post(
 router.post(
   '/:id/postpone',
   authenticate,
-  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('surgery:write', ['DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const surgery = await surgeryService.postponeSurgery(
       req.params.id,

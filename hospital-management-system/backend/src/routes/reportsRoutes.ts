@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { reportsService } from '../services/reportsService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -20,7 +20,7 @@ const parseDateRange = (query: any) => {
 router.get(
   '/executive-summary',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('reports:view', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const dateRange = parseDateRange(req.query);
     const summary = await reportsService.getExecutiveSummary(req.user!.hospitalId, dateRange);
@@ -32,7 +32,7 @@ router.get(
 router.get(
   '/comprehensive',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('reports:view', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const dateRange = parseDateRange(req.query);
     const report = await reportsService.getComprehensiveReport(req.user!.hospitalId, dateRange);
@@ -70,7 +70,7 @@ router.get(
 router.get(
   '/financial/revenue',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('reports:financial', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const dateRange = parseDateRange(req.query);
     const analysis = await reportsService.getRevenueAnalysis(req.user!.hospitalId, dateRange);
@@ -82,7 +82,7 @@ router.get(
 router.get(
   '/financial/trends',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('reports:financial', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const months = parseInt(req.query.months as string) || 12;
     const trends = await reportsService.getRevenueTrends(req.user!.hospitalId, months);
@@ -107,7 +107,7 @@ router.get(
 router.get(
   '/operations/doctors',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('reports:view', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const dateRange = parseDateRange(req.query);
     const productivity = await reportsService.getDoctorProductivity(req.user!.hospitalId, dateRange);
@@ -175,7 +175,7 @@ router.post(
 router.post(
   '/ai/insights',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('reports:view', ['HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const insights = reportsService.generateExecutiveInsights(req.body);
     sendSuccess(res, insights);

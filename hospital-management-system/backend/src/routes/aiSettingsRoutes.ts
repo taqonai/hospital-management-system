@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { aiSettingsService } from '../services/aiSettingsService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -15,7 +15,7 @@ router.use(authenticate);
  */
 router.get(
   '/settings',
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('settings:read', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const settings = await aiSettingsService.getSettings(req.user!.hospitalId);
     sendSuccess(res, settings, 'AI settings retrieved successfully');
@@ -27,7 +27,7 @@ router.get(
  */
 router.put(
   '/settings',
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('settings:write', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const settings = await aiSettingsService.updateSettings(
       req.user!.hospitalId,
@@ -43,7 +43,7 @@ router.put(
  */
 router.get(
   '/ollama/models',
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('settings:read', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { endpoint } = req.query;
 
@@ -64,7 +64,7 @@ router.get(
  */
 router.get(
   '/ollama/health',
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('settings:read', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { endpoint } = req.query;
 
@@ -85,7 +85,7 @@ router.get(
  */
 router.post(
   '/ollama/test',
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('settings:write', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { endpoint, model } = req.body;
 
@@ -106,7 +106,7 @@ router.post(
  */
 router.get(
   '/provider/status',
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorizeWithPermission('settings:read', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const status = await aiSettingsService.getProviderStatus(req.user!.hospitalId);
     sendSuccess(res, status, 'Provider status retrieved successfully');

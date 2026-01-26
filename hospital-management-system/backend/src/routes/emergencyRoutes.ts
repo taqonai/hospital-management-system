@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { emergencyService } from '../services/emergencyService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -11,7 +11,7 @@ const router = Router();
 router.post(
   '/register',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'RECEPTIONIST', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('emergency:write', ['DOCTOR', 'NURSE', 'RECEPTIONIST', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const patient = await emergencyService.registerEmergencyPatient(req.user!.hospitalId, req.body);
     sendCreated(res, patient, 'Emergency patient registered');
@@ -32,7 +32,7 @@ router.get(
 router.patch(
   '/:appointmentId/triage',
   authenticate,
-  authorize('DOCTOR', 'NURSE'),
+  authorizeWithPermission('emergency:triage', ['DOCTOR', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { esiLevel, notes } = req.body;
     const result = await emergencyService.updateTriageLevel(req.params.appointmentId, esiLevel, notes);
@@ -44,7 +44,7 @@ router.patch(
 router.patch(
   '/:appointmentId/assign-doctor',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'NURSE'),
+  authorizeWithPermission('emergency:write', ['HOSPITAL_ADMIN', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await emergencyService.assignDoctor(req.params.appointmentId, req.body.doctorId);
     sendSuccess(res, result, 'Doctor assigned');
@@ -55,7 +55,7 @@ router.patch(
 router.post(
   '/:appointmentId/admit',
   authenticate,
-  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('emergency:write', ['DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const admission = await emergencyService.admitFromEmergency(
       req.params.appointmentId,
@@ -70,7 +70,7 @@ router.post(
 router.post(
   '/:appointmentId/discharge',
   authenticate,
-  authorize('DOCTOR'),
+  authorizeWithPermission('emergency:write', ['DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await emergencyService.dischargeFromEmergency(req.params.appointmentId, req.body.notes);
     sendSuccess(res, result, 'Patient discharged');

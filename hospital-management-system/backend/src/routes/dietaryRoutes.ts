@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { dietaryService } from '../services/dietaryService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -13,7 +13,7 @@ const router = Router();
 router.post(
   '/plans',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'),
+  authorizeWithPermission('dietary:write', ['HOSPITAL_ADMIN', 'DOCTOR', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const plan = await dietaryService.createDietPlan(req.user!.hospitalId, req.body);
     sendCreated(res, plan, 'Diet plan created');
@@ -45,7 +45,7 @@ router.get(
 router.put(
   '/plans/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR'),
+  authorizeWithPermission('dietary:write', ['HOSPITAL_ADMIN', 'DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const plan = await dietaryService.updateDietPlan(req.params.id, req.body);
     sendSuccess(res, plan, 'Diet plan updated');
@@ -58,7 +58,7 @@ router.put(
 router.post(
   '/patient-diets',
   authenticate,
-  authorize('DOCTOR', 'NURSE'),
+  authorizeWithPermission('dietary:write', ['DOCTOR', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const diet = await dietaryService.assignPatientDiet(req.user!.hospitalId, {
       ...req.body,
@@ -93,7 +93,7 @@ router.get(
 router.patch(
   '/patient-diets/:id',
   authenticate,
-  authorize('DOCTOR', 'NURSE'),
+  authorizeWithPermission('dietary:write', ['DOCTOR', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const diet = await dietaryService.updatePatientDiet(req.params.id, req.body);
     sendSuccess(res, diet, 'Patient diet updated');

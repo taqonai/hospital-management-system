@@ -1,5 +1,5 @@
 import { Router, Response, NextFunction } from 'express';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { AuthenticatedRequest } from '../types';
 import {
   crmLeadService,
@@ -18,7 +18,7 @@ const router = Router();
 
 // All CRM routes require authentication
 router.use(authenticate);
-router.use(authorize('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'RECEPTIONIST', 'MARKETING'));
+router.use(authorizeWithPermission('crm:read', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'RECEPTIONIST', 'MARKETING']));
 
 // ==================== LEADS ====================
 
@@ -80,7 +80,7 @@ router.put('/leads/:id', async (req: AuthenticatedRequest, res: Response, next: 
 });
 
 // Delete lead (Admin only)
-router.delete('/leads/:id', authorize('SUPER_ADMIN', 'HOSPITAL_ADMIN'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+router.delete('/leads/:id', authorizeWithPermission('crm:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN']), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const hospitalId = req.user!.hospitalId;
     const result = await crmLeadService.delete(hospitalId, req.params.id);
@@ -344,7 +344,7 @@ router.get('/campaigns', async (req: AuthenticatedRequest, res: Response, next: 
 });
 
 // Create campaign
-router.post('/campaigns', authorize('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'MARKETING'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+router.post('/campaigns', authorizeWithPermission('crm:campaigns', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'MARKETING']), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const hospitalId = req.user!.hospitalId;
     const userId = req.user!.userId;
@@ -367,7 +367,7 @@ router.get('/campaigns/:id', async (req: AuthenticatedRequest, res: Response, ne
 });
 
 // Update campaign
-router.put('/campaigns/:id', authorize('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'MARKETING'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+router.put('/campaigns/:id', authorizeWithPermission('crm:campaigns', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'MARKETING']), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const hospitalId = req.user!.hospitalId;
     const campaign = await crmCampaignService.update(hospitalId, req.params.id, req.body);
@@ -378,7 +378,7 @@ router.put('/campaigns/:id', authorize('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'MARKETI
 });
 
 // Launch campaign
-router.post('/campaigns/:id/launch', authorize('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'MARKETING'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+router.post('/campaigns/:id/launch', authorizeWithPermission('crm:campaigns', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'MARKETING']), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const hospitalId = req.user!.hospitalId;
     const campaign = await crmCampaignService.launch(hospitalId, req.params.id);
@@ -389,7 +389,7 @@ router.post('/campaigns/:id/launch', authorize('SUPER_ADMIN', 'HOSPITAL_ADMIN', 
 });
 
 // Pause campaign
-router.patch('/campaigns/:id/pause', authorize('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'MARKETING'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+router.patch('/campaigns/:id/pause', authorizeWithPermission('crm:campaigns', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'MARKETING']), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const hospitalId = req.user!.hospitalId;
     const campaign = await crmCampaignService.pause(hospitalId, req.params.id);
@@ -424,7 +424,7 @@ router.get('/surveys', async (req: AuthenticatedRequest, res: Response, next: Ne
 });
 
 // Create survey
-router.post('/surveys', authorize('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'MARKETING'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+router.post('/surveys', authorizeWithPermission('crm:surveys', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'MARKETING']), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const hospitalId = req.user!.hospitalId;
     const userId = req.user!.userId;
@@ -447,7 +447,7 @@ router.get('/surveys/:id', async (req: AuthenticatedRequest, res: Response, next
 });
 
 // Update survey
-router.put('/surveys/:id', authorize('SUPER_ADMIN', 'HOSPITAL_ADMIN', 'MARKETING'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+router.put('/surveys/:id', authorizeWithPermission('crm:surveys', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'MARKETING']), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const hospitalId = req.user!.hospitalId;
     const survey = await crmSurveyService.update(hospitalId, req.params.id, req.body);
@@ -574,7 +574,7 @@ router.get('/settings', async (req: AuthenticatedRequest, res: Response, next: N
 });
 
 // Update settings
-router.put('/settings', authorize('SUPER_ADMIN', 'HOSPITAL_ADMIN'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+router.put('/settings', authorizeWithPermission('crm:write', ['SUPER_ADMIN', 'HOSPITAL_ADMIN']), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const hospitalId = req.user!.hospitalId;
     const settings = await crmSettingsService.update(hospitalId, req.body);

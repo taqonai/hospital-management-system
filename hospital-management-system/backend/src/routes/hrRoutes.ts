@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated } from '../utils/response';
 import { hrService } from '../services/hrService';
@@ -15,7 +15,7 @@ router.use(authenticate);
 // Get all employees
 router.get(
   '/employees',
-  authorize('HR_MANAGER', 'HR_STAFF', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('hr:employees:read', ['HR_MANAGER', 'HR_STAFF', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await hrService.getEmployees({
       hospitalId: req.user!.hospitalId,
@@ -33,7 +33,7 @@ router.get(
 // Get employee by ID
 router.get(
   '/employees/:id',
-  authorize('HR_MANAGER', 'HR_STAFF', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('hr:employees:read', ['HR_MANAGER', 'HR_STAFF', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const employee = await hrService.getEmployeeById(req.params.id);
     sendSuccess(res, employee);
@@ -43,7 +43,7 @@ router.get(
 // Create employee
 router.post(
   '/employees',
-  authorize('HR_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('hr:employees:write', ['HR_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const employee = await hrService.createEmployee({
       ...req.body,
@@ -56,7 +56,7 @@ router.post(
 // Update employee
 router.put(
   '/employees/:id',
-  authorize('HR_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('hr:employees:write', ['HR_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const employee = await hrService.updateEmployee(req.params.id, req.body);
     sendSuccess(res, employee, 'Employee updated successfully');
@@ -94,7 +94,7 @@ router.post(
 // Get attendance records
 router.get(
   '/attendance',
-  authorize('HR_MANAGER', 'HR_STAFF', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('hr:attendance', ['HR_MANAGER', 'HR_STAFF', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await hrService.getAttendance({
       hospitalId: req.user!.hospitalId,
@@ -112,7 +112,7 @@ router.get(
 // Get attendance summary for employee
 router.get(
   '/attendance/summary/:employeeId',
-  authorize('HR_MANAGER', 'HR_STAFF', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('hr:attendance', ['HR_MANAGER', 'HR_STAFF', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const month = parseInt(req.query.month as string) || new Date().getMonth() + 1;
     const year = parseInt(req.query.year as string) || new Date().getFullYear();
@@ -135,7 +135,7 @@ router.get(
 // Create leave type
 router.post(
   '/leave-types',
-  authorize('HR_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('hr:leave:manage', ['HR_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const leaveType = await hrService.createLeaveType({
       ...req.body,
@@ -157,7 +157,7 @@ router.post(
 // Process leave request (approve/reject)
 router.patch(
   '/leave/:id/process',
-  authorize('HR_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('hr:leave:manage', ['HR_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { action, rejectionReason } = req.body;
     const leaveRequest = await hrService.processLeaveRequest(
@@ -173,7 +173,7 @@ router.patch(
 // Get leave requests
 router.get(
   '/leave/requests',
-  authorize('HR_MANAGER', 'HR_STAFF', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('hr:leave:manage', ['HR_MANAGER', 'HR_STAFF', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await hrService.getLeaveRequests({
       hospitalId: req.user!.hospitalId,
@@ -201,7 +201,7 @@ router.get(
 // Generate payroll for month
 router.post(
   '/payroll/generate',
-  authorize('HR_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('hr:payroll', ['HR_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { month, year } = req.body;
     const payrolls = await hrService.generatePayroll(
@@ -216,7 +216,7 @@ router.post(
 // Get payroll records
 router.get(
   '/payroll',
-  authorize('HR_MANAGER', 'HR_STAFF', 'HOSPITAL_ADMIN', 'ACCOUNTANT'),
+  authorizeWithPermission('hr:payroll', ['HR_MANAGER', 'HR_STAFF', 'HOSPITAL_ADMIN', 'ACCOUNTANT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await hrService.getPayrolls({
       hospitalId: req.user!.hospitalId,
@@ -234,7 +234,7 @@ router.get(
 // Process payroll (approve/pay)
 router.patch(
   '/payroll/:id/process',
-  authorize('HR_MANAGER', 'HOSPITAL_ADMIN', 'ACCOUNTANT'),
+  authorizeWithPermission('hr:payroll', ['HR_MANAGER', 'HOSPITAL_ADMIN', 'ACCOUNTANT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { action, paymentMode, transactionId } = req.body;
     const payroll = await hrService.processPayroll(
@@ -261,7 +261,7 @@ router.get(
 // Create shift
 router.post(
   '/shifts',
-  authorize('HR_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('hr:employees:write', ['HR_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const shift = await hrService.createShift({
       ...req.body,
@@ -274,7 +274,7 @@ router.post(
 // Update shift
 router.put(
   '/shifts/:id',
-  authorize('HR_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('hr:employees:write', ['HR_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const shift = await hrService.updateShift(req.params.id, req.body);
     sendSuccess(res, shift, 'Shift updated successfully');
@@ -284,7 +284,7 @@ router.put(
 // Assign shift to employee
 router.post(
   '/shifts/assign',
-  authorize('HR_MANAGER', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('hr:employees:write', ['HR_MANAGER', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { employeeId, shiftId } = req.body;
     const employee = await hrService.assignShift(employeeId, shiftId);
@@ -369,7 +369,7 @@ router.patch(
 // Get HR dashboard stats
 router.get(
   '/dashboard',
-  authorize('HR_MANAGER', 'HR_STAFF', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('hr:employees:read', ['HR_MANAGER', 'HR_STAFF', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const stats = await hrService.getDashboardStats(req.user!.hospitalId);
     sendSuccess(res, stats);

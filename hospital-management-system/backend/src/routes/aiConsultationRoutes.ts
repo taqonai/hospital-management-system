@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { authenticate, authorize, authorizeHospital } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission, authorizeHospital } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendError } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -30,7 +30,7 @@ const router = Router();
 router.get(
   '/patient-context/:patientId',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:diagnostic', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   authorizeHospital,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId } = req.params;
@@ -71,7 +71,7 @@ router.get(
 router.post(
   '/interpret-vitals',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:diagnostic', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const {
       respiratoryRate,
@@ -133,7 +133,7 @@ router.post(
 router.post(
   '/suggest-diagnosis',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:diagnostic', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { symptoms, patientId, patientAge, patientGender, medicalHistory } = req.body;
 
@@ -171,7 +171,7 @@ router.post(
 router.post(
   '/recommend-tests',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:diagnostic', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { diagnosis, patientId, symptoms } = req.body;
 
@@ -207,7 +207,7 @@ router.post(
 router.post(
   '/validate-prescription',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:diagnostic', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { medications, patientId } = req.body;
 
@@ -266,7 +266,7 @@ router.post(
 router.post(
   '/generate-soap',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:diagnostic', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { consultationId, symptoms, vitals, diagnosis, treatment, notes } = req.body;
 
@@ -313,7 +313,7 @@ router.post(
 router.get(
   '/follow-up/:consultationId',
   authenticate,
-  authorize('DOCTOR', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:diagnostic', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
   authorizeHospital,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { consultationId } = req.params;
@@ -356,7 +356,7 @@ router.get(
 router.post(
   '/complete',
   authenticate,
-  authorize('DOCTOR', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:diagnostic', ['DOCTOR', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const {
       appointmentId,

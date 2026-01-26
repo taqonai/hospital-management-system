@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { appointmentService } from '../services/appointmentService';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { validate, createAppointmentSchema, uuidParamSchema, paginationSchema, updateAppointmentStatusSchema } from '../middleware/validation';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
@@ -58,7 +58,7 @@ router.get(
 router.post(
   '/',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'),
+  authorizeWithPermission('appointments:write', ['HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST']),
   validate(createAppointmentSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const appointment = await appointmentService.create(req.user!.hospitalId, req.body);
@@ -81,7 +81,7 @@ router.get(
 router.put(
   '/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'),
+  authorizeWithPermission('appointments:write', ['HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST']),
   validate(uuidParamSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const appointment = await appointmentService.update(
@@ -97,7 +97,7 @@ router.put(
 router.patch(
   '/:id/status',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'),
+  authorizeWithPermission('appointments:write', ['HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST']),
   validate(uuidParamSchema),
   validate(updateAppointmentStatusSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
@@ -115,7 +115,7 @@ router.patch(
 router.post(
   '/:id/cancel',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST', 'PATIENT'),
+  authorizeWithPermission('appointments:write', ['HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST', 'PATIENT']),
   validate(uuidParamSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { reason } = req.body;

@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { advancedPharmacyAIService } from '../services/advancedPharmacyAIService';
-import { authenticate, authorize, authorizeHospital } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission, authorizeHospital } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -16,7 +16,7 @@ const router = Router();
 router.post(
   '/tdm/guidance',
   authenticate,
-  authorize('DOCTOR', 'PHARMACIST', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:med_safety', ['DOCTOR', 'PHARMACIST', 'NURSE', 'HOSPITAL_ADMIN']),
   authorizeHospital,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { drugName, patientData } = req.body;
@@ -32,7 +32,7 @@ router.post(
 router.get(
   '/tdm/drugs',
   authenticate,
-  authorize('DOCTOR', 'PHARMACIST', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:med_safety', ['DOCTOR', 'PHARMACIST', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = advancedPharmacyAIService.getTDMDrugList();
     sendSuccess(res, { drugs: result });
@@ -48,7 +48,7 @@ router.get(
 router.post(
   '/cyp450/check',
   authenticate,
-  authorize('DOCTOR', 'PHARMACIST', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:med_safety', ['DOCTOR', 'PHARMACIST', 'NURSE', 'HOSPITAL_ADMIN']),
   authorizeHospital,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { medications } = req.body;
@@ -64,7 +64,7 @@ router.post(
 router.get(
   '/cyp450/profile/:drugName',
   authenticate,
-  authorize('DOCTOR', 'PHARMACIST', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:med_safety', ['DOCTOR', 'PHARMACIST', 'NURSE', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { drugName } = req.params;
     const result = advancedPharmacyAIService.getDrugCYP450Profile(drugName);
@@ -81,7 +81,7 @@ router.get(
 router.post(
   '/alternatives',
   authenticate,
-  authorize('DOCTOR', 'PHARMACIST', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:med_safety', ['DOCTOR', 'PHARMACIST', 'NURSE', 'HOSPITAL_ADMIN']),
   authorizeHospital,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { drugName, indication } = req.body;
@@ -99,7 +99,7 @@ router.post(
 router.post(
   '/renal-dosing',
   authenticate,
-  authorize('DOCTOR', 'PHARMACIST', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:med_safety', ['DOCTOR', 'PHARMACIST', 'NURSE', 'HOSPITAL_ADMIN']),
   authorizeHospital,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { drugName, creatinine, age, weight, gender } = req.body;
@@ -123,7 +123,7 @@ router.post(
 router.post(
   '/iv-compatibility',
   authenticate,
-  authorize('DOCTOR', 'PHARMACIST', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:med_safety', ['DOCTOR', 'PHARMACIST', 'NURSE', 'HOSPITAL_ADMIN']),
   authorizeHospital,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { drug1, drug2, solution } = req.body;
@@ -141,7 +141,7 @@ router.post(
 router.post(
   '/lab-interactions',
   authenticate,
-  authorize('DOCTOR', 'PHARMACIST', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:med_safety', ['DOCTOR', 'PHARMACIST', 'NURSE', 'HOSPITAL_ADMIN']),
   authorizeHospital,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { medications, labTests } = req.body;
@@ -159,7 +159,7 @@ router.post(
 router.post(
   '/polypharmacy-risk',
   authenticate,
-  authorize('DOCTOR', 'PHARMACIST', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:med_safety', ['DOCTOR', 'PHARMACIST', 'NURSE', 'HOSPITAL_ADMIN']),
   authorizeHospital,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { medications, patientAge } = req.body;
@@ -177,7 +177,7 @@ router.post(
 router.get(
   '/drug-info/:drugName',
   authenticate,
-  authorize('DOCTOR', 'PHARMACIST', 'NURSE', 'HOSPITAL_ADMIN'),
+  authorizeWithPermission('ai:med_safety', ['DOCTOR', 'PHARMACIST', 'NURSE', 'HOSPITAL_ADMIN']),
   authorizeHospital,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { drugName } = req.params;

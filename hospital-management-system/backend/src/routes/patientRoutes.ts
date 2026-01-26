@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { patientService } from '../services/patientService';
-import { authenticate, authorize, authorizeHospital } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission, authorizeHospital } from '../middleware/auth';
 import { validate, createPatientSchema, uuidParamSchema, paginationSchema } from '../middleware/validation';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
@@ -31,7 +31,7 @@ router.get(
 router.post(
   '/',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'),
+  authorizeWithPermission('patients:write', ['HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST']),
   validate(createPatientSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const patient = await patientService.create(req.user!.hospitalId, req.body);
@@ -64,7 +64,7 @@ router.get(
 router.put(
   '/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'),
+  authorizeWithPermission('patients:write', ['HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST']),
   validate(uuidParamSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const patient = await patientService.update(req.params.id, req.user!.hospitalId, req.body);
@@ -76,7 +76,7 @@ router.put(
 router.delete(
   '/:id',
   authenticate,
-  authorize('HOSPITAL_ADMIN'),
+  authorizeWithPermission('patients:delete', ['HOSPITAL_ADMIN']),
   validate(uuidParamSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     await patientService.delete(req.params.id, req.user!.hospitalId);
@@ -99,7 +99,7 @@ router.get(
 router.put(
   '/:id/medical-history',
   authenticate,
-  authorize('DOCTOR', 'NURSE'),
+  authorizeWithPermission('patients:medical_history', ['DOCTOR', 'NURSE']),
   validate(uuidParamSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const history = await patientService.updateMedicalHistory(
@@ -115,7 +115,7 @@ router.put(
 router.post(
   '/:id/allergies',
   authenticate,
-  authorize('DOCTOR', 'NURSE'),
+  authorizeWithPermission('patients:medical_history', ['DOCTOR', 'NURSE']),
   validate(uuidParamSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const allergy = await patientService.addAllergy(
@@ -131,7 +131,7 @@ router.post(
 router.delete(
   '/:id/allergies/:allergyId',
   authenticate,
-  authorize('DOCTOR', 'NURSE'),
+  authorizeWithPermission('patients:medical_history', ['DOCTOR', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     await patientService.removeAllergy(req.params.id, req.params.allergyId);
     sendSuccess(res, null, 'Allergy removed');
@@ -142,7 +142,7 @@ router.delete(
 router.post(
   '/:id/vitals',
   authenticate,
-  authorize('DOCTOR', 'NURSE'),
+  authorizeWithPermission('patients:medical_history', ['DOCTOR', 'NURSE']),
   validate(uuidParamSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const vitals = await patientService.recordVitals(
@@ -174,7 +174,7 @@ router.get(
 router.post(
   '/:id/insurance',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'RECEPTIONIST'),
+  authorizeWithPermission('patients:write', ['HOSPITAL_ADMIN', 'RECEPTIONIST']),
   validate(uuidParamSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const insurance = await patientService.addInsurance(
