@@ -325,15 +325,18 @@ export default function PatientPortalDashboard() {
 
         // Fetch appointments
         const appointmentsResponse = await patientPortalApi.getAppointments({ type: 'upcoming', limit: 3 });
-        const appointments = appointmentsResponse.data?.data || appointmentsResponse.data || [];
+        const appointmentsData = appointmentsResponse.data?.data || appointmentsResponse.data;
+        const appointments = Array.isArray(appointmentsData) ? appointmentsData : [];
 
         // Fetch prescriptions
         const prescriptionsResponse = await patientPortalApi.getPrescriptions({ status: 'active', limit: 3 });
-        const prescriptions = prescriptionsResponse.data?.data || prescriptionsResponse.data || [];
+        const prescriptionsData = prescriptionsResponse.data?.data || prescriptionsResponse.data;
+        const prescriptions = Array.isArray(prescriptionsData) ? prescriptionsData : [];
 
         // Fetch lab results
         const labsResponse = await patientPortalApi.getLabResults({ limit: 3 });
-        const labs = labsResponse.data?.data || labsResponse.data || [];
+        const labsData = labsResponse.data?.data || labsResponse.data;
+        const labs = Array.isArray(labsData) ? labsData : [];
 
         // Fetch billing summary
         const billingSummary = await patientPortalApi.getBillingSummary();
@@ -341,7 +344,8 @@ export default function PatientPortalDashboard() {
 
         // Fetch pending bills
         const billsResponse = await patientPortalApi.getBills({ type: 'pending', limit: 3 });
-        const bills = billsResponse.data?.data || billsResponse.data || [];
+        const billsData = billsResponse.data?.data || billsResponse.data;
+        const bills = Array.isArray(billsData) ? billsData : [];
 
         // Transform appointments data
         const upcomingAppointments: Appointment[] = appointments.map((apt: any) => ({
