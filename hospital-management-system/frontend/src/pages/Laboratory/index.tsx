@@ -559,6 +559,19 @@ export default function Laboratory() {
     });
   };
 
+  const handleAcknowledgeCritical = async (testId: string) => {
+    try {
+      await laboratoryApi.acknowledgeCritical(testId);
+      toast.success('Critical result acknowledged successfully');
+      // Refresh critical results
+      const response = await laboratoryApi.getCriticalResults();
+      setCriticalResults(response.data.data || []);
+    } catch (error: any) {
+      console.error('Failed to acknowledge critical result:', error);
+      toast.error(error.response?.data?.message || 'Failed to acknowledge critical result');
+    }
+  };
+
   const statCards = [
     { label: 'Pending Orders', value: stats.pendingOrders, icon: ClockIcon, color: 'from-amber-500 to-orange-500', bg: 'bg-amber-500/10' },
     { label: 'In Progress', value: stats.inProgressOrders, icon: ArrowPathIcon, color: 'from-blue-500 to-cyan-500', bg: 'bg-blue-500/10' },
@@ -886,7 +899,10 @@ export default function Laboratory() {
                         <p className="text-sm text-rose-600">Reference: {cv.referenceRange}</p>
                         <p className="text-xs text-rose-500 mt-2">{new Date(cv.createdAt).toLocaleString()}</p>
                       </div>
-                      <button className="px-4 py-2 rounded-xl text-sm font-semibold text-rose-600 bg-rose-500/10 border border-rose-500/30 hover:bg-rose-500/20 transition-all">
+                      <button
+                        onClick={() => handleAcknowledgeCritical(cv.id)}
+                        className="px-4 py-2 rounded-xl text-sm font-semibold text-rose-600 bg-rose-500/10 border border-rose-500/30 hover:bg-rose-500/20 transition-all hover:scale-105"
+                      >
                         Acknowledge
                       </button>
                     </div>

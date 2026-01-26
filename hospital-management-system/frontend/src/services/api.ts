@@ -434,6 +434,7 @@ export const laboratoryApi = {
   enterResult: (testId: string, data: any) => api.post(`/laboratory/results/${testId}`, data),
   verifyResult: (testId: string) => api.patch(`/laboratory/results/${testId}/verify`),
   getCriticalResults: () => api.get('/laboratory/critical'),
+  acknowledgeCritical: (testId: string) => api.post(`/laboratory/critical/${testId}/acknowledge`),
   getPendingOrders: () => api.get('/laboratory/pending'),
   getStats: () => api.get('/laboratory/stats'),
   // Sample Tracking
