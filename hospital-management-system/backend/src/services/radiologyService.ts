@@ -80,7 +80,31 @@ export class RadiologyService {
       prisma.imagingOrder.count({ where }),
     ]);
 
-    return { orders, total, page, limit };
+    // Transform AI analysis findings from JSON array to readable string
+    const ordersWithFormattedFindings = orders.map(order => {
+      if (order.aiAnalysis && order.aiAnalysis.findings) {
+        try {
+          const findingsArray = order.aiAnalysis.findings as Array<{ region?: string; finding?: string; confidence?: number }>;
+          const findingsText = findingsArray
+            .map((f, i) => `${i + 1}. ${f.region ? f.region + ': ' : ''}${f.finding || 'No findings'} (${Math.round((f.confidence || 0) * 100)}% confidence)`)
+            .join('; ');
+
+          return {
+            ...order,
+            aiAnalysis: {
+              ...order.aiAnalysis,
+              findings: findingsText || 'No significant findings detected',
+            },
+          };
+        } catch (e) {
+          // If parsing fails, return as-is
+          return order;
+        }
+      }
+      return order;
+    });
+
+    return { orders: ordersWithFormattedFindings, total, page, limit };
   }
 
   async getImagingOrderById(id: string, hospitalId: string) {
@@ -95,6 +119,28 @@ export class RadiologyService {
     });
 
     if (!order) throw new NotFoundError('Imaging order not found');
+
+    // Transform AI analysis findings from JSON array to readable string
+    if (order.aiAnalysis && order.aiAnalysis.findings) {
+      try {
+        const findingsArray = order.aiAnalysis.findings as Array<{ region?: string; finding?: string; confidence?: number }>;
+        const findingsText = findingsArray
+          .map((f, i) => `${i + 1}. ${f.region ? f.region + ': ' : ''}${f.finding || 'No findings'} (${Math.round((f.confidence || 0) * 100)}% confidence)`)
+          .join('; ');
+
+        return {
+          ...order,
+          aiAnalysis: {
+            ...order.aiAnalysis,
+            findings: findingsText || 'No significant findings detected',
+          },
+        };
+      } catch (e) {
+        // If parsing fails, return as-is
+        return order;
+      }
+    }
+
     return order;
   }
 
