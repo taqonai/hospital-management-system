@@ -115,12 +115,47 @@ router.post(
       });
     }
 
-    const appointment = await patientPortalService.bookAppointment(hospitalId, patientId, {
-      ...req.body,
-      appointmentDate: new Date(req.body.appointmentDate),
-      startTime: req.body.appointmentTime || req.body.startTime,
-    });
-    sendSuccess(res, appointment, 'Appointment booked successfully');
+    // Parse and validate the appointment date
+    const parsedDate = new Date(req.body.appointmentDate);
+    if (isNaN(parsedDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid appointment date format. Please use YYYY-MM-DD format.',
+        error: 'INVALID_DATE_FORMAT'
+      });
+    }
+
+    const startTime = req.body.appointmentTime || req.body.startTime;
+    // Validate time format (HH:MM)
+    if (!/^\d{1,2}:\d{2}$/.test(startTime)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid time format. Please use HH:MM format.',
+        error: 'INVALID_TIME_FORMAT'
+      });
+    }
+
+    try {
+      const appointment = await patientPortalService.bookAppointment(hospitalId, patientId, {
+        doctorId: req.body.doctorId,
+        departmentId: req.body.departmentId,
+        appointmentDate: parsedDate,
+        startTime,
+        type: req.body.type || 'CONSULTATION',
+        reason: req.body.reason || undefined,
+        notes: req.body.notes || undefined,
+      });
+      sendSuccess(res, appointment, 'Appointment booked successfully');
+    } catch (bookingError: any) {
+      // Provide better error messages for booking failures
+      const message = bookingError.message || 'Failed to book appointment';
+      const statusCode = bookingError.statusCode || 400;
+      return res.status(statusCode).json({
+        success: false,
+        message,
+        error: 'BOOKING_FAILED'
+      });
+    }
   })
 );
 

@@ -13,6 +13,36 @@ import { radiologyApi, patientApi, doctorApi } from '../../services/api';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 
+
+// Format AI findings from JSON to readable text
+const formatAIFindings = (findings: any): string => {
+  if (!findings) return '';
+  if (typeof findings === 'string') {
+    try {
+      findings = JSON.parse(findings);
+    } catch {
+      return findings;
+    }
+  }
+  if (Array.isArray(findings)) {
+    return findings.map((f: any) => {
+      const parts: string[] = [];
+      if (f.region) parts.push(f.region);
+      if (f.finding) parts.push(f.finding);
+      if (f.description) parts.push(f.description);
+      if (f.severity) parts.push(`(${f.severity})`);
+      if (f.confidence) parts.push(`[${Math.round(f.confidence * 100)}% confidence]`);
+      return parts.join(': ') || JSON.stringify(f);
+    }).join('; ');
+  }
+  if (typeof findings === 'object') {
+    return Object.entries(findings)
+      .map(([key, val]) => `${key}: ${val}`)
+      .join('; ');
+  }
+  return String(findings);
+};
+
 interface ImagingOrder {
   id: string;
   orderNumber: string;
@@ -402,7 +432,7 @@ function OrderDetailsModal({ order, onClose }: OrderDetailsModalProps) {
                     <SparklesIcon className="h-6 w-6 text-violet-600 flex-shrink-0 mt-0.5" />
                     <div className="flex-1">
                       <p className="text-sm text-gray-500 mb-1">Findings</p>
-                      <p className="text-gray-900">{order.aiAnalysis.findings}</p>
+                      <p className="text-gray-900">{formatAIFindings(order.aiAnalysis.findings)}</p>
                       {order.aiAnalysis.abnormalityDetected && (
                         <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-sm font-medium">
                           <ExclamationTriangleIcon className="h-4 w-4" />
@@ -632,7 +662,7 @@ export default function Radiology() {
               <div className="mt-2 space-y-1">
                 {flaggedStudies.slice(0, 3).map(s => (
                   <p key={s.id} className="text-sm text-red-700">
-                    {s.patient?.firstName} {s.patient?.lastName} - {s.modalityType} {s.bodyPart}: {s.aiAnalysis?.findings}
+                    {s.patient?.firstName} {s.patient?.lastName} - {s.modalityType} {s.bodyPart}: {formatAIFindings(s.aiAnalysis?.findings)}
                   </p>
                 ))}
               </div>
@@ -748,7 +778,7 @@ export default function Radiology() {
                       {order.aiAnalysis?.findings && (
                         <div className="mt-2 inline-flex items-center gap-1.5 text-sm text-red-600 bg-red-100/50 px-2 py-1 rounded-lg">
                           <SparklesIcon className="h-4 w-4" />
-                          AI: {order.aiAnalysis.findings}
+                          AI: {formatAIFindings(order.aiAnalysis.findings)}
                         </div>
                       )}
                     </div>

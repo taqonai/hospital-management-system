@@ -325,18 +325,18 @@ export default function PatientPortalDashboard() {
 
         // Fetch appointments
         const appointmentsResponse = await patientPortalApi.getAppointments({ type: 'upcoming', limit: 3 });
-        const appointmentsData = appointmentsResponse.data?.data || appointmentsResponse.data;
-        const appointments = Array.isArray(appointmentsData) ? appointmentsData : [];
+        const appointmentsRaw = appointmentsResponse.data?.data;
+        const appointments = Array.isArray(appointmentsRaw) ? appointmentsRaw : (appointmentsRaw?.data || []);
 
         // Fetch prescriptions
         const prescriptionsResponse = await patientPortalApi.getPrescriptions({ status: 'active', limit: 3 });
-        const prescriptionsData = prescriptionsResponse.data?.data || prescriptionsResponse.data;
-        const prescriptions = Array.isArray(prescriptionsData) ? prescriptionsData : [];
+        const prescriptionsRaw = prescriptionsResponse.data?.data;
+        const prescriptions = Array.isArray(prescriptionsRaw) ? prescriptionsRaw : (prescriptionsRaw?.data || []);
 
         // Fetch lab results
         const labsResponse = await patientPortalApi.getLabResults({ limit: 3 });
-        const labsData = labsResponse.data?.data || labsResponse.data;
-        const labs = Array.isArray(labsData) ? labsData : [];
+        const labsRaw = labsResponse.data?.data;
+        const labs = Array.isArray(labsRaw) ? labsRaw : (labsRaw?.data || []);
 
         // Fetch billing summary
         const billingSummary = await patientPortalApi.getBillingSummary();
@@ -344,8 +344,8 @@ export default function PatientPortalDashboard() {
 
         // Fetch pending bills
         const billsResponse = await patientPortalApi.getBills({ type: 'pending', limit: 3 });
-        const billsData = billsResponse.data?.data || billsResponse.data;
-        const bills = Array.isArray(billsData) ? billsData : [];
+        const billsRaw = billsResponse.data?.data;
+        const bills = Array.isArray(billsRaw) ? billsRaw : (billsRaw?.data || []);
 
         // Transform appointments data
         const upcomingAppointments: Appointment[] = appointments.map((apt: any) => ({
@@ -481,120 +481,22 @@ export default function PatientPortalDashboard() {
         };
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
-        // Return fallback data with user's actual name
+        // Return empty data - no mock/hardcoded data
+        const patientData = typeof window !== 'undefined'
+          ? JSON.parse(localStorage.getItem('patientUser') || 'null')
+          : null;
         return {
           patient: {
-            firstName: user?.firstName || 'Patient',
-            lastName: user?.lastName || '',
+            firstName: patientData?.firstName || user?.firstName || 'Patient',
+            lastName: patientData?.lastName || user?.lastName || '',
           },
-          upcomingAppointments: [
-            {
-              id: '1',
-              doctorName: 'Dr. Sarah Johnson',
-              specialty: 'Cardiology',
-              department: 'Heart Center',
-              date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-              time: '10:30',
-              status: 'SCHEDULED',
-            },
-            {
-              id: '2',
-              doctorName: 'Dr. Michael Chen',
-              specialty: 'Internal Medicine',
-              department: 'General Medicine',
-              date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-              time: '14:00',
-              status: 'CONFIRMED',
-            },
-          ],
-          recentPrescriptions: [
-            {
-              id: '1',
-              medicationName: 'Lisinopril',
-              dosage: '10mg',
-              frequency: 'Once daily',
-              status: 'ACTIVE' as const,
-              refillsRemaining: 3,
-            },
-            {
-              id: '2',
-              medicationName: 'Metformin',
-              dosage: '500mg',
-              frequency: 'Twice daily',
-              status: 'NEEDS_REFILL' as const,
-              refillsRemaining: 0,
-            },
-          ],
-          labResults: [
-            {
-              id: '1',
-              testName: 'Complete Blood Count',
-              testDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-              status: 'REVIEWED' as const,
-              hasAbnormalValues: true,
-              keyValues: [
-                { name: 'WBC', value: '11.5 K/uL', status: 'HIGH' },
-                { name: 'HGB', value: '14.5 g/dL', status: 'NORMAL' },
-              ],
-            },
-            {
-              id: '2',
-              testName: 'Lipid Panel',
-              testDate: new Date().toISOString(),
-              status: 'PENDING' as const,
-            },
-          ],
-          outstandingBills: [
-            {
-              id: '1',
-              invoiceNumber: 'INV-2024-001',
-              description: 'Cardiology Consultation',
-              amount: 150.00,
-              dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-              status: 'PENDING' as const,
-            },
-          ],
-          totalAmountDue: 150.00,
-          healthReminders: [
-            {
-              id: '1',
-              type: 'medication' as const,
-              title: 'Medication Refill Needed',
-              description: 'Metformin needs to be refilled',
-              priority: 'high' as const,
-            },
-            {
-              id: '2',
-              type: 'checkup' as const,
-              title: 'Annual Checkup Due',
-              description: 'Your yearly physical exam is due',
-              dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-              priority: 'medium' as const,
-            },
-          ],
-          unreadMessages: 2,
-          aiHealthInsights: {
-            summary: {
-              totalConditions: 2,
-              totalAllergies: 1,
-              riskLevel: 'moderate',
-            },
-            recommendations: [
-              {
-                title: 'Schedule Annual Checkup',
-                description: 'Regular health checkups help detect issues early.',
-                priority: 'medium',
-              },
-              {
-                title: 'Review Medications',
-                description: 'Discuss your current medications with your doctor.',
-                priority: 'low',
-              },
-            ],
-            riskFactors: [
-              { factor: 'Family history of heart disease', level: 'moderate' },
-            ],
-          },
+          upcomingAppointments: [],
+          recentPrescriptions: [],
+          labResults: [],
+          outstandingBills: [],
+          totalAmountDue: 0,
+          healthReminders: [],
+          unreadMessages: 0,
         };
       }
     },
