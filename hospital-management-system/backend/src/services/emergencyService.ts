@@ -125,7 +125,7 @@ export class EmergencyService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    return prisma.appointment.findMany({
+    const appointments = await prisma.appointment.findMany({
       where: {
         hospitalId,
         type: 'EMERGENCY',
@@ -144,6 +144,42 @@ export class EmergencyService {
           include: { user: { select: { firstName: true, lastName: true } } },
         },
       },
+    });
+
+    // Transform appointments to ED patient format
+    return appointments.map(apt => {
+      let esiLevel = 3; // Default triage level
+      let triageNotes = '';
+
+      // Parse ESI level and triage notes from JSON notes field
+      if (apt.notes) {
+        try {
+          const parsedNotes = JSON.parse(apt.notes);
+          esiLevel = parsedNotes.esiLevel || esiLevel;
+          triageNotes = parsedNotes.triageNotes || '';
+        } catch (e) {
+          // If notes is not JSON, treat as plain text
+          triageNotes = apt.notes;
+        }
+      }
+
+      return {
+        id: apt.id,
+        patient: {
+          firstName: apt.patient.firstName,
+          lastName: apt.patient.lastName,
+        },
+        esiLevel,
+        chiefComplaint: apt.reason || '',
+        arrivalTime: apt.createdAt.toISOString(), // Use createdAt as arrival time
+        status: apt.status,
+        triageNotes,
+        doctor: apt.doctor ? {
+          user: apt.doctor.user,
+        } : undefined,
+        vitals: apt.patient.vitals,
+        allergies: apt.patient.allergies,
+      };
     });
   }
 

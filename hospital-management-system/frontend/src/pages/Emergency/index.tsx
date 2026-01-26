@@ -430,7 +430,9 @@ export default function Emergency() {
   };
 
   const calculateWaitTime = (arrivalTime: string) => {
+    if (!arrivalTime) return 0;
     const arrival = new Date(arrivalTime);
+    if (isNaN(arrival.getTime())) return 0;
     const now = new Date();
     return Math.round((now.getTime() - arrival.getTime()) / (1000 * 60));
   };
@@ -617,8 +619,12 @@ export default function Emergency() {
                         </p>
                         <p className="text-sm mt-1 text-gray-700">{patient.chiefComplaint}</p>
                         <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                          <span>Arrived: {new Date(patient.arrivalTime).toLocaleTimeString()}</span>
-                          {patient.status === 'WAITING' && (
+                          <span>
+                            Arrived: {patient.arrivalTime
+                              ? new Date(patient.arrivalTime).toLocaleTimeString()
+                              : 'N/A'}
+                          </span>
+                          {patient.status === 'WAITING' && patient.arrivalTime && (
                             <span className="flex items-center gap-1">
                               <ClockIcon className="h-3 w-3" />
                               Wait: {calculateWaitTime(patient.arrivalTime)} min
