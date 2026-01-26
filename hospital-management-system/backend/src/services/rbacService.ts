@@ -538,6 +538,16 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     PERMISSIONS.NOTIFICATIONS_READ,
   ],
 
+  PATHOLOGIST: [
+    'patients:read',
+    'patients:medical_history',
+    'lab:orders:read',
+    'lab:orders:write',
+    'lab:results:write',
+    'lab:results:verify',
+    'lab:tests:manage',
+    'notifications:read',
+  ],
   MARKETING: [
     // CRM
     PERMISSIONS.CRM_READ,
