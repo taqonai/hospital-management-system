@@ -401,3 +401,141 @@ export async function getPendingItems(hospitalId: string) {
     pendingReturns,
   };
 }
+
+// ==================== PO Status Breakdown ====================
+
+export async function getPOStatusBreakdown(hospitalId: string) {
+  const poStatuses = await prisma.purchaseOrder.groupBy({
+    by: ['status'],
+    where: { hospitalId },
+    _count: { id: true },
+  });
+
+  return poStatuses.map(item => ({
+    status: item.status,
+    count: item._count.id,
+  }));
+}
+
+// ==================== Recent Purchase Orders ====================
+
+export async function getRecentPOs(hospitalId: string, limit: number = 10) {
+  const recentPOs = await prisma.purchaseOrder.findMany({
+    where: { hospitalId },
+    select: {
+      id: true,
+      poNumber: true,
+      status: true,
+      totalAmount: true,
+      orderDate: true,
+      expectedDate: true,
+      supplier: {
+        select: {
+          companyName: true,
+          code: true,
+        },
+      },
+    },
+    orderBy: { orderDate: 'desc' },
+    take: limit,
+  });
+
+  return recentPOs.map(po => ({
+    ...po,
+    totalAmount: Number(po.totalAmount),
+  }));
+}
+
+// ==================== Low Stock Alerts ====================
+
+export async function getLowStockAlerts(hospitalId: string, limit: number = 20) {
+  // Get items where quantity is at or below reorder level
+  const lowStockItems = await prisma.inventoryItem.findMany({
+    where: {
+      hospitalId,
+      reorderLevel: { gt: 0 },
+    },
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      category: true,
+      quantity: true,
+      unit: true,
+      reorderLevel: true,
+    },
+    orderBy: { quantity: 'asc' },
+  });
+
+  // Filter items where quantity <= reorderLevel
+  const filteredItems = lowStockItems.filter(item => item.quantity <= item.reorderLevel);
+
+  return filteredItems.slice(0, limit);
+}
+
+// ==================== My PRs (for staff dashboard) ====================
+
+export async function getMyPRs(hospitalId: string, userId: string, limit: number = 10) {
+  const myPRs = await prisma.purchaseRequisition.findMany({
+    where: {
+      hospitalId,
+      requestedById: userId,
+    },
+    select: {
+      id: true,
+      prNumber: true,
+      status: true,
+      urgency: true,
+      totalEstimated: true,
+      createdAt: true,
+      department: {
+        select: {
+          name: true,
+          code: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+  });
+
+  return myPRs.map(pr => ({
+    ...pr,
+    totalEstimated: Number(pr.totalEstimated),
+  }));
+}
+
+// ==================== Recent GRNs ====================
+
+export async function getRecentGRNs(hospitalId: string, limit: number = 10) {
+  const recentGRNs = await prisma.goodsReceiptNote.findMany({
+    where: { hospitalId },
+    select: {
+      id: true,
+      grnNumber: true,
+      status: true,
+      receiptDate: true,
+      inspectionStatus: true,
+      purchaseOrder: {
+        select: {
+          poNumber: true,
+          supplier: {
+            select: {
+              companyName: true,
+            },
+          },
+        },
+      },
+      receivedBy: {
+        select: {
+          firstName: true,
+          lastName: true,
+        },
+      },
+    },
+    orderBy: { receiptDate: 'desc' },
+    take: limit,
+  });
+
+  return recentGRNs;
+}

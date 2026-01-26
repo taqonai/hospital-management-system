@@ -195,6 +195,50 @@ async function main() {
 
   console.log(`Created pathologist user: ${pathologistUser.email}`);
 
+  // Create Procurement Manager User
+  const procurementManagerPassword = await bcrypt.hash('password123', 12);
+  const procurementManagerUser = await prisma.user.upsert({
+    where: {
+      hospitalId_email: { hospitalId: hospital.id, email: 'procurement.manager@hospital.com' },
+    },
+    update: {},
+    create: {
+      hospitalId: hospital.id,
+      email: 'procurement.manager@hospital.com',
+      password: procurementManagerPassword,
+      firstName: 'Michael',
+      lastName: 'Stevens',
+      phone: '+1-555-100-0009',
+      role: UserRole.PROCUREMENT_MANAGER,
+      isActive: true,
+      isEmailVerified: true,
+    },
+  });
+
+  console.log(`Created procurement manager user: ${procurementManagerUser.email}`);
+
+  // Create Procurement Staff User
+  const procurementStaffPassword = await bcrypt.hash('password123', 12);
+  const procurementStaffUser = await prisma.user.upsert({
+    where: {
+      hospitalId_email: { hospitalId: hospital.id, email: 'procurement.staff@hospital.com' },
+    },
+    update: {},
+    create: {
+      hospitalId: hospital.id,
+      email: 'procurement.staff@hospital.com',
+      password: procurementStaffPassword,
+      firstName: 'Jennifer',
+      lastName: 'Martinez',
+      phone: '+1-555-100-0010',
+      role: UserRole.PROCUREMENT_STAFF,
+      isActive: true,
+      isEmailVerified: true,
+    },
+  });
+
+  console.log(`Created procurement staff user: ${procurementStaffUser.email}`);
+
   // Create Lab Tests Catalog
   const labTestsData = [
     { name: 'Complete Blood Count (CBC)', code: 'CBC001', category: 'Hematology', sampleType: 'Blood', price: 50, turnaroundTime: 4 },

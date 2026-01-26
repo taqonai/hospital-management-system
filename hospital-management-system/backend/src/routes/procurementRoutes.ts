@@ -18,12 +18,16 @@ const router = Router();
 // All procurement routes require authentication
 router.use(authenticate);
 
-// Roles with procurement access
+// Roles with procurement access (read/view)
 const PROCUREMENT_ROLES = [
-  'SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT'
+  'SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST', 'ACCOUNTANT', 'PROCUREMENT_MANAGER', 'PROCUREMENT_STAFF'
 ] as const;
 
-const ADMIN_ROLES = ['SUPER_ADMIN', 'HOSPITAL_ADMIN'] as const;
+// Admin roles (create/edit/delete/approve everything)
+const ADMIN_ROLES = ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PROCUREMENT_MANAGER'] as const;
+
+// Procurement staff roles (limited write access: create PRs, GRNs, invoices, returns)
+const PROCUREMENT_STAFF_ROLES = ['PROCUREMENT_STAFF'] as const;
 
 // ==================== Suppliers ====================
 
@@ -184,10 +188,10 @@ router.get(
   })
 );
 
-// Create PR
+// Create PR (Staff can create, Manager can create)
 router.post(
   '/requisitions',
-  authorize(...PROCUREMENT_ROLES),
+  authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const pr = await prService.createPR(req.user!.hospitalId, req.user!.userId, req.body);
     sendCreated(res, pr, 'Purchase requisition created');
@@ -213,27 +217,27 @@ router.get(
   })
 );
 
-// Update PR (draft only)
+// Update PR (draft only - Staff and Manager can edit)
 router.put(
   '/requisitions/:id',
-  authorize(...PROCUREMENT_ROLES),
+  authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const pr = await prService.updatePR(req.user!.hospitalId, req.params.id, req.body);
     sendSuccess(res, pr, 'Requisition updated');
   })
 );
 
-// Submit PR for approval
+// Submit PR for approval (Staff and Manager can submit)
 router.post(
   '/requisitions/:id/submit',
-  authorize(...PROCUREMENT_ROLES),
+  authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const pr = await prService.submitPR(req.user!.hospitalId, req.params.id, req.user!.userId);
     sendSuccess(res, pr, 'Requisition submitted for approval');
   })
 );
 
-// Approve PR
+// Approve PR (Only Manager and Admins can approve, NOT Staff)
 router.post(
   '/requisitions/:id/approve',
   authorize(...ADMIN_ROLES),
@@ -266,10 +270,10 @@ router.post(
   })
 );
 
-// Cancel PR
+// Cancel PR (Staff and Manager can cancel)
 router.post(
   '/requisitions/:id/cancel',
-  authorize(...PROCUREMENT_ROLES),
+  authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const pr = await prService.cancelPR(req.user!.hospitalId, req.params.id);
     sendSuccess(res, pr, 'Requisition cancelled');
@@ -297,7 +301,7 @@ router.get(
   })
 );
 
-// Create PO
+// Create PO (Only Manager, Admins, and Pharmacist can create - NOT Staff)
 router.post(
   '/orders',
   authorize(...ADMIN_ROLES, 'PHARMACIST'),
@@ -317,7 +321,7 @@ router.get(
   })
 );
 
-// Update PO (draft only)
+// Update PO (draft only - Only Manager, Admins, and Pharmacist can edit - NOT Staff)
 router.put(
   '/orders/:id',
   authorize(...ADMIN_ROLES, 'PHARMACIST'),
@@ -327,7 +331,7 @@ router.put(
   })
 );
 
-// Submit PO for approval
+// Submit PO for approval (Only Manager, Admins, and Pharmacist - NOT Staff)
 router.post(
   '/orders/:id/submit',
   authorize(...ADMIN_ROLES, 'PHARMACIST'),
@@ -337,7 +341,7 @@ router.post(
   })
 );
 
-// Approve PO
+// Approve PO (Only Manager and Admins - NOT Staff)
 router.post(
   '/orders/:id/approve',
   authorize(...ADMIN_ROLES),
@@ -352,7 +356,7 @@ router.post(
   })
 );
 
-// Send PO to supplier
+// Send PO to supplier (Only Manager, Admins, and Pharmacist - NOT Staff)
 router.post(
   '/orders/:id/send',
   authorize(...ADMIN_ROLES, 'PHARMACIST'),
@@ -431,10 +435,10 @@ router.get(
   })
 );
 
-// Create GRN
+// Create GRN (Staff can create, Manager can create)
 router.post(
   '/grn',
-  authorize(...PROCUREMENT_ROLES),
+  authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const grn = await grnService.createGRN(req.user!.hospitalId, req.user!.userId, req.body);
     sendCreated(res, grn, 'Goods receipt note created');
@@ -451,17 +455,17 @@ router.get(
   })
 );
 
-// Update GRN (draft only)
+// Update GRN (draft only - Staff and Manager can edit)
 router.put(
   '/grn/:id',
-  authorize(...PROCUREMENT_ROLES),
+  authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const grn = await grnService.updateGRN(req.user!.hospitalId, req.params.id, req.body);
     sendSuccess(res, grn, 'GRN updated');
   })
 );
 
-// Approve GRN (triggers inventory update)
+// Approve GRN (triggers inventory update - Only Manager, Admins, and Pharmacist - NOT Staff)
 router.post(
   '/grn/:id/approve',
   authorize(...ADMIN_ROLES, 'PHARMACIST'),
@@ -471,10 +475,10 @@ router.post(
   })
 );
 
-// Record inspection
+// Record inspection (Staff and Manager can inspect)
 router.post(
   '/grn/:id/inspect',
-  authorize(...PROCUREMENT_ROLES),
+  authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const grn = await grnService.recordInspection(
       req.user!.hospitalId,
@@ -505,10 +509,10 @@ router.get(
   })
 );
 
-// Record invoice
+// Record invoice (Staff can create, Manager can create)
 router.post(
   '/invoices',
-  authorize(...PROCUREMENT_ROLES),
+  authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST', 'ACCOUNTANT'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const invoice = await invoiceService.createInvoice(req.user!.hospitalId, req.body);
     sendCreated(res, invoice, 'Invoice recorded');
@@ -580,10 +584,10 @@ router.get(
   })
 );
 
-// Create return
+// Create return (Staff can create, Manager can create)
 router.post(
   '/returns',
-  authorize(...PROCUREMENT_ROLES),
+  authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const returnRecord = await returnService.createReturn(
       req.user!.hospitalId,
@@ -604,7 +608,7 @@ router.get(
   })
 );
 
-// Approve return
+// Approve return (Only Manager and Admins - NOT Staff)
 router.post(
   '/returns/:id/approve',
   authorize(...ADMIN_ROLES),
@@ -618,10 +622,10 @@ router.post(
   })
 );
 
-// Mark return as shipped
+// Mark return as shipped (Staff and Manager can ship)
 router.post(
   '/returns/:id/ship',
-  authorize(...PROCUREMENT_ROLES),
+  authorize(...ADMIN_ROLES, ...PROCUREMENT_STAFF_ROLES, 'PHARMACIST'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const returnRecord = await returnService.markReturnShipped(req.user!.hospitalId, req.params.id);
     sendSuccess(res, returnRecord, 'Return marked as shipped');
@@ -686,6 +690,60 @@ router.get(
   authorize(...PROCUREMENT_ROLES),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = await analyticsService.getPendingItems(req.user!.hospitalId);
+    sendSuccess(res, result);
+  })
+);
+
+// PO status breakdown
+router.get(
+  '/analytics/po-status-breakdown',
+  authorize(...PROCUREMENT_ROLES),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const result = await analyticsService.getPOStatusBreakdown(req.user!.hospitalId);
+    sendSuccess(res, result);
+  })
+);
+
+// Recent POs
+router.get(
+  '/analytics/recent-pos',
+  authorize(...PROCUREMENT_ROLES),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const limit = req.query.limit ? Number(req.query.limit) : 10;
+    const result = await analyticsService.getRecentPOs(req.user!.hospitalId, limit);
+    sendSuccess(res, result);
+  })
+);
+
+// Low stock alerts
+router.get(
+  '/analytics/low-stock',
+  authorize(...PROCUREMENT_ROLES),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const limit = req.query.limit ? Number(req.query.limit) : 20;
+    const result = await analyticsService.getLowStockAlerts(req.user!.hospitalId, limit);
+    sendSuccess(res, result);
+  })
+);
+
+// My PRs (for staff dashboard)
+router.get(
+  '/analytics/my-prs',
+  authorize(...PROCUREMENT_ROLES),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const limit = req.query.limit ? Number(req.query.limit) : 10;
+    const result = await analyticsService.getMyPRs(req.user!.hospitalId, req.user!.userId, limit);
+    sendSuccess(res, result);
+  })
+);
+
+// Recent GRNs
+router.get(
+  '/analytics/recent-grns',
+  authorize(...PROCUREMENT_ROLES),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const limit = req.query.limit ? Number(req.query.limit) : 10;
+    const result = await analyticsService.getRecentGRNs(req.user!.hospitalId, limit);
     sendSuccess(res, result);
   })
 );

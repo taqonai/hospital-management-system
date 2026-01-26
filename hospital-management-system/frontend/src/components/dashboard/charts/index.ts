@@ -19,3 +19,4 @@ export { PharmacyDashboard } from './pharmacy';
 export { RadiologyDashboard } from './radiology';
 export { HRDashboard } from './hr';
 export { AccountantDashboard } from './accountant';
+export { ProcurementDashboard } from './procurement';

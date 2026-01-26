@@ -26,7 +26,10 @@ export type UserRole =
   | 'MAINTENANCE_STAFF'
   | 'SECURITY_STAFF'
   | 'DIETARY_STAFF'
-  | 'MARKETING';
+  | 'MARKETING'
+  | 'PROCUREMENT_MANAGER'
+  | 'PROCUREMENT_STAFF'
+  | 'PATHOLOGIST';
 
 export interface AuthState {
   user: User | null;

@@ -560,6 +560,25 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     // Notifications
     PERMISSIONS.NOTIFICATIONS_READ,
   ],
+  PROCUREMENT_MANAGER: [
+    // Procurement manager has full procurement access
+    // Reports
+    PERMISSIONS.REPORTS_VIEW,
+    PERMISSIONS.REPORTS_EXPORT,
+    // Pharmacy Inventory (for viewing stock levels)
+    PERMISSIONS.PHARMACY_INVENTORY,
+    // Notifications
+    PERMISSIONS.NOTIFICATIONS_READ,
+  ] as Permission[],
+  PROCUREMENT_STAFF: [
+    // Procurement staff has limited access
+    // Reports
+    PERMISSIONS.REPORTS_VIEW,
+    // Pharmacy Inventory (for viewing stock levels)
+    PERMISSIONS.PHARMACY_READ,
+    // Notifications
+    PERMISSIONS.NOTIFICATIONS_READ,
+  ] as Permission[],
 };
 
 // ==================== PERMISSION CATEGORIES FOR UI ====================

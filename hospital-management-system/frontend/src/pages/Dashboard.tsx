@@ -30,6 +30,7 @@ import {
   RadiologyDashboard,
   HRDashboard,
   AccountantDashboard,
+  ProcurementDashboard,
 } from '../components/dashboard/charts';
 
 // Welcome Header Component
@@ -170,6 +171,9 @@ export default function Dashboard() {
         return <HRDashboard />;
       case 'ACCOUNTANT':
         return <AccountantDashboard />;
+      case 'PROCUREMENT_MANAGER':
+      case 'PROCUREMENT_STAFF':
+        return <ProcurementDashboard />;
       default:
         return <DefaultDashboard />;
     }

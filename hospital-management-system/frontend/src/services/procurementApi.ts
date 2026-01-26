@@ -51,12 +51,16 @@ export const procurementApi = {
   createReturn: (data: any) => api.post('/procurement/returns', data),
 
   // Analytics / Dashboard
-  getDashboardStats: () => api.get('/procurement/dashboard/stats'),
-  getRecentPOs: (limit?: number) => api.get('/procurement/dashboard/recent-pos', { params: { limit } }),
-  getPendingApprovals: () => api.get('/procurement/dashboard/pending-approvals'),
-  getSpendByCategory: () => api.get('/procurement/dashboard/spend-by-category'),
-  getLowStockAlerts: () => api.get('/procurement/dashboard/low-stock-alerts'),
-  getAnalytics: (params?: any) => api.get('/procurement/analytics', { params }),
+  getDashboardStats: () => api.get('/procurement/analytics/dashboard'),
+  getRecentPOs: (limit?: number) => api.get('/procurement/analytics/recent-pos', { params: { limit } }),
+  getPendingApprovals: () => api.get('/procurement/analytics/pending'),
+  getSpendByCategory: () => api.get('/procurement/analytics/spend', { params: { groupBy: 'category' } }),
+  getLowStockAlerts: () => api.get('/procurement/analytics/low-stock'),
+  getAnalytics: (params?: any) => api.get('/procurement/analytics/spend', { params }),
+  getPOStatusBreakdown: () => api.get('/procurement/analytics/po-status-breakdown'),
+  getRecentGRNs: (limit?: number) => api.get('/procurement/analytics/recent-grns', { params: { limit } }),
+  getMyPRs: (limit?: number) => api.get('/procurement/analytics/my-prs', { params: { limit } }),
+  getSupplierPerformanceReport: (limit?: number) => api.get('/procurement/analytics/supplier-performance', { params: { limit } }),
 };
 
 export default procurementApi;
