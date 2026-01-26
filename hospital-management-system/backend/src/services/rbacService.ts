@@ -2224,6 +2224,18 @@ export class RBACService {
   }
 
   /**
+   * Get default role permissions as a map of role → permissions array.
+   * Used by the admin UI Permission Matrix to show system role defaults.
+   */
+  getDefaultRolePermissionsMap(): Record<string, string[]> {
+    const result: Record<string, string[]> = {};
+    for (const [role, permissions] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
+      result[role] = permissions as string[];
+    }
+    return result;
+  }
+
+  /**
    * Seed default system roles for a hospital.
    * This creates custom roles based on common hospital configurations.
    */

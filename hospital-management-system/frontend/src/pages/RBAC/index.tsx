@@ -131,11 +131,13 @@ function RoleCard({
   onEdit,
   onDelete,
   onView,
+  onClone,
 }: {
   role: Role;
   onEdit: () => void;
   onDelete: () => void;
   onView: () => void;
+  onClone: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -245,6 +247,14 @@ function RoleCard({
             <EyeIcon className="h-4 w-4 inline mr-1" />
             View
           </button>
+          <button
+            onClick={onClone}
+            className="flex-1 px-3 py-2 rounded-lg text-sm font-medium text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/30 transition-colors"
+            title="Clone this role as a new custom role"
+          >
+            <DocumentTextIcon className="h-4 w-4 inline mr-1" />
+            Clone
+          </button>
           {!role.isSystem && (
             <>
               <button
@@ -272,11 +282,13 @@ function RoleCard({
 // Create/Edit Role Modal
 function RoleModal({
   role,
+  cloneSource,
   permissions,
   onClose,
   onSuccess,
 }: {
   role?: Role | null;
+  cloneSource?: Role | null;
   permissions: Permission[];
   onClose: () => void;
   onSuccess: () => void;
@@ -285,11 +297,15 @@ function RoleModal({
   const [loading, setLoading] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
 
+  // When cloning, pre-fill with clone source's permissions but clear name
+  const isCloning = !role && !!cloneSource;
+  const sourceRole = role || cloneSource;
+
   const { register, handleSubmit, control, watch, setValue, formState: { errors } } = useForm<RoleFormData>({
     defaultValues: {
-      name: role?.name || '',
-      description: role?.description || '',
-      permissionIds: role?.permissions.map((p) => p.id) || [],
+      name: isCloning ? `${cloneSource?.name || ''} (Copy)` : (role?.name || ''),
+      description: isCloning ? `Cloned from ${cloneSource?.name || ''}. ${cloneSource?.description || ''}` : (role?.description || ''),
+      permissionIds: sourceRole?.permissions.map((p) => p.id) || [],
     },
   });
 
@@ -378,10 +394,10 @@ function RoleModal({
             </div>
             <div>
               <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                {role ? 'Edit Role' : 'Create New Role'}
+                {role ? 'Edit Role' : isCloning ? 'Clone Role' : 'Create New Role'}
               </h2>
               <p className="text-sm text-gray-500 dark:text-slate-400">
-                {role ? 'Modify role permissions' : 'Define a new custom role with specific permissions'}
+                {role ? 'Modify role permissions' : isCloning ? `Creating a copy of "${cloneSource?.name}"` : 'Define a new custom role with specific permissions'}
               </p>
             </div>
           </div>
@@ -850,11 +866,17 @@ export default function RBACManagement() {
   // Modals
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const [cloneSourceRole, setCloneSourceRole] = useState<Role | null>(null);
   const [showUserModal, setShowUserModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserWithRoles | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
   const [expandedPermissionCategories, setExpandedPermissionCategories] = useState<string[]>([]);
+
+  // Permission matrix state
+  const [matrixSearch, setMatrixSearch] = useState('');
+  const [matrixCategoryFilter, setMatrixCategoryFilter] = useState('');
+  const [expandedMatrixCategories, setExpandedMatrixCategories] = useState<string[]>([]);
 
   // Fetch roles
   const { data: rolesData, isLoading: loadingRoles } = useQuery({
@@ -894,6 +916,14 @@ export default function RBACManagement() {
     enabled: activeTab === 'audit',
   });
 
+  // Fetch available permissions with categories and descriptions (for matrix)
+  const { data: availablePermissionsData } = useQuery({
+    queryKey: ['rbac-available-permissions'],
+    queryFn: () => rbacApi.getAvailablePermissions(),
+    select: (res) => res.data.data || {},
+    enabled: activeTab === 'permissions',
+  });
+
   // Delete role mutation
   const deleteMutation = useMutation({
     mutationFn: (roleId: string) => rbacApi.deleteRole(roleId),
@@ -912,6 +942,10 @@ export default function RBACManagement() {
   const permissions = permissionsData || [];
   const users = usersData || [];
   const auditLogs = auditData || [];
+
+  // Available permissions with categories for the Permission Matrix
+  const availableCategories: Record<string, { description: string; permissions: Array<{ permission: string; description: string }> }> = availablePermissionsData?.categories || {};
+  const defaultRolePermissions: Record<string, string[]> = availablePermissionsData?.defaultRolePermissions || {};
 
   // Group permissions by category for Permissions tab
   const permissionsByCategory = useMemo(() => {
@@ -1026,7 +1060,7 @@ export default function RBACManagement() {
           {[
             { id: 'roles', label: 'Roles', icon: ShieldCheckIcon },
             { id: 'users', label: 'Users', icon: UserGroupIcon },
-            { id: 'permissions', label: 'Permissions', icon: KeyIcon },
+            { id: 'permissions', label: 'Permission Matrix', icon: KeyIcon },
             { id: 'audit', label: 'Audit Log', icon: ClipboardDocumentListIcon },
           ].map((tab) => (
             <button
@@ -1144,6 +1178,7 @@ export default function RBACManagement() {
                     role={role}
                     onEdit={() => {
                       setSelectedRole(role);
+                      setCloneSourceRole(null);
                       setShowRoleModal(true);
                     }}
                     onDelete={() => {
@@ -1152,6 +1187,12 @@ export default function RBACManagement() {
                     }}
                     onView={() => {
                       setSelectedRole(role);
+                      setCloneSourceRole(null);
+                      setShowRoleModal(true);
+                    }}
+                    onClone={() => {
+                      setSelectedRole(null);
+                      setCloneSourceRole(role);
                       setShowRoleModal(true);
                     }}
                   />
@@ -1262,128 +1303,176 @@ export default function RBACManagement() {
             </div>
           )}
 
-          {/* Permissions Tab */}
+          {/* Permission Matrix Tab */}
           {activeTab === 'permissions' && (
             <div className="space-y-4">
+              {/* Matrix Header Info */}
               <div className="relative overflow-hidden rounded-xl backdrop-blur-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4">
                 <div className="flex items-start gap-3">
                   <InformationCircleIcon className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
                   <div>
                     <h4 className="font-medium text-blue-800 dark:text-blue-300">
-                      Permission Reference
+                      Permission Matrix
                     </h4>
                     <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
-                      This is a read-only view of all available permissions in the system. Use the
-                      Roles tab to assign permissions to roles.
+                      Visual overview of which permissions belong to each system role. System role defaults are read-only (greyed out). Custom roles can be edited from the Roles tab.
                     </p>
                   </div>
                 </div>
               </div>
 
+              {/* Matrix Search & Filter */}
+              <div className="relative overflow-hidden rounded-xl backdrop-blur-xl bg-white/70 dark:bg-slate-800/70 border border-white/50 dark:border-white/10 p-4 shadow-lg">
+                <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" />
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="relative flex-1">
+                    <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search permissions..."
+                      value={matrixSearch}
+                      onChange={(e) => setMatrixSearch(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                    />
+                  </div>
+                  <select
+                    value={matrixCategoryFilter}
+                    onChange={(e) => setMatrixCategoryFilter(e.target.value)}
+                    className="px-4 py-2.5 rounded-lg bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                  >
+                    <option value="">All Categories</option>
+                    {Object.keys(availableCategories).map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => setExpandedMatrixCategories(
+                      expandedMatrixCategories.length === Object.keys(availableCategories).length
+                        ? []
+                        : Object.keys(availableCategories)
+                    )}
+                    className="px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-200 dark:hover:bg-slate-500 transition-all whitespace-nowrap"
+                  >
+                    {expandedMatrixCategories.length === Object.keys(availableCategories).length ? 'Collapse All' : 'Expand All'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Permission Matrix Grid */}
               <div className="relative overflow-hidden rounded-xl backdrop-blur-xl bg-white/70 dark:bg-slate-800/70 border border-white/50 dark:border-white/10 shadow-lg">
                 <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" />
-                {Object.keys(permissionsByCategory).length === 0 ? (
+                {Object.keys(availableCategories).length === 0 ? (
                   <div className="p-12 text-center">
                     <KeyIcon className="h-12 w-12 mx-auto text-gray-300 dark:text-slate-600 mb-4" />
-                    <p className="text-gray-600 dark:text-slate-400">No permissions found</p>
+                    <p className="text-gray-600 dark:text-slate-400">Loading permission matrix...</p>
                   </div>
                 ) : (
                   <div className="divide-y divide-gray-200 dark:divide-slate-700">
-                    {Object.entries(permissionsByCategory).map(([category, perms]) => {
-                      const categoryInfo = PERMISSION_CATEGORIES.find((c) => c.id === category);
-                      const isExpanded = expandedPermissionCategories.includes(category);
+                    {Object.entries(availableCategories)
+                      .filter(([cat]) => !matrixCategoryFilter || cat === matrixCategoryFilter)
+                      .map(([category, catData]) => {
+                        const isExpanded = expandedMatrixCategories.includes(category);
+                        // Filter permissions by search
+                        const filteredPerms = catData.permissions.filter((p) =>
+                          !matrixSearch || p.permission.toLowerCase().includes(matrixSearch.toLowerCase()) || p.description.toLowerCase().includes(matrixSearch.toLowerCase())
+                        );
+                        if (filteredPerms.length === 0 && matrixSearch) return null;
 
-                      return (
-                        <div key={category}>
-                          <div
-                            className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700/50"
-                            onClick={() => togglePermissionCategory(category)}
-                          >
-                            <div className="flex items-center gap-3">
-                              {isExpanded ? (
-                                <ChevronDownIcon className="h-5 w-5 text-gray-400" />
-                              ) : (
-                                <ChevronRightIcon className="h-5 w-5 text-gray-400" />
-                              )}
-                              {categoryInfo && (
-                                <categoryInfo.icon className="h-5 w-5 text-indigo-500" />
-                              )}
-                              <span className="font-semibold text-gray-700 dark:text-slate-300">
-                                {categoryInfo?.label || category}
-                              </span>
-                              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-slate-600 text-gray-600 dark:text-slate-300">
-                                {(perms as Permission[]).length} permissions
-                              </span>
-                            </div>
-                          </div>
+                        // System role column names
+                        const systemRoles = ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST', 'LAB_TECHNICIAN', 'PHARMACIST', 'RADIOLOGIST', 'ACCOUNTANT'];
 
-                          {isExpanded && (
-                            <div className="px-4 pb-4">
-                              <div className="overflow-x-auto">
-                                <table className="min-w-full">
-                                  <thead>
-                                    <tr className="text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                                      <th className="px-3 py-2">Permission</th>
-                                      <th className="px-3 py-2">Code</th>
-                                      <th className="px-3 py-2">Description</th>
-                                      <th className="px-3 py-2">Roles with Access</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-                                    {(perms as Permission[]).map((perm) => {
-                                      const rolesWithPerm = roles.filter((r: Role) =>
-                                        r.permissions.some((p) => p.id === perm.id)
-                                      );
-                                      return (
-                                        <tr
-                                          key={perm.id}
-                                          className="hover:bg-gray-50 dark:hover:bg-slate-700/30"
-                                        >
-                                          <td className="px-3 py-3">
-                                            <span className="font-medium text-gray-900 dark:text-white">
-                                              {perm.name}
-                                            </span>
-                                          </td>
-                                          <td className="px-3 py-3">
-                                            <code className="px-2 py-1 rounded text-xs bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300">
-                                              {perm.code}
-                                            </code>
-                                          </td>
-                                          <td className="px-3 py-3 text-sm text-gray-500 dark:text-slate-400">
-                                            {perm.description || '-'}
-                                          </td>
-                                          <td className="px-3 py-3">
-                                            <div className="flex flex-wrap gap-1">
-                                              {rolesWithPerm.length === 0 ? (
-                                                <span className="text-xs text-gray-400">None</span>
-                                              ) : (
-                                                rolesWithPerm.slice(0, 3).map((role: Role) => (
-                                                  <span
-                                                    key={role.id}
-                                                    className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
-                                                  >
-                                                    {role.name}
-                                                  </span>
-                                                ))
-                                              )}
-                                              {rolesWithPerm.length > 3 && (
-                                                <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-slate-600 text-gray-600 dark:text-slate-300">
-                                                  +{rolesWithPerm.length - 3} more
-                                                </span>
-                                              )}
-                                            </div>
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
+                        return (
+                          <div key={category}>
+                            <div
+                              className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700/50"
+                              onClick={() => setExpandedMatrixCategories((prev) =>
+                                prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category]
+                              )}
+                            >
+                              <div className="flex items-center gap-3">
+                                {isExpanded ? (
+                                  <ChevronDownIcon className="h-5 w-5 text-gray-400" />
+                                ) : (
+                                  <ChevronRightIcon className="h-5 w-5 text-gray-400" />
+                                )}
+                                <span className="font-semibold text-gray-700 dark:text-slate-300">
+                                  {category}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-slate-600 text-gray-600 dark:text-slate-300">
+                                  {filteredPerms.length} permission{filteredPerms.length !== 1 ? 's' : ''}
+                                </span>
+                                <span className="text-xs text-gray-400 dark:text-slate-500 hidden sm:inline">
+                                  {catData.description}
+                                </span>
                               </div>
                             </div>
-                          )}
-                        </div>
-                      );
-                    })}
+
+                            {isExpanded && (
+                              <div className="px-4 pb-4">
+                                <div className="overflow-x-auto">
+                                  <table className="min-w-full border-collapse">
+                                    <thead>
+                                      <tr>
+                                        <th className="sticky left-0 z-10 bg-gray-50 dark:bg-slate-700 px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-slate-400 uppercase tracking-wider min-w-[200px]">
+                                          Permission
+                                        </th>
+                                        {systemRoles.map((role) => (
+                                          <th key={role} className="px-2 py-2 text-center text-[10px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider min-w-[80px]">
+                                            <span className="block truncate" title={role.replace(/_/g, ' ')}>
+                                              {role.replace(/_/g, ' ').split(' ').map(w => w[0]).join('')}
+                                            </span>
+                                            <span className="block text-[9px] font-normal text-gray-400 dark:text-slate-500 truncate">
+                                              {role.replace(/_/g, ' ')}
+                                            </span>
+                                          </th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
+                                      {filteredPerms.map((perm) => (
+                                        <tr
+                                          key={perm.permission}
+                                          className="hover:bg-gray-50 dark:hover:bg-slate-700/30 group"
+                                        >
+                                          <td className="sticky left-0 z-10 bg-white dark:bg-slate-800 group-hover:bg-gray-50 dark:group-hover:bg-slate-700/30 px-3 py-2.5 transition-colors">
+                                            <div className="relative">
+                                              <code className="text-xs font-medium text-gray-700 dark:text-slate-300">
+                                                {perm.permission}
+                                              </code>
+                                              <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-0.5" title={perm.description}>
+                                                {perm.description}
+                                              </p>
+                                            </div>
+                                          </td>
+                                          {systemRoles.map((role) => {
+                                            const rolePerms = defaultRolePermissions[role] || [];
+                                            const hasIt = role === 'SUPER_ADMIN' || rolePerms.includes(perm.permission);
+                                            return (
+                                              <td key={role} className="px-2 py-2.5 text-center">
+                                                <div className="flex items-center justify-center">
+                                                  {hasIt ? (
+                                                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-green-100 dark:bg-green-900/30" title={`${role.replace(/_/g, ' ')} has ${perm.permission}`}>
+                                                      <CheckIcon className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                                    </span>
+                                                  ) : (
+                                                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-gray-50 dark:bg-slate-700/30" title={`${role.replace(/_/g, ' ')} does not have ${perm.permission}`}>
+                                                      <XMarkIcon className="h-3.5 w-3.5 text-gray-300 dark:text-slate-600" />
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              </td>
+                                            );
+                                          })}
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                   </div>
                 )}
               </div>
@@ -1477,14 +1566,17 @@ export default function RBACManagement() {
       {showRoleModal && (
         <RoleModal
           role={selectedRole}
+          cloneSource={cloneSourceRole}
           permissions={permissions}
           onClose={() => {
             setShowRoleModal(false);
             setSelectedRole(null);
+            setCloneSourceRole(null);
           }}
           onSuccess={() => {
             setShowRoleModal(false);
             setSelectedRole(null);
+            setCloneSourceRole(null);
           }}
         />
       )}

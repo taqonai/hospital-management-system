@@ -1577,7 +1577,7 @@ export const pdfApi = {
 export const rbacApi = {
   // Permissions
   getPermissions: () => api.get('/rbac/permissions'),
-  getAvailablePermissions: () => api.get('/rbac/permissions'),
+  getAvailablePermissions: () => api.get('/rbac/available-permissions'),
 
   // Roles
   createRole: (data: any) => api.post('/rbac/roles', data),

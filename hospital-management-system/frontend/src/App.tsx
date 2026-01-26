@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from './store';
+import { PermissionProvider, usePermissions } from './contexts/PermissionContext';
 
 // Layout
 import MainLayout from './components/layout/MainLayout';
@@ -134,19 +135,30 @@ import ClinicianDashboard from './pages/Clinician';
 import ClinicianPatientSummary from './pages/Clinician/PatientSummary';
 import ClinicianAlerts from './pages/Clinician/Alerts';
 
-// Protected Route Component
+// Protected Route Component with RBAC permission support
 interface ProtectedRouteProps {
   children: React.ReactNode;
   allowedRoles?: string[];
+  permission?: string; // RBAC permission code for dynamic access control
 }
 
-const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
+const ProtectedRoute = ({ children, allowedRoles, permission }: ProtectedRouteProps) => {
   const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
+  const { hasPermission, loaded: permissionsLoaded } = usePermissions();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
+  // If permission is specified AND permissions are loaded → check permission
+  if (permission && permissionsLoaded) {
+    if (!hasPermission(permission)) {
+      return <Navigate to="/dashboard" replace />;
+    }
+    return <>{children}</>;
+  }
+
+  // Fallback: role-based check (when permissions not loaded or no permission specified)
   if (allowedRoles && user && !allowedRoles.includes(user.role)) {
     return <Navigate to="/dashboard" replace />;
   }
@@ -158,6 +170,7 @@ function App() {
   const { isAuthenticated } = useSelector((state: RootState) => state.auth);
 
   return (
+    <PermissionProvider>
     <Routes>
       {/* Public Routes */}
       <Route element={<AuthLayout />}>
@@ -230,7 +243,7 @@ function App() {
         <Route
           path="/rbac"
           element={
-            <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'SUPER_ADMIN']}>
+            <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'SUPER_ADMIN']} permission="rbac:manage">
               <RBAC />
             </ProtectedRoute>
           }
@@ -238,7 +251,7 @@ function App() {
         <Route
           path="/ai-settings"
           element={
-            <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'SUPER_ADMIN']}>
+            <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'SUPER_ADMIN']} permission="settings:write">
               <AISettings />
             </ProtectedRoute>
           }
@@ -246,7 +259,7 @@ function App() {
         <Route
           path="/insurance-coding"
           element={
-            <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'ACCOUNTANT']}>
+            <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'ACCOUNTANT']} permission="insurance_coding:read">
               <InsuranceCoding />
             </ProtectedRoute>
           }
@@ -254,7 +267,7 @@ function App() {
         <Route
           path="/crm"
           element={
-            <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'SUPER_ADMIN', 'RECEPTIONIST']}>
+            <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'SUPER_ADMIN', 'RECEPTIONIST']} permission="crm:read">
               <CRM />
             </ProtectedRoute>
           }
@@ -263,7 +276,7 @@ function App() {
         <Route
           path="/ai-assistant"
           element={
-            <ProtectedRoute allowedRoles={['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']}>
+            <ProtectedRoute allowedRoles={['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']} permission="ai:diagnostic">
               <AIAssistant />
             </ProtectedRoute>
           }
@@ -273,7 +286,7 @@ function App() {
         <Route
           path="/clinician"
           element={
-            <ProtectedRoute allowedRoles={['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']}>
+            <ProtectedRoute allowedRoles={['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']} permission="opd:consultations">
               <ClinicianDashboard />
             </ProtectedRoute>
           }
@@ -281,7 +294,7 @@ function App() {
         <Route
           path="/clinician/patients/:patientId"
           element={
-            <ProtectedRoute allowedRoles={['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']}>
+            <ProtectedRoute allowedRoles={['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']} permission="opd:consultations">
               <ClinicianPatientSummary />
             </ProtectedRoute>
           }
@@ -289,7 +302,7 @@ function App() {
         <Route
           path="/clinician/alerts"
           element={
-            <ProtectedRoute allowedRoles={['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']}>
+            <ProtectedRoute allowedRoles={['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']} permission="opd:consultations">
               <ClinicianAlerts />
             </ProtectedRoute>
           }
@@ -340,6 +353,7 @@ function App() {
       {/* Redirects */}
       <Route path="*" element={<Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />} />
     </Routes>
+    </PermissionProvider>
   );
 }
 

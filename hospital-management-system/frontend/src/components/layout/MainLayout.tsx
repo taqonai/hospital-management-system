@@ -40,6 +40,7 @@ import {
   ShoppingCartIcon,
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../../hooks/useAuth';
+import { usePermissions } from '../../hooks/usePermissions';
 import AICreationAssistant from '../ai/AICreationAssistant';
 
 // Role-based access configuration
@@ -55,6 +56,7 @@ interface NavItem {
   color: string;
   badge?: boolean;
   roles?: UserRole[]; // If undefined, accessible to all authenticated users
+  permission?: string; // RBAC permission code for dynamic access control
 }
 
 // Define which roles can access each module
@@ -65,12 +67,16 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
     items: [
       { name: 'Dashboard', href: '/dashboard', icon: Squares2X2Icon, color: 'from-blue-500 to-blue-600' },
       { name: 'Patients', href: '/patients', icon: UsersIcon, color: 'from-emerald-500 to-emerald-600',
+        permission: 'patients:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'] },
       { name: 'Appointments', href: '/appointments', icon: CalendarDaysIcon, color: 'from-purple-500 to-purple-600',
+        permission: 'appointments:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'] },
       { name: 'Doctors', href: '/doctors', icon: UserGroupIcon, color: 'from-cyan-500 to-cyan-600',
+        permission: 'doctors:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'RECEPTIONIST'] },
       { name: 'Departments', href: '/departments', icon: BuildingOffice2Icon, color: 'from-blue-500 to-indigo-600',
+        permission: 'departments:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN'] },
     ],
   },
@@ -78,26 +84,37 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
     name: 'Clinical',
     items: [
       { name: 'Precision Health', href: '/clinician', icon: HeartIcon, color: 'from-rose-500 to-pink-600',
+        permission: 'opd:consultations',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'] },
       { name: 'OPD', href: '/opd', icon: ClipboardDocumentListIcon, color: 'from-indigo-500 to-indigo-600',
+        permission: 'opd:visits:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'] },
       { name: 'IPD', href: '/ipd', icon: BuildingOffice2Icon, color: 'from-violet-500 to-violet-600',
+        permission: 'ipd:admissions:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'] },
       { name: 'Emergency', href: '/emergency', icon: ExclamationTriangleIcon, color: 'from-red-500 to-red-600', badge: true,
+        permission: 'emergency:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'] },
       { name: 'Early Warning', href: '/early-warning', icon: BellIcon, color: 'from-orange-500 to-red-600',
+        permission: 'ai:early_warning',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'] },
       { name: 'Med Safety', href: '/medication-safety', icon: ShieldCheckIcon, color: 'from-blue-500 to-cyan-600',
+        permission: 'ai:med_safety',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'PHARMACIST'] },
       { name: 'Laboratory', href: '/laboratory', icon: BeakerIcon, color: 'from-amber-500 to-amber-600',
+        permission: 'lab:orders:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN'] },
       { name: 'Radiology', href: '/radiology', icon: PhotoIcon, color: 'from-pink-500 to-pink-600',
+        permission: 'radiology:orders:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'RADIOLOGIST'] },
       { name: 'Pharmacy', href: '/pharmacy', icon: BuildingStorefrontIcon, color: 'from-teal-500 to-teal-600',
+        permission: 'pharmacy:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'PHARMACIST'] },
       { name: 'Surgery', href: '/surgery', icon: HeartIcon, color: 'from-rose-500 to-rose-600',
+        permission: 'surgery:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR'] },
       { name: 'Blood Bank', href: '/blood-bank', icon: HeartIcon, color: 'from-red-500 to-red-600',
+        permission: 'blood_bank:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'LAB_TECHNICIAN'] },
     ],
   },
@@ -105,24 +122,34 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
     name: 'AI Features',
     items: [
       { name: 'Diagnostic AI', href: '/diagnostic-assistant', icon: SparklesIcon, color: 'from-fuchsia-500 to-fuchsia-600',
+        permission: 'ai:diagnostic',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'] },
       { name: 'AI Scribe', href: '/ai-scribe', icon: DocumentTextIcon, color: 'from-violet-500 to-violet-600',
+        permission: 'ai:scribe',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR'] },
       { name: 'Smart Orders', href: '/smart-orders', icon: SparklesIcon, color: 'from-indigo-500 to-purple-600',
+        permission: 'ai:smart_orders',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR'] },
       { name: 'Clinical Notes', href: '/clinical-notes', icon: DocumentTextIcon, color: 'from-sky-500 to-sky-600',
+        permission: 'ai:diagnostic',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'] },
       { name: 'Patient Risk', href: '/patient-risk', icon: ShieldCheckIcon, color: 'from-orange-500 to-orange-600',
+        permission: 'ai:predictive',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'] },
       { name: 'Drug Checker', href: '/drug-interactions', icon: BeakerIcon, color: 'from-lime-500 to-lime-600',
+        permission: 'ai:med_safety',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'PHARMACIST'] },
       { name: 'Medical Imaging', href: '/medical-imaging', icon: PhotoIcon, color: 'from-cyan-500 to-cyan-600',
+        permission: 'ai:imaging',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'RADIOLOGIST'] },
       { name: 'PDF Analysis', href: '/pdf-analysis', icon: DocumentMagnifyingGlassIcon, color: 'from-violet-500 to-purple-600',
+        permission: 'ai:diagnostic',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'LAB_TECHNICIAN', 'RADIOLOGIST'] },
       { name: 'Telemedicine', href: '/telemedicine', icon: VideoCameraIcon, color: 'from-blue-500 to-blue-600',
+        permission: 'telemedicine:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR'] },
       { name: 'Symptom Checker', href: '/symptom-checker', icon: MagnifyingGlassIcon, color: 'from-emerald-500 to-teal-600',
+        permission: 'ai:symptom_checker',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'] },
     ],
   },
@@ -130,32 +157,46 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
     name: 'Operations',
     items: [
       { name: 'Billing', href: '/billing', icon: CreditCardIcon, color: 'from-green-500 to-green-600',
+        permission: 'billing:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT', 'RECEPTIONIST'] },
       { name: 'Insurance Coding', href: '/insurance-coding', icon: ReceiptPercentIcon, color: 'from-teal-500 to-cyan-600',
+        permission: 'insurance_coding:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT'] },
       { name: 'Procurement', href: '/procurement', icon: ShoppingCartIcon, color: 'from-indigo-500 to-blue-600',
+        permission: 'procurement:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT'] },
       { name: 'HR', href: '/hr', icon: BriefcaseIcon, color: 'from-slate-500 to-slate-600',
+        permission: 'hr:employees:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'HR_MANAGER', 'HR_STAFF'] },
       { name: 'My Leave', href: '/my-leave', icon: CalendarDaysIcon, color: 'from-teal-500 to-teal-600',
+        permission: 'hr:leave:manage',
         roles: ['NURSE', 'LAB_TECHNICIAN', 'PHARMACIST', 'RADIOLOGIST', 'ACCOUNTANT', 'HR_STAFF', 'HOUSEKEEPING_STAFF', 'MAINTENANCE_STAFF', 'SECURITY_STAFF', 'DIETARY_STAFF', 'RECEPTIONIST'] },
       { name: 'Housekeeping', href: '/housekeeping', icon: HomeModernIcon, color: 'from-amber-500 to-amber-600',
+        permission: 'housekeeping:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'HOUSEKEEPING_MANAGER', 'HOUSEKEEPING_STAFF'] },
       { name: 'Queue', href: '/queue', icon: QueueListIcon, color: 'from-indigo-500 to-indigo-600',
+        permission: 'queue:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'RECEPTIONIST', 'NURSE'] },
       { name: 'Kiosk', href: '/kiosk', icon: ComputerDesktopIcon, color: 'from-gray-500 to-gray-600',
+        permission: 'queue:manage',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'RECEPTIONIST'] },
       { name: 'Quality', href: '/quality', icon: ClipboardDocumentCheckIcon, color: 'from-emerald-500 to-teal-600',
+        permission: 'quality:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN'] },
       { name: 'Assets', href: '/assets', icon: WrenchScrewdriverIcon, color: 'from-amber-500 to-orange-600',
+        permission: 'assets:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'MAINTENANCE_STAFF'] },
       { name: 'Dietary', href: '/dietary', icon: CakeIcon, color: 'from-lime-500 to-green-600',
+        permission: 'dietary:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DIETARY_STAFF'] },
       { name: 'CRM', href: '/crm', icon: UserGroupIcon, color: 'from-purple-500 to-violet-600',
+        permission: 'crm:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'RECEPTIONIST', 'MARKETING'] },
       { name: 'Access Control', href: '/rbac', icon: ShieldCheckIcon, color: 'from-indigo-500 to-purple-600',
+        permission: 'rbac:manage',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN'] },
       { name: 'AI Settings', href: '/ai-settings', icon: CpuChipIcon, color: 'from-cyan-500 to-blue-600',
+        permission: 'settings:write',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN'] },
     ],
   },
@@ -163,21 +204,35 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
     name: 'Analytics',
     items: [
       { name: 'Reports', href: '/reports', icon: ChartBarIcon, color: 'from-violet-500 to-violet-600',
+        permission: 'reports:view',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'ACCOUNTANT', 'HR_MANAGER', 'MARKETING'] },
       { name: 'Risk Analytics', href: '/risk-analytics', icon: PresentationChartLineIcon, color: 'from-rose-500 to-rose-600',
+        permission: 'reports:analytics',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR'] },
     ],
   },
 ];
 
-// Helper function to filter navigation based on user role
-const filterNavigationByRole = (groups: typeof navigationGroups, userRole?: string) => {
+// Helper function to filter navigation based on permissions (with role fallback)
+const filterNavigationByPermissions = (
+  groups: typeof navigationGroups,
+  userRole?: string,
+  hasPermission?: (permission: string) => boolean,
+  permissionsLoaded?: boolean,
+) => {
   return groups.map(group => ({
     ...group,
     items: group.items.filter(item => {
-      // If no roles specified, accessible to all authenticated users
+      // Items without permission or roles are accessible to all authenticated users
+      if (!item.roles && !item.permission) return true;
+
+      // If permissions are loaded AND item has a permission field → use permission check
+      if (permissionsLoaded && item.permission && hasPermission) {
+        return hasPermission(item.permission);
+      }
+
+      // Fallback: role-based check (when permissions not loaded yet or item has no permission)
       if (!item.roles) return true;
-      // Check if user's role is in the allowed roles
       return item.roles.includes(userRole as UserRole);
     })
   })).filter(group => group.items.length > 0); // Remove empty groups
@@ -187,10 +242,16 @@ export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const { user, logout } = useAuth();
+  const { hasPermission, loaded: permissionsLoaded } = usePermissions();
   const location = useLocation();
 
-  // Filter navigation based on user role
-  const filteredNavGroups = filterNavigationByRole(navigationGroups, user?.role);
+  // Filter navigation based on permissions (with role fallback)
+  const filteredNavGroups = filterNavigationByPermissions(
+    navigationGroups,
+    user?.role,
+    hasPermission,
+    permissionsLoaded,
+  );
 
   // Get current page name
   const getCurrentPageName = () => {

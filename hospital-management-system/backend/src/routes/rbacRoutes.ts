@@ -27,6 +27,20 @@ router.get(
   })
 );
 
+/**
+ * Get all available permissions grouped by category with descriptions
+ * Used by the RBAC admin UI for the Permission Matrix
+ */
+router.get(
+  '/available-permissions',
+  authorizeWithPermission('rbac:roles:read', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const categories = rbacService.getPermissionsByCategory();
+    const defaultRolePermissions = rbacService.getDefaultRolePermissionsMap();
+    sendSuccess(res, { categories, defaultRolePermissions }, 'Available permissions retrieved successfully');
+  })
+);
+
 // ==================== ROLES ====================
 
 /**
