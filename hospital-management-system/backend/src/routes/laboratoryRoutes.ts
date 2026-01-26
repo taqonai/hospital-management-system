@@ -152,6 +152,17 @@ router.get(
   })
 );
 
+// Acknowledge critical result
+router.post(
+  '/critical/:testId/acknowledge',
+  authenticate,
+  authorize(UserRole.DOCTOR, UserRole.PATHOLOGIST, UserRole.LAB_TECHNICIAN),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const result = await laboratoryService.verifyTestResult(req.params.testId, req.user!.id);
+    sendSuccess(res, result, 'Critical result acknowledged successfully');
+  })
+);
+
 // Get pending orders
 router.get(
   '/pending',
