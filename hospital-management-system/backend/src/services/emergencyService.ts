@@ -619,7 +619,7 @@ export class EmergencyService {
   async getAvailableDoctors(hospitalId: string) {
     const doctors = await prisma.doctor.findMany({
       where: {
-        hospitalId,
+        department: { hospitalId },
         user: {
           role: 'DOCTOR',
           isActive: true,
@@ -677,7 +677,6 @@ export class EmergencyService {
       where: {
         hospitalId,
         status: 'AVAILABLE',
-        isActive: true,
       },
       include: {
         ward: {
@@ -685,6 +684,7 @@ export class EmergencyService {
             id: true,
             name: true,
             type: true,
+            floor: true,
           },
         },
       },
@@ -698,8 +698,9 @@ export class EmergencyService {
       id: bed.id,
       bedNumber: bed.bedNumber,
       ward: bed.ward?.name || 'Unknown',
+      wardId: bed.wardId,
       wardType: bed.ward?.type || 'GENERAL',
-      floor: bed.floor,
+      floor: (bed.ward as any)?.floor ?? 0,
     }));
   }
 

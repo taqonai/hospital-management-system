@@ -288,7 +288,7 @@ router.get(
 router.patch(
   '/page/:pageId/respond',
   authenticate,
-  authorizeWithPermission('emergency:page_respond', ['DOCTOR']),
+  authorizeWithPermission('emergency:page_respond', ['DOCTOR', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { status, declineReason } = req.body;
     const page = await emergencyService.respondToPage(
