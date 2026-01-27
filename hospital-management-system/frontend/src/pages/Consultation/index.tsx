@@ -2315,27 +2315,58 @@ export default function Consultation() {
           <span className="text-sm font-normal text-green-600 ml-2">
             ({recommendedTests.length} test{recommendedTests.length !== 1 ? 's' : ''})
           </span>
+          {recommendedTests.length > 0 && (() => {
+            const unavailableCount = recommendedTests.filter(test =>
+              !availableLabTests.some(labTest =>
+                labTest.name.toLowerCase() === test.toLowerCase() ||
+                labTest.name.toLowerCase().includes(test.toLowerCase()) ||
+                test.toLowerCase().includes(labTest.name.toLowerCase())
+              )
+            ).length;
+            return unavailableCount > 0 ? (
+              <span className="text-xs font-normal text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">
+                {unavailableCount} not in database
+              </span>
+            ) : null;
+          })()}
         </h3>
 
         {/* Test List with Remove Buttons */}
         {recommendedTests.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-4">
-            {recommendedTests.map((test) => (
-              <span
-                key={test}
-                className="px-3 py-1.5 bg-white text-green-700 rounded-lg text-sm border border-green-300 flex items-center gap-2"
-              >
-                {test}
-                <button
-                  type="button"
-                  onClick={() => setRecommendedTests(prev => prev.filter(t => t !== test))}
-                  className="text-green-500 hover:text-red-500 transition-colors"
-                  title="Remove test"
+            {recommendedTests.map((test) => {
+              const isAvailable = availableLabTests.some(labTest =>
+                labTest.name.toLowerCase() === test.toLowerCase() ||
+                labTest.name.toLowerCase().includes(test.toLowerCase()) ||
+                test.toLowerCase().includes(labTest.name.toLowerCase())
+              );
+              return (
+                <span
+                  key={test}
+                  className={`px-3 py-1.5 bg-white rounded-lg text-sm flex items-center gap-2 ${
+                    isAvailable
+                      ? 'text-green-700 border border-green-300'
+                      : 'text-orange-700 border border-orange-300'
+                  }`}
+                  title={isAvailable ? 'Available in lab database' : 'Not available in lab database'}
                 >
-                  <XMarkIcon className="h-4 w-4" />
-                </button>
-              </span>
-            ))}
+                  {test}
+                  {!isAvailable && (
+                    <span className="text-[10px] font-medium bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded">
+                      N/A
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setRecommendedTests(prev => prev.filter(t => t !== test))}
+                    className={`${isAvailable ? 'text-green-500' : 'text-orange-500'} hover:text-red-500 transition-colors`}
+                    title="Remove test"
+                  >
+                    <XMarkIcon className="h-4 w-4" />
+                  </button>
+                </span>
+              );
+            })}
           </div>
         )}
 
