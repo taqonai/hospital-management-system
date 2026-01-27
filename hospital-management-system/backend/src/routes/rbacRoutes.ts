@@ -1,10 +1,35 @@
 import { Router, Response } from 'express';
-import { rbacService } from '../services/rbacService';
+import { rbacService, PERMISSION_CATEGORIES, PERMISSION_DESCRIPTIONS, PERMISSIONS } from '../services/rbacService';
 import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
 import { invalidatePermissions, invalidateAllPermissions } from '../services/permissionCacheService';
+import prisma from '../config/database';
+
+/**
+ * Enrich a flat permission string into a Permission object with category/description.
+ */
+function enrichPermission(permStr: string): { id: string; name: string; code: string; description: string; category: string; isActive: boolean } {
+  let category = 'other';
+  for (const [cat, data] of Object.entries(PERMISSION_CATEGORIES)) {
+    if ((data.permissions as string[]).includes(permStr)) {
+      category = cat;
+      break;
+    }
+  }
+  const description = (PERMISSION_DESCRIPTIONS as Record<string, string>)[permStr] || permStr;
+  // Convert code like "patients:read" to a readable name "Patients Read"
+  const name = permStr.split(':').map(s => s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ')).join(' ');
+  return {
+    id: permStr,
+    name,
+    code: permStr,
+    description,
+    category,
+    isActive: true,
+  };
+}
 
 const router = Router();
 
@@ -45,13 +70,16 @@ router.get(
 
 /**
  * Create a new custom role
+ * Accepts either 'permissions' or 'permissionIds' from frontend
  */
 router.post(
   '/roles',
   authorizeWithPermission('rbac:roles:write', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { permissionIds, permissions, ...rest } = req.body;
     const role = await rbacService.createRole(req.user!.hospitalId, {
-      ...req.body,
+      ...rest,
+      permissions: permissions || permissionIds || [],
       createdBy: req.user!.userId,
     });
     await invalidateAllPermissions();
@@ -61,17 +89,56 @@ router.post(
 
 /**
  * Get all roles for the hospital
+ * Enriches flat permission strings into full Permission objects for the frontend
  */
 router.get(
   '/roles',
   authorizeWithPermission('rbac:roles:read', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const roles = await rbacService.getRoles(req.user!.hospitalId, {
+    const result = await rbacService.getRoles(req.user!.hospitalId, {
       search: req.query.search as string,
       page: parseInt(req.query.page as string) || 1,
       limit: parseInt(req.query.limit as string) || 20,
     });
-    sendSuccess(res, roles, 'Roles retrieved successfully');
+
+    // Count users per system role
+    const userCountsByRole = await prisma.user.groupBy({
+      by: ['role'],
+      where: { hospitalId: req.user!.hospitalId, isActive: true },
+      _count: { role: true },
+    });
+    const roleCountMap: Record<string, number> = {};
+    for (const entry of userCountsByRole) {
+      roleCountMap[`system_${entry.role}`] = entry._count.role;
+    }
+
+    // For custom roles, count users with role: assignments
+    const customRoleIds = result.roles.filter(r => !r.isSystem).map(r => r.id);
+    if (customRoleIds.length > 0) {
+      const customRoleCounts = await prisma.userPermission.groupBy({
+        by: ['permission'],
+        where: {
+          permission: { in: customRoleIds.map(id => `role:${id}`) },
+          user: { hospitalId: req.user!.hospitalId, isActive: true },
+        },
+        _count: { permission: true },
+      });
+      for (const entry of customRoleCounts) {
+        const roleId = entry.permission.replace('role:', '');
+        roleCountMap[roleId] = entry._count.permission;
+      }
+    }
+
+    // Enrich permissions from strings to objects and add _count
+    const enrichedRoles = result.roles.map(role => ({
+      ...role,
+      permissions: (role.permissions as string[]).map(enrichPermission),
+      _count: {
+        users: roleCountMap[role.id] || 0,
+      },
+    }));
+
+    sendSuccess(res, { roles: enrichedRoles, pagination: result.pagination }, 'Roles retrieved successfully');
   })
 );
 
@@ -89,15 +156,21 @@ router.get(
 
 /**
  * Update role
+ * Accepts either 'permissions' or 'permissionIds' from frontend
  */
 router.put(
   '/roles/:id',
   authorizeWithPermission('rbac:roles:write', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { permissionIds, permissions, ...rest } = req.body;
+    const updateData = {
+      ...rest,
+      ...(permissions || permissionIds ? { permissions: permissions || permissionIds } : {}),
+    };
     const role = await rbacService.updateRole(
       req.user!.hospitalId,
       req.params.id,
-      req.body,
+      updateData,
       req.user!.userId
     );
     await invalidateAllPermissions();
@@ -121,19 +194,51 @@ router.delete(
 // ==================== USER ROLE ASSIGNMENT ====================
 
 /**
- * Assign role to user
+ * Assign role(s) to user.
+ * Supports both single roleId and bulk roleIds array.
+ * When roleIds is provided, it syncs: removes missing roles and adds new ones.
  */
 router.post(
   '/users/:userId/roles',
   authorizeWithPermission('rbac:assign', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    await rbacService.assignRoleToUser(
-      req.params.userId,
-      req.body.roleId,
-      req.user!.userId
-    );
-    await invalidatePermissions(req.params.userId);
-    sendCreated(res, { success: true }, 'Role assigned to user successfully');
+    const { roleId, roleIds } = req.body;
+    const userId = req.params.userId;
+    const assignedBy = req.user!.userId;
+
+    if (roleIds && Array.isArray(roleIds)) {
+      // Bulk sync: get current roles, remove stale, add new
+      const currentRoles = await rbacService.getUserRoles(userId);
+      const currentRoleIds = currentRoles.map((r: any) => r.id);
+
+      // Remove roles no longer in the list
+      for (const existingId of currentRoleIds) {
+        if (!roleIds.includes(existingId)) {
+          try {
+            await rbacService.removeRoleFromUser(userId, existingId, assignedBy);
+          } catch (e) { /* ignore if already removed */ }
+        }
+      }
+
+      // Add new roles
+      for (const newRoleId of roleIds) {
+        if (!currentRoleIds.includes(newRoleId)) {
+          try {
+            await rbacService.assignRoleToUser(userId, newRoleId, assignedBy);
+          } catch (e) { /* ignore duplicates */ }
+        }
+      }
+
+      await invalidatePermissions(userId);
+      sendSuccess(res, { success: true }, 'User roles updated successfully');
+    } else if (roleId) {
+      // Single assignment
+      await rbacService.assignRoleToUser(userId, roleId, assignedBy);
+      await invalidatePermissions(userId);
+      sendCreated(res, { success: true }, 'Role assigned to user successfully');
+    } else {
+      res.status(400).json({ success: false, message: 'roleId or roleIds required' });
+    }
   })
 );
 
@@ -164,6 +269,19 @@ router.get(
     const roles = await rbacService.getUserRoles(req.params.userId);
     const permissions = await rbacService.getUserPermissions(req.params.userId);
     sendSuccess(res, { roles, permissions }, 'User roles and permissions retrieved successfully');
+  })
+);
+
+/**
+ * Get user's effective permissions (enriched with metadata)
+ */
+router.get(
+  '/users/:userId/effective-permissions',
+  authorizeWithPermission('rbac:roles:read', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const permStrings = await rbacService.getUserPermissions(req.params.userId);
+    const permissions = permStrings.map(enrichPermission);
+    sendSuccess(res, { permissions }, 'User effective permissions retrieved successfully');
   })
 );
 
@@ -239,14 +357,86 @@ router.get(
 // ==================== USERS LIST ====================
 
 /**
- * Get all users for the hospital (for assignment dropdowns)
- * Returns users that can be assigned to leads, tasks, etc.
+ * Get all users for the hospital with their custom roles.
+ * Returns users wrapped in { users: [...] } for the RBAC management page.
  */
 router.get(
   '/users',
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const users = await rbacService.getHospitalUsers(req.user!.hospitalId);
-    sendSuccess(res, users, 'Users retrieved successfully');
+    const { search, role, page, limit } = req.query;
+    const hospitalId = req.user!.hospitalId;
+
+    // Build where clause
+    const where: any = {
+      hospitalId,
+      isActive: true,
+      role: { not: 'PATIENT' as any },
+    };
+    if (search) {
+      where.OR = [
+        { firstName: { contains: search as string, mode: 'insensitive' } },
+        { lastName: { contains: search as string, mode: 'insensitive' } },
+        { email: { contains: search as string, mode: 'insensitive' } },
+      ];
+    }
+    if (role) {
+      where.role = role as any;
+    }
+
+    const users = await prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        phone: true,
+        avatar: true,
+        isActive: true,
+        createdAt: true,
+        permissions: {
+          where: { permission: { startsWith: 'role:' } },
+          select: { permission: true },
+        },
+      },
+      orderBy: [{ role: 'asc' }, { firstName: 'asc' }],
+    });
+
+    // Get hospital custom roles to resolve role IDs
+    const hospital = await prisma.hospital.findUnique({
+      where: { id: hospitalId },
+      select: { settings: true },
+    });
+    const settings = (hospital?.settings as any) || {};
+    const customRoles: any[] = settings.customRoles || [];
+    const customRoleMap = new Map(customRoles.filter((r: any) => r.isActive).map((r: any) => [r.id, r]));
+
+    // Enrich users with custom roles info
+    const enrichedUsers = users.map(u => {
+      const roleIds = u.permissions.map(p => p.permission.replace('role:', ''));
+      const userCustomRoles = roleIds
+        .map(id => customRoleMap.get(id))
+        .filter(Boolean)
+        .map((r: any) => ({
+          id: r.id,
+          name: r.name,
+          permissions: (r.permissions as string[]).map(enrichPermission),
+        }));
+
+      return {
+        id: u.id,
+        email: u.email,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        role: u.role,
+        isActive: u.isActive,
+        customRoles: userCustomRoles,
+        createdAt: u.createdAt,
+      };
+    });
+
+    sendSuccess(res, { users: enrichedUsers }, 'Users retrieved successfully');
   })
 );
 
