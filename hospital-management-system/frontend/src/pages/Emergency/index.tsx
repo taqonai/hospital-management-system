@@ -297,6 +297,7 @@ function NewEDPatientModal({ onClose, onSuccess }: { onClose: () => void; onSucc
 export default function Emergency() {
   const [activeTab, setActiveTab] = useState<'tracking' | 'triage' | 'waiting'>('tracking');
   const [showNewPatientModal, setShowNewPatientModal] = useState(false);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patients, setPatients] = useState<EDPatient[]>([]);
   const [stats, setStats] = useState<EmergencyStats>({
     inDepartment: 0,
@@ -651,7 +652,10 @@ export default function Emergency() {
                         {patient.status?.replace('_', ' ')}
                       </span>
                       <div className="mt-3">
-                        <button className="inline-flex items-center px-4 py-2 rounded-xl text-sm font-medium text-gray-700 bg-white backdrop-blur-sm border border-gray-200 hover:bg-gray-50 transition-all duration-300 hover:shadow-md">
+                        <button 
+                          onClick={() => setSelectedPatientId(patient.id)}
+                          className="inline-flex items-center px-4 py-2 rounded-xl text-sm font-medium text-gray-700 bg-white backdrop-blur-sm border border-gray-200 hover:bg-gray-50 transition-all duration-300 hover:shadow-md"
+                        >
                           View Details
                         </button>
                       </div>
@@ -1013,6 +1017,186 @@ export default function Emergency() {
             }
           }}
         />
+      )}
+
+      {/* Patient Detail Slide-Out Panel */}
+      {selectedPatientId && (
+        <div className="fixed inset-0 z-50 overflow-hidden">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setSelectedPatientId(null)} />
+          <div className="absolute right-0 top-0 bottom-0 w-full max-w-2xl bg-white shadow-2xl transform transition-transform duration-300">
+            <div className="h-full overflow-y-auto">
+              {(() => {
+                const patient = patients.find(p => p.id === selectedPatientId);
+                if (!patient) return null;
+                
+                return (
+                  <div>
+                    {/* Header */}
+                    <div className="bg-gradient-to-r from-red-600 via-rose-500 to-red-700 px-6 py-5 flex items-center justify-between">
+                      <div>
+                        <h2 className="text-2xl font-bold text-white">
+                          {patient.patient?.firstName} {patient.patient?.lastName}
+                        </h2>
+                        <div className="flex items-center gap-3 mt-2">
+                          <span className={clsx(
+                            'px-3 py-1 rounded-full text-sm font-bold',
+                            esiColors[patient.esiLevel]
+                          )}>
+                            ESI {patient.esiLevel}
+                          </span>
+                          <span className="text-white/90 text-sm">
+                            {patient.patient?.dateOfBirth ? calculateAge(patient.patient.dateOfBirth) : 'N/A'} years old
+                          </span>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => setSelectedPatientId(null)}
+                        className="p-2 rounded-xl bg-white/20 hover:bg-white/30 text-white transition-colors"
+                      >
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {/* Content */}
+                    <div className="p-6 space-y-6">
+                      {/* Overview */}
+                      <div className="bg-gray-50 rounded-xl p-5">
+                        <h3 className="font-semibold text-gray-900 mb-3">Chief Complaint</h3>
+                        <p className="text-gray-700">{patient.chiefComplaint}</p>
+                      </div>
+
+                      {/* Arrival Info */}
+                      <div className="bg-gray-50 rounded-xl p-5">
+                        <h3 className="font-semibold text-gray-900 mb-3">Arrival Information</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-sm text-gray-500">Arrival Time</p>
+                            <p className="font-medium text-gray-900">
+                              {patient.arrivalTime
+                                ? new Date(patient.arrivalTime).toLocaleString()
+                                : 'N/A'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Wait Time</p>
+                            <p className="font-medium text-gray-900">
+                              {calculateWaitTime(patient.arrivalTime)} minutes
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Status</p>
+                            <p className="font-medium text-gray-900">
+                              {patient.status?.replace('_', ' ')}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Triage Level</p>
+                            <p className="font-medium text-gray-900">
+                              {esiLabels[patient.esiLevel]}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Assigned Staff */}
+                      {patient.doctor && (
+                        <div className="bg-gray-50 rounded-xl p-5">
+                          <h3 className="font-semibold text-gray-900 mb-3">Assigned Staff</h3>
+                          <div>
+                            <p className="text-sm text-gray-500">Doctor</p>
+                            <p className="font-medium text-gray-900">
+                              Dr. {patient.doctor.user?.firstName} {patient.doctor.user?.lastName}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Latest Vitals */}
+                      {patient.vitals && patient.vitals.length > 0 && (
+                        <div className="bg-gray-50 rounded-xl p-5">
+                          <h3 className="font-semibold text-gray-900 mb-3">Latest Vitals</h3>
+                          <div className="grid grid-cols-2 gap-4">
+                            {patient.vitals[0].temperature && (
+                              <div>
+                                <p className="text-sm text-gray-500">Temperature</p>
+                                <p className="font-medium text-gray-900">{patient.vitals[0].temperature}°C</p>
+                              </div>
+                            )}
+                            {patient.vitals[0].bloodPressureSys && (
+                              <div>
+                                <p className="text-sm text-gray-500">Blood Pressure</p>
+                                <p className="font-medium text-gray-900">
+                                  {patient.vitals[0].bloodPressureSys}/{patient.vitals[0].bloodPressureDia} mmHg
+                                </p>
+                              </div>
+                            )}
+                            {patient.vitals[0].heartRate && (
+                              <div>
+                                <p className="text-sm text-gray-500">Heart Rate</p>
+                                <p className="font-medium text-gray-900">{patient.vitals[0].heartRate} bpm</p>
+                              </div>
+                            )}
+                            {patient.vitals[0].oxygenSaturation && (
+                              <div>
+                                <p className="text-sm text-gray-500">SpO2</p>
+                                <p className="font-medium text-gray-900">{patient.vitals[0].oxygenSaturation}%</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Triage Notes */}
+                      {patient.triageNotes && (
+                        <div className="bg-gray-50 rounded-xl p-5">
+                          <h3 className="font-semibold text-gray-900 mb-3">Triage Notes</h3>
+                          <p className="text-gray-700">{patient.triageNotes}</p>
+                        </div>
+                      )}
+
+                      {/* Allergies */}
+                      {patient.allergies && patient.allergies.length > 0 && (
+                        <div className="bg-red-50 rounded-xl p-5 border border-red-200">
+                          <h3 className="font-semibold text-red-900 mb-3 flex items-center gap-2">
+                            <ExclamationTriangleIcon className="h-5 w-5" />
+                            Critical Allergies
+                          </h3>
+                          <ul className="space-y-2">
+                            {patient.allergies.map((allergy: any, idx: number) => (
+                              <li key={idx} className="text-red-800 font-medium">
+                                {allergy.allergen} - {allergy.severity}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-3 pt-4 border-t border-gray-200">
+                        <button className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-red-500 to-rose-500 text-white font-semibold hover:from-red-600 hover:to-rose-600 transition-all">
+                          Update Triage
+                        </button>
+                        <button className="flex-1 px-4 py-3 rounded-xl border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 transition-all">
+                          Assign Doctor
+                        </button>
+                      </div>
+                      <div className="flex gap-3">
+                        <button className="flex-1 px-4 py-3 rounded-xl bg-green-500 text-white font-semibold hover:bg-green-600 transition-all">
+                          Admit
+                        </button>
+                        <button className="flex-1 px-4 py-3 rounded-xl bg-blue-500 text-white font-semibold hover:bg-blue-600 transition-all">
+                          Discharge
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
