@@ -4,6 +4,7 @@ import {
   BeakerIcon,
   HeartIcon,
   ClipboardDocumentListIcon,
+  ClipboardDocumentCheckIcon,
   CheckBadgeIcon,
   ArrowPathRoundedSquareIcon,
   ClockIcon,
@@ -384,11 +385,43 @@ function EmarTab({ patients }: { patients: Patient[] }) {
         </div>
       )}
 
-      {/* Use existing MedSchedule component */}
-      <MedSchedule
-        patientId={selectedPatient?.patient.id || ''}
-        admissionId={selectedAdmissionId || ''}
-      />
+      {/* eMAR Medication List */}
+      <div className="bg-white rounded-xl border-2 border-blue-100 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold text-gray-900">Medication Schedule</h3>
+          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
+            Refresh
+          </button>
+        </div>
+        {medications.length > 0 ? (
+          <MedSchedule
+            medications={medications.map((m: any) => ({
+              id: m.id || '',
+              prescriptionId: m.prescriptionId || '',
+              name: m.medicationName || '',
+              genericName: m.genericName || '',
+              dose: m.dosage || '',
+              unit: m.unit || 'mg',
+              route: m.route || 'ORAL',
+              frequency: m.frequency || '',
+              scheduledTime: m.scheduledTime || new Date().toISOString(),
+              status: (m.status === 'OVERDUE' ? 'OVERDUE' : m.status === 'DUE' ? 'DUE_NOW' : 'SCHEDULED') as any,
+              isPRN: m.frequency === 'PRN',
+              isHighAlert: false,
+              instructions: m.notes || '',
+              prescribedBy: m.prescribedBy || 'Doctor',
+            }))}
+            onSelectMedication={(med) => console.log('Selected:', med)}
+            onRefresh={() => loadEMAR()}
+            loading={loading}
+          />
+        ) : (
+          <div className="text-center py-10 text-gray-400">
+            <ClipboardDocumentCheckIcon className="w-12 h-12 mx-auto mb-2" />
+            <p>{loading ? 'Loading medications...' : 'No medications scheduled for this patient'}</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -439,18 +472,50 @@ function VitalsTab({ patients }: { patients: Patient[] }) {
           {/* Vitals Trend Chart */}
           <div className="bg-white rounded-xl border-2 border-purple-100 p-6">
             <h3 className="text-lg font-bold text-gray-900 mb-4">Vitals Trends (24h)</h3>
-            <VitalsTrendChart patientId={patient.patient.id} />
+            <VitalsTrendChart
+              data={{
+                labels: [],
+                respiratoryRate: [],
+                oxygenSaturation: [],
+                heartRate: [],
+                systolicBP: [],
+                diastolicBP: [],
+                temperature: [],
+                news2Scores: [],
+              }}
+              patientName={`${patient.patient.firstName} ${patient.patient.lastName}`}
+            />
           </div>
 
           {/* NEWS2 Calculator & EWS Alert */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white rounded-xl border-2 border-yellow-100 p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-4">NEWS2 Calculator</h3>
-              <EWSCalculator patientId={patient.patient.id} />
+              <EWSCalculator
+                patientId={patient.patient.id}
+                patientName={`${patient.patient.firstName} ${patient.patient.lastName}`}
+              />
             </div>
             <div className="bg-white rounded-xl border-2 border-red-100 p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-4">Early Warning Alerts</h3>
-              <EWSAlertCard patientId={patient.patient.id} />
+              <EWSAlertCard
+                alert={{
+                  id: patient.patient.id,
+                  patientId: patient.patient.id,
+                  patientName: `${patient.patient.firstName} ${patient.patient.lastName}`,
+                  ward: patient.bed?.ward || 'N/A',
+                  bed: patient.bed?.bedNumber || 'N/A',
+                  severity: 'info',
+                  title: 'Patient Monitoring',
+                  news2Score: patient.latestVitals?.news2Score || 0,
+                  riskLevel: (patient.latestVitals?.news2Risk as any) || 'LOW',
+                  components: [],
+                  clinicalResponse: 'Routine monitoring',
+                  timestamp: new Date().toISOString(),
+                  status: 'active',
+                }}
+                compact
+              />
             </div>
           </div>
 

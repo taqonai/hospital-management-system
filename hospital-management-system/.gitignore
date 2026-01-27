@@ -75,3 +75,5 @@ secrets/
 mobile/dist-bundle/
 mobile/dist-debug/
 mobile/dist-prod/
+hospital-management-system/scripts/deploy-whatsapp-aws-ssm.sh
+hospital-management-system/scripts/deploy-whatsapp-fix.sh
