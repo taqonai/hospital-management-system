@@ -835,7 +835,7 @@ export class EmergencyService {
         ward: true,
         admissions: {
           where: {
-            status: 'ACTIVE',
+            status: 'ADMITTED',
           },
           include: {
             patient: {

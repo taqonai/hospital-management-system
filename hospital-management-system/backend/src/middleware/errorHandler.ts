@@ -93,6 +93,7 @@ export const errorHandler = (
   }
 
   if (err instanceof Prisma.PrismaClientValidationError) {
+    console.error('[PRISMA VALIDATION ERROR]', err.message);
     sendError(res, 'Invalid data provided', 400);
     return;
   }
