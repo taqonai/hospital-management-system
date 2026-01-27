@@ -13,6 +13,7 @@ import { emergencyApi, patientApi } from '../../services/api';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import EDBeds from './EDBeds';
+import ResuscitationDashboard from './ResuscitationDashboard';
 
 interface EDPatient {
   id: string;
@@ -699,7 +700,7 @@ function DischargePatientModal({
 }
 
 export default function Emergency() {
-  const [activeTab, setActiveTab] = useState<'tracking' | 'triage' | 'waiting' | 'beds'>('tracking');
+  const [activeTab, setActiveTab] = useState<'tracking' | 'triage' | 'waiting' | 'beds' | 'resus'>('tracking');
   const [showNewPatientModal, setShowNewPatientModal] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patients, setPatients] = useState<EDPatient[]>([]);
@@ -870,6 +871,7 @@ export default function Emergency() {
     { id: 'triage', label: 'Triage Station' },
     { id: 'waiting', label: 'Waiting Room', count: patients.filter(p => p.status === 'WAITING').length },
     { id: 'beds', label: 'ED Beds' },
+    { id: 'resus', label: 'Resuscitation', count: criticalCount },
   ];
 
   return (
@@ -1415,6 +1417,13 @@ export default function Emergency() {
       {activeTab === 'beds' && (
         <div style={{ animationDelay: '0.4s' }}>
           <EDBeds />
+        </div>
+      )}
+
+      {/* Resuscitation Dashboard Tab - Feature 5 */}
+      {activeTab === 'resus' && (
+        <div style={{ animationDelay: '0.4s' }}>
+          <ResuscitationDashboard />
         </div>
       )}
 
