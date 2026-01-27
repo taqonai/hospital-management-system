@@ -287,13 +287,45 @@ export class EmergencyService {
     const active = patients.filter(p => ['IN_PROGRESS', 'CHECKED_IN'].includes(p.status));
     const completed = patients.filter(p => p.status === 'COMPLETED');
 
+    // Count patients admitted from ED today
+    const admitted = await prisma.admission.count({
+      where: {
+        hospitalId,
+        admissionType: 'EMERGENCY',
+        admissionDate: { gte: today },
+      },
+    });
+
+    // Calculate average wait time (door-to-doctor time)
+    let avgWaitTime = 0;
+    if (completed.length > 0) {
+      const waitTimes = completed
+        .filter(p => p.createdAt && p.updatedAt)
+        .map(p => {
+          const arrivalTime = p.createdAt.getTime();
+          const seenTime = p.updatedAt.getTime(); // Approximation using updatedAt
+          return Math.round((seenTime - arrivalTime) / (1000 * 60)); // minutes
+        });
+      
+      if (waitTimes.length > 0) {
+        avgWaitTime = Math.round(
+          waitTimes.reduce((sum, time) => sum + time, 0) / waitTimes.length
+        );
+      }
+    }
+
     return {
+      // Frontend expects these field names:
+      inDepartment: active.length,      // Patients currently in ED
+      treatedToday: completed.length,   // Patients treated today
+      admitted,                         // Patients admitted from ED today
+      avgWaitTime,                      // Calculated average wait time
+      byESILevel: byESI,
+      criticalCount: byESI[1] + byESI[2],
+      // Keep old fields for backward compatibility (temporary)
       totalToday: patients.length,
       activePatients: active.length,
       completedToday: completed.length,
-      byESILevel: byESI,
-      criticalCount: byESI[1] + byESI[2],
-      avgWaitTime: 15, // Calculate from timestamps in real implementation
     };
   }
 

@@ -132,13 +132,12 @@ function NewEDPatientModal({ onClose, onSuccess }: { onClose: () => void; onSucc
       if (selectedPatient) {
         data.patientId = selectedPatient.id;
       } else if (isNewPatient) {
-        data.newPatient = {
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          dateOfBirth: formData.dateOfBirth,
-          gender: formData.gender,
-          phone: formData.phone,
-        };
+        // Backend expects flat fields, not wrapped in newPatient object
+        data.firstName = formData.firstName;
+        data.lastName = formData.lastName;
+        data.dateOfBirth = formData.dateOfBirth;
+        data.gender = formData.gender;
+        data.phone = formData.phone;
       }
 
       await emergencyApi.registerPatient(data);
