@@ -60,7 +60,8 @@ router.get(
     const period = (req.query.period as 'daily' | 'weekly' | 'monthly') || 'monthly';
     const months = parseInt(req.query.months as string) || 6;
     const trends = await reportsService.getPatientVisitTrends(req.user!.hospitalId, period, months);
-    sendSuccess(res, trends);
+    // Wrap response for frontend compatibility
+    sendSuccess(res, { trends });
   })
 );
 
@@ -86,7 +87,8 @@ router.get(
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const months = parseInt(req.query.months as string) || 12;
     const trends = await reportsService.getRevenueTrends(req.user!.hospitalId, months);
-    sendSuccess(res, trends);
+    // Wrap response for frontend compatibility
+    sendSuccess(res, { trends });
   })
 );
 
@@ -98,8 +100,9 @@ router.get(
   authenticate,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const dateRange = parseDateRange(req.query);
-    const performance = await reportsService.getDepartmentPerformance(req.user!.hospitalId, dateRange);
-    sendSuccess(res, performance);
+    const departments = await reportsService.getDepartmentPerformance(req.user!.hospitalId, dateRange);
+    // Wrap response for frontend compatibility
+    sendSuccess(res, { departments });
   })
 );
 

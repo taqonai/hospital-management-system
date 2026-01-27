@@ -326,8 +326,11 @@ export const reportsService = {
     });
 
     return Object.entries(departmentStats).map(([department, stats]) => ({
-      department,
-      ...stats,
+      name: department,  // Frontend expects 'name' field
+      department,         // Keep for backward compatibility
+      appointmentsTotal: stats.total,      // Frontend expects 'appointmentsTotal'
+      appointmentsCompleted: stats.completed,  // Frontend expects 'appointmentsCompleted'
+      ...stats,  // Keep original fields for backward compatibility
       completionRate: stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0,
       cancellationRate: stats.total > 0 ? Math.round((stats.cancelled / stats.total) * 100) : 0,
     })).sort((a, b) => b.total - a.total);
