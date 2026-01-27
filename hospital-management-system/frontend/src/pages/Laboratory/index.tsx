@@ -17,6 +17,7 @@ import {
   InboxArrowDownIcon,
   CogIcon,
   PencilSquareIcon,
+  DocumentArrowUpIcon,
 } from '@heroicons/react/24/outline';
 import { useAIHealth } from '../../hooks/useAI';
 import { laboratoryApi } from '../../services/api';
@@ -27,6 +28,7 @@ import toast from 'react-hot-toast';
 import { CurrencyDisplay } from '../../components/common';
 import SampleTracker from '../../components/laboratory/SampleTracker';
 import ResultsEntryForm from '../../components/laboratory/ResultsEntryForm';
+import LabResultFileUpload from '../../components/laboratory/LabResultFileUpload';
 
 interface LabOrder {
   id: string;
@@ -433,6 +435,7 @@ export default function Laboratory() {
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [selectedOrderForResults, setSelectedOrderForResults] = useState<{ orderId: string; testId: string; testName: string; patientName: string } | null>(null);
+  const [selectedOrderForUpload, setSelectedOrderForUpload] = useState<{ orderId: string; testId: string; testName: string; patientName: string } | null>(null);
   const { data: healthStatus } = useAIHealth();
 
   const isAIOnline = healthStatus?.status === 'connected';
@@ -568,6 +571,21 @@ export default function Laboratory() {
       return;
     }
     setSelectedOrderForResults({
+      orderId: order.id,
+      testId: firstTest.id,
+      testName: firstTest.labTest?.name || firstTest.test?.name || 'Unknown Test',
+      patientName: `${order.patient?.firstName || ''} ${order.patient?.lastName || ''}`.trim(),
+    });
+  };
+
+  const handleUploadResult = (order: LabOrder) => {
+    // For simplicity, use the first test in the order
+    const firstTest = order.tests?.[0];
+    if (!firstTest) {
+      toast.error('No tests found in this order');
+      return;
+    }
+    setSelectedOrderForUpload({
       orderId: order.id,
       testId: firstTest.id,
       testName: firstTest.labTest?.name || firstTest.test?.name || 'Unknown Test',
@@ -837,14 +855,23 @@ export default function Laboratory() {
                                 Process
                               </button>
                             )}
-                            {order.status === 'PROCESSING' && (
-                              <button
-                                onClick={() => handleEnterResults(order)}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-green-600 bg-green-500/10 hover:bg-green-500/20 transition-all"
-                              >
-                                <PencilSquareIcon className="h-3.5 w-3.5" />
-                                Enter Results
-                              </button>
+                            {(order.status === 'PROCESSING' || order.status === 'IN_PROGRESS' || order.status === 'ORDERED') && (
+                              <>
+                                <button
+                                  onClick={() => handleUploadResult(order)}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 transition-all"
+                                >
+                                  <DocumentArrowUpIcon className="h-3.5 w-3.5" />
+                                  Upload Result
+                                </button>
+                                <button
+                                  onClick={() => handleEnterResults(order)}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-green-600 bg-green-500/10 hover:bg-green-500/20 transition-all"
+                                >
+                                  <PencilSquareIcon className="h-3.5 w-3.5" />
+                                  Enter Manually
+                                </button>
+                              </>
                             )}
                             {order.status === 'COMPLETED' && isAIOnline && (
                               <button
@@ -1018,6 +1045,27 @@ export default function Laboratory() {
                   fetchOrders();
                 }}
                 onCancel={() => setSelectedOrderForResults(null)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* File Upload Modal */}
+      {selectedOrderForUpload && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setSelectedOrderForUpload(null)} />
+            <div className="relative w-full max-w-3xl bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6">
+              <LabResultFileUpload
+                testId={selectedOrderForUpload.testId}
+                testName={selectedOrderForUpload.testName}
+                patientName={selectedOrderForUpload.patientName}
+                onSuccess={() => {
+                  setSelectedOrderForUpload(null);
+                  fetchOrders();
+                }}
+                onCancel={() => setSelectedOrderForUpload(null)}
               />
             </div>
           </div>

@@ -1,6 +1,12 @@
 import prisma from '../config/database';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler';
 import { notificationService } from './notificationService';
+import { storageService } from './storageService';
+import axios from 'axios';
+import FormData from 'form-data';
+import logger from '../utils/logger';
+
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
 export class LaboratoryService {
   private generateOrderNumber(): string {
@@ -301,6 +307,209 @@ export class LaboratoryService {
     }
 
     return updatedTest;
+  }
+
+  /**
+   * Upload and extract lab result from file (PDF or image)
+   * Uses AI service to extract structured data from uploaded files
+   */
+  async uploadAndExtractLabResult(
+    labOrderTestId: string,
+    fileBuffer: Buffer,
+    filename: string,
+    mimeType: string,
+    performedBy: string,
+    hospitalId: string
+  ) {
+    try {
+      // Get the test details to know what we're looking for
+      const test = await prisma.labOrderTest.findUnique({
+        where: { id: labOrderTestId },
+        include: {
+          labTest: true,
+          labOrder: {
+            include: {
+              patient: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  mrn: true,
+                  email: true,
+                  phone: true,
+                  oderId: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!test) {
+        throw new NotFoundError('Lab test not found');
+      }
+
+      // Step 1: Upload file to S3/MinIO
+      logger.info(`Uploading lab result file for test ${labOrderTestId}`);
+      const uploadResult = await storageService.uploadFile(fileBuffer, {
+        filename,
+        contentType: mimeType,
+        folder: `lab-results/${hospitalId}`,
+        metadata: {
+          labOrderTestId,
+          labTestName: test.labTest.name,
+          patientMrn: test.labOrder.patient.mrn,
+        },
+      });
+
+      // Step 2: Call AI service to extract lab result data
+      logger.info(`Extracting lab result data from ${mimeType} file`);
+      const formData = new FormData();
+      formData.append('file', fileBuffer, {
+        filename,
+        contentType: mimeType,
+      });
+      formData.append('test_name', test.labTest.name);
+
+      // Determine endpoint based on file type
+      const endpoint = mimeType === 'application/pdf'
+        ? '/api/laboratory/analyze-lab-pdf'
+        : '/api/laboratory/analyze-lab-image';
+
+      const aiResponse = await axios.post(`${AI_SERVICE_URL}${endpoint}`, formData, {
+        headers: formData.getHeaders(),
+        timeout: 60000, // 60 second timeout for AI processing
+      });
+
+      const extractedData = aiResponse.data;
+
+      if (!extractedData.success) {
+        throw new Error(extractedData.error || 'Failed to extract lab result data');
+      }
+
+      // Step 3: Parse numeric value if present
+      let resultValue: number | null = null;
+      if (extractedData.resultValue) {
+        const parsed = parseFloat(extractedData.resultValue);
+        if (!isNaN(parsed)) {
+          resultValue = parsed;
+        }
+      }
+
+      // Step 4: Update test with extracted data and attachment info
+      const updatedTest = await prisma.labOrderTest.update({
+        where: { id: labOrderTestId },
+        data: {
+          result: extractedData.resultValue || extractedData.comments || 'See attached file',
+          resultValue,
+          unit: extractedData.unit || test.labTest.unit,
+          normalRange: extractedData.normalRange || test.labTest.normalRange,
+          isAbnormal: extractedData.isAbnormal || false,
+          isCritical: extractedData.isCritical || false,
+          comments: extractedData.comments,
+          status: 'COMPLETED',
+          performedAt: new Date(),
+          performedBy,
+          attachmentUrl: uploadResult.url,
+          attachmentType: mimeType,
+          extractedByAI: true,
+          aiConfidence: extractedData.confidence,
+          rawExtractedText: extractedData.rawText,
+        },
+        include: {
+          labTest: true,
+          labOrder: {
+            include: {
+              patient: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  mrn: true,
+                  email: true,
+                  phone: true,
+                  oderId: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      // Step 5: Send notifications (critical/abnormal results + AI summary to doctor)
+      const order = updatedTest.labOrder;
+      const patient = order.patient;
+      const testName = updatedTest.labTest.name;
+
+      // Send to patient if critical or abnormal
+      if ((extractedData.isCritical || extractedData.isAbnormal) && patient.oderId) {
+        try {
+          await notificationService.sendLabResultNotification({
+            labOrderId: order.id,
+            orderNumber: order.orderNumber,
+            patientName: `${patient.firstName} ${patient.lastName}`,
+            testNames: [testName],
+            hasCriticalResults: extractedData.isCritical || false,
+            hasAbnormalResults: extractedData.isAbnormal || false,
+            title: extractedData.isCritical
+              ? 'URGENT: Critical Lab Result'
+              : 'Alert: Abnormal Lab Result',
+            message: extractedData.isCritical
+              ? `A critical result has been detected for ${testName}. Please contact your healthcare provider immediately.`
+              : `An abnormal result has been detected for ${testName}. Please consult with your healthcare provider.`,
+          });
+        } catch (error) {
+          logger.error('[LAB UPLOAD] Failed to send patient notification:', error);
+        }
+      }
+
+      // Send AI summary to ordering physician
+      if (order.orderedBy && extractedData.summary) {
+        try {
+          const orderingPhysician = await prisma.user.findFirst({
+            where: {
+              OR: [{ id: order.orderedBy }, { doctor: { id: order.orderedBy } }],
+            },
+          });
+
+          if (orderingPhysician) {
+            const alertType = extractedData.isCritical ? 'CRITICAL_RESULT' : 'SYSTEM_ALERT';
+            const title = extractedData.isCritical
+              ? 'Critical Lab Result Alert (AI Extracted)'
+              : 'Lab Result Available (AI Extracted)';
+
+            await notificationService.sendEmergencyAlert(
+              {
+                alertType,
+                title,
+                message: `${testName} result for patient ${patient.firstName} ${patient.lastName} (MRN: ${patient.mrn})\n\nAI Analysis:\n${extractedData.summary}\n\nResult: ${extractedData.resultValue || 'See attachment'}${extractedData.unit ? ' ' + extractedData.unit : ''}\nOrder #: ${order.orderNumber}\n\nConfidence: ${extractedData.confidence}`,
+                patientId: patient.id,
+                patientName: `${patient.firstName} ${patient.lastName}`,
+                actionRequired: extractedData.isCritical
+                  ? 'Review critical AI-extracted lab result and take appropriate clinical action'
+                  : 'Review AI-extracted lab result',
+              },
+              [orderingPhysician.id]
+            );
+          }
+        } catch (error) {
+          logger.error('[LAB UPLOAD] Failed to send physician notification:', error);
+        }
+      }
+
+      return {
+        success: true,
+        test: updatedTest,
+        extraction: extractedData,
+        attachment: {
+          url: uploadResult.url,
+          type: mimeType,
+        },
+      };
+    } catch (error: any) {
+      logger.error('[LAB UPLOAD] Upload and extraction failed:', error);
+      throw new Error(`Failed to process lab result file: ${error.message}`);
+    }
   }
 
   async verifyTestResult(labOrderTestId: string, verifiedBy: string) {

@@ -327,6 +327,8 @@ export default function Emergency() {
     admitted: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [secondsSinceUpdate, setSecondsSinceUpdate] = useState(0);
   const [triageLoading, setTriageLoading] = useState(false);
   const [esiResult, setEsiResult] = useState<ESIResult | null>(null);
   const [triageForm, setTriageForm] = useState({
@@ -344,42 +346,57 @@ export default function Emergency() {
   const { data: healthStatus } = useAIHealth();
   const isAIOnline = healthStatus?.status === 'connected';
 
-  // Fetch ED patients
-  useEffect(() => {
-    const fetchPatients = async () => {
-      try {
-        setLoading(true);
-        const response = await emergencyApi.getPatients();
-        setPatients(response.data.data || []);
-      } catch (error) {
-        console.error('Failed to fetch patients:', error);
-        toast.error('Failed to load ED patients');
-      } finally {
-        setLoading(false);
-      }
-    };
+  // Fetch ED patients and stats (reusable function)
+  const fetchData = async (showLoader = true) => {
+    try {
+      if (showLoader) setLoading(true);
+      
+      // Fetch patients and stats in parallel
+      const [patientsResponse, statsResponse] = await Promise.all([
+        emergencyApi.getPatients(),
+        emergencyApi.getStats(),
+      ]);
+      
+      setPatients(patientsResponse.data.data || []);
+      setStats(statsResponse.data.data || {
+        inDepartment: 0,
+        avgWaitTime: 0,
+        treatedToday: 0,
+        admitted: 0,
+      });
+      
+      setLastUpdated(new Date());
+      setSecondsSinceUpdate(0);
+    } catch (error) {
+      console.error('Failed to fetch data:', error);
+      if (showLoader) toast.error('Failed to load ED data');
+    } finally {
+      if (showLoader) setLoading(false);
+    }
+  };
 
-    fetchPatients();
+  // Initial fetch
+  useEffect(() => {
+    fetchData();
   }, []);
 
-  // Fetch stats
+  // Auto-refresh every 30 seconds
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const response = await emergencyApi.getStats();
-        setStats(response.data.data || {
-          inDepartment: 0,
-          avgWaitTime: 0,
-          treatedToday: 0,
-          admitted: 0,
-        });
-      } catch (error) {
-        console.error('Failed to fetch stats:', error);
-      }
-    };
+    const refreshInterval = setInterval(() => {
+      fetchData(false); // Don't show loader for background refresh
+    }, 30000); // 30 seconds
 
-    fetchStats();
+    return () => clearInterval(refreshInterval);
   }, []);
+
+  // Update "seconds since last update" counter every second
+  useEffect(() => {
+    const counterInterval = setInterval(() => {
+      setSecondsSinceUpdate((prev) => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(counterInterval);
+  }, [lastUpdated]);
 
   const handleAITriage = async () => {
     if (!triageForm.chiefComplaint.trim()) {
@@ -478,9 +495,17 @@ export default function Emergency() {
 
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <div className="inline-flex items-center px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm text-white/90 text-sm font-medium mb-3">
-              <ExclamationTriangleIcon className="h-4 w-4 mr-2" />
-              Emergency Department
+            <div className="flex items-center gap-3 mb-3">
+              <div className="inline-flex items-center px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm text-white/90 text-sm font-medium">
+                <ExclamationTriangleIcon className="h-4 w-4 mr-2" />
+                Emergency Department
+              </div>
+              {lastUpdated && (
+                <div className="inline-flex items-center px-3 py-1 rounded-full bg-white/10 backdrop-blur-sm text-white/80 text-xs font-medium">
+                  <ClockIcon className="h-3 w-3 mr-1.5" />
+                  Updated {secondsSinceUpdate === 0 ? 'just now' : `${secondsSinceUpdate}s ago`}
+                </div>
+              )}
             </div>
             <h1 className="text-3xl font-bold text-white mb-2">Emergency Department</h1>
             <p className="text-red-100">
@@ -1030,12 +1055,7 @@ export default function Emergency() {
           onClose={() => setShowNewPatientModal(false)}
           onSuccess={async () => {
             setShowNewPatientModal(false);
-            try {
-              const response = await emergencyApi.getPatients();
-              setPatients(response.data.data || []);
-            } catch (error) {
-              console.error('Failed to refresh patients:', error);
-            }
+            await fetchData(false); // Refresh data after registration
           }}
         />
       )}

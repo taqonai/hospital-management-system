@@ -2262,6 +2262,241 @@ async def pdf_analyzer_status():
     }
 
 
+# ============= Lab Result Extraction Endpoints =============
+
+class LabResultExtractionResponse(BaseModel):
+    """Response model for lab result extraction from files"""
+    success: bool
+    testName: Optional[str] = None
+    resultValue: Optional[str] = None
+    unit: Optional[str] = None
+    normalRange: Optional[str] = None
+    isAbnormal: Optional[bool] = None
+    isCritical: Optional[bool] = None
+    comments: Optional[str] = None
+    confidence: str  # LOW, MEDIUM, HIGH
+    rawText: Optional[str] = None
+    summary: Optional[str] = None  # AI-generated summary for doctor
+    error: Optional[str] = None
+
+
+@app.post("/api/laboratory/analyze-lab-pdf", response_model=LabResultExtractionResponse)
+async def analyze_lab_pdf(
+    file: UploadFile = File(...),
+    test_name: Optional[str] = Form(None)
+):
+    """
+    Extract lab results from PDF file
+
+    Uses GPT-4 Vision for scanned PDFs and GPT-4o for text-based PDFs.
+    Returns structured lab result data with AI confidence scoring.
+    """
+    try:
+        if not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="File must be a PDF")
+
+        # Read PDF content
+        pdf_data = await file.read()
+
+        # Use PDF analyzer to extract content
+        analysis = pdf_analyzer.analyze_pdf(
+            pdf_data=pdf_data,
+            document_type="lab_result",
+            extract_entities=True,
+            patient_context=None
+        )
+
+        # Extract lab results from analysis
+        if not analysis.get('success') or not analysis.get('labResults'):
+            return LabResultExtractionResponse(
+                success=False,
+                confidence="LOW",
+                error="Could not extract lab results from PDF"
+            )
+
+        # Get the first lab result (or match by test_name if provided)
+        lab_results = analysis.get('labResults', [])
+        target_result = None
+
+        if test_name:
+            # Try to find matching test
+            for result in lab_results:
+                if test_name.lower() in result.get('test', '').lower():
+                    target_result = result
+                    break
+
+        if not target_result and lab_results:
+            target_result = lab_results[0]
+
+        if not target_result:
+            return LabResultExtractionResponse(
+                success=False,
+                confidence="LOW",
+                error="No matching lab result found in PDF"
+            )
+
+        # Determine abnormality
+        is_abnormal = target_result.get('abnormal', False)
+        is_critical = target_result.get('critical', False)
+
+        # Generate doctor summary
+        summary = analysis.get('summary', '')
+        if not summary:
+            summary = f"Lab result for {target_result.get('test', 'Unknown Test')}: "
+            summary += f"{target_result.get('value', 'N/A')} {target_result.get('unit', '')}. "
+            if is_critical:
+                summary += "⚠️ CRITICAL value detected. "
+            elif is_abnormal:
+                summary += "Abnormal value detected. "
+            else:
+                summary += "Within normal range. "
+
+        return LabResultExtractionResponse(
+            success=True,
+            testName=target_result.get('test'),
+            resultValue=str(target_result.get('value', '')),
+            unit=target_result.get('unit'),
+            normalRange=target_result.get('normalRange'),
+            isAbnormal=is_abnormal,
+            isCritical=is_critical,
+            comments=target_result.get('notes', ''),
+            confidence="HIGH" if analysis.get('analysisMethod') == 'text' else "MEDIUM",
+            rawText=analysis.get('summary'),
+            summary=summary
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        return LabResultExtractionResponse(
+            success=False,
+            confidence="LOW",
+            error=str(e)
+        )
+
+
+@app.post("/api/laboratory/analyze-lab-image", response_model=LabResultExtractionResponse)
+async def analyze_lab_image(
+    file: UploadFile = File(...),
+    test_name: Optional[str] = Form(None)
+):
+    """
+    Extract lab results from image file (JPEG, PNG)
+
+    Uses GPT-4 Vision to perform OCR and extract structured lab data.
+    """
+    try:
+        # Validate file type
+        allowed_types = ['image/jpeg', 'image/png', 'image/jpg']
+        if file.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File must be an image (JPEG/PNG). Got: {file.content_type}"
+            )
+
+        # Read image data
+        image_data = await file.read()
+
+        # Use imaging AI service for analysis
+        import base64
+        image_base64 = base64.b64encode(image_data).decode('utf-8')
+
+        # Call GPT-4 Vision for lab result extraction
+        from shared.openai_client import openai_manager
+
+        prompt = """Analyze this lab result image and extract the following information:
+1. Test name
+2. Result value
+3. Unit of measurement
+4. Normal/reference range
+5. Whether the result is abnormal (outside normal range)
+6. Whether the result is critical (dangerously abnormal)
+7. Any relevant comments or notes
+
+Provide a structured response in JSON format:
+{
+    "testName": "...",
+    "resultValue": "...",
+    "unit": "...",
+    "normalRange": "...",
+    "isAbnormal": true/false,
+    "isCritical": true/false,
+    "comments": "...",
+    "summary": "Brief summary for doctor"
+}
+
+If multiple tests are present, extract the most prominent one or all if clearly visible."""
+
+        if test_name:
+            prompt += f"\n\nSpecifically look for: {test_name}"
+
+        response = openai_manager.get_client().chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{file.content_type};base64,{image_base64}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            max_tokens=1000,
+            temperature=0.1
+        )
+
+        # Parse response
+        import json
+        result_text = response.choices[0].message.content
+
+        # Try to extract JSON from response
+        try:
+            # Find JSON block in response
+            start_idx = result_text.find('{')
+            end_idx = result_text.rfind('}') + 1
+            if start_idx >= 0 and end_idx > start_idx:
+                json_str = result_text[start_idx:end_idx]
+                extracted_data = json.loads(json_str)
+            else:
+                raise ValueError("No JSON found in response")
+        except (json.JSONDecodeError, ValueError):
+            # If JSON parsing fails, return raw text
+            return LabResultExtractionResponse(
+                success=False,
+                confidence="LOW",
+                rawText=result_text,
+                error="Could not parse structured data from image"
+            )
+
+        return LabResultExtractionResponse(
+            success=True,
+            testName=extracted_data.get('testName'),
+            resultValue=extracted_data.get('resultValue'),
+            unit=extracted_data.get('unit'),
+            normalRange=extracted_data.get('normalRange'),
+            isAbnormal=extracted_data.get('isAbnormal', False),
+            isCritical=extracted_data.get('isCritical', False),
+            comments=extracted_data.get('comments'),
+            confidence="MEDIUM",  # Vision-based extraction is medium confidence
+            rawText=result_text,
+            summary=extracted_data.get('summary', '')
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        return LabResultExtractionResponse(
+            success=False,
+            confidence="LOW",
+            error=str(e)
+        )
+
+
 # ============= Early Warning System (EWS) Endpoints =============
 
 class EWSVitalsRequest(BaseModel):

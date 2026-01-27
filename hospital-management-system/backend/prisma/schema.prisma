@@ -1210,6 +1210,13 @@ model LabOrderTest {
   performedAt  DateTime?
   verifiedAt   DateTime?
 
+  // File upload fields
+  attachmentUrl      String?  // S3/MinIO URL for uploaded file
+  attachmentType     String?  // MIME type (application/pdf, image/jpeg, etc.)
+  extractedByAI      Boolean  @default(false)
+  aiConfidence       String?  // LOW, MEDIUM, HIGH
+  rawExtractedText   String?  @db.Text
+
   labOrder LabOrder @relation(fields: [labOrderId], references: [id])
   labTest  LabTest  @relation(fields: [labTestId], references: [id])
 

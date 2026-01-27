@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import multer from 'multer';
 import { laboratoryService } from '../services/laboratoryService';
 import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
@@ -6,6 +7,22 @@ import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '..
 import { AuthenticatedRequest } from '../types';
 
 const router = Router();
+
+// Configure multer for lab result file upload (PDF and images)
+const uploadLabResult = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB max
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF and image files (JPEG, PNG) are allowed'));
+    }
+  },
+});
 
 // ==================== Lab Tests ====================
 
@@ -128,6 +145,33 @@ router.post(
       performedBy: req.user!.userId,
     });
     sendSuccess(res, result, 'Result entered successfully');
+  })
+);
+
+// Upload and extract lab result from file
+router.post(
+  '/results/:testId/upload',
+  authenticate,
+  authorizeWithPermission('lab:results:write', ['LAB_TECHNICIAN']),
+  uploadLabResult.single('file'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'No file uploaded',
+      });
+    }
+
+    const result = await laboratoryService.uploadAndExtractLabResult(
+      req.params.testId,
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype,
+      req.user!.userId,
+      req.user!.hospitalId
+    );
+
+    sendSuccess(res, result, 'Lab result uploaded and extracted successfully');
   })
 );
 

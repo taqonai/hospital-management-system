@@ -432,6 +432,10 @@ export const laboratoryApi = {
   updateOrderStatus: (id: string, status: string) =>
     api.patch(`/laboratory/orders/${id}/status`, { status }),
   enterResult: (testId: string, data: any) => api.post(`/laboratory/results/${testId}`, data),
+  uploadLabResult: (testId: string, formData: FormData) =>
+    api.post(`/laboratory/results/${testId}/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
   verifyResult: (testId: string) => api.patch(`/laboratory/results/${testId}/verify`),
   getCriticalResults: () => api.get('/laboratory/critical'),
   acknowledgeCritical: (testId: string) => api.post(`/laboratory/critical/${testId}/acknowledge`),
