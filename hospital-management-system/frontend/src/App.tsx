@@ -27,6 +27,7 @@ import AIAssistant from './pages/AIAssistant';
 import Laboratory from './pages/Laboratory';
 import Pharmacy from './pages/Pharmacy';
 import IPD from './pages/IPD';
+import AdmissionDetail from './pages/IPD/AdmissionDetail';
 import OPD from './pages/OPD';
 import Emergency from './pages/Emergency';
 import Nursing from './pages/Nursing';
@@ -223,6 +224,11 @@ function App() {
         <Route path="/pdf-analysis" element={<PDFAnalysis />} />
         <Route path="/quality" element={<Quality />} />
         <Route path="/ipd" element={<IPD />} />
+        <Route path="/ipd/admission/:id" element={
+          <ProtectedRoute allowedRoles={['NURSE', 'HOSPITAL_ADMIN', 'SUPER_ADMIN', 'DOCTOR']} permission="ipd:admissions:read">
+            <AdmissionDetail />
+          </ProtectedRoute>
+        } />
         <Route path="/emergency" element={<Emergency />} />
         <Route path="/nursing" element={
             <ProtectedRoute allowedRoles={['NURSE', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']} permission="nursing:dashboard">

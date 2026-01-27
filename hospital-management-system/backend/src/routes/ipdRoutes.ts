@@ -121,6 +121,16 @@ router.get(
   })
 );
 
+// Get admission detail with all relations
+router.get(
+  '/admissions/:id/detail',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const admission = await ipdService.getAdmissionDetail(req.params.id, req.user!.hospitalId);
+    sendSuccess(res, admission);
+  })
+);
+
 // Update admission
 router.put(
   '/admissions/:id',
@@ -165,6 +175,94 @@ router.post(
       preparedBy: req.user!.userId,
     });
     sendCreated(res, summary, 'Patient discharged successfully');
+  })
+);
+
+// ==================== DOCTOR'S ORDERS ====================
+
+// Create new doctor's order
+router.post(
+  '/admissions/:id/orders',
+  authenticate,
+  authorizeWithPermission('ipd:admissions:write', ['DOCTOR', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const order = await ipdService.createOrder(req.params.id, req.user!.hospitalId, {
+      ...req.body,
+      orderedBy: req.user!.userId,
+    });
+    sendCreated(res, order, 'Order created successfully');
+  })
+);
+
+// Get all orders for an admission
+router.get(
+  '/admissions/:id/orders',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { type, status } = req.query;
+    const orders = await ipdService.getOrders(req.params.id, {
+      type: type as string,
+      status: status as string,
+    });
+    sendSuccess(res, orders);
+  })
+);
+
+// Update order status
+router.patch(
+  '/admissions/:id/orders/:orderId',
+  authenticate,
+  authorizeWithPermission('ipd:admissions:write', ['DOCTOR', 'NURSE', 'LAB_TECHNICIAN', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const order = await ipdService.updateOrderStatus(req.params.orderId, {
+      status: req.body.status,
+      completedBy: req.user!.userId,
+    });
+    sendSuccess(res, order, 'Order status updated');
+  })
+);
+
+// Cancel order
+router.delete(
+  '/admissions/:id/orders/:orderId',
+  authenticate,
+  authorizeWithPermission('ipd:admissions:write', ['DOCTOR', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const order = await ipdService.cancelOrder(req.params.orderId);
+    sendSuccess(res, order, 'Order cancelled');
+  })
+);
+
+// ==================== PROGRESS NOTES ====================
+
+// Create progress note
+router.post(
+  '/admissions/:id/notes',
+  authenticate,
+  authorizeWithPermission('ipd:admissions:write', ['DOCTOR', 'NURSE']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const note = await ipdService.createProgressNote(req.params.id, {
+      ...req.body,
+      authorId: req.user!.userId,
+      authorRole: req.user!.role,
+    });
+    sendCreated(res, note, 'Progress note created successfully');
+  })
+);
+
+// Get progress notes for an admission
+router.get(
+  '/admissions/:id/notes',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { page, limit } = req.query;
+    const result = await ipdService.getProgressNotes(
+      req.params.id,
+      Number(page) || 1,
+      Number(limit) || 20
+    );
+    const pagination = calculatePagination(result.page, result.limit, result.total);
+    sendPaginated(res, result.notes, pagination);
   })
 );
 

@@ -671,6 +671,19 @@ export const ipdApi = {
     temperature?: number;
     consciousness?: string;
   }) => api.post('/ipd/calculate-news2', vitals),
+  
+  // Admission Detail
+  getAdmissionDetail: (id: string) => api.get(`/ipd/admissions/${id}/detail`),
+  
+  // Doctor's Orders
+  createOrder: (admissionId: string, data: any) => api.post(`/ipd/admissions/${admissionId}/orders`, data),
+  getOrders: (admissionId: string, params?: any) => api.get(`/ipd/admissions/${admissionId}/orders`, { params }),
+  updateOrderStatus: (admissionId: string, orderId: string, data: any) => api.patch(`/ipd/admissions/${admissionId}/orders/${orderId}`, data),
+  cancelOrder: (admissionId: string, orderId: string) => api.delete(`/ipd/admissions/${admissionId}/orders/${orderId}`),
+  
+  // Progress Notes
+  createNote: (admissionId: string, data: any) => api.post(`/ipd/admissions/${admissionId}/notes`, data),
+  getNotes: (admissionId: string, params?: any) => api.get(`/ipd/admissions/${admissionId}/notes`, { params }),
 };
 
 // OPD APIs

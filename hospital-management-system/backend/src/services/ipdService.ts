@@ -498,6 +498,176 @@ export class IPDService {
     };
   }
 
+  // ==================== ADMISSION DETAIL ====================
+  async getAdmissionDetail(id: string, hospitalId: string) {
+    const admission = await prisma.admission.findFirst({
+      where: { id, hospitalId },
+      include: {
+        patient: {
+          include: {
+            vitals: {
+              where: {
+                recordedAt: {
+                  gte: new Date(Date.now() - 48 * 60 * 60 * 1000), // Last 48 hours
+                },
+              },
+              orderBy: { recordedAt: 'desc' },
+            },
+            aiPredictions: {
+              where: { predictionType: 'DETERIORATION' },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+        },
+        bed: { include: { ward: true, department: true } },
+        nursingNotes: {
+          orderBy: { createdAt: 'desc' },
+          include: { nurse: { include: { user: { select: { firstName: true, lastName: true } } } } },
+        },
+        prescriptions: {
+          include: { medications: { include: { drug: true } } },
+        },
+        surgeries: {
+          orderBy: { scheduledDate: 'desc' },
+        },
+        dischargeSummary: true,
+        nurseAssignments: {
+          include: {
+            nurse: { include: { user: { select: { firstName: true, lastName: true } } } },
+          },
+          orderBy: { shiftDate: 'desc' },
+        },
+        doctorOrders: {
+          orderBy: { createdAt: 'desc' },
+        },
+        progressNotes: {
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+
+    if (!admission) throw new NotFoundError('Admission not found');
+
+    // Calculate latest NEWS2 score
+    let latestNEWS2 = null;
+    const latestVitals = admission.patient.vitals[0];
+    if (latestVitals) {
+      latestNEWS2 = this.calculateNEWS2Score({
+        respiratoryRate: latestVitals.respiratoryRate || undefined,
+        oxygenSaturation: latestVitals.oxygenSaturation ? Number(latestVitals.oxygenSaturation) : undefined,
+        bloodPressureSys: latestVitals.bloodPressureSys || undefined,
+        heartRate: latestVitals.heartRate || undefined,
+        temperature: latestVitals.temperature ? Number(latestVitals.temperature) : undefined,
+      });
+    }
+
+    return {
+      ...admission,
+      latestNEWS2Score: latestNEWS2,
+    };
+  }
+
+  // ==================== DOCTOR'S ORDERS ====================
+  async createOrder(admissionId: string, hospitalId: string, data: {
+    orderType: string;
+    priority: string;
+    description: string;
+    details?: any;
+    notes?: string;
+    orderedBy: string;
+  }) {
+    const admission = await prisma.admission.findFirst({ where: { id: admissionId, hospitalId } });
+    if (!admission) throw new NotFoundError('Admission not found');
+
+    return prisma.doctorOrder.create({
+      data: {
+        admissionId,
+        hospitalId,
+        orderType: data.orderType as any,
+        priority: data.priority as any,
+        description: data.description,
+        details: data.details,
+        notes: data.notes,
+        orderedBy: data.orderedBy,
+      },
+    });
+  }
+
+  async getOrders(admissionId: string, filters?: { type?: string; status?: string }) {
+    const where: any = { admissionId };
+    if (filters?.type) where.orderType = filters.type;
+    if (filters?.status) where.status = filters.status;
+
+    return prisma.doctorOrder.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async updateOrderStatus(orderId: string, data: { status: string; completedBy?: string }) {
+    const updateData: any = { status: data.status };
+    
+    if (data.status === 'COMPLETED') {
+      updateData.completedAt = new Date();
+      updateData.completedBy = data.completedBy;
+    }
+
+    return prisma.doctorOrder.update({
+      where: { id: orderId },
+      data: updateData,
+    });
+  }
+
+  async cancelOrder(orderId: string) {
+    return prisma.doctorOrder.update({
+      where: { id: orderId },
+      data: { status: 'CANCELLED' },
+    });
+  }
+
+  // ==================== PROGRESS NOTES ====================
+  async createProgressNote(admissionId: string, data: {
+    authorId: string;
+    authorRole: string;
+    noteType: string;
+    subjective?: string;
+    objective?: string;
+    assessment?: string;
+    plan?: string;
+    content?: string;
+  }) {
+    return prisma.progressNote.create({
+      data: {
+        admissionId,
+        authorId: data.authorId,
+        authorRole: data.authorRole,
+        noteType: data.noteType as any,
+        subjective: data.subjective,
+        objective: data.objective,
+        assessment: data.assessment,
+        plan: data.plan,
+        content: data.content,
+      },
+    });
+  }
+
+  async getProgressNotes(admissionId: string, page: number = 1, limit: number = 20) {
+    const skip = (page - 1) * limit;
+
+    const [notes, total] = await Promise.all([
+      prisma.progressNote.findMany({
+        where: { admissionId },
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.progressNote.count({ where: { admissionId } }),
+    ]);
+
+    return { notes, total, page, limit };
+  }
+
   // Get deterioration monitoring dashboard data
   async getDeteriorationDashboard(hospitalId: string) {
     const admissions = await prisma.admission.findMany({

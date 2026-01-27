@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   PlusIcon,
   ExclamationTriangleIcon,
@@ -444,6 +445,7 @@ function NewAdmissionModal({ onClose, onSuccess, wards }: { onClose: () => void;
 }
 
 export default function IPD() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'beds' | 'admissions' | 'monitoring' | 'discharge'>('beds');
   const [showAdmissionModal, setShowAdmissionModal] = useState(false);
   const [wards, setWards] = useState<Ward[]>([]);
@@ -622,17 +624,8 @@ export default function IPD() {
     return `${mins}m ago`;
   };
 
-  const handleDischarge = async (admissionId: string) => {
-    try {
-      await ipdApi.discharge(admissionId, { dischargeNotes: 'Discharged by staff' });
-      toast.success('Patient discharged successfully');
-      // Refresh admissions
-      const response = await ipdApi.getAdmissions({ status: 'ADMITTED' });
-      setAdmissions(response.data.data || []);
-    } catch (error) {
-      console.error('Failed to discharge:', error);
-      toast.error('Failed to discharge patient');
-    }
+  const handleDischarge = (admissionId: string) => {
+    navigate(`/ipd/admission/${admissionId}?tab=discharge`);
   };
 
   const getBedColor = (status: string) => {
@@ -961,7 +954,10 @@ export default function IPD() {
                     </p>
                     <p className="text-sm text-gray-500">LOS: {admission.lengthOfStay} days</p>
                   </div>
-                  <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200 transition-all duration-300">
+                  <button 
+                    onClick={() => navigate(`/ipd/admission/${admission.id}`)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200 transition-all duration-300"
+                  >
                     View Details
                   </button>
                 </div>
