@@ -901,14 +901,47 @@ export class PatientPortalService {
       where,
       orderBy: { createdAt: 'desc' },
       take: limit,
+      include: {
+        tests: {
+          include: {
+            labTest: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                category: true,
+                unit: true,
+                normalRange: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     return {
       data: labOrders.map(order => ({
         id: order.id,
+        orderNumber: order.orderNumber,
         date: order.createdAt,
         status: order.status,
+        priority: order.priority,
         clinicalNotes: order.clinicalNotes,
+        completedAt: order.completedAt,
+        tests: order.tests.map(test => ({
+          id: test.id,
+          name: test.labTest?.name || 'Unknown Test',
+          code: test.labTest?.code || '',
+          category: test.labTest?.category || '',
+          result: test.result,
+          resultValue: test.resultValue ? Number(test.resultValue) : null,
+          unit: test.unit || test.labTest?.unit || '',
+          normalRange: test.normalRange || test.labTest?.normalRange || '',
+          status: test.status,
+          isAbnormal: test.isAbnormal,
+          isCritical: test.isCritical,
+          comments: test.comments,
+        })),
       })),
       pagination: { page, limit, total: labOrders.length, totalPages: 1 },
     };
