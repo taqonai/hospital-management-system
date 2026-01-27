@@ -498,6 +498,7 @@ export default function Consultation() {
   const [newTestInput, setNewTestInput] = useState('');
   const [sidebarTestInput, setSidebarTestInput] = useState('');
   const [showSidebarTestDropdown, setShowSidebarTestDropdown] = useState(false);
+  const [showMainTestDropdown, setShowMainTestDropdown] = useState(false);
 
   // Custom Diagnosis State
   const [customDiagnoses, setCustomDiagnoses] = useState<Array<{ id: string; name: string; icd10?: string; isPrimary?: boolean }>>([]);
@@ -2376,38 +2377,84 @@ export default function Consultation() {
           <p className="text-green-600 text-sm mb-4 italic">No tests added yet. Run AI analysis or add manually.</p>
         )}
 
-        {/* Add New Test Input */}
-        <div className="flex gap-2 mt-4 pt-4 border-t border-green-200">
-          <input
-            type="text"
-            value={newTestInput}
-            onChange={(e) => setNewTestInput(e.target.value)}
-            placeholder="Add a test (e.g., Complete Blood Count)"
-            className="flex-1 px-3 py-2 border border-green-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && newTestInput.trim()) {
-                e.preventDefault();
-                if (!recommendedTests.includes(newTestInput.trim())) {
-                  setRecommendedTests(prev => [...prev, newTestInput.trim()]);
+        {/* Add New Test Input with Autocomplete */}
+        <div className="relative mt-4 pt-4 border-t border-green-200">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newTestInput}
+              onChange={(e) => {
+                setNewTestInput(e.target.value);
+                setShowMainTestDropdown(e.target.value.length >= 2);
+              }}
+              onFocus={() => { if (newTestInput.length >= 2) setShowMainTestDropdown(true); }}
+              onBlur={() => setTimeout(() => setShowMainTestDropdown(false), 200)}
+              placeholder="Type to search lab tests or add custom..."
+              className="flex-1 px-3 py-2 border border-green-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newTestInput.trim()) {
+                  e.preventDefault();
+                  if (!recommendedTests.some(t => t.toLowerCase() === newTestInput.trim().toLowerCase())) {
+                    setRecommendedTests(prev => [...prev, newTestInput.trim()]);
+                  }
+                  setNewTestInput('');
+                  setShowMainTestDropdown(false);
                 }
-                setNewTestInput('');
-              }
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => {
-              if (newTestInput.trim() && !recommendedTests.includes(newTestInput.trim())) {
-                setRecommendedTests(prev => [...prev, newTestInput.trim()]);
-                setNewTestInput('');
-              }
-            }}
-            disabled={!newTestInput.trim()}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-          >
-            <PlusIcon className="h-4 w-4" />
-            Add
-          </button>
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (newTestInput.trim() && !recommendedTests.some(t => t.toLowerCase() === newTestInput.trim().toLowerCase())) {
+                  setRecommendedTests(prev => [...prev, newTestInput.trim()]);
+                  setNewTestInput('');
+                  setShowMainTestDropdown(false);
+                }
+              }}
+              disabled={!newTestInput.trim()}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+            >
+              <PlusIcon className="h-4 w-4" />
+              Add
+            </button>
+          </div>
+
+          {/* Autocomplete dropdown from lab database */}
+          {showMainTestDropdown && newTestInput.trim().length >= 2 && (
+            <div className="absolute z-50 mt-1 w-full bg-white border border-green-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
+              {availableLabTests
+                .filter(lt =>
+                  lt.name.toLowerCase().includes(newTestInput.toLowerCase()) &&
+                  !recommendedTests.some(t => t.toLowerCase() === lt.name.toLowerCase())
+                )
+                .slice(0, 10)
+                .map((lt) => (
+                  <button
+                    key={lt.id}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setRecommendedTests(prev => [...prev, lt.name]);
+                      setNewTestInput('');
+                      setShowMainTestDropdown(false);
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-green-50 border-b border-gray-100 last:border-0 flex items-center justify-between transition-colors"
+                  >
+                    <span className="text-gray-800 font-medium">{lt.name}</span>
+                    <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full">{lt.category}</span>
+                  </button>
+                ))}
+              {availableLabTests.filter(lt =>
+                lt.name.toLowerCase().includes(newTestInput.toLowerCase()) &&
+                !recommendedTests.some(t => t.toLowerCase() === lt.name.toLowerCase())
+              ).length === 0 && (
+                <div className="px-4 py-3 text-sm text-gray-500 flex items-center justify-between">
+                  <span>No matching tests in database</span>
+                  <span className="text-xs text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">Press Enter to add as custom</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
