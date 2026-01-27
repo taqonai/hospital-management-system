@@ -64,8 +64,8 @@ const poStatuses = ['DRAFT_PO', 'PENDING_APPROVAL_PO', 'APPROVED_PO', 'SENT_TO_S
 const poTypes = [
   { value: 'STANDARD', label: 'Standard' },
   { value: 'BLANKET', label: 'Blanket' },
-  { value: 'EMERGENCY', label: 'Emergency' },
-  { value: 'CONTRACT', label: 'Contract' },
+  { value: 'EMERGENCY_PO', label: 'Emergency' },
+  { value: 'CONTRACT_RELEASE', label: 'Contract Release' },
 ];
 
 const paymentTermsOptions = [
@@ -79,11 +79,11 @@ const paymentTermsOptions = [
 
 const itemTypes = [
   { value: 'DRUG', label: 'Drug' },
-  { value: 'CONSUMABLE', label: 'Consumable' },
-  { value: 'EQUIPMENT', label: 'Equipment' },
+  { value: 'INVENTORY', label: 'Inventory' },
+  { value: 'HOUSEKEEPING_ITEM', label: 'Housekeeping' },
   { value: 'ASSET', label: 'Asset' },
-  { value: 'SERVICE', label: 'Service' },
-  { value: 'OTHER', label: 'Other' },
+  { value: 'LAB_CONSUMABLE', label: 'Lab Consumable' },
+  { value: 'OTHER_ITEM', label: 'Other' },
 ];
 
 const statusConfig: Record<string, { bg: string; text: string }> = {
@@ -101,7 +101,7 @@ const statusConfig: Record<string, { bg: string; text: string }> = {
 const timelineSteps = ['DRAFT_PO', 'PENDING_APPROVAL_PO', 'APPROVED_PO', 'SENT_TO_SUPPLIER', 'PARTIALLY_RECEIVED', 'FULLY_RECEIVED', 'CLOSED_PO'];
 
 const emptyItem: POItem = {
-  itemType: 'CONSUMABLE', itemName: '', itemCode: '', unit: 'PCS', orderedQty: 1, unitPrice: 0, totalPrice: 0, notes: '',
+  itemType: 'DRUG', itemName: '', itemCode: '', unit: 'PCS', orderedQty: 1, unitPrice: 0, totalPrice: 0, notes: '',
 };
 
 export default function PurchaseOrders() {

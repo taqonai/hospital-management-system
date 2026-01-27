@@ -81,7 +81,8 @@ const statusConfig: Record<string, { bg: string; text: string }> = {
 const conditionOptions = [
   { value: 'GOOD', label: 'Good' },
   { value: 'DAMAGED', label: 'Damaged' },
-  { value: 'EXPIRED', label: 'Expired' },
+  { value: 'EXPIRED_ITEM', label: 'Expired' },
+  { value: 'WRONG_ITEM', label: 'Wrong Item' },
   { value: 'DEFECTIVE', label: 'Defective' },
 ];
 

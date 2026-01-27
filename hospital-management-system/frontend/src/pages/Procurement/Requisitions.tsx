@@ -55,19 +55,18 @@ interface Department {
 }
 
 const urgencies = [
-  { value: 'LOW', label: 'Low' },
-  { value: 'NORMAL', label: 'Normal' },
-  { value: 'HIGH', label: 'High' },
-  { value: 'CRITICAL', label: 'Critical' },
+  { value: 'ROUTINE', label: 'Routine' },
+  { value: 'URGENT', label: 'Urgent' },
+  { value: 'EMERGENCY_PR', label: 'Emergency' },
 ];
 
 const itemTypes = [
   { value: 'DRUG', label: 'Drug' },
-  { value: 'CONSUMABLE', label: 'Consumable' },
-  { value: 'EQUIPMENT', label: 'Equipment' },
+  { value: 'INVENTORY', label: 'Inventory' },
+  { value: 'HOUSEKEEPING_ITEM', label: 'Housekeeping' },
   { value: 'ASSET', label: 'Asset' },
-  { value: 'SERVICE', label: 'Service' },
-  { value: 'OTHER', label: 'Other' },
+  { value: 'LAB_CONSUMABLE', label: 'Lab Consumable' },
+  { value: 'OTHER_ITEM', label: 'Other' },
 ];
 
 const prStatuses = ['DRAFT_PR', 'SUBMITTED', 'PENDING_APPROVAL', 'APPROVED_PR', 'REJECTED_PR', 'CANCELLED_PR', 'PARTIALLY_ORDERED', 'FULLY_ORDERED', 'CLOSED_PR'];
@@ -85,14 +84,13 @@ const statusConfig: Record<string, { bg: string; text: string }> = {
 };
 
 const urgencyConfig: Record<string, { bg: string; text: string }> = {
-  LOW: { bg: 'bg-gray-100', text: 'text-gray-600' },
-  NORMAL: { bg: 'bg-blue-100', text: 'text-blue-700' },
-  HIGH: { bg: 'bg-orange-100', text: 'text-orange-700' },
-  CRITICAL: { bg: 'bg-red-100', text: 'text-red-700' },
+  ROUTINE: { bg: 'bg-blue-100', text: 'text-blue-700' },
+  URGENT: { bg: 'bg-orange-100', text: 'text-orange-700' },
+  EMERGENCY_PR: { bg: 'bg-red-100', text: 'text-red-700' },
 };
 
 const emptyItem: RequisitionItem = {
-  itemType: 'CONSUMABLE', itemName: '', itemCode: '', specification: '', quantity: 1, unit: 'PCS',
+  itemType: 'DRUG', itemName: '', itemCode: '', specification: '', quantity: 1, unit: 'PCS',
   estimatedUnitCost: 0, estimatedTotal: 0, preferredSupplier: '', notes: '',
 };
 
@@ -110,7 +108,7 @@ export default function Requisitions() {
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     departmentId: '',
-    urgency: 'NORMAL',
+    urgency: 'ROUTINE',
     justification: '',
     requiredDate: '',
     notes: '',
@@ -204,7 +202,7 @@ export default function Requisitions() {
       await procurementApi.createRequisition(payload);
       toast.success('Purchase Requisition created');
       setShowCreate(false);
-      setFormData({ departmentId: '', urgency: 'NORMAL', justification: '', requiredDate: '', notes: '', items: [{ ...emptyItem }] });
+      setFormData({ departmentId: '', urgency: 'ROUTINE', justification: '', requiredDate: '', notes: '', items: [{ ...emptyItem }] });
       fetchRequisitions();
     } catch (error) {
       toast.error('Failed to create requisition');
@@ -267,7 +265,7 @@ export default function Requisitions() {
   if (selectedPR) {
     const r = selectedPR;
     const style = statusConfig[r.status] || statusConfig.DRAFT_PR;
-    const uStyle = urgencyConfig[r.urgency] || urgencyConfig.NORMAL;
+    const uStyle = urgencyConfig[r.urgency] || urgencyConfig.ROUTINE;
     return (
       <div className="space-y-6">
         <button onClick={() => setSelectedPR(null)} className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1">
@@ -411,7 +409,7 @@ export default function Requisitions() {
                 ) : (
                   filteredRequisitions.map((r) => {
                     const style = statusConfig[r.status] || statusConfig.DRAFT_PR;
-                    const uStyle = urgencyConfig[r.urgency] || urgencyConfig.NORMAL;
+                    const uStyle = urgencyConfig[r.urgency] || urgencyConfig.ROUTINE;
                     return (
                       <tr key={r.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">{r.prNumber}</td>
