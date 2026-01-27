@@ -580,7 +580,7 @@ export class LaboratoryService {
   }
 
   async getCriticalResults(hospitalId: string) {
-    return prisma.labOrderTest.findMany({
+    const results = await prisma.labOrderTest.findMany({
       where: {
         isCritical: true,
         labOrder: { hospitalId },
@@ -596,6 +596,21 @@ export class LaboratoryService {
       },
       orderBy: { performedAt: 'desc' },
     });
+
+    // Transform to frontend-friendly format
+    return results.map(test => ({
+      id: test.id,
+      testName: test.labTest?.name || 'Unknown Test',
+      patientName: `${test.labOrder.patient.firstName} ${test.labOrder.patient.lastName}`,
+      patientMrn: test.labOrder.patient.mrn,
+      value: test.resultValue?.toString() || test.result || '',
+      unit: test.unit || '',
+      normalRange: test.normalRange || '',
+      comments: test.comments || '',
+      performedAt: test.performedAt,
+      labOrderId: test.labOrderId,
+      orderedAt: test.labOrder.createdAt,
+    }));
   }
 
   async getPendingOrders(hospitalId: string) {
