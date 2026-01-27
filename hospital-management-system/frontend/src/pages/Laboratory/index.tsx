@@ -838,35 +838,47 @@ export default function Laboratory() {
                                 Process
                               </button>
                             )}
-                            {(order.status === 'PROCESSING' || order.status === 'IN_PROGRESS' || order.status === 'ORDERED') && (
-                              <button
-                                onClick={() => handleEnterResults(order)}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-green-600 bg-green-500/10 hover:bg-green-500/20 transition-all"
-                              >
-                                <PencilSquareIcon className="h-3.5 w-3.5" />
-                                Enter Results
-                              </button>
-                            )}
-                            {order.status === 'COMPLETED' && (
-                              <>
-                                <button
-                                  onClick={() => handleEnterResults(order)}
-                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 transition-all"
-                                >
-                                  <EyeIcon className="h-3.5 w-3.5" />
-                                  View/Edit Results
-                                </button>
-                                {isAIOnline && (
+                            {/* Show button based on whether test has results, not order status */}
+                            {(() => {
+                              const firstTest = order.tests?.[0];
+                              const hasResults = firstTest?.result || firstTest?.resultValue;
+
+                              if (hasResults) {
+                                // Test has results - show View/Edit button
+                                return (
+                                  <>
+                                    <button
+                                      onClick={() => handleEnterResults(order)}
+                                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 transition-all"
+                                    >
+                                      <EyeIcon className="h-3.5 w-3.5" />
+                                      View/Edit Results
+                                    </button>
+                                    {isAIOnline && (
+                                      <button
+                                        onClick={() => handleInterpretResults(order.id)}
+                                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-purple-600 bg-purple-500/10 hover:bg-purple-500/20 transition-all"
+                                      >
+                                        <SparklesIcon className="h-3.5 w-3.5" />
+                                        AI Context
+                                      </button>
+                                    )}
+                                  </>
+                                );
+                              } else if (order.status === 'PROCESSING' || order.status === 'IN_PROGRESS' || order.status === 'ORDERED' || order.status === 'RECEIVED') {
+                                // No results yet and order is ready for results entry
+                                return (
                                   <button
-                                    onClick={() => handleInterpretResults(order.id)}
-                                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-purple-600 bg-purple-500/10 hover:bg-purple-500/20 transition-all"
+                                    onClick={() => handleEnterResults(order)}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-green-600 bg-green-500/10 hover:bg-green-500/20 transition-all"
                                   >
-                                    <SparklesIcon className="h-3.5 w-3.5" />
-                                    AI Context
+                                    <PencilSquareIcon className="h-3.5 w-3.5" />
+                                    Enter Results
                                   </button>
-                                )}
-                              </>
-                            )}
+                                );
+                              }
+                              return null;
+                            })()}
                             {order.consultation?.appointmentId && (
                               <button
                                 onClick={() => setSelectedBookingId(order.consultation!.appointmentId!)}

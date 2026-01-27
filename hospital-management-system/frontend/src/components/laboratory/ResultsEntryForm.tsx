@@ -246,8 +246,15 @@ export default function ResultsEntryForm({
         toast.success('Results entered successfully');
       }
 
-      // Close modal and refresh orders list
-      onSuccess();
+      // Set existingResult so user can generate AI context
+      // Don't close modal immediately - let user view success and generate context if needed
+      setExistingResult({
+        result: mainParam.value,
+        resultValue: parseFloat(mainParam.value),
+        unit: mainParam.unit,
+        normalRange: mainParam.referenceRange,
+        comments: overallNotes || mainParam.notes,
+      });
     } catch (error: any) {
       console.error('Failed to enter results:', error);
       toast.error(error.response?.data?.message || 'Failed to enter results');
