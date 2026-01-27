@@ -315,6 +315,366 @@ function NewEDPatientModal({ onClose, onSuccess }: { onClose: () => void; onSucc
   );
 }
 
+// Update Triage Modal
+function UpdateTriageModal({ 
+  patientId, 
+  currentESI, 
+  onClose, 
+  onSuccess 
+}: { 
+  patientId: string; 
+  currentESI: number; 
+  onClose: () => void; 
+  onSuccess: () => void;
+}) {
+  const [esiLevel, setEsiLevel] = useState(currentESI);
+  const [notes, setNotes] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    
+    try {
+      await emergencyApi.updateTriage(patientId, esiLevel, notes);
+      toast.success('Triage level updated successfully');
+      onSuccess();
+      onClose();
+    } catch (error: any) {
+      console.error('Failed to update triage:', error);
+      toast.error(error.response?.data?.message || 'Failed to update triage level');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <div className="bg-gradient-to-r from-red-600 to-rose-600 px-6 py-4 rounded-t-2xl">
+          <h2 className="text-xl font-bold text-white">Update Triage Level</h2>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">New ESI Level</label>
+            <select 
+              value={esiLevel} 
+              onChange={(e) => setEsiLevel(Number(e.target.value))}
+              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50"
+            >
+              <option value={1}>1 - Resuscitation (Critical)</option>
+              <option value={2}>2 - Emergent (High Risk)</option>
+              <option value={3}>3 - Urgent (Stable)</option>
+              <option value={4}>4 - Less Urgent</option>
+              <option value={5}>5 - Non-Urgent</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+            <textarea 
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Reason for triage update..."
+              rows={3}
+              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500/50 resize-none"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+            <button 
+              type="button" 
+              onClick={onClose} 
+              className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit" 
+              disabled={loading}
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-rose-500 text-white font-semibold hover:from-red-600 hover:to-rose-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {loading ? <><ArrowPathIcon className="h-5 w-5 animate-spin" />Updating...</> : 'Update Triage'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Assign Doctor Modal
+function AssignDoctorModal({ 
+  patientId, 
+  onClose, 
+  onSuccess 
+}: { 
+  patientId: string; 
+  onClose: () => void; 
+  onSuccess: () => void;
+}) {
+  const [doctors, setDoctors] = useState<any[]>([]);
+  const [selectedDoctorId, setSelectedDoctorId] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [fetchingDoctors, setFetchingDoctors] = useState(true);
+
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      try {
+        // Using existing doctors API
+        const response = await emergencyApi.getStats(); // Temporary - we'll add proper endpoint later
+        // For now, we'll need to fetch available doctors
+        // TODO: Add GET /emergency/available-doctors endpoint
+        setDoctors([]);
+      } catch (error) {
+        console.error('Failed to fetch doctors:', error);
+      } finally {
+        setFetchingDoctors(false);
+      }
+    };
+
+    fetchDoctors();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDoctorId) {
+      toast.error('Please select a doctor');
+      return;
+    }
+
+    setLoading(true);
+    
+    try {
+      await emergencyApi.assignDoctor(patientId, selectedDoctorId);
+      toast.success('Doctor assigned successfully');
+      onSuccess();
+      onClose();
+    } catch (error: any) {
+      console.error('Failed to assign doctor:', error);
+      toast.error(error.response?.data?.message || 'Failed to assign doctor');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 rounded-t-2xl">
+          <h2 className="text-xl font-bold text-white">Assign Doctor</h2>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Select Doctor</label>
+            {fetchingDoctors ? (
+              <div className="flex items-center justify-center py-8">
+                <ArrowPathIcon className="h-8 w-8 animate-spin text-gray-400" />
+              </div>
+            ) : doctors.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <p>Doctor list temporarily unavailable.</p>
+                <p className="text-sm mt-2">Please enter doctor ID manually or contact IT support.</p>
+                <input
+                  type="text"
+                  value={selectedDoctorId}
+                  onChange={(e) => setSelectedDoctorId(e.target.value)}
+                  placeholder="Enter doctor ID..."
+                  className="mt-4 w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                />
+              </div>
+            ) : (
+              <select 
+                value={selectedDoctorId} 
+                onChange={(e) => setSelectedDoctorId(e.target.value)}
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              >
+                <option value="">Select a doctor...</option>
+                {doctors.map((doctor) => (
+                  <option key={doctor.id} value={doctor.id}>
+                    Dr. {doctor.user.firstName} {doctor.user.lastName}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+            <button 
+              type="button" 
+              onClick={onClose} 
+              className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit" 
+              disabled={loading || !selectedDoctorId}
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold hover:from-blue-600 hover:to-indigo-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {loading ? <><ArrowPathIcon className="h-5 w-5 animate-spin" />Assigning...</> : 'Assign Doctor'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Admit Patient Modal
+function AdmitPatientModal({ 
+  patientId, 
+  onClose, 
+  onSuccess 
+}: { 
+  patientId: string; 
+  onClose: () => void; 
+  onSuccess: () => void;
+}) {
+  const [bedId, setBedId] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bedId) {
+      toast.error('Please enter a bed ID');
+      return;
+    }
+
+    setLoading(true);
+    
+    try {
+      await emergencyApi.admit(patientId, bedId);
+      toast.success('Patient admitted successfully');
+      onSuccess();
+      onClose();
+    } catch (error: any) {
+      console.error('Failed to admit patient:', error);
+      toast.error(error.response?.data?.message || 'Failed to admit patient');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+        <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4 rounded-t-2xl">
+          <h2 className="text-xl font-bold text-white">Admit Patient</h2>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Bed ID <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              value={bedId}
+              onChange={(e) => setBedId(e.target.value)}
+              placeholder="Enter bed ID or number..."
+              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/50"
+              required
+            />
+            <p className="text-sm text-gray-500 mt-2">
+              Note: Bed selection UI will be available in Phase 4 Feature 4
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+            <button 
+              type="button" 
+              onClick={onClose} 
+              className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit" 
+              disabled={loading || !bedId}
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold hover:from-green-600 hover:to-emerald-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {loading ? <><ArrowPathIcon className="h-5 w-5 animate-spin" />Admitting...</> : 'Admit Patient'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Discharge Patient Modal
+function DischargePatientModal({ 
+  patientId, 
+  onClose, 
+  onSuccess 
+}: { 
+  patientId: string; 
+  onClose: () => void; 
+  onSuccess: () => void;
+}) {
+  const [notes, setNotes] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    setLoading(true);
+    
+    try {
+      await emergencyApi.discharge(patientId, notes);
+      toast.success('Patient discharged successfully');
+      onSuccess();
+      onClose();
+    } catch (error: any) {
+      console.error('Failed to discharge patient:', error);
+      toast.error(error.response?.data?.message || 'Failed to discharge patient');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+        <div className="bg-gradient-to-r from-blue-600 to-cyan-600 px-6 py-4 rounded-t-2xl">
+          <h2 className="text-xl font-bold text-white">Discharge Patient</h2>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Discharge Notes</label>
+            <textarea 
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Discharge instructions, follow-up care, prescriptions..."
+              rows={5}
+              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 resize-none"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+            <button 
+              type="button" 
+              onClick={onClose} 
+              className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit" 
+              disabled={loading}
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {loading ? <><ArrowPathIcon className="h-5 w-5 animate-spin" />Discharging...</> : 'Discharge Patient'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function Emergency() {
   const [activeTab, setActiveTab] = useState<'tracking' | 'triage' | 'waiting'>('tracking');
   const [showNewPatientModal, setShowNewPatientModal] = useState(false);
@@ -329,6 +689,13 @@ export default function Emergency() {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [secondsSinceUpdate, setSecondsSinceUpdate] = useState(0);
+  
+  // Action modals state
+  const [showUpdateTriageModal, setShowUpdateTriageModal] = useState(false);
+  const [showAssignDoctorModal, setShowAssignDoctorModal] = useState(false);
+  const [showAdmitModal, setShowAdmitModal] = useState(false);
+  const [showDischargeModal, setShowDischargeModal] = useState(false);
+  const [actionPatientId, setActionPatientId] = useState<string | null>(null);
   const [triageLoading, setTriageLoading] = useState(false);
   const [esiResult, setEsiResult] = useState<ESIResult | null>(null);
   const [triageForm, setTriageForm] = useState({
@@ -1216,18 +1583,42 @@ export default function Emergency() {
 
                       {/* Action Buttons */}
                       <div className="flex gap-3 pt-4 border-t border-gray-200">
-                        <button className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-red-500 to-rose-500 text-white font-semibold hover:from-red-600 hover:to-rose-600 transition-all">
+                        <button 
+                          onClick={() => {
+                            setActionPatientId(patient.id);
+                            setShowUpdateTriageModal(true);
+                          }}
+                          className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-red-500 to-rose-500 text-white font-semibold hover:from-red-600 hover:to-rose-600 transition-all"
+                        >
                           Update Triage
                         </button>
-                        <button className="flex-1 px-4 py-3 rounded-xl border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 transition-all">
+                        <button 
+                          onClick={() => {
+                            setActionPatientId(patient.id);
+                            setShowAssignDoctorModal(true);
+                          }}
+                          className="flex-1 px-4 py-3 rounded-xl border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 transition-all"
+                        >
                           Assign Doctor
                         </button>
                       </div>
                       <div className="flex gap-3">
-                        <button className="flex-1 px-4 py-3 rounded-xl bg-green-500 text-white font-semibold hover:bg-green-600 transition-all">
+                        <button 
+                          onClick={() => {
+                            setActionPatientId(patient.id);
+                            setShowAdmitModal(true);
+                          }}
+                          className="flex-1 px-4 py-3 rounded-xl bg-green-500 text-white font-semibold hover:bg-green-600 transition-all"
+                        >
                           Admit
                         </button>
-                        <button className="flex-1 px-4 py-3 rounded-xl bg-blue-500 text-white font-semibold hover:bg-blue-600 transition-all">
+                        <button 
+                          onClick={() => {
+                            setActionPatientId(patient.id);
+                            setShowDischargeModal(true);
+                          }}
+                          className="flex-1 px-4 py-3 rounded-xl bg-blue-500 text-white font-semibold hover:bg-blue-600 transition-all"
+                        >
                           Discharge
                         </button>
                       </div>
@@ -1238,6 +1629,68 @@ export default function Emergency() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Action Modals */}
+      {showUpdateTriageModal && actionPatientId && (() => {
+        const patient = patients.find(p => p.id === actionPatientId);
+        if (!patient) return null;
+        return (
+          <UpdateTriageModal
+            patientId={actionPatientId}
+            currentESI={patient.esiLevel}
+            onClose={() => {
+              setShowUpdateTriageModal(false);
+              setActionPatientId(null);
+            }}
+            onSuccess={() => {
+              fetchData(false);
+              setSelectedPatientId(null); // Close detail panel
+            }}
+          />
+        );
+      })()}
+
+      {showAssignDoctorModal && actionPatientId && (
+        <AssignDoctorModal
+          patientId={actionPatientId}
+          onClose={() => {
+            setShowAssignDoctorModal(false);
+            setActionPatientId(null);
+          }}
+          onSuccess={() => {
+            fetchData(false);
+            setSelectedPatientId(null);
+          }}
+        />
+      )}
+
+      {showAdmitModal && actionPatientId && (
+        <AdmitPatientModal
+          patientId={actionPatientId}
+          onClose={() => {
+            setShowAdmitModal(false);
+            setActionPatientId(null);
+          }}
+          onSuccess={() => {
+            fetchData(false);
+            setSelectedPatientId(null);
+          }}
+        />
+      )}
+
+      {showDischargeModal && actionPatientId && (
+        <DischargePatientModal
+          patientId={actionPatientId}
+          onClose={() => {
+            setShowDischargeModal(false);
+            setActionPatientId(null);
+          }}
+          onSuccess={() => {
+            fetchData(false);
+            setSelectedPatientId(null);
+          }}
+        />
       )}
     </div>
   );
