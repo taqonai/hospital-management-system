@@ -1022,6 +1022,7 @@ export default function Laboratory() {
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setSelectedOrderForResults(null)} />
             <div className="relative w-full max-w-4xl">
               <ResultsEntryForm
+                orderId={selectedOrderForResults.orderId}
                 testId={selectedOrderForResults.testId}
                 testName={selectedOrderForResults.testName}
                 patientName={selectedOrderForResults.patientName}
