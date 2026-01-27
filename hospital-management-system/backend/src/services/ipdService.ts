@@ -549,6 +549,39 @@ export class IPDService {
 
     if (!admission) throw new NotFoundError('Admission not found');
 
+    // Resolve admitting doctor with user info
+    let admittingDoctor = null;
+    if (admission.admittingDoctorId) {
+      admittingDoctor = await prisma.doctor.findUnique({
+        where: { id: admission.admittingDoctorId },
+        include: { user: { select: { firstName: true, lastName: true, email: true } } },
+      });
+    }
+
+    // Resolve orderedBy users for doctor orders
+    const orderUserIds = [...new Set(admission.doctorOrders.map((o: any) => o.orderedBy).filter(Boolean))];
+    const orderUsers = orderUserIds.length > 0
+      ? await prisma.user.findMany({ where: { id: { in: orderUserIds } }, select: { id: true, firstName: true, lastName: true } })
+      : [];
+    const orderUserMap = Object.fromEntries(orderUsers.map(u => [u.id, u]));
+
+    const enrichedOrders = admission.doctorOrders.map((order: any) => ({
+      ...order,
+      orderedByUser: orderUserMap[order.orderedBy] || null,
+    }));
+
+    // Resolve author users for progress notes
+    const noteAuthorIds = [...new Set(admission.progressNotes.map((n: any) => n.authorId).filter(Boolean))];
+    const noteAuthors = noteAuthorIds.length > 0
+      ? await prisma.user.findMany({ where: { id: { in: noteAuthorIds } }, select: { id: true, firstName: true, lastName: true } })
+      : [];
+    const noteAuthorMap = Object.fromEntries(noteAuthors.map(u => [u.id, u]));
+
+    const enrichedNotes = admission.progressNotes.map((note: any) => ({
+      ...note,
+      author: { user: noteAuthorMap[note.authorId] || { firstName: 'Unknown', lastName: 'User' } },
+    }));
+
     // Calculate latest NEWS2 score
     let latestNEWS2 = null;
     const latestVitals = admission.patient.vitals[0];
@@ -564,6 +597,9 @@ export class IPDService {
 
     return {
       ...admission,
+      admittingDoctor,
+      doctorOrders: enrichedOrders,
+      progressNotes: enrichedNotes,
       latestNEWS2Score: latestNEWS2,
     };
   }

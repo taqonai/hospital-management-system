@@ -371,7 +371,7 @@ export default function AdmissionDetail() {
                   <span>•</span>
                   <span>Admitted: {new Date(admission.admissionDate).toLocaleDateString()}</span>
                   <span>•</span>
-                  <span>Dr. {admission.admittingDoctor.user.firstName} {admission.admittingDoctor.user.lastName}</span>
+                  <span>Dr. {admission.admittingDoctor?.user?.firstName || 'Unknown'} {admission.admittingDoctor?.user?.lastName || ''}</span>
                 </div>
               </div>
             </div>
@@ -595,7 +595,7 @@ export default function AdmissionDetail() {
                         )}
                         <div className="flex items-center gap-4 text-sm text-gray-500">
                           <span>
-                            Ordered by: Dr. {order.orderedBy.user.firstName} {order.orderedBy.user.lastName}
+                            Ordered by: Dr. {order.orderedByUser?.firstName || 'Unknown'} {order.orderedByUser?.lastName || ''}
                           </span>
                           <span>•</span>
                           <span>{new Date(order.createdAt).toLocaleString()}</span>
@@ -755,16 +755,16 @@ export default function AdmissionDetail() {
                     <div className="flex items-start gap-4">
                       <div className="flex-shrink-0">
                         <div className="h-10 w-10 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 flex items-center justify-center text-white font-bold">
-                          {note.author.user.firstName[0]}{note.author.user.lastName[0]}
+                          {(note.author?.user?.firstName || 'U')[0]}{(note.author?.user?.lastName || '')[0]}
                         </div>
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
                           <span className="font-medium text-gray-900">
-                            {note.author.user.firstName} {note.author.user.lastName}
+                            {note.author?.user?.firstName || 'Unknown'} {note.author?.user?.lastName || ''}
                           </span>
-                          <span className={clsx('px-2 py-1 rounded text-xs font-medium', getRoleBadgeClass(note.author.role))}>
-                            {note.author.role}
+                          <span className={clsx('px-2 py-1 rounded text-xs font-medium', getRoleBadgeClass(note.authorRole || 'DOCTOR'))}>
+                            {note.authorRole || 'DOCTOR'}
                           </span>
                           <span className="text-sm text-gray-500">{new Date(note.createdAt).toLocaleString()}</span>
                         </div>
