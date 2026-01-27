@@ -97,6 +97,14 @@ model Hospital {
   purchaseRequisitions   PurchaseRequisition[]
   purchaseOrders         PurchaseOrder[]
 
+  // Nursing Module
+  nurseAssignments       NurseAssignment[]
+  medicationAdministrations MedicationAdministration[]
+  nursingAssessments     NursingAssessment[]
+  intakeOutputRecords    IntakeOutput[]
+  shiftHandoffs          ShiftHandoff[]
+  nurseTasks             NurseTask[]
+
   @@map("hospitals")
 }
 
@@ -209,6 +217,9 @@ model User {
   poApprovals           POApproval[]          @relation("POApprover")
   grnReceivedBy         GoodsReceiptNote[]    @relation("GRNReceivedBy")
   emergencyPages        EmergencyPage[]       @relation("UserPages")
+  
+  // Nursing Module
+  nurseAssignments      NurseAssignment[]     @relation("NurseAssignments")
 
   @@unique([hospitalId, email])
   @@map("users")
@@ -431,6 +442,9 @@ model Nurse {
   qualification String
   shift        NurseShift
   licenseNumber String
+  specialization String?      // Specialty area
+  certifications String[]     // BLS, ACLS, PALS, etc.
+  isCharge      Boolean @default(false) // Charge nurse flag
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -438,6 +452,15 @@ model Nurse {
   user         User         @relation(fields: [userId], references: [id])
   department   Department   @relation(fields: [departmentId], references: [id])
   nursingNotes NursingNote[]
+  
+  // New relations
+  assignments  NurseAssignment[]
+  medicationAdmins MedicationAdministration[]
+  assessments  NursingAssessment[]
+  intakeOutputs IntakeOutput[]
+  outgoingHandoffs ShiftHandoff[] @relation("OutgoingNurse")
+  incomingHandoffs ShiftHandoff[] @relation("IncomingNurse")
+  tasks        NurseTask[]
 
   @@map("nurses")
 }
@@ -446,6 +469,249 @@ enum NurseShift {
   MORNING
   AFTERNOON
   NIGHT
+}
+
+// ==================== NURSING MODULE ====================
+
+// Patient-Nurse Assignment
+model NurseAssignment {
+  id           String     @id @default(uuid())
+  hospitalId   String
+  nurseId      String
+  admissionId  String
+  shiftDate    DateTime   @db.Date
+  shift        NurseShift
+  isPrimary    Boolean    @default(true)
+  assignedBy   String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  hospital  Hospital  @relation(fields: [hospitalId], references: [id])
+  nurse     Nurse     @relation(fields: [nurseId], references: [id])
+  admission Admission @relation(fields: [admissionId], references: [id])
+  assignedByUser User @relation("NurseAssignments", fields: [assignedBy], references: [id])
+
+  @@unique([nurseId, admissionId, shiftDate, shift])
+  @@map("nurse_assignments")
+}
+
+// eMAR - Medication Administration Record
+model MedicationAdministration {
+  id              String         @id @default(uuid())
+  hospitalId      String
+  admissionId     String
+  prescriptionId  String?
+  nurseId         String
+  
+  // Medication Details
+  medicationName  String
+  dosage          String
+  route           String    // ORAL, IV, IM, SC, TOPICAL, etc.
+  frequency       String    // BID, TID, QID, PRN, STAT, etc.
+  scheduledTime   DateTime
+  
+  // Administration
+  status          MedAdminStatus @default(SCHEDULED)
+  administeredAt  DateTime?
+  administeredBy  String?
+  witnessedBy     String?    // For controlled substances
+  
+  // Verification
+  patientScanned  Boolean  @default(false)
+  medScanned      Boolean  @default(false)
+  verifiedRights  Json?    // { rightPatient, rightMed, rightDose, rightRoute, rightTime }
+  
+  // If not given
+  notGivenReason  String?
+  
+  // Notes
+  notes           String?
+  sideEffects     String?
+  vitalsBefore    Json?
+  vitalsAfter     Json?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  hospital   Hospital  @relation(fields: [hospitalId], references: [id])
+  admission  Admission @relation(fields: [admissionId], references: [id])
+  nurse      Nurse     @relation(fields: [nurseId], references: [id])
+
+  @@map("medication_administrations")
+}
+
+enum MedAdminStatus {
+  SCHEDULED
+  DUE
+  OVERDUE
+  ADMINISTERED
+  NOT_GIVEN
+  HELD
+  REFUSED
+}
+
+// Nursing Assessment
+model NursingAssessment {
+  id            String   @id @default(uuid())
+  hospitalId    String
+  admissionId   String
+  nurseId       String
+  assessmentType NursingAssessmentType
+  
+  // Assessment Data (flexible JSON per type)
+  data          Json
+  score         Float?    // For scored assessments (pain, fall risk, Braden, etc.)
+  riskLevel     String?   // LOW, MEDIUM, HIGH, CRITICAL
+  
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  hospital   Hospital  @relation(fields: [hospitalId], references: [id])
+  admission  Admission @relation(fields: [admissionId], references: [id])
+  nurse      Nurse     @relation(fields: [nurseId], references: [id])
+
+  @@map("nursing_assessments")
+}
+
+enum NursingAssessmentType {
+  ADMISSION        // Initial admission assessment
+  HEAD_TO_TOE      // Systems assessment
+  PAIN             // Pain scale (0-10)
+  FALL_RISK        // Morse Fall Scale
+  SKIN_INTEGRITY   // Braden Scale (pressure ulcer risk)
+  NEUROLOGICAL     // Glasgow Coma Scale
+  RESPIRATORY      // Respiratory assessment
+  CARDIOVASCULAR   // Cardiac assessment
+  GASTROINTESTINAL // GI assessment
+  MUSCULOSKELETAL  // Mobility assessment
+  PSYCHOSOCIAL     // Mental health screening
+  DISCHARGE_READINESS // Discharge assessment
+}
+
+// Intake & Output
+model IntakeOutput {
+  id           String   @id @default(uuid())
+  hospitalId   String
+  admissionId  String
+  nurseId      String
+  recordedAt   DateTime
+  
+  type         IOType   // INTAKE or OUTPUT
+  category     String   // oral, iv, urine, drain, emesis, etc.
+  amount       Float    // in mL
+  notes        String?
+  
+  createdAt    DateTime @default(now())
+
+  hospital   Hospital  @relation(fields: [hospitalId], references: [id])
+  admission  Admission @relation(fields: [admissionId], references: [id])
+  nurse      Nurse     @relation(fields: [nurseId], references: [id])
+
+  @@map("intake_output")
+}
+
+enum IOType {
+  INTAKE
+  OUTPUT
+}
+
+// Shift Handoff (SBAR)
+model ShiftHandoff {
+  id            String   @id @default(uuid())
+  hospitalId    String
+  admissionId   String
+  
+  outgoingNurseId String
+  incomingNurseId String?
+  
+  shift         NurseShift
+  handoffDate   DateTime
+  
+  // SBAR Format
+  situation     String    // Current condition, why patient is here
+  background    String    // Relevant history, recent changes
+  assessment    String    // Nurse's clinical assessment
+  recommendation String   // What needs to happen next
+  
+  // Additional
+  pendingTasks  Json?     // Tasks not completed
+  pendingMeds   Json?     // Medications due soon
+  alerts        Json?     // Active alerts/warnings
+  
+  status        HandoffStatus @default(PENDING)
+  acceptedAt    DateTime?
+  
+  createdAt     DateTime @default(now())
+
+  hospital    Hospital  @relation(fields: [hospitalId], references: [id])
+  admission   Admission @relation(fields: [admissionId], references: [id])
+  outgoingNurse Nurse   @relation("OutgoingNurse", fields: [outgoingNurseId], references: [id])
+  incomingNurse Nurse?  @relation("IncomingNurse", fields: [incomingNurseId], references: [id])
+
+  @@map("shift_handoffs")
+}
+
+enum HandoffStatus {
+  PENDING
+  ACCEPTED
+  REVIEWED
+}
+
+// Nurse Task
+model NurseTask {
+  id           String   @id @default(uuid())
+  hospitalId   String
+  admissionId  String?
+  nurseId      String
+  
+  title        String
+  description  String?
+  category     TaskCategory
+  priority     TaskPriority @default(ROUTINE)
+  
+  dueAt        DateTime?
+  completedAt  DateTime?
+  status       NurseTaskStatus @default(PENDING)
+  
+  // Auto-generated tasks link
+  sourceType   String?   // "medication", "vitals", "assessment", "order"
+  sourceId     String?
+  
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  hospital   Hospital   @relation(fields: [hospitalId], references: [id])
+  admission  Admission? @relation(fields: [admissionId], references: [id])
+  nurse      Nurse      @relation(fields: [nurseId], references: [id])
+
+  @@map("nurse_tasks")
+}
+
+enum TaskCategory {
+  MEDICATION
+  VITALS
+  ASSESSMENT
+  PROCEDURE
+  DOCUMENTATION
+  COMMUNICATION
+  DISCHARGE
+  OTHER
+}
+
+enum TaskPriority {
+  STAT
+  URGENT
+  ROUTINE
+  LOW
+}
+
+enum NurseTaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  DEFERRED
 }
 
 // ==================== PATIENT MANAGEMENT ====================
@@ -1082,6 +1348,14 @@ model Admission {
   surgeries       Surgery[]
   dischargeSummary DischargeSummary?
   dischargeCoding  DischargeCoding?
+  
+  // Nursing Module
+  nurseAssignments       NurseAssignment[]
+  medicationAdministrations MedicationAdministration[]
+  nursingAssessments     NursingAssessment[]
+  intakeOutputRecords    IntakeOutput[]
+  shiftHandoffs          ShiftHandoff[]
+  nurseTasks             NurseTask[]
 
   @@map("admissions")
 }

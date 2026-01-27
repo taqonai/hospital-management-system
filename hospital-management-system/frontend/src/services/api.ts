@@ -783,6 +783,130 @@ export const emergencyApi = {
     api.patch(`/emergency/page/${pageId}/respond`, { status, declineReason }),
 };
 
+// Nursing APIs
+export const nursingApi = {
+  // Dashboard
+  getDashboard: (nurseId?: string) => api.get('/nursing/dashboard', { params: { nurseId } }),
+  getUnitOverview: () => api.get('/nursing/unit-overview'),
+  
+  // Assignments
+  assignPatient: (data: {
+    nurseId: string;
+    admissionId: string;
+    shiftDate: Date;
+    shift: 'MORNING' | 'AFTERNOON' | 'NIGHT';
+    isPrimary?: boolean;
+  }) => api.post('/nursing/assignments', data),
+  getMyPatients: (shift?: string) => api.get('/nursing/my-patients', { params: { shift } }),
+  getAssignments: (date?: string) => api.get('/nursing/assignments', { params: { date } }),
+  removeAssignment: (id: string) => api.delete(`/nursing/assignments/${id}`),
+  
+  // eMAR
+  getEMAR: (admissionId: string) => api.get(`/nursing/emar/${admissionId}`),
+  administerMedication: (data: {
+    id: string;
+    administeredAt?: Date;
+    notes?: string;
+    sideEffects?: string;
+    vitalsBefore?: any;
+    vitalsAfter?: any;
+  }) => api.post('/nursing/emar/administer', data),
+  verifyMedication: (data: {
+    id: string;
+    patientScanned: boolean;
+    medScanned: boolean;
+    verifiedRights: any;
+  }) => api.post('/nursing/emar/verify', data),
+  recordNotGiven: (id: string, reason: string, notes?: string) =>
+    api.patch(`/nursing/emar/${id}/not-given`, { reason, notes }),
+  getOverdueMedications: (nurseId?: string) =>
+    api.get('/nursing/emar/overdue', { params: { nurseId } }),
+  
+  // Vitals
+  recordVitals: (data: {
+    patientId: string;
+    temperature?: number;
+    bloodPressureSys?: number;
+    bloodPressureDia?: number;
+    heartRate?: number;
+    respiratoryRate?: number;
+    oxygenSaturation?: number;
+    painLevel?: number;
+    notes?: string;
+  }) => api.post('/nursing/vitals', data),
+  getVitalsHistory: (patientId: string, limit?: number) =>
+    api.get(`/nursing/vitals/${patientId}`, { params: { limit } }),
+  getVitalsTrends: (patientId: string, hours?: number) =>
+    api.get(`/nursing/vitals/trends/${patientId}`, { params: { hours } }),
+  
+  // I&O
+  recordIntakeOutput: (data: {
+    admissionId: string;
+    recordedAt: Date;
+    type: 'INTAKE' | 'OUTPUT';
+    category: string;
+    amount: number;
+    notes?: string;
+  }) => api.post('/nursing/io', data),
+  getIntakeOutput: (admissionId: string, hours?: number) =>
+    api.get(`/nursing/io/${admissionId}`, { params: { hours } }),
+  getIOBalance: (admissionId: string, hours?: number) =>
+    api.get(`/nursing/io/balance/${admissionId}`, { params: { hours } }),
+  
+  // Assessments
+  createAssessment: (data: {
+    admissionId: string;
+    assessmentType: string;
+    data: any;
+    score?: number;
+    riskLevel?: string;
+    notes?: string;
+  }) => api.post('/nursing/assessments', data),
+  getAssessments: (admissionId: string, type?: string) =>
+    api.get(`/nursing/assessments/${admissionId}`, { params: { type } }),
+  getAssessmentTypes: () => api.get('/nursing/assessments/types'),
+  
+  // Handoff
+  createHandoff: (data: {
+    admissionId: string;
+    incomingNurseId?: string;
+    shift: 'MORNING' | 'AFTERNOON' | 'NIGHT';
+    handoffDate: Date;
+    situation: string;
+    background: string;
+    assessment: string;
+    recommendation: string;
+    pendingTasks?: any;
+    pendingMeds?: any;
+    alerts?: any;
+  }) => api.post('/nursing/handoff', data),
+  getHandoffHistory: (admissionId: string) => api.get(`/nursing/handoff/${admissionId}`),
+  getPendingHandoffs: () => api.get('/nursing/handoff/pending'),
+  acceptHandoff: (id: string) => api.patch(`/nursing/handoff/${id}/accept`),
+  
+  // Tasks
+  createTask: (data: {
+    admissionId?: string;
+    title: string;
+    description?: string;
+    category: string;
+    priority?: string;
+    dueAt?: Date;
+  }) => api.post('/nursing/tasks', data),
+  getTasks: (filters?: {
+    status?: string;
+    category?: string;
+    admissionId?: string;
+  }) => api.get('/nursing/tasks', { params: filters }),
+  updateTask: (id: string, data: {
+    status?: string;
+    notes?: string;
+    completedAt?: Date;
+  }) => api.patch(`/nursing/tasks/${id}`, data),
+  getOverdueTasks: (nurseId?: string) =>
+    api.get('/nursing/tasks/overdue', { params: { nurseId } }),
+};
+
 // Radiology APIs
 export const radiologyApi = {
   getOrders: (params?: any) => api.get('/radiology/orders', { params }),

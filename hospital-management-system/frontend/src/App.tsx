@@ -29,6 +29,7 @@ import Pharmacy from './pages/Pharmacy';
 import IPD from './pages/IPD';
 import OPD from './pages/OPD';
 import Emergency from './pages/Emergency';
+import Nursing from './pages/Nursing';
 import Radiology from './pages/Radiology';
 import Surgery from './pages/Surgery';
 import Billing from './pages/Billing';
@@ -223,6 +224,7 @@ function App() {
         <Route path="/quality" element={<Quality />} />
         <Route path="/ipd" element={<IPD />} />
         <Route path="/emergency" element={<Emergency />} />
+        <Route path="/nursing" element={<Nursing />} />
         <Route path="/laboratory" element={<Laboratory />} />
         <Route path="/radiology" element={<Radiology />} />
         <Route path="/pharmacy" element={<Pharmacy />} />

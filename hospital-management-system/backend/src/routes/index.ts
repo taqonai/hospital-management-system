@@ -57,6 +57,7 @@ import noShowRoutes from './noShowRoutes';
 import referralRoutes from './referralRoutes';
 import whatsappBotRoutes from './whatsappBotRoutes';
 import procurementRoutes from './procurementRoutes';
+import nurseRoutes from './nurseRoutes';
 
 const router = Router();
 
@@ -152,5 +153,8 @@ router.use('/referrals', referralRoutes);
 
 // Procurement Module
 router.use('/procurement', procurementRoutes);
+
+// Nursing Module
+router.use('/nursing', nurseRoutes);
 
 export default router;
