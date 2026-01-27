@@ -244,11 +244,8 @@ export default function ResultsEntryForm({
         toast.success('Results entered successfully');
       }
 
-      // Reload to get the saved result
-      setExistingResult({ result: mainParam.value, resultValue: parseFloat(mainParam.value), unit: mainParam.unit });
-
-      // Don't close immediately - allow viewing/generating context
-      // onSuccess();
+      // Close modal and refresh orders list
+      onSuccess();
     } catch (error: any) {
       console.error('Failed to enter results:', error);
       toast.error(error.response?.data?.message || 'Failed to enter results');
