@@ -2430,7 +2430,7 @@ If multiple tests are present, extract the most prominent one or all if clearly 
         if test_name:
             prompt += f"\n\nSpecifically look for: {test_name}"
 
-        response = openai_manager.get_client().chat.completions.create(
+        response = openai_manager.client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {
@@ -2575,7 +2575,7 @@ Provide a comprehensive clinical interpretation including:
 
 Be specific, concise, and focus on actionable clinical insights. Use medical terminology appropriate for healthcare professionals."""
 
-        response = openai_manager.get_client().chat.completions.create(
+        response = openai_manager.client.chat.completions.create(
             model=Models.GPT_4O_MINI,
             messages=[
                 {

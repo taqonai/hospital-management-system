@@ -3509,6 +3509,43 @@ export default function Consultation() {
               {prescriptions.length === 0 && <p className="text-gray-400">None</p>}
             </div>
           </div>
+          <div>
+            <h4 className="text-sm font-medium text-gray-500 mb-2">Recommended Tests ({recommendedTests.length})</h4>
+            <div className="flex flex-wrap gap-1.5">
+              {recommendedTests.map((test, idx) => {
+                const isAvailable = availableLabTests.some(labTest =>
+                  labTest.name.toLowerCase() === test.toLowerCase() ||
+                  labTest.name.toLowerCase().includes(test.toLowerCase()) ||
+                  test.toLowerCase().includes(labTest.name.toLowerCase())
+                );
+                return (
+                  <span
+                    key={idx}
+                    className={`px-2 py-1 rounded text-xs border ${
+                      isAvailable
+                        ? 'text-green-700 bg-green-50 border-green-200'
+                        : 'text-orange-700 bg-orange-50 border-orange-300'
+                    }`}
+                  >
+                    {test}
+                  </span>
+                );
+              })}
+              {recommendedTests.length === 0 && <p className="text-gray-400">None</p>}
+            </div>
+          </div>
+          <div>
+            <h4 className="text-sm font-medium text-gray-500 mb-2">Lab Orders ({labOrders.length})</h4>
+            <div className="space-y-1">
+              {labOrders.map((order, i) => (
+                <p key={order.id} className="text-gray-900">
+                  {i + 1}. {order.testName}
+                  <span className="ml-2 text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{order.priority}</span>
+                </p>
+              ))}
+              {labOrders.length === 0 && <p className="text-gray-400">None</p>}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -3677,13 +3714,29 @@ export default function Consultation() {
           <h4 className="font-semibold text-green-800 mb-3 flex items-center gap-2">
             <BeakerIcon className="h-5 w-5" />
             Recommended Tests
+            <span className="text-xs font-normal text-green-600">({recommendedTests.length})</span>
           </h4>
           <div className="flex flex-wrap gap-1.5">
-            {recommendedTests.slice(0, 5).map((test, idx) => (
-              <span key={idx} className="px-2 py-1 bg-white text-green-700 rounded text-xs border border-green-200">
-                {test}
-              </span>
-            ))}
+            {recommendedTests.map((test, idx) => {
+              const isAvailable = availableLabTests.some(labTest =>
+                labTest.name.toLowerCase() === test.toLowerCase() ||
+                labTest.name.toLowerCase().includes(test.toLowerCase()) ||
+                test.toLowerCase().includes(labTest.name.toLowerCase())
+              );
+              return (
+                <span
+                  key={idx}
+                  className={`px-2 py-1 bg-white rounded text-xs border ${
+                    isAvailable
+                      ? 'text-green-700 border-green-200'
+                      : 'text-orange-700 border-orange-300'
+                  }`}
+                  title={isAvailable ? 'Available in lab database' : 'Not in lab database'}
+                >
+                  {test}
+                </span>
+              );
+            })}
           </div>
         </div>
       )}
