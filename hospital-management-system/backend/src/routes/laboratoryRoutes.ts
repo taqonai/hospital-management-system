@@ -190,7 +190,7 @@ router.patch(
 router.post(
   '/results/:testId/clinical-context',
   authenticate,
-  authorize(['DOCTOR', 'NURSE', 'LAB_TECHNICIAN']),
+  authorize('DOCTOR', 'NURSE', 'LAB_TECHNICIAN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const context = await laboratoryService.generateClinicalContext(req.params.testId);
     sendSuccess(res, context, 'Clinical context generated');
