@@ -821,6 +821,7 @@ export class EmergencyService {
         availableCount: 0,
         occupiedCount: 0,
         cleaningCount: 0,
+        totalBeds: 0,
       };
     }
 
