@@ -715,7 +715,7 @@ interface IncomingAmbulance {
 }
 
 export default function Emergency() {
-  const [activeTab, setActiveTab] = useState<'tracking' | 'triage' | 'waiting' | 'beds' | 'resus' | 'bloodBank' | 'onCall'>('tracking');
+  const [activeTab, setActiveTab] = useState<'triageRegister' | 'tracking' | 'waiting' | 'beds' | 'resus' | 'bloodBank' | 'onCall'>('tracking');
   const [showNewPatientModal, setShowNewPatientModal] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patients, setPatients] = useState<EDPatient[]>([]);
@@ -752,6 +752,172 @@ export default function Emergency() {
   });
   const { data: healthStatus } = useAIHealth();
   const isAIOnline = healthStatus?.status === 'connected';
+
+  // Unified Triage & Register workflow state
+  const [currentStep, setCurrentStep] = useState(1);
+  const [unifiedFormData, setUnifiedFormData] = useState({
+    // Patient selection
+    selectedPatient: null as Patient | null,
+    isNewPatient: false,
+    // New patient data
+    firstName: '',
+    lastName: '',
+    dateOfBirth: '',
+    gender: 'MALE',
+    phone: '',
+    // Triage data
+    chiefComplaint: '',
+    painScale: 5,
+    mentalStatus: 'alert' as 'alert' | 'voice' | 'pain' | 'unresponsive',
+    bloodPressureSys: 120,
+    bloodPressureDia: 80,
+    heartRate: 80,
+    respiratoryRate: 16,
+    oxygenSaturation: 98,
+    temperature: 37.0,
+    isPregnant: false,
+    arrivalMode: 'WALK_IN',
+    notes: '',
+  });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Patient[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [registering, setRegistering] = useState(false);
+
+  // Search patients for unified workflow
+  const searchPatients = async (query: string) => {
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const response = await patientApi.getAll({ search: query, limit: 10 });
+      setSearchResults(response.data.data || []);
+    } catch (error) {
+      console.error('Failed to search patients:', error);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  useEffect(() => {
+    const debounce = setTimeout(() => {
+      searchPatients(searchQuery);
+    }, 300);
+    return () => clearTimeout(debounce);
+  }, [searchQuery]);
+
+  // Reset unified workflow
+  const resetUnifiedWorkflow = () => {
+    setCurrentStep(1);
+    setUnifiedFormData({
+      selectedPatient: null,
+      isNewPatient: false,
+      firstName: '',
+      lastName: '',
+      dateOfBirth: '',
+      gender: 'MALE',
+      phone: '',
+      chiefComplaint: '',
+      painScale: 5,
+      mentalStatus: 'alert',
+      bloodPressureSys: 120,
+      bloodPressureDia: 80,
+      heartRate: 80,
+      respiratoryRate: 16,
+      oxygenSaturation: 98,
+      temperature: 37.0,
+      isPregnant: false,
+      arrivalMode: 'WALK_IN',
+      notes: '',
+    });
+    setEsiResult(null);
+    setSearchQuery('');
+    setSearchResults([]);
+  };
+
+  // Handle AI Triage for unified workflow
+  const handleUnifiedAITriage = async () => {
+    if (!unifiedFormData.chiefComplaint.trim()) {
+      toast.error('Please enter the chief complaint');
+      return;
+    }
+
+    try {
+      setTriageLoading(true);
+      setEsiResult(null);
+      const response = await emergencyApi.calculateESI({
+        chiefComplaint: unifiedFormData.chiefComplaint,
+        vitals: {
+          heartRate: unifiedFormData.heartRate,
+          respiratoryRate: unifiedFormData.respiratoryRate,
+          oxygenSaturation: unifiedFormData.oxygenSaturation,
+          bloodPressureSys: unifiedFormData.bloodPressureSys,
+          bloodPressureDia: unifiedFormData.bloodPressureDia,
+          temperature: unifiedFormData.temperature,
+        },
+        painScale: unifiedFormData.painScale,
+        mentalStatus: unifiedFormData.mentalStatus,
+        isPregnant: unifiedFormData.isPregnant,
+      });
+      setEsiResult(response.data.data);
+      toast.success(`ESI Level ${response.data.data.esiLevel} - ${response.data.data.category}`);
+      setCurrentStep(3); // Move to results step
+    } catch (error) {
+      console.error('Failed to calculate ESI:', error);
+      toast.error('Failed to calculate ESI level');
+    } finally {
+      setTriageLoading(false);
+    }
+  };
+
+  // Handle final registration
+  const handleUnifiedRegistration = async () => {
+    if (!unifiedFormData.selectedPatient && !unifiedFormData.isNewPatient) {
+      toast.error('Please select or create a patient');
+      return;
+    }
+    if (!unifiedFormData.chiefComplaint.trim()) {
+      toast.error('Please enter chief complaint');
+      return;
+    }
+    if (!esiResult) {
+      toast.error('Please calculate ESI level first');
+      return;
+    }
+
+    setRegistering(true);
+    try {
+      const data: any = {
+        chiefComplaint: unifiedFormData.chiefComplaint,
+        esiLevel: esiResult.esiLevel,
+        arrivalMode: unifiedFormData.arrivalMode,
+        triageNotes: unifiedFormData.notes || undefined,
+      };
+
+      if (unifiedFormData.selectedPatient) {
+        data.patientId = unifiedFormData.selectedPatient.id;
+      } else if (unifiedFormData.isNewPatient) {
+        data.firstName = unifiedFormData.firstName;
+        data.lastName = unifiedFormData.lastName;
+        data.dateOfBirth = unifiedFormData.dateOfBirth;
+        data.gender = unifiedFormData.gender;
+        data.phone = unifiedFormData.phone;
+      }
+
+      await emergencyApi.registerPatient(data);
+      toast.success('Patient registered in ED successfully!');
+      resetUnifiedWorkflow();
+      setActiveTab('tracking'); // Switch to tracking tab
+      await fetchData(false);
+    } catch (error: any) {
+      console.error('Failed to register patient:', error);
+      toast.error(error.response?.data?.message || 'Failed to register patient');
+    } finally {
+      setRegistering(false);
+    }
+  };
 
   // Fetch ED patients and stats (reusable function)
   const fetchData = async (showLoader = true) => {
@@ -905,8 +1071,8 @@ export default function Emergency() {
   };
 
   const tabs = [
+    { id: 'triageRegister', label: 'Triage & Register' },
     { id: 'tracking', label: 'Patient Tracking', count: patients.length },
-    { id: 'triage', label: 'Triage Station' },
     { id: 'waiting', label: 'Waiting Room', count: patients.filter(p => p.status === 'WAITING').length },
     { id: 'beds', label: 'ED Beds' },
     { id: 'resus', label: 'Resuscitation', count: criticalCount },
@@ -946,17 +1112,11 @@ export default function Emergency() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            {isAIOnline && (
-              <button
-                onClick={handleAITriage}
-                className="group relative inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-white overflow-hidden transition-all duration-300 hover:scale-105 hover:shadow-lg bg-white/20 backdrop-blur-sm border border-white/30 hover:bg-white/30"
-              >
-                <SparklesIcon className="h-5 w-5 transition-transform group-hover:rotate-12" />
-                AI Triage
-              </button>
-            )}
             <button
-              onClick={() => setShowNewPatientModal(true)}
+              onClick={() => {
+                resetUnifiedWorkflow();
+                setActiveTab('triageRegister');
+              }}
               className="group relative inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-red-700 overflow-hidden transition-all duration-300 hover:scale-105 hover:shadow-lg bg-white backdrop-blur-sm border border-white/30"
             >
               <UserPlusIcon className="h-5 w-5 transition-transform group-hover:scale-110" />
@@ -1049,6 +1209,559 @@ export default function Emergency() {
           </nav>
         </div>
       </div>
+
+      {/* Unified Triage & Register Tab */}
+      {activeTab === 'triageRegister' && (
+        <div className="space-y-6">
+          {/* Progress Steps */}
+          <div className="relative overflow-hidden backdrop-blur-xl bg-white rounded-2xl border border-gray-200 shadow-xl p-6">
+            <div className="flex items-center justify-between mb-8">
+              {[
+                { num: 1, label: 'Patient Selection' },
+                { num: 2, label: 'Triage Assessment' },
+                { num: 3, label: 'ESI Result' },
+                { num: 4, label: 'Register' },
+              ].map((step, idx) => (
+                <div key={step.num} className="flex items-center flex-1">
+                  <div className="flex flex-col items-center flex-1">
+                    <div className={clsx(
+                      'w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg transition-all',
+                      currentStep === step.num && 'bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-lg scale-110',
+                      currentStep > step.num && 'bg-green-500 text-white',
+                      currentStep < step.num && 'bg-gray-200 text-gray-500'
+                    )}>
+                      {currentStep > step.num ? '✓' : step.num}
+                    </div>
+                    <p className={clsx(
+                      'text-sm mt-2 font-medium',
+                      currentStep === step.num && 'text-red-600',
+                      currentStep > step.num && 'text-green-600',
+                      currentStep < step.num && 'text-gray-500'
+                    )}>{step.label}</p>
+                  </div>
+                  {idx < 3 && (
+                    <div className={clsx(
+                      'h-1 flex-1 mx-2 rounded transition-all',
+                      currentStep > step.num ? 'bg-green-500' : 'bg-gray-200'
+                    )} />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Step 1: Patient Selection */}
+            {currentStep === 1 && (
+              <div className="space-y-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">Step 1: Select or Create Patient</h2>
+                
+                {/* Mode Toggle */}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUnifiedFormData({ ...unifiedFormData, isNewPatient: false, selectedPatient: null });
+                      setSearchQuery('');
+                      setSearchResults([]);
+                    }}
+                    className={clsx(
+                      'flex-1 py-3 px-4 rounded-xl font-medium transition-all',
+                      !unifiedFormData.isNewPatient
+                        ? 'bg-red-500 text-white shadow-lg'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    )}
+                  >
+                    Existing Patient
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUnifiedFormData({ ...unifiedFormData, isNewPatient: true, selectedPatient: null });
+                      setSearchQuery('');
+                      setSearchResults([]);
+                    }}
+                    className={clsx(
+                      'flex-1 py-3 px-4 rounded-xl font-medium transition-all',
+                      unifiedFormData.isNewPatient
+                        ? 'bg-red-500 text-white shadow-lg'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    )}
+                  >
+                    New Patient
+                  </button>
+                </div>
+
+                {/* Existing Patient Search */}
+                {!unifiedFormData.isNewPatient ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Search Patient <span className="text-red-500">*</span>
+                    </label>
+                    {unifiedFormData.selectedPatient ? (
+                      <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-xl">
+                        <div>
+                          <span className="font-medium text-gray-900">
+                            {unifiedFormData.selectedPatient.firstName} {unifiedFormData.selectedPatient.lastName}
+                          </span>
+                          <span className="ml-2 text-sm text-gray-500">
+                            MRN: {unifiedFormData.selectedPatient.mrn}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setUnifiedFormData({ ...unifiedFormData, selectedPatient: null })}
+                          className="text-sm text-red-600 hover:text-red-700 font-medium"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <div className="relative">
+                          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                          <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Search by name or MRN..."
+                            className="w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500/50"
+                          />
+                          {searching && (
+                            <ArrowPathIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 animate-spin text-gray-400" />
+                          )}
+                        </div>
+                        {searchResults.length > 0 && (
+                          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                            {searchResults.map((patient) => (
+                              <button
+                                key={patient.id}
+                                type="button"
+                                onClick={() => {
+                                  setUnifiedFormData({ ...unifiedFormData, selectedPatient: patient });
+                                  setSearchQuery('');
+                                  setSearchResults([]);
+                                }}
+                                className="w-full text-left px-4 py-2 hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl"
+                              >
+                                <span className="font-medium">{patient.firstName} {patient.lastName}</span>
+                                <span className="ml-2 text-sm text-gray-500">MRN: {patient.mrn}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* New Patient Form */
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          First Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={unifiedFormData.firstName}
+                          onChange={(e) => setUnifiedFormData({ ...unifiedFormData, firstName: e.target.value })}
+                          className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Last Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={unifiedFormData.lastName}
+                          onChange={(e) => setUnifiedFormData({ ...unifiedFormData, lastName: e.target.value })}
+                          className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Date of Birth</label>
+                        <input
+                          type="date"
+                          value={unifiedFormData.dateOfBirth}
+                          onChange={(e) => setUnifiedFormData({ ...unifiedFormData, dateOfBirth: e.target.value })}
+                          className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
+                        <select
+                          value={unifiedFormData.gender}
+                          onChange={(e) => setUnifiedFormData({ ...unifiedFormData, gender: e.target.value })}
+                          className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50"
+                        >
+                          <option value="MALE">Male</option>
+                          <option value="FEMALE">Female</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                      <input
+                        type="tel"
+                        value={unifiedFormData.phone}
+                        onChange={(e) => setUnifiedFormData({ ...unifiedFormData, phone: e.target.value })}
+                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Navigation */}
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={resetUnifiedWorkflow}
+                    className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!unifiedFormData.selectedPatient && !unifiedFormData.isNewPatient) {
+                        toast.error('Please select or create a patient');
+                        return;
+                      }
+                      if (unifiedFormData.isNewPatient && (!unifiedFormData.firstName.trim() || !unifiedFormData.lastName.trim())) {
+                        toast.error('Please enter patient first and last name');
+                        return;
+                      }
+                      setCurrentStep(2);
+                    }}
+                    disabled={!unifiedFormData.selectedPatient && !unifiedFormData.isNewPatient}
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-rose-500 text-white font-semibold hover:from-red-600 hover:to-rose-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next: Triage Assessment
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Triage Assessment */}
+            {currentStep === 2 && (
+              <div className="space-y-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">Step 2: Triage Assessment</h2>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Chief Complaint <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={unifiedFormData.chiefComplaint}
+                    onChange={(e) => setUnifiedFormData({ ...unifiedFormData, chiefComplaint: e.target.value })}
+                    placeholder="e.g., Chest pain, difficulty breathing, abdominal pain..."
+                    rows={3}
+                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500/50 resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Mental Status (AVPU)</label>
+                  <select
+                    value={unifiedFormData.mentalStatus}
+                    onChange={(e) => setUnifiedFormData({ ...unifiedFormData, mentalStatus: e.target.value as any })}
+                    className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50"
+                  >
+                    <option value="alert">Alert</option>
+                    <option value="voice">Responds to Voice</option>
+                    <option value="pain">Responds to Pain</option>
+                    <option value="unresponsive">Unresponsive</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Pain Scale (0-10): <span className="text-red-500 font-bold">{unifiedFormData.painScale}</span>
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="10"
+                    value={unifiedFormData.painScale}
+                    onChange={(e) => setUnifiedFormData({ ...unifiedFormData, painScale: Number(e.target.value) })}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-500"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>No Pain</span>
+                    <span>Worst Pain</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">BP Systolic</label>
+                    <input
+                      type="number"
+                      value={unifiedFormData.bloodPressureSys}
+                      onChange={(e) => setUnifiedFormData({ ...unifiedFormData, bloodPressureSys: Number(e.target.value) })}
+                      className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">BP Diastolic</label>
+                    <input
+                      type="number"
+                      value={unifiedFormData.bloodPressureDia}
+                      onChange={(e) => setUnifiedFormData({ ...unifiedFormData, bloodPressureDia: Number(e.target.value) })}
+                      className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Heart Rate (bpm)</label>
+                    <input
+                      type="number"
+                      value={unifiedFormData.heartRate}
+                      onChange={(e) => setUnifiedFormData({ ...unifiedFormData, heartRate: Number(e.target.value) })}
+                      className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Respiratory Rate</label>
+                    <input
+                      type="number"
+                      value={unifiedFormData.respiratoryRate}
+                      onChange={(e) => setUnifiedFormData({ ...unifiedFormData, respiratoryRate: Number(e.target.value) })}
+                      className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">SpO2 (%)</label>
+                    <input
+                      type="number"
+                      value={unifiedFormData.oxygenSaturation}
+                      onChange={(e) => setUnifiedFormData({ ...unifiedFormData, oxygenSaturation: Number(e.target.value) })}
+                      className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Temperature (°C)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={unifiedFormData.temperature}
+                      onChange={(e) => setUnifiedFormData({ ...unifiedFormData, temperature: Number(e.target.value) })}
+                      className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-50">
+                  <input
+                    type="checkbox"
+                    id="isPregnantUnified"
+                    checked={unifiedFormData.isPregnant}
+                    onChange={(e) => setUnifiedFormData({ ...unifiedFormData, isPregnant: e.target.checked })}
+                    className="w-4 h-4 rounded text-red-500 focus:ring-red-500/50"
+                  />
+                  <label htmlFor="isPregnantUnified" className="text-sm text-gray-700">
+                    Patient is Pregnant
+                  </label>
+                </div>
+
+                {/* Navigation */}
+                <div className="flex justify-between gap-3 pt-4 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(1)}
+                    className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleUnifiedAITriage}
+                    disabled={triageLoading || !unifiedFormData.chiefComplaint.trim()}
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-rose-500 text-white font-semibold hover:from-red-600 hover:to-rose-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {triageLoading ? (
+                      <>
+                        <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                        Calculating ESI...
+                      </>
+                    ) : (
+                      <>
+                        <SparklesIcon className="h-5 w-5" />
+                        Calculate ESI Level
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: ESI Result */}
+            {currentStep === 3 && esiResult && (
+              <div className="space-y-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">Step 3: ESI Result</h2>
+
+                {/* ESI Level Display */}
+                <div className={clsx(
+                  'relative overflow-hidden p-8 rounded-2xl text-center shadow-lg',
+                  esiColors[esiResult.esiLevel]
+                )}>
+                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent"></div>
+                  <p className="text-6xl font-bold">{esiResult.esiLevel}</p>
+                  <p className="text-2xl font-semibold mt-2">{esiResult.category}</p>
+                  <p className="text-sm mt-2 opacity-90">
+                    Estimated Resources: {esiResult.estimatedResources}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Reasoning */}
+                  <div className="p-4 rounded-xl bg-gray-50">
+                    <h4 className="font-medium text-gray-900 mb-3">Clinical Reasoning</h4>
+                    <ul className="space-y-2">
+                      {esiResult.reasoning.map((reason, idx) => (
+                        <li key={idx} className="flex items-start gap-2 text-sm text-gray-600">
+                          <CheckCircleIcon className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                          {reason}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* Recommendations */}
+                  <div className="p-4 rounded-xl bg-gray-50">
+                    <h4 className="font-medium text-gray-900 mb-3">Recommendations</h4>
+                    <ul className="space-y-2">
+                      {esiResult.recommendations.map((rec, idx) => (
+                        <li key={idx} className="flex items-start gap-2 text-sm text-gray-600">
+                          <span className="w-2 h-2 rounded-full bg-purple-500 flex-shrink-0 mt-2"></span>
+                          {rec}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Navigation */}
+                <div className="flex justify-between gap-3 pt-4 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(2)}
+                    className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+                  >
+                    Back to Triage
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(4)}
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-rose-500 text-white font-semibold hover:from-red-600 hover:to-rose-600 transition-all"
+                  >
+                    Next: Register Patient
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 4: Final Registration */}
+            {currentStep === 4 && esiResult && (
+              <div className="space-y-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">Step 4: Register Patient in ED</h2>
+
+                {/* Patient Summary */}
+                <div className="bg-gray-50 rounded-xl p-5">
+                  <h3 className="font-semibold text-gray-900 mb-3">Patient Information</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-500">Name</p>
+                      <p className="font-medium text-gray-900">
+                        {unifiedFormData.selectedPatient
+                          ? `${unifiedFormData.selectedPatient.firstName} ${unifiedFormData.selectedPatient.lastName}`
+                          : `${unifiedFormData.firstName} ${unifiedFormData.lastName}`}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">ESI Level</p>
+                      <p className="font-medium text-gray-900">
+                        Level {esiResult.esiLevel} - {esiResult.category}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Chief Complaint</p>
+                      <p className="font-medium text-gray-900">{unifiedFormData.chiefComplaint}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Estimated Resources</p>
+                      <p className="font-medium text-gray-900">{esiResult.estimatedResources}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional Details */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Arrival Mode</label>
+                  <select
+                    value={unifiedFormData.arrivalMode}
+                    onChange={(e) => setUnifiedFormData({ ...unifiedFormData, arrivalMode: e.target.value })}
+                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50"
+                  >
+                    <option value="WALK_IN">Walk-in</option>
+                    <option value="AMBULANCE">Ambulance</option>
+                    <option value="POLICE">Police</option>
+                    <option value="TRANSFER">Transfer</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Additional Notes (Optional)</label>
+                  <textarea
+                    value={unifiedFormData.notes}
+                    onChange={(e) => setUnifiedFormData({ ...unifiedFormData, notes: e.target.value })}
+                    placeholder="Any additional notes or observations..."
+                    rows={3}
+                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500/50 resize-none"
+                  />
+                </div>
+
+                {/* Navigation */}
+                <div className="flex justify-between gap-3 pt-4 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(3)}
+                    className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleUnifiedRegistration}
+                    disabled={registering}
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold hover:from-green-600 hover:to-emerald-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {registering ? (
+                      <>
+                        <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                        Registering...
+                      </>
+                    ) : (
+                      <>
+                        <UserPlusIcon className="h-5 w-5" />
+                        Register Patient in ED
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Incoming Ambulances - Feature 6 */}
       {activeTab === 'tracking' && incomingAmbulances.length > 0 && (
@@ -1341,250 +2054,6 @@ export default function Emergency() {
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {activeTab === 'triage' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Triage Form */}
-          <div
-            className="relative overflow-hidden backdrop-blur-xl bg-white rounded-2xl border border-gray-200 shadow-xl"
-            style={{ animationDelay: '0.4s' }}
-          >
-            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent"></div>
-            <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-200">
-              <div className="p-2 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 shadow-lg">
-                <SparklesIcon className="h-5 w-5 text-white" />
-              </div>
-              <h3 className="font-semibold text-gray-900">AI Triage Assistant</h3>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Chief Complaint *
-                </label>
-                <input
-                  type="text"
-                  value={triageForm.chiefComplaint}
-                  onChange={(e) => setTriageForm({ ...triageForm, chiefComplaint: e.target.value })}
-                  placeholder="e.g., Chest pain, shortness of breath, abdominal pain"
-                  className="w-full px-4 py-3 rounded-xl bg-gray-50 backdrop-blur-sm border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Mental Status (AVPU)
-                </label>
-                <select
-                  value={triageForm.mentalStatus}
-                  onChange={(e) => setTriageForm({ ...triageForm, mentalStatus: e.target.value as any })}
-                  className="w-full px-4 py-3 rounded-xl bg-gray-50 backdrop-blur-sm border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all"
-                >
-                  <option value="alert">Alert</option>
-                  <option value="voice">Responds to Voice</option>
-                  <option value="pain">Responds to Pain</option>
-                  <option value="unresponsive">Unresponsive</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Pain Scale (0-10): <span className="text-red-500 font-bold">{triageForm.painScale}</span>
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="10"
-                  value={triageForm.painScale}
-                  onChange={(e) => setTriageForm({ ...triageForm, painScale: Number(e.target.value) })}
-                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-500"
-                />
-                <div className="flex justify-between text-xs text-gray-500 mt-1">
-                  <span>No Pain</span>
-                  <span>Worst Pain</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">BP Systolic</label>
-                  <input
-                    type="number"
-                    value={triageForm.bloodPressureSys}
-                    onChange={(e) => setTriageForm({ ...triageForm, bloodPressureSys: Number(e.target.value) })}
-                    className="w-full px-4 py-3 rounded-xl bg-gray-50 backdrop-blur-sm border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">BP Diastolic</label>
-                  <input
-                    type="number"
-                    value={triageForm.bloodPressureDia}
-                    onChange={(e) => setTriageForm({ ...triageForm, bloodPressureDia: Number(e.target.value) })}
-                    className="w-full px-4 py-3 rounded-xl bg-gray-50 backdrop-blur-sm border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Heart Rate (bpm)</label>
-                  <input
-                    type="number"
-                    value={triageForm.heartRate}
-                    onChange={(e) => setTriageForm({ ...triageForm, heartRate: Number(e.target.value) })}
-                    className="w-full px-4 py-3 rounded-xl bg-gray-50 backdrop-blur-sm border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Respiratory Rate</label>
-                  <input
-                    type="number"
-                    value={triageForm.respiratoryRate}
-                    onChange={(e) => setTriageForm({ ...triageForm, respiratoryRate: Number(e.target.value) })}
-                    className="w-full px-4 py-3 rounded-xl bg-gray-50 backdrop-blur-sm border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">SpO2 (%)</label>
-                  <input
-                    type="number"
-                    value={triageForm.oxygenSaturation}
-                    onChange={(e) => setTriageForm({ ...triageForm, oxygenSaturation: Number(e.target.value) })}
-                    className="w-full px-4 py-3 rounded-xl bg-gray-50 backdrop-blur-sm border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Temperature (C)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={triageForm.temperature}
-                    onChange={(e) => setTriageForm({ ...triageForm, temperature: Number(e.target.value) })}
-                    className="w-full px-4 py-3 rounded-xl bg-gray-50 backdrop-blur-sm border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 backdrop-blur-sm">
-                <input
-                  type="checkbox"
-                  id="isPregnant"
-                  checked={triageForm.isPregnant}
-                  onChange={(e) => setTriageForm({ ...triageForm, isPregnant: e.target.checked })}
-                  className="w-4 h-4 rounded text-red-500 focus:ring-red-500/50"
-                />
-                <label htmlFor="isPregnant" className="text-sm text-gray-700">
-                  Patient is Pregnant
-                </label>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={handleAITriage}
-                  disabled={triageLoading || !triageForm.chiefComplaint.trim()}
-                  className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-medium text-white transition-all duration-300 hover:scale-[1.02] hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-r from-red-500 to-rose-500 shadow-md"
-                >
-                  {triageLoading ? (
-                    <ArrowPathIcon className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <SparklesIcon className="h-5 w-5" />
-                  )}
-                  Calculate ESI Level
-                </button>
-                <button
-                  onClick={resetTriageForm}
-                  className="inline-flex items-center px-5 py-3 rounded-xl font-medium text-gray-700 bg-white backdrop-blur-sm border border-gray-200 hover:bg-gray-50 transition-all duration-300 hover:shadow-md"
-                >
-                  Reset
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* ESI Result */}
-          <div
-            className="relative overflow-hidden backdrop-blur-xl bg-white rounded-2xl border border-gray-200 shadow-xl"
-            style={{ animationDelay: '0.5s' }}
-          >
-            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent"></div>
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="font-semibold text-gray-900">Triage Result</h3>
-            </div>
-            {!esiResult ? (
-              <div className="p-8 text-center">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gray-100 mb-4">
-                  <ExclamationTriangleIcon className="h-8 w-8 text-gray-400" />
-                </div>
-                <p className="text-gray-500">Enter patient information and calculate ESI level</p>
-              </div>
-            ) : (
-              <div className="p-6 space-y-5">
-                {/* ESI Level Display */}
-                <div className={clsx(
-                  'relative overflow-hidden p-8 rounded-2xl text-center shadow-lg',
-                  esiColors[esiResult.esiLevel]
-                )}>
-                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent"></div>
-                  <p className="text-6xl font-bold">{esiResult.esiLevel}</p>
-                  <p className="text-xl font-semibold mt-2">{esiResult.category}</p>
-                  <p className="text-sm mt-2 opacity-90">
-                    Estimated Resources: {esiResult.estimatedResources}
-                  </p>
-                </div>
-
-                {/* Reasoning */}
-                <div className="p-4 rounded-xl bg-gray-50 backdrop-blur-sm">
-                  <h4 className="font-medium text-gray-900 mb-3">Clinical Reasoning</h4>
-                  <ul className="space-y-2">
-                    {esiResult.reasoning.map((reason, idx) => (
-                      <li key={idx} className="flex items-start gap-2 text-sm text-gray-600">
-                        <CheckCircleIcon className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
-                        {reason}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* Recommendations */}
-                <div className="p-4 rounded-xl bg-gray-50 backdrop-blur-sm">
-                  <h4 className="font-medium text-gray-900 mb-3">Recommendations</h4>
-                  <ul className="space-y-2">
-                    {esiResult.recommendations.map((rec, idx) => (
-                      <li key={idx} className="flex items-start gap-2 text-sm text-gray-600">
-                        <span className="w-2 h-2 rounded-full bg-purple-500 flex-shrink-0 mt-2"></span>
-                        {rec}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* ESI Guide */}
-                <div className="p-4 rounded-xl bg-gray-50 backdrop-blur-sm">
-                  <h4 className="font-medium text-gray-900 mb-3 text-sm">ESI Level Guide</h4>
-                  <div className="grid grid-cols-5 gap-2">
-                    {[1, 2, 3, 4, 5].map(level => (
-                      <div
-                        key={level}
-                        className={clsx(
-                          'p-2 rounded-xl text-center text-xs transition-all',
-                          esiColors[level],
-                          esiResult.esiLevel === level && 'ring-2 ring-black ring-offset-2'
-                        )}
-                      >
-                        <p className="font-bold">{level}</p>
-                        <p className="opacity-90">{esiLabels[level]}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
       )}
 
