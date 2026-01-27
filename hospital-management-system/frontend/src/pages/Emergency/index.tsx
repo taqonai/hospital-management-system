@@ -1183,6 +1183,107 @@ export default function Emergency() {
                             </span>
                           )}
                         </div>
+                        
+                        {/* Feature 7: Real-time Vitals Display */}
+                        {patient.vitals && patient.vitals.length > 0 && (() => {
+                          const latestVitals = patient.vitals[0];
+                          
+                          // Helper function to get vital status
+                          const getVitalStatus = (vital: string, value: number | string | undefined) => {
+                            if (value === undefined || value === null) return 'normal';
+                            const numValue = typeof value === 'string' ? parseFloat(value) : value;
+                            
+                            switch (vital) {
+                              case 'hr':
+                                if (numValue < 40 || numValue > 150) return 'critical';
+                                if (numValue < 50 || numValue > 120) return 'warning';
+                                return 'normal';
+                              case 'spo2':
+                                if (numValue < 90) return 'critical';
+                                if (numValue < 95) return 'warning';
+                                return 'normal';
+                              case 'sbp':
+                                if (numValue < 80 || numValue > 200) return 'critical';
+                                if (numValue < 90 || numValue > 180) return 'warning';
+                                return 'normal';
+                              case 'rr':
+                                if (numValue < 8 || numValue > 30) return 'critical';
+                                if (numValue < 10 || numValue > 25) return 'warning';
+                                return 'normal';
+                              case 'temp':
+                                if (numValue > 40) return 'critical';
+                                if (numValue > 38.5) return 'warning';
+                                return 'normal';
+                              default:
+                                return 'normal';
+                            }
+                          };
+                          
+                          const getVitalColorClasses = (status: string) => {
+                            switch (status) {
+                              case 'critical': return 'bg-red-100 text-red-700 border-red-300';
+                              case 'warning': return 'bg-yellow-100 text-yellow-700 border-yellow-300';
+                              default: return 'bg-green-100 text-green-700 border-green-300';
+                            }
+                          };
+                          
+                          return (
+                            <div className="flex flex-wrap gap-2 mt-3">
+                              {latestVitals.heartRate && (
+                                <span className={clsx(
+                                  'inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border',
+                                  getVitalColorClasses(getVitalStatus('hr', latestVitals.heartRate))
+                                )}>
+                                  <span className="font-semibold">HR:</span> {latestVitals.heartRate}
+                                </span>
+                              )}
+                              
+                              {latestVitals.bloodPressureSys && latestVitals.bloodPressureDia && (
+                                <span className={clsx(
+                                  'inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border',
+                                  getVitalColorClasses(getVitalStatus('sbp', latestVitals.bloodPressureSys))
+                                )}>
+                                  <span className="font-semibold">BP:</span> {latestVitals.bloodPressureSys}/{latestVitals.bloodPressureDia}
+                                </span>
+                              )}
+                              
+                              {latestVitals.oxygenSaturation && (
+                                <span className={clsx(
+                                  'inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border',
+                                  getVitalColorClasses(getVitalStatus('spo2', latestVitals.oxygenSaturation))
+                                )}>
+                                  <span className="font-semibold">SpO2:</span> {latestVitals.oxygenSaturation}%
+                                </span>
+                              )}
+                              
+                              {latestVitals.respiratoryRate && (
+                                <span className={clsx(
+                                  'inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border',
+                                  getVitalColorClasses(getVitalStatus('rr', latestVitals.respiratoryRate))
+                                )}>
+                                  <span className="font-semibold">RR:</span> {latestVitals.respiratoryRate}
+                                </span>
+                              )}
+                              
+                              {latestVitals.temperature && (
+                                <span className={clsx(
+                                  'inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border',
+                                  getVitalColorClasses(getVitalStatus('temp', latestVitals.temperature))
+                                )}>
+                                  <span className="font-semibold">Temp:</span> {latestVitals.temperature}°C
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
+                        
+                        {(!patient.vitals || patient.vitals.length === 0) && (
+                          <div className="mt-3">
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-500 border border-gray-300">
+                              No vitals recorded
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="text-right">

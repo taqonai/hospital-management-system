@@ -2497,6 +2497,143 @@ If multiple tests are present, extract the most prominent one or all if clearly 
         )
 
 
+# ============= Lab Result Clinical Context Generation =============
+
+class LabResultContextRequest(BaseModel):
+    """Request for generating clinical context from lab results"""
+    testName: str
+    resultValue: str
+    unit: Optional[str] = None
+    normalRange: Optional[str] = None
+    isAbnormal: bool = False
+    isCritical: bool = False
+    comments: Optional[str] = None
+    patientAge: Optional[int] = None
+    patientGender: Optional[str] = None
+    patientConditions: Optional[List[str]] = None
+
+
+class LabResultContextResponse(BaseModel):
+    """Response with AI-generated clinical context"""
+    success: bool
+    clinicalContext: Optional[str] = None
+    interpretation: Optional[str] = None
+    recommendations: Optional[List[str]] = None
+    concerns: Optional[List[str]] = None
+    followUpNeeded: bool = False
+    error: Optional[str] = None
+
+
+@app.post("/api/laboratory/generate-clinical-context", response_model=LabResultContextResponse)
+async def generate_clinical_context(request: LabResultContextRequest):
+    """
+    Generate AI-powered clinical context from lab result data
+
+    For doctors and nurses to understand the clinical significance of lab results.
+    Provides interpretation, recommendations, and potential concerns.
+    """
+    try:
+        if not openai_manager.is_available():
+            return LabResultContextResponse(
+                success=False,
+                error="AI service not available"
+            )
+
+        # Build patient context
+        patient_info = ""
+        if request.patientAge:
+            patient_info += f"Patient age: {request.patientAge} years old\n"
+        if request.patientGender:
+            patient_info += f"Gender: {request.patientGender}\n"
+        if request.patientConditions:
+            patient_info += f"Known conditions: {', '.join(request.patientConditions)}\n"
+
+        # Build result context
+        result_status = "CRITICAL" if request.isCritical else ("ABNORMAL" if request.isAbnormal else "NORMAL")
+
+        prompt = f"""You are a clinical assistant helping doctors and nurses interpret lab results. Analyze the following lab result and provide clinical context.
+
+Lab Test: {request.testName}
+Result: {request.resultValue} {request.unit or ''}
+Normal Range: {request.normalRange or 'Not provided'}
+Status: {result_status}
+{f'Comments: {request.comments}' if request.comments else ''}
+
+{patient_info if patient_info else ''}
+
+Provide a comprehensive clinical interpretation including:
+
+1. **Clinical Interpretation**: What does this result mean clinically? Is it significant?
+
+2. **Potential Implications**: What conditions or issues might this indicate?
+
+3. **Recommendations**: What should the clinical team consider or do next?
+
+4. **Concerns**: Any immediate concerns or red flags?
+
+5. **Follow-up**: Does this result require follow-up testing or monitoring?
+
+Be specific, concise, and focus on actionable clinical insights. Use medical terminology appropriate for healthcare professionals."""
+
+        response = openai_manager.get_client().chat.completions.create(
+            model=Models.GPT_4O_MINI,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an expert clinical assistant helping healthcare providers interpret laboratory results. Provide clear, concise, evidence-based clinical interpretations."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.3,
+            max_tokens=800
+        )
+
+        ai_response = response.choices[0].message.content
+
+        # Parse the response to extract structured data
+        lines = ai_response.split('\n')
+        clinical_context = ai_response
+
+        # Extract recommendations (lines starting with numbers or bullets)
+        recommendations = []
+        concerns = []
+        current_section = None
+
+        for line in lines:
+            line = line.strip()
+            if 'recommendation' in line.lower():
+                current_section = 'recommendations'
+            elif 'concern' in line.lower() or 'red flag' in line.lower():
+                current_section = 'concerns'
+            elif line and (line.startswith('-') or line.startswith('•') or (len(line) > 0 and line[0].isdigit())):
+                content = line.lstrip('-•0123456789. ')
+                if current_section == 'recommendations' and content:
+                    recommendations.append(content)
+                elif current_section == 'concerns' and content:
+                    concerns.append(content)
+
+        # Determine if follow-up is needed
+        follow_up_needed = request.isCritical or request.isAbnormal or 'follow-up' in ai_response.lower() or 'repeat' in ai_response.lower()
+
+        return LabResultContextResponse(
+            success=True,
+            clinicalContext=clinical_context,
+            interpretation=ai_response.split('\n')[0] if ai_response else None,
+            recommendations=recommendations if recommendations else ["Review result with patient", "Consider clinical context"],
+            concerns=concerns if concerns else (["Critical value - immediate attention required"] if request.isCritical else None),
+            followUpNeeded=follow_up_needed
+        )
+
+    except Exception as e:
+        return LabResultContextResponse(
+            success=False,
+            error=str(e)
+        )
+
+
 # ============= Early Warning System (EWS) Endpoints =============
 
 class EWSVitalsRequest(BaseModel):
