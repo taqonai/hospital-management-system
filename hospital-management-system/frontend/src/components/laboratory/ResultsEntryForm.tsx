@@ -28,6 +28,7 @@ interface ResultsEntryFormData {
 }
 
 interface ResultsEntryFormProps {
+  orderId: string;
   testId: string;
   testName: string;
   patientName?: string;
@@ -98,6 +99,7 @@ const getStatusConfig = (status: ResultStatus) => {
 };
 
 export default function ResultsEntryForm({
+  orderId,
   testId,
   testName,
   patientName,
@@ -121,23 +123,23 @@ export default function ResultsEntryForm({
   useEffect(() => {
     const loadExistingResult = async () => {
       try {
-        const orders = await laboratoryApi.getOrders({ limit: 100 });
-        // Find the test in the orders
-        for (const order of orders.data.data || []) {
-          const test = order.tests?.find((t: any) => t.id === testId);
-          if (test && test.result) {
-            setExistingResult(test);
-            // Pre-fill form with existing data
-            setParameters([{
-              name: testName,
-              value: test.resultValue?.toString() || test.result || '',
-              unit: test.unit || '',
-              referenceRange: test.normalRange || '',
-              notes: test.comments || '',
-            }]);
-            setOverallNotes(test.comments || '');
-            break;
-          }
+        // Fetch the specific order by ID
+        const response = await laboratoryApi.getOrderById(orderId);
+        const order = response.data.data;
+
+        // Find the test in this order
+        const test = order.tests?.find((t: any) => t.id === testId);
+        if (test && test.result) {
+          setExistingResult(test);
+          // Pre-fill form with existing data
+          setParameters([{
+            name: testName,
+            value: test.resultValue?.toString() || test.result || '',
+            unit: test.unit || '',
+            referenceRange: test.normalRange || '',
+            notes: test.comments || '',
+          }]);
+          setOverallNotes(test.comments || '');
         }
       } catch (error) {
         console.error('Failed to load existing result:', error);
@@ -145,7 +147,7 @@ export default function ResultsEntryForm({
     };
 
     loadExistingResult();
-  }, [testId, testName]);
+  }, [orderId, testId, testName]);
 
   const {
     formState: { errors },
