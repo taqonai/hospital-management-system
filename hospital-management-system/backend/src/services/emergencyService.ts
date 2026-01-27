@@ -1046,33 +1046,28 @@ export class EmergencyService {
             vehicleType: true,
           },
         },
-        pickupLocation: true,
-        dropoffLocation: true,
       },
-      orderBy: { estimatedArrival: 'asc' },
+      orderBy: { dispatchedAt: 'desc' },
     });
 
     return incomingTrips.map(trip => {
-      // Calculate ETA in minutes
-      let etaMinutes = null;
-      if (trip.estimatedArrival) {
-        const now = new Date();
-        const eta = new Date(trip.estimatedArrival);
-        etaMinutes = Math.max(0, Math.round((eta.getTime() - now.getTime()) / (1000 * 60)));
-      }
+      // Calculate ETA in minutes from AI estimated time
+      const etaMinutes = trip.aiEstimatedTime || null;
 
       return {
         id: trip.id,
         ambulanceNumber: trip.ambulance?.vehicleNumber || 'Unknown',
         vehicleType: trip.ambulance?.vehicleType || 'BASIC_LIFE_SUPPORT',
         patientInfo: trip.patientName || 'Unknown',
-        chiefComplaint: trip.reason || 'Not specified',
+        chiefComplaint: trip.patientCondition || 'Not specified',
         tripType: trip.tripType,
-        estimatedArrival: trip.estimatedArrival,
         etaMinutes,
-        pickupLocation: trip.pickupLocation?.address || trip.pickupAddress || 'Unknown',
+        pickupLocation: trip.pickupAddress || 'Unknown',
+        destinationAddress: trip.destinationAddress || 'Unknown',
         status: trip.status,
-        vitals: trip.vitals ? JSON.parse(trip.vitals as any) : null,
+        priority: trip.priority,
+        dispatchedAt: trip.dispatchedAt,
+        vitals: trip.vitalsRecorded || null,
       };
     });
   }
