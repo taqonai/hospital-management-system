@@ -40,14 +40,15 @@ router.use(authenticate);
 
 /**
  * Get all available permissions (for UI display)
- * Returns the complete list of permissions that can be assigned
+ * Returns the complete list of permissions as enriched objects with category/name/description
  */
 router.get(
   '/permissions',
   authorizeWithPermission('rbac:roles:read', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    // Return the list of available permissions from the service
-    const permissions = await rbacService.getUserPermissions(req.user!.userId);
+    // Return ALL available permissions as enriched objects
+    const allPermStrings = Object.values(PERMISSIONS) as string[];
+    const permissions = allPermStrings.map(enrichPermission);
     sendSuccess(res, { permissions }, 'Permissions retrieved successfully');
   })
 );
