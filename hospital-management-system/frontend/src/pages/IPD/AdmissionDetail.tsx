@@ -44,9 +44,9 @@ interface Admission {
     };
   };
   admissionDate: string;
-  admittingDoctor: {
+  admittingDoctor?: {
     id: string;
-    user: {
+    user?: {
       firstName: string;
       lastName: string;
     };
@@ -72,11 +72,10 @@ interface Order {
   description: string;
   priority: 'ROUTINE' | 'URGENT' | 'STAT';
   status: 'ORDERED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
-  orderedBy: {
-    user: {
-      firstName: string;
-      lastName: string;
-    };
+  orderedBy: string;
+  orderedByUser?: {
+    firstName: string;
+    lastName: string;
   };
   createdAt: string;
   notes?: string;
@@ -90,12 +89,13 @@ interface Note {
   assessment?: string;
   plan?: string;
   content?: string;
-  author: {
-    user: {
+  authorId: string;
+  authorRole: string;
+  author?: {
+    user?: {
       firstName: string;
       lastName: string;
     };
-    role: string;
   };
   createdAt: string;
 }
