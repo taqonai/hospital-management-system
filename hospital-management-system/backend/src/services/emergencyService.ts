@@ -1031,13 +1031,15 @@ export class EmergencyService {
 
   // ==================== FEATURE 6: AMBULANCE INTEGRATION ====================
 
-  // Get incoming ambulances (EN_ROUTE status)
+  // Get incoming ambulances (active trips heading to hospital)
   async getIncomingAmbulances(hospitalId: string) {
-    // Find ambulance trips that are en route to this hospital
+    // Find ambulance trips that are actively in progress (dispatched or en route)
     const incomingTrips = await prisma.ambulanceTrip.findMany({
       where: {
         hospitalId,
-        status: 'EN_ROUTE',
+        status: {
+          in: ['DISPATCHED', 'EN_ROUTE_TO_PICKUP', 'AT_PICKUP', 'EN_ROUTE_TO_DESTINATION'],
+        },
       },
       include: {
         ambulance: {
