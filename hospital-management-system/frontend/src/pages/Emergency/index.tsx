@@ -759,21 +759,41 @@ export default function Emergency() {
     try {
       if (showLoader) setLoading(true);
       
-      // Fetch patients, stats, and incoming ambulances in parallel
-      const [patientsResponse, statsResponse, ambulancesResponse] = await Promise.all([
+      // Fetch patients, stats, and incoming ambulances in parallel (resilient — partial failures don't break everything)
+      const [patientsResult, statsResult, ambulancesResult] = await Promise.allSettled([
         emergencyApi.getPatients(),
         emergencyApi.getStats(),
         emergencyApi.getIncomingAmbulances(),
       ]);
       
-      setPatients(patientsResponse.data.data || []);
-      setStats(statsResponse.data.data || {
-        inDepartment: 0,
-        avgWaitTime: 0,
-        treatedToday: 0,
-        admitted: 0,
-      });
-      setIncomingAmbulances(ambulancesResponse.data.data || []);
+      if (patientsResult.status === 'fulfilled') {
+        setPatients(patientsResult.value.data.data || []);
+      } else {
+        console.error('Failed to fetch patients:', patientsResult.reason);
+      }
+      
+      if (statsResult.status === 'fulfilled') {
+        setStats(statsResult.value.data.data || {
+          inDepartment: 0,
+          avgWaitTime: 0,
+          treatedToday: 0,
+          admitted: 0,
+        });
+      } else {
+        console.error('Failed to fetch stats:', statsResult.reason);
+      }
+      
+      if (ambulancesResult.status === 'fulfilled') {
+        setIncomingAmbulances(ambulancesResult.value.data.data || []);
+      } else {
+        console.error('Failed to fetch ambulances:', ambulancesResult.reason);
+      }
+      
+      // Show error only if ALL calls failed
+      const allFailed = [patientsResult, statsResult, ambulancesResult].every(r => r.status === 'rejected');
+      if (allFailed && showLoader) {
+        toast.error('Failed to load ED data');
+      }
       
       setLastUpdated(new Date());
       setSecondsSinceUpdate(0);
