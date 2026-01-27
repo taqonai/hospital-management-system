@@ -634,7 +634,11 @@ export class EmergencyService {
             email: true,
           },
         },
-        specialization: true,
+        department: {
+          select: {
+            name: true,
+          },
+        },
       },
       orderBy: {
         user: {
