@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
 import {
   BeakerIcon,
   CheckCircleIcon,
@@ -12,29 +11,23 @@ import { laboratoryApi } from '../../services/api';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 
-interface ResultParameter {
-  name: string;
+interface TestResult {
+  testId: string;
+  testName: string;
   value: string;
   unit: string;
-  referenceMin?: number;
-  referenceMax?: number;
-  referenceRange?: string;
-  notes?: string;
-}
-
-interface ResultsEntryFormData {
-  parameters: ResultParameter[];
-  overallNotes?: string;
+  referenceRange: string;
+  comments: string;
+  labTestInfo?: any; // Lab test metadata (unit, normalRange from labTest)
 }
 
 interface ResultsEntryFormProps {
   orderId: string;
-  testId: string;
+  testId: string; // Kept for compatibility, but we'll load all tests
   testName: string;
   patientName?: string;
   onSuccess: () => void;
   onCancel: () => void;
-  defaultParameters?: ResultParameter[];
 }
 
 type ResultStatus = 'normal' | 'abnormal' | 'critical';
@@ -65,22 +58,33 @@ const calculateResultStatus = (
   return 'normal';
 };
 
+const parseReferenceRange = (rangeString: string): { min?: number; max?: number } => {
+  const match = rangeString.match(/(\d+\.?\d*)\s*-\s*(\d+\.?\d*)/);
+  if (match) {
+    return {
+      min: parseFloat(match[1]),
+      max: parseFloat(match[2]),
+    };
+  }
+  return {};
+};
+
 const getStatusConfig = (status: ResultStatus) => {
   switch (status) {
     case 'critical':
       return {
-        bg: 'bg-rose-50 dark:bg-rose-900/20',
+        bg: 'bg-rose-50',
         border: 'border-rose-500',
-        text: 'text-rose-700 dark:text-rose-300',
+        text: 'text-rose-700',
         icon: XCircleIcon,
         iconColor: 'text-rose-500',
         label: 'Critical',
       };
     case 'abnormal':
       return {
-        bg: 'bg-amber-50 dark:bg-amber-900/20',
+        bg: 'bg-amber-50',
         border: 'border-amber-500',
-        text: 'text-amber-700 dark:text-amber-300',
+        text: 'text-amber-700',
         icon: ExclamationTriangleIcon,
         iconColor: 'text-amber-500',
         label: 'Abnormal',
@@ -88,9 +92,9 @@ const getStatusConfig = (status: ResultStatus) => {
     case 'normal':
     default:
       return {
-        bg: 'bg-emerald-50 dark:bg-emerald-900/20',
+        bg: 'bg-emerald-50',
         border: 'border-emerald-500',
-        text: 'text-emerald-700 dark:text-emerald-300',
+        text: 'text-emerald-700',
         icon: CheckCircleIcon,
         iconColor: 'text-emerald-500',
         label: 'Normal',
@@ -100,171 +104,150 @@ const getStatusConfig = (status: ResultStatus) => {
 
 export default function ResultsEntryForm({
   orderId,
-  testId,
-  testName,
   patientName,
   onSuccess,
   onCancel,
-  defaultParameters = [
-    { name: '', value: '', unit: '', referenceRange: '' },
-  ],
 }: ResultsEntryFormProps) {
-  const [parameters, setParameters] = useState<ResultParameter[]>(
-    // Initialize with test name pre-filled
-    [{ name: testName, value: '', unit: '', referenceRange: '' }]
-  );
-  const [loading, setLoading] = useState(false);
-  const [loadingContext, setLoadingContext] = useState(false);
-  const [overallNotes, setOverallNotes] = useState('');
-  const [clinicalContext, setClinicalContext] = useState<any>(null);
-  const [existingResult, setExistingResult] = useState<any>(null);
+  const [tests, setTests] = useState<TestResult[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [allSaved, setAllSaved] = useState(false);
 
-  // Load existing result data if available
+  // Load all tests from the order
   useEffect(() => {
-    const loadExistingResult = async () => {
+    const loadTests = async () => {
       try {
-        // Fetch the specific order by ID
+        setLoading(true);
         const response = await laboratoryApi.getOrderById(orderId);
         const order = response.data.data;
 
-        // Find the test in this order
-        const test = order.tests?.find((t: any) => t.id === testId);
-        if (test && test.result) {
-          setExistingResult(test);
-          // Pre-fill form with existing data
-          setParameters([{
-            name: testName,
-            value: test.resultValue?.toString() || test.result || '',
-            unit: test.unit || '',
-            referenceRange: test.normalRange || '',
-            notes: test.comments || '',
-          }]);
-          setOverallNotes(test.comments || '');
-        }
+        // Map all tests to our test result structure
+        const testResults: TestResult[] = (order.tests || []).map((test: any) => ({
+          testId: test.id,
+          testName: test.labTest?.name || 'Unknown Test',
+          value: test.resultValue?.toString() || test.result || '',
+          unit: test.unit || test.labTest?.unit || '',
+          referenceRange: test.normalRange || test.labTest?.normalRange || '',
+          comments: test.comments || '',
+          labTestInfo: test.labTest,
+        }));
+
+        setTests(testResults);
+
+        // Check if all tests already have results
+        const allHaveResults = testResults.every(t => t.value);
+        setAllSaved(allHaveResults);
       } catch (error) {
-        console.error('Failed to load existing result:', error);
+        console.error('Failed to load tests:', error);
+        toast.error('Failed to load test information');
+      } finally {
+        setLoading(false);
       }
     };
 
-    loadExistingResult();
-  }, [orderId, testId, testName]);
+    loadTests();
+  }, [orderId]);
 
-  const {
-    formState: { errors },
-  } = useForm<ResultsEntryFormData>();
-
-  const addParameter = () => {
-    setParameters([
-      ...parameters,
-      { name: '', value: '', unit: '', referenceRange: '' },
-    ]);
-  };
-
-  const removeParameter = (index: number) => {
-    setParameters(parameters.filter((_, i) => i !== index));
-  };
-
-  const updateParameter = (index: number, field: keyof ResultParameter, value: string | number) => {
-    const updated = [...parameters];
+  const updateTestValue = (index: number, field: keyof TestResult, value: string) => {
+    const updated = [...tests];
     updated[index] = { ...updated[index], [field]: value };
-    setParameters(updated);
-  };
-
-  const parseReferenceRange = (rangeString: string): { min?: number; max?: number } => {
-    const match = rangeString.match(/(\d+\.?\d*)\s*-\s*(\d+\.?\d*)/);
-    if (match) {
-      return {
-        min: parseFloat(match[1]),
-        max: parseFloat(match[2]),
-      };
-    }
-    return {};
-  };
-
-  const handleGenerateContext = async () => {
-    if (!existingResult) {
-      toast.error('Please save results first before generating clinical context');
-      return;
-    }
-
-    setLoadingContext(true);
-    try {
-      const response = await laboratoryApi.getClinicalContext(testId);
-      if (response.data.success) {
-        setClinicalContext(response.data);
-        toast.success('Clinical context generated');
-      } else {
-        toast.error(response.data.error || 'Failed to generate context');
-      }
-    } catch (error: any) {
-      console.error('Failed to generate clinical context:', error);
-      toast.error('Failed to generate clinical context');
-    } finally {
-      setLoadingContext(false);
-    }
+    setTests(updated);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // For simplicity, use the first parameter as the main result
-    const mainParam = parameters[0];
-    if (!mainParam || !mainParam.value) {
-      toast.error('Please enter a result value');
+    // Validate that at least one test has a value
+    const testsWithValues = tests.filter(t => t.value.trim());
+    if (testsWithValues.length === 0) {
+      toast.error('Please enter results for at least one test');
       return;
     }
 
-    setLoading(true);
+    setSaving(true);
     try {
-      // Calculate flags based on reference range
-      const { min, max } = parseReferenceRange(mainParam.referenceRange || '');
-      const status = calculateResultStatus(mainParam.value, min, max);
+      // Save each test result
+      const savePromises = testsWithValues.map(async (test) => {
+        const { min, max } = parseReferenceRange(test.referenceRange);
+        const status = calculateResultStatus(test.value, min, max);
 
-      await laboratoryApi.enterResult(testId, {
-        result: mainParam.value,
-        resultValue: parseFloat(mainParam.value) || undefined,
-        unit: mainParam.unit || undefined,
-        normalRange: mainParam.referenceRange || undefined,
-        isAbnormal: status === 'abnormal' || status === 'critical',
-        isCritical: status === 'critical',
-        comments: overallNotes || mainParam.notes || undefined,
+        return laboratoryApi.enterResult(test.testId, {
+          result: test.value,
+          resultValue: parseFloat(test.value) || undefined,
+          unit: test.unit || undefined,
+          normalRange: test.referenceRange || undefined,
+          isAbnormal: status === 'abnormal' || status === 'critical',
+          isCritical: status === 'critical',
+          comments: test.comments || undefined,
+        });
       });
 
-      const hasCritical = status === 'critical';
-      const hasAbnormal = status === 'abnormal';
+      await Promise.all(savePromises);
+
+      // Check for critical or abnormal values
+      const hasCritical = testsWithValues.some(test => {
+        const { min, max } = parseReferenceRange(test.referenceRange);
+        return calculateResultStatus(test.value, min, max) === 'critical';
+      });
+
+      const hasAbnormal = testsWithValues.some(test => {
+        const { min, max } = parseReferenceRange(test.referenceRange);
+        const status = calculateResultStatus(test.value, min, max);
+        return status === 'abnormal' || status === 'critical';
+      });
 
       if (hasCritical) {
-        toast.error('Critical values detected! Results submitted and flagged for immediate review.');
+        toast.error(`Results saved! ${testsWithValues.length} test(s) with CRITICAL values flagged for immediate review.`);
       } else if (hasAbnormal) {
         toast((t) => (
           <div className="flex items-center gap-2">
             <ExclamationTriangleIcon className="h-5 w-5 text-amber-500" />
-            <span>Abnormal values detected. Results submitted successfully.</span>
+            <span>Results saved! {testsWithValues.length} test(s) with abnormal values detected.</span>
           </div>
         ));
       } else {
-        toast.success('Results entered successfully');
+        toast.success(`All ${testsWithValues.length} test results saved successfully!`);
       }
 
-      // Set existingResult so user can generate AI context
-      // Don't close modal immediately - let user view success and generate context if needed
-      setExistingResult({
-        result: mainParam.value,
-        resultValue: parseFloat(mainParam.value),
-        unit: mainParam.unit,
-        normalRange: mainParam.referenceRange,
-        comments: overallNotes || mainParam.notes,
-      });
+      setAllSaved(true);
     } catch (error: any) {
-      console.error('Failed to enter results:', error);
-      toast.error(error.response?.data?.message || 'Failed to enter results');
+      console.error('Failed to save results:', error);
+      toast.error(error.response?.data?.message || 'Failed to save results');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
+  if (loading) {
+    return (
+      <div className="bg-white rounded-2xl shadow-lg overflow-hidden p-12">
+        <div className="flex flex-col items-center justify-center gap-4">
+          <ArrowPathIcon className="h-12 w-12 animate-spin text-blue-500" />
+          <p className="text-gray-500">Loading tests...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (tests.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl shadow-lg overflow-hidden p-12">
+        <div className="text-center">
+          <BeakerIcon className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+          <p className="text-gray-500">No tests found in this order</p>
+          <button
+            onClick={onCancel}
+            className="mt-4 px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-lg overflow-hidden max-h-[90vh] flex flex-col">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 px-6 py-4">
         <div className="flex items-center gap-3">
@@ -272,302 +255,181 @@ export default function ResultsEntryForm({
             <BeakerIcon className="h-6 w-6 text-white" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-white">Enter Test Results</h2>
+            <h2 className="text-xl font-bold text-white">
+              Enter Lab Results - {tests.length} Test{tests.length !== 1 ? 's' : ''}
+            </h2>
             <p className="text-white/80 text-sm">
-              {testName} {patientName && `for ${patientName}`}
+              {patientName && `Patient: ${patientName}`}
             </p>
           </div>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="p-6 space-y-6">
-        {/* Parameters */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <label className="block text-sm font-medium text-gray-700">
-              Test Parameters <span className="text-red-500">*</span>
-            </label>
-            <button
-              type="button"
-              onClick={addParameter}
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-            >
-              + Add Parameter
-            </button>
-          </div>
-
-          {parameters.map((param, index) => {
-            const { min, max } = parseReferenceRange(param.referenceRange || '');
-            const status = param.value ? calculateResultStatus(param.value, min, max) : 'normal';
+      <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
+        <div className="p-6 space-y-6">
+          {/* Test Results Section */}
+          {tests.map((test, index) => {
+            const { min, max } = parseReferenceRange(test.referenceRange);
+            const status = test.value ? calculateResultStatus(test.value, min, max) : 'normal';
             const statusConfig = getStatusConfig(status);
             const StatusIcon = statusConfig.icon;
 
             return (
               <div
-                key={index}
+                key={test.testId}
                 className={clsx(
-                  'border-2 rounded-xl p-4 space-y-3 transition-all',
-                  param.value && status !== 'normal' ? statusConfig.border : 'border-gray-200'
+                  'border-2 rounded-xl p-5 space-y-4 transition-all',
+                  test.value && status !== 'normal' ? statusConfig.border : 'border-gray-200'
                 )}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {/* Parameter Name */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                        Parameter Name
-                      </label>
+                {/* Test Header */}
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    {index + 1}. {test.testName}
+                  </h3>
+                  {test.value && status !== 'normal' && (
+                    <div className={clsx('flex items-center gap-2 px-3 py-1.5 rounded-lg', statusConfig.bg)}>
+                      <StatusIcon className={clsx('h-5 w-5', statusConfig.iconColor)} />
+                      <span className={clsx('text-sm font-semibold', statusConfig.text)}>
+                        {statusConfig.label}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Result Value and Unit */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Result Value <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex gap-2">
                       <input
                         type="text"
-                        value={param.name}
-                        onChange={(e) => updateParameter(index, 'name', e.target.value)}
-                        placeholder="e.g., Hemoglobin"
-                        className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
+                        value={test.value}
+                        onChange={(e) => updateTestValue(index, 'value', e.target.value)}
+                        placeholder="e.g., 14.5"
+                        className="flex-1 px-4 py-2.5 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
                       />
-                    </div>
-
-                    {/* Result Value */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                        Result Value
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={param.value}
-                          onChange={(e) => updateParameter(index, 'value', e.target.value)}
-                          placeholder="e.g., 14.5"
-                          className="flex-1 px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
-                        />
-                        <input
-                          type="text"
-                          value={param.unit}
-                          onChange={(e) => updateParameter(index, 'unit', e.target.value)}
-                          placeholder="Unit"
-                          className="w-24 px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Reference Range */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                        Reference Range
-                      </label>
                       <input
                         type="text"
-                        value={param.referenceRange || ''}
-                        onChange={(e) => updateParameter(index, 'referenceRange', e.target.value)}
-                        placeholder="e.g., 12.0 - 16.0"
-                        className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
-                      />
-                    </div>
-
-                    {/* Notes */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                        Notes (Optional)
-                      </label>
-                      <input
-                        type="text"
-                        value={param.notes || ''}
-                        onChange={(e) => updateParameter(index, 'notes', e.target.value)}
-                        placeholder="Additional notes"
-                        className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
+                        value={test.unit}
+                        onChange={(e) => updateTestValue(index, 'unit', e.target.value)}
+                        placeholder="Unit"
+                        className="w-28 px-3 py-2.5 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
                       />
                     </div>
                   </div>
 
-                  {/* Remove Button */}
-                  {parameters.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeParameter(index)}
-                      className="p-2 text-gray-400 hover:text-red-500 transition-colors"
-                      title="Remove parameter"
-                    >
-                      <XCircleIcon className="h-5 w-5" />
-                    </button>
-                  )}
+                  {/* Reference Range */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Reference Range
+                    </label>
+                    <input
+                      type="text"
+                      value={test.referenceRange}
+                      onChange={(e) => updateTestValue(index, 'referenceRange', e.target.value)}
+                      placeholder="e.g., 12.0 - 16.0"
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
+                    />
+                  </div>
                 </div>
 
-                {/* Status Indicator */}
-                {param.value && status !== 'normal' && (
-                  <div className={clsx('flex items-center gap-2 p-2 rounded-lg', statusConfig.bg)}>
-                    <StatusIcon className={clsx('h-5 w-5', statusConfig.iconColor)} />
-                    <span className={clsx('text-sm font-semibold', statusConfig.text)}>
-                      {statusConfig.label} - {status === 'critical' ? 'Immediate attention required' : 'Out of reference range'}
-                    </span>
+                {/* Comments */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Comments (Optional)
+                  </label>
+                  <textarea
+                    value={test.comments}
+                    onChange={(e) => updateTestValue(index, 'comments', e.target.value)}
+                    placeholder="Any observations or notes for this test..."
+                    rows={2}
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 resize-none"
+                  />
+                </div>
+
+                {/* Status Warning */}
+                {test.value && status !== 'normal' && (
+                  <div className={clsx('flex items-start gap-3 p-3 rounded-lg', statusConfig.bg)}>
+                    <StatusIcon className={clsx('h-5 w-5 flex-shrink-0 mt-0.5', statusConfig.iconColor)} />
+                    <p className={clsx('text-sm font-medium', statusConfig.text)}>
+                      {status === 'critical'
+                        ? 'CRITICAL value detected! This result will be flagged for immediate physician review.'
+                        : 'Result is outside the normal reference range.'}
+                    </p>
                   </div>
                 )}
               </div>
             );
           })}
-        </div>
 
-        {/* Overall Notes */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Overall Notes (Optional)
-          </label>
-          <textarea
-            value={overallNotes}
-            onChange={(e) => setOverallNotes(e.target.value)}
-            placeholder="General observations, test conditions, or interpretation notes..."
-            rows={3}
-            className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 resize-none"
-          />
-        </div>
+          {/* Summary */}
+          {tests.some(t => {
+            if (!t.value) return false;
+            const { min, max } = parseReferenceRange(t.referenceRange);
+            return calculateResultStatus(t.value, min, max) !== 'normal';
+          }) && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+              <div className="flex items-start gap-3">
+                <ExclamationTriangleIcon className="h-6 w-6 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <h4 className="font-semibold text-amber-800 mb-2">Summary of Abnormal Results</h4>
+                  <ul className="space-y-1.5 text-sm text-amber-700">
+                    {tests.map((test, index) => {
+                      if (!test.value) return null;
+                      const { min, max } = parseReferenceRange(test.referenceRange);
+                      const status = calculateResultStatus(test.value, min, max);
+                      if (status === 'normal') return null;
 
-        {/* Summary of Abnormalities */}
-        {parameters.some(p => {
-          if (!p.value) return false;
-          const { min, max } = parseReferenceRange(p.referenceRange || '');
-          const status = calculateResultStatus(p.value, min, max);
-          return status !== 'normal';
-        }) && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-            <div className="flex items-start gap-3">
-              <ExclamationTriangleIcon className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <h4 className="font-semibold text-amber-800 mb-2">Abnormal Values Detected</h4>
-                <ul className="space-y-1 text-sm text-amber-700">
-                  {parameters.map((param, index) => {
-                    if (!param.value) return null;
-                    const { min, max } = parseReferenceRange(param.referenceRange || '');
-                    const status = calculateResultStatus(param.value, min, max);
-                    if (status === 'normal') return null;
-
-                    return (
-                      <li key={index}>
-                        <span className="font-medium">{param.name}:</span> {param.value} {param.unit}
-                        {status === 'critical' && (
-                          <span className="ml-2 px-2 py-0.5 text-xs font-bold text-rose-700 bg-rose-100 rounded-full">
-                            CRITICAL
-                          </span>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Clinical Context Section (for doctors/nurses) */}
-        {existingResult && (
-          <div className="bg-gradient-to-br from-purple-50 to-blue-50 border-2 border-purple-200 rounded-xl p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <SparklesIcon className="h-5 w-5 text-purple-600" />
-                <h4 className="font-semibold text-purple-900">AI Clinical Context</h4>
-              </div>
-              <button
-                type="button"
-                onClick={handleGenerateContext}
-                disabled={loadingContext}
-                className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
-              >
-                {loadingContext ? (
-                  <>
-                    <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <SparklesIcon className="h-4 w-4" />
-                    Generate Context
-                  </>
-                )}
-              </button>
-            </div>
-
-            {clinicalContext ? (
-              <div className="space-y-4">
-                <div className="bg-white rounded-lg p-4">
-                  <h5 className="text-sm font-semibold text-gray-700 mb-2">Clinical Interpretation</h5>
-                  <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                    {clinicalContext.clinicalContext}
-                  </p>
+                      return (
+                        <li key={index} className="flex items-center gap-2">
+                          <span className="font-medium">{test.testName}:</span>
+                          <span>{test.value} {test.unit}</span>
+                          {status === 'critical' && (
+                            <span className="px-2 py-0.5 text-xs font-bold text-rose-700 bg-rose-100 rounded-full">
+                              CRITICAL
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
-
-                {clinicalContext.recommendations && clinicalContext.recommendations.length > 0 && (
-                  <div className="bg-white rounded-lg p-4">
-                    <h5 className="text-sm font-semibold text-gray-700 mb-2">Recommendations</h5>
-                    <ul className="list-disc list-inside space-y-1 text-sm text-gray-900">
-                      {clinicalContext.recommendations.map((rec: string, idx: number) => (
-                        <li key={idx}>{rec}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {clinicalContext.concerns && clinicalContext.concerns.length > 0 && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                    <h5 className="text-sm font-semibold text-amber-800 mb-2 flex items-center gap-2">
-                      <ExclamationTriangleIcon className="h-4 w-4" />
-                      Clinical Concerns
-                    </h5>
-                    <ul className="list-disc list-inside space-y-1 text-sm text-amber-900">
-                      {clinicalContext.concerns.map((concern: string, idx: number) => (
-                        <li key={idx}>{concern}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {clinicalContext.followUpNeeded && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-900">
-                    <strong>Follow-up Recommended:</strong> This result requires additional monitoring or testing.
-                  </div>
-                )}
               </div>
-            ) : (
-              <p className="text-sm text-gray-600 italic">
-                Click "Generate Context" to get AI-powered clinical interpretation for doctors and nurses.
-              </p>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
 
         {/* Actions */}
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+        <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
           <button
             type="button"
-            onClick={onCancel}
+            onClick={allSaved ? onSuccess : onCancel}
             className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
           >
-            {existingResult ? 'Close' : 'Cancel'}
+            {allSaved ? 'Done' : 'Cancel'}
           </button>
-          {!existingResult || parameters[0]?.value !== existingResult.resultValue?.toString() ? (
+          {!allSaved || tests.some(t => t.value) ? (
             <button
               type="submit"
-              disabled={loading || parameters.filter(p => p.name && p.value).length === 0}
+              disabled={saving || tests.every(t => !t.value.trim())}
               className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold hover:from-blue-600 hover:to-indigo-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              {loading ? (
+              {saving ? (
                 <>
                   <ArrowPathIcon className="h-5 w-5 animate-spin" />
-                  Submitting...
+                  Saving...
                 </>
               ) : (
                 <>
                   <CheckCircleIcon className="h-5 w-5" />
-                  {existingResult ? 'Update Results' : 'Submit Results'}
+                  {allSaved ? 'Update Results' : 'Save All Results'}
                 </>
               )}
             </button>
-          ) : (
-            <button
-              type="button"
-              onClick={onSuccess}
-              className="px-6 py-2.5 rounded-xl bg-green-600 text-white font-semibold hover:bg-green-700 transition-all flex items-center gap-2"
-            >
-              <CheckCircleIcon className="h-5 w-5" />
-              Done
-            </button>
-          )}
+          ) : null}
         </div>
       </form>
     </div>
