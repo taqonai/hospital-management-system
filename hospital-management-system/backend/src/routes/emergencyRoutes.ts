@@ -183,4 +183,16 @@ router.get(
   })
 );
 
+// ==================== FEATURE 6: AMBULANCE INTEGRATION ====================
+
+// Get incoming ambulances
+router.get(
+  '/incoming-ambulances',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const ambulances = await emergencyService.getIncomingAmbulances(req.user!.hospitalId);
+    sendSuccess(res, ambulances);
+  })
+);
+
 export default router;

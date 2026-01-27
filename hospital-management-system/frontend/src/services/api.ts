@@ -752,6 +752,8 @@ export const emergencyApi = {
   updateBedStatus: (bedId: string, status: string) =>
     api.patch(`/emergency/beds/${bedId}/status`, { status }),
   getWaitingPatients: () => api.get('/emergency/waiting-patients'),
+  // Feature 6: Ambulance Integration
+  getIncomingAmbulances: () => api.get('/emergency/incoming-ambulances'),
 };
 
 // Radiology APIs

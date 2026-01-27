@@ -699,11 +699,26 @@ function DischargePatientModal({
   );
 }
 
+interface IncomingAmbulance {
+  id: string;
+  ambulanceNumber: string;
+  vehicleType: string;
+  patientInfo: string;
+  chiefComplaint: string;
+  tripType: string;
+  estimatedArrival: string;
+  etaMinutes: number | null;
+  pickupLocation: string;
+  status: string;
+  vitals: any;
+}
+
 export default function Emergency() {
   const [activeTab, setActiveTab] = useState<'tracking' | 'triage' | 'waiting' | 'beds' | 'resus'>('tracking');
   const [showNewPatientModal, setShowNewPatientModal] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patients, setPatients] = useState<EDPatient[]>([]);
+  const [incomingAmbulances, setIncomingAmbulances] = useState<IncomingAmbulance[]>([]);
   const [stats, setStats] = useState<EmergencyStats>({
     inDepartment: 0,
     avgWaitTime: 0,
@@ -742,10 +757,11 @@ export default function Emergency() {
     try {
       if (showLoader) setLoading(true);
       
-      // Fetch patients and stats in parallel
-      const [patientsResponse, statsResponse] = await Promise.all([
+      // Fetch patients, stats, and incoming ambulances in parallel
+      const [patientsResponse, statsResponse, ambulancesResponse] = await Promise.all([
         emergencyApi.getPatients(),
         emergencyApi.getStats(),
+        emergencyApi.getIncomingAmbulances(),
       ]);
       
       setPatients(patientsResponse.data.data || []);
@@ -755,6 +771,7 @@ export default function Emergency() {
         treatedToday: 0,
         admitted: 0,
       });
+      setIncomingAmbulances(ambulancesResponse.data.data || []);
       
       setLastUpdated(new Date());
       setSecondsSinceUpdate(0);
@@ -1009,6 +1026,102 @@ export default function Emergency() {
           </nav>
         </div>
       </div>
+
+      {/* Incoming Ambulances - Feature 6 */}
+      {activeTab === 'tracking' && incomingAmbulances.length > 0 && (
+        <div 
+          className="relative overflow-hidden backdrop-blur-xl bg-gradient-to-r from-blue-50 to-cyan-50 rounded-2xl border-2 border-blue-300 shadow-xl mb-6"
+          style={{ animationDelay: '0.3s' }}
+        >
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/60 to-transparent"></div>
+          <div className="px-6 py-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center animate-pulse">
+                <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-blue-900">
+                  {incomingAmbulances.length} Incoming Ambulance{incomingAmbulances.length > 1 ? 's' : ''}
+                </h3>
+                <p className="text-sm text-blue-700">En route to ED</p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {incomingAmbulances.map((ambulance) => (
+                <div
+                  key={ambulance.id}
+                  className="bg-white/80 backdrop-blur-sm rounded-xl p-4 border border-blue-200 hover:shadow-lg transition-all duration-300"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <p className="font-bold text-gray-900">{ambulance.ambulanceNumber}</p>
+                      <p className="text-xs text-gray-500">{ambulance.vehicleType.replace('_', ' ')}</p>
+                    </div>
+                    {ambulance.etaMinutes !== null && (
+                      <div className={clsx(
+                        'px-3 py-1 rounded-full text-sm font-bold',
+                        ambulance.etaMinutes <= 5
+                          ? 'bg-red-100 text-red-700 animate-pulse'
+                          : ambulance.etaMinutes <= 15
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-green-100 text-green-700'
+                      )}>
+                        ETA {ambulance.etaMinutes} min
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div>
+                      <p className="text-xs font-medium text-gray-600">Patient</p>
+                      <p className="text-sm font-semibold text-gray-900">{ambulance.patientInfo}</p>
+                    </div>
+                    
+                    <div>
+                      <p className="text-xs font-medium text-gray-600">Chief Complaint</p>
+                      <p className="text-sm text-gray-700">{ambulance.chiefComplaint}</p>
+                    </div>
+                    
+                    <div>
+                      <p className="text-xs font-medium text-gray-600">From</p>
+                      <p className="text-xs text-gray-600 truncate">{ambulance.pickupLocation}</p>
+                    </div>
+
+                    {ambulance.vitals && Object.keys(ambulance.vitals).length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <p className="text-xs font-medium text-gray-600 mb-2">Paramedic Vitals</p>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          {ambulance.vitals.heartRate && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-gray-500">HR:</span>
+                              <span className="font-semibold">{ambulance.vitals.heartRate}</span>
+                            </div>
+                          )}
+                          {ambulance.vitals.bloodPressure && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-gray-500">BP:</span>
+                              <span className="font-semibold">{ambulance.vitals.bloodPressure}</span>
+                            </div>
+                          )}
+                          {ambulance.vitals.oxygenSaturation && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-gray-500">SpO2:</span>
+                              <span className="font-semibold">{ambulance.vitals.oxygenSaturation}%</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Patient Tracking Tab */}
       {activeTab === 'tracking' && (
