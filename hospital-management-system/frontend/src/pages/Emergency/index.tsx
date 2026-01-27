@@ -25,6 +25,27 @@ interface EDPatient {
   arrivalTime: string;
   status: string;
   triageNotes?: string;
+  doctor?: {
+    user: {
+      firstName: string;
+      lastName: string;
+    };
+  };
+  vitals?: Array<{
+    id: string;
+    temperature?: string;
+    bloodPressureSys?: number;
+    bloodPressureDia?: number;
+    heartRate?: number;
+    respiratoryRate?: number;
+    oxygenSaturation?: string;
+    recordedAt: string;
+  }>;
+  allergies?: Array<{
+    id: string;
+    allergen: string;
+    severity: string;
+  }>;
 }
 
 interface EmergencyStats {
