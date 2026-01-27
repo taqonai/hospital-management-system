@@ -145,7 +145,7 @@ function AddEmployeeModal({ onClose, onSuccess }: { onClose: () => void; onSucce
     email: '',
     phone: '',
     dateOfBirth: '',
-    gender: 'MALE' as 'MALE' | 'FEMALE' | 'OTHER',
+    gender: 'MALE' as 'MALE' | 'FEMALE',
     address: '',
     city: '',
     state: '',
@@ -263,7 +263,6 @@ function AddEmployeeModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                 >
                   <option value="MALE">Male</option>
                   <option value="FEMALE">Female</option>
-                  <option value="OTHER">Other</option>
                 </select>
               </div>
             </div>

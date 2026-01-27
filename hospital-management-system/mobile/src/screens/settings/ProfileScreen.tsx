@@ -70,7 +70,7 @@ interface ProfileFormData {
   phone: string;
   phoneCountryCode: string;
   dateOfBirth: string;
-  gender: 'MALE' | 'FEMALE' | 'OTHER' | '';
+  gender: 'MALE' | 'FEMALE' | '';
   address: string;
   city: string;
   state: string;
@@ -666,7 +666,7 @@ const ProfileScreen: React.FC = () => {
     );
   };
 
-  const genderOptions = ['MALE', 'FEMALE', 'OTHER'];
+  const genderOptions = ['MALE', 'FEMALE'];
 
   const renderGenderSelector = () => (
     <View style={styles.fieldContainer}>

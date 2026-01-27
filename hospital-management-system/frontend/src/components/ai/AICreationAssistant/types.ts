@@ -3,7 +3,7 @@ export type EntityType = 'patient' | 'doctor' | 'appointment' | null;
 export interface ExtractedPatientData {
   firstName?: string;
   lastName?: string;
-  gender?: 'MALE' | 'FEMALE' | 'OTHER';
+  gender?: 'MALE' | 'FEMALE';
   dateOfBirth?: string;
   phone?: string;
   email?: string;

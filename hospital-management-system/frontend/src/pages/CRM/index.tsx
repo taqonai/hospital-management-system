@@ -2576,7 +2576,6 @@ function LeadFormModal({
                 <option value="">Select</option>
                 <option value="MALE">Male</option>
                 <option value="FEMALE">Female</option>
-                <option value="OTHER">Other</option>
               </select>
             </div>
           </div>

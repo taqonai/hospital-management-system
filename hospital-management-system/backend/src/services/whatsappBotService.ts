@@ -134,9 +134,43 @@ export class WhatsAppBotService {
   ): Promise<void> {
     const normalizedText = text.trim().toLowerCase();
 
+    // Check for greetings at any point in the conversation
+    // This allows users to restart the conversation flow
+    const greetingKeywords = ['hi', 'hello', 'hey', 'start', 'restart', 'begin'];
+    const isGreeting = greetingKeywords.some(keyword =>
+      normalizedText === keyword ||
+      normalizedText.startsWith(keyword + ' ') ||
+      normalizedText.startsWith(keyword + ',')
+    );
+
+    if (isGreeting) {
+      // Reset session to greeting state and start fresh
+      await whatsappSessionService.updateSessionState(
+        phoneNumber,
+        ConversationStep.GREETING,
+        {}
+      );
+      await this.handleGreeting(phoneNumber, text);
+      return;
+    }
+
+    // Check for menu command to go back to main menu (for registered users)
+    if (normalizedText === 'menu' && session.patientId) {
+      await whatsappSessionService.updateSessionState(
+        phoneNumber,
+        ConversationStep.MAIN_MENU,
+        {}
+      );
+      await this.sendWhatsAppMessage(
+        phoneNumber,
+        `How can I help you today?\n\n1. Book an Appointment\n2. View My Appointments\n3. Check Symptoms\n\nJust reply with the number. 😊`
+      );
+      return;
+    }
+
     switch (session.currentStep) {
       case ConversationStep.GREETING:
-        await this.handleGreeting(phoneNumber);
+        await this.handleGreeting(phoneNumber, text);
         break;
 
       case ConversationStep.ASK_REGISTRATION:
@@ -221,26 +255,103 @@ export class WhatsAppBotService {
 
   /**
    * Handle initial greeting
+   * Automatically check if patient exists by phone number
    */
-  private async handleGreeting(phoneNumber: string): Promise<void> {
-    await whatsappSessionService.updateSessionState(
-      phoneNumber,
-      ConversationStep.ASK_REGISTRATION,
-      {}
-    );
+  private async handleGreeting(phoneNumber: string, originalMessage?: string): Promise<void> {
+    const cleanPhone = phoneNumber.replace('whatsapp:', '');
 
-    await this.sendWhatsAppMessage(
-      phoneNumber,
-      `👋 Welcome to Spetaar HMS! I'm your AI health assistant.\n\nAre you a new patient or do you already have an account?\n\n1. New Patient\n2. Existing Patient`
-    );
+    try {
+      // Check if patient already exists with this phone number
+      const existingPatient = await prisma.patient.findFirst({
+        where: {
+          phone: cleanPhone,
+          isActive: true
+        },
+        include: {
+          hospital: {
+            select: {
+              name: true
+            }
+          }
+        }
+      });
+
+      if (existingPatient) {
+        // Patient found - welcome them back and link session
+        await whatsappSessionService.linkPatient(phoneNumber, existingPatient.id);
+
+        await whatsappSessionService.updateSessionState(
+          phoneNumber,
+          ConversationStep.MAIN_MENU,
+          {},
+          {
+            patientId: existingPatient.id,
+            patientName: `${existingPatient.firstName} ${existingPatient.lastName}`,
+            hospitalId: existingPatient.hospitalId,
+            hospitalName: existingPatient.hospital.name
+          }
+        );
+
+        // Check if the original message contains booking intent
+        const bookingKeywords = ['book', 'appointment', 'schedule', 'visit', 'consult'];
+        const hasBookingIntent = originalMessage && bookingKeywords.some(keyword =>
+          originalMessage.toLowerCase().includes(keyword)
+        );
+
+        if (hasBookingIntent) {
+          // User wants to book - go directly to symptom check
+          await whatsappSessionService.updateSessionState(
+            phoneNumber,
+            ConversationStep.SYMPTOM_CHECK_START,
+            {}
+          );
+
+          await this.sendWhatsAppMessage(
+            phoneNumber,
+            `Hello, ${existingPatient.firstName}! 😊\n\nI'd be happy to help you book an appointment.\n\nWhat brings you in today? Please describe your symptoms or reason for your visit.\n\n💡 You can type your message or send a voice note.`
+          );
+        } else {
+          // General greeting - show menu
+          await this.sendWhatsAppMessage(
+            phoneNumber,
+            `👋 Welcome back, ${existingPatient.firstName}! 😊\n\nHow can I help you today?\n\n1. Book an Appointment\n2. View My Appointments\n3. Check Symptoms\n\nJust reply with the number of your choice.`
+          );
+        }
+      } else {
+        // New patient - ask for registration
+        await whatsappSessionService.updateSessionState(
+          phoneNumber,
+          ConversationStep.ASK_REGISTRATION,
+          {}
+        );
+
+        await this.sendWhatsAppMessage(
+          phoneNumber,
+          `👋 Welcome to Spetaar HMS! I'm your health assistant. 😊\n\nI don't have your details yet. Would you like to register?\n\n1. Yes, register me\n2. No, not now\n\nPlease reply with 1 or 2.`
+        );
+      }
+    } catch (error) {
+      console.error('Error checking patient:', error);
+      // Fallback to asking
+      await whatsappSessionService.updateSessionState(
+        phoneNumber,
+        ConversationStep.ASK_REGISTRATION,
+        {}
+      );
+
+      await this.sendWhatsAppMessage(
+        phoneNumber,
+        `👋 Welcome to Spetaar HMS! I'm your health assistant. 😊\n\nWould you like to register?\n\n1. Yes\n2. No`
+      );
+    }
   }
 
   /**
    * Handle registration choice
    */
   private async handleRegistrationChoice(phoneNumber: string, choice: string): Promise<void> {
-    if (choice === '1' || choice.includes('new')) {
-      // New patient - skip emirate/hospital selection, go directly to name collection
+    if (choice === '1' || choice.includes('yes') || choice.includes('register')) {
+      // New patient - proceed with registration
       try {
         const hospital = await this.getDefaultHospital();
 
@@ -259,31 +370,32 @@ export class WhatsAppBotService {
 
         await this.sendWhatsAppMessage(
           phoneNumber,
-          `Great! To register, I'll need some information.\n\nWhat is your full name? (First and Last Name)`
+          `Perfect! Let's get you registered. 📋\n\nI'll need a few details from you.\n\nFirst, what is your full name?\n(Please provide First and Last Name)`
         );
       } catch (error) {
         console.error('Error getting default hospital:', error);
         await this.sendWhatsAppMessage(
           phoneNumber,
-          `Sorry, there was an error. Please try again later.`
+          `I'm sorry, something went wrong. 😔\n\nPlease try again in a moment, or contact the hospital directly for assistance.`
         );
       }
-    } else if (choice === '2' || choice.includes('existing')) {
-      // Existing patient - ask for phone verification
-      await whatsappSessionService.updateSessionState(
-        phoneNumber,
-        ConversationStep.EXISTING_PATIENT_LOGIN,
-        {}
-      );
-
+    } else if (choice === '2' || choice.includes('no')) {
+      // User declined registration
       await this.sendWhatsAppMessage(
         phoneNumber,
-        `Please share your registered phone number, or reply 'this number' if it's the same.`
+        `No problem! Feel free to reach out whenever you're ready. 😊\n\nHave a great day! 🌟`
+      );
+
+      // Reset to greeting state
+      await whatsappSessionService.updateSessionState(
+        phoneNumber,
+        ConversationStep.GREETING,
+        {}
       );
     } else {
       await this.sendWhatsAppMessage(
         phoneNumber,
-        `Please reply with '1' for New Patient or '2' for Existing Patient.`
+        `I didn't quite get that. 😅\n\nPlease reply with:\n1 - To register\n2 - Not now`
       );
     }
   }
@@ -414,7 +526,7 @@ export class WhatsAppBotService {
     if (nameParts.length < 2) {
       await this.sendWhatsAppMessage(
         phoneNumber,
-        `Please provide both your first and last name.`
+        `I need both your first and last name to continue. 😊\n\nPlease provide your full name (e.g., John Smith).`
       );
       return;
     }
@@ -433,7 +545,7 @@ export class WhatsAppBotService {
 
     await this.sendWhatsAppMessage(
       phoneNumber,
-      `Thank you, ${firstName}! What is your date of birth? (DD/MM/YYYY)`
+      `Thank you, ${firstName}! 😊\n\nWhat is your date of birth?\n(Please use DD/MM/YYYY format, e.g., 15/03/1990)`
     );
   }
 
@@ -448,7 +560,7 @@ export class WhatsAppBotService {
     if (!match) {
       await this.sendWhatsAppMessage(
         phoneNumber,
-        `Please enter your date of birth in DD/MM/YYYY format (e.g., 15/03/1990).`
+        `Hmm, I didn't quite get that format. 😅\n\nPlease enter your date of birth as DD/MM/YYYY\n(For example: 15/03/1990)`
       );
       return;
     }
@@ -461,7 +573,7 @@ export class WhatsAppBotService {
     if (dob > new Date()) {
       await this.sendWhatsAppMessage(
         phoneNumber,
-        `Date of birth cannot be in the future. Please try again.`
+        `That date is in the future! 🤔\n\nPlease provide your actual date of birth.`
       );
       return;
     }
@@ -476,7 +588,7 @@ export class WhatsAppBotService {
 
     await this.sendWhatsAppMessage(
       phoneNumber,
-      `What is your gender?\n\n1. Male\n2. Female\n3. Other`
+      `Perfect! 👍\n\nNow, what is your gender?\n\n1. Male\n2. Female\n\nJust reply with the number.`
     );
   }
 
@@ -484,20 +596,18 @@ export class WhatsAppBotService {
    * Handle gender collection
    */
   private async handleGenderCollection(phoneNumber: string, choice: string): Promise<void> {
-    let gender: 'MALE' | 'FEMALE' | 'OTHER' | undefined;
+    let gender: 'MALE' | 'FEMALE' | undefined;
 
     if (choice === '1' || choice.includes('male') && !choice.includes('female')) {
       gender = 'MALE';
     } else if (choice === '2' || choice.includes('female')) {
       gender = 'FEMALE';
-    } else if (choice === '3' || choice.includes('other')) {
-      gender = 'OTHER';
     }
 
     if (!gender) {
       await this.sendWhatsAppMessage(
         phoneNumber,
-        `Please reply with 1 (Male), 2 (Female), or 3 (Other).`
+        `I didn't understand that. 😅\n\nPlease reply with:\n1 - Male\n2 - Female`
       );
       return;
     }
@@ -526,13 +636,13 @@ export class WhatsAppBotService {
 
       await this.sendWhatsAppMessage(
         phoneNumber,
-        `I'll send you a verification code via WhatsApp.\n\nYour verification code is: *${otpCode}*\n\nPlease reply with this 6-digit code to verify.`
+        `Great! Almost done. 🎉\n\nFor verification, here's your code:\n\n*${otpCode}*\n\nPlease reply with this 6-digit code to complete your registration.`
       );
     } catch (error) {
       console.error('Error sending OTP:', error);
       await this.sendWhatsAppMessage(
         phoneNumber,
-        `Sorry, there was an error sending the verification code. Please try again.`
+        `I'm sorry, something went wrong while sending the verification code. 😔\n\nPlease try again in a moment.`
       );
     }
   }
@@ -550,7 +660,7 @@ export class WhatsAppBotService {
     if (enteredOTP !== savedOTP) {
       await this.sendWhatsAppMessage(
         phoneNumber,
-        `❌ Incorrect verification code. Please try again.`
+        `Hmm, that code doesn't match. 🤔\n\nPlease check and try again with the 6-digit code I sent you.`
       );
       return;
     }
@@ -618,13 +728,13 @@ export class WhatsAppBotService {
 
       await this.sendWhatsAppMessage(
         phoneNumber,
-        `✅ Verified! Your account is ready.\n\nMRN: ${patient.mrn}\n\nWhat can I help you with today?\n\n1. Book Appointment\n2. View My Appointments\n3. Symptom Check`
+        `🎉 Perfect! Your account is all set up.\n\nYour Medical Record Number: *${patient.mrn}*\n\nHow can I help you today?\n\n1. Book an Appointment\n2. View My Appointments\n3. Check Symptoms\n\nJust reply with the number. 😊`
       );
     } catch (error) {
       console.error('Error creating patient:', error);
       await this.sendWhatsAppMessage(
         phoneNumber,
-        `Sorry, there was an error creating your account. Please try again later.`
+        `I'm sorry, something went wrong while creating your account. 😔\n\nPlease try again in a moment, or contact the hospital directly.`
       );
     }
   }
@@ -696,7 +806,7 @@ export class WhatsAppBotService {
     if (enteredOTP !== savedOTP) {
       await this.sendWhatsAppMessage(
         phoneNumber,
-        `❌ Incorrect verification code. Please try again.`
+        `Hmm, that code doesn't match. 🤔\n\nPlease check and try again with the 6-digit code I sent you.`
       );
       return;
     }
@@ -714,7 +824,7 @@ export class WhatsAppBotService {
 
     await this.sendWhatsAppMessage(
       phoneNumber,
-      `✅ Welcome back, ${session.patientName}!\n\nWhat can I help you with today?\n\n1. Book Appointment\n2. View My Appointments\n3. Symptom Check`
+      `✅ Welcome back, ${session.patientName}! 😊\n\nHow can I help you today?\n\n1. Book an Appointment\n2. View My Appointments\n3. Check Symptoms\n\nJust reply with the number.`
     );
   }
 
@@ -731,7 +841,7 @@ export class WhatsAppBotService {
 
       await this.sendWhatsAppMessage(
         phoneNumber,
-        `What brings you in today? You can describe your symptoms or reason for visit.\n\n(You can type or send a voice message)`
+        `I'd be happy to help you book an appointment! 📅\n\nWhat brings you in today? Please describe your symptoms or reason for your visit.\n\n💡 You can type your message or send a voice note.`
       );
     } else if (choice === '2' || choice.includes('view')) {
       await this.handleViewAppointments(phoneNumber, 'view');
@@ -744,12 +854,12 @@ export class WhatsAppBotService {
 
       await this.sendWhatsAppMessage(
         phoneNumber,
-        `Let's do a symptom check. What symptoms are you experiencing?\n\n(You can type or send a voice message)`
+        `Let me help you with a symptom check. 🩺\n\nPlease tell me what symptoms you're experiencing.\n\n💡 You can type your message or send a voice note.`
       );
     } else {
       await this.sendWhatsAppMessage(
         phoneNumber,
-        `Please choose an option:\n\n1. Book Appointment\n2. View My Appointments\n3. Symptom Check`
+        `I didn't quite understand that. 😅\n\nPlease choose one of these options:\n\n1. Book an Appointment\n2. View My Appointments\n3. Check Symptoms\n\nJust reply with the number.`
       );
     }
   }
@@ -1227,7 +1337,7 @@ export class WhatsAppBotService {
   private async sendErrorMessage(to: string): Promise<void> {
     await this.sendWhatsAppMessage(
       to,
-      `I'm having a small technical issue. Please try again in a moment, or type 'menu' to start over.`
+      `Oops! I'm having a small technical issue. 😔\n\nPlease try again in a moment, or type 'menu' to start over.`
     );
   }
 }

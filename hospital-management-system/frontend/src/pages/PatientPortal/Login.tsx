@@ -1210,7 +1210,6 @@ function RegistrationForm({
             <option value="">Select Gender</option>
             <option value="MALE">Male</option>
             <option value="FEMALE">Female</option>
-            <option value="OTHER">Other</option>
           </select>
         </div>
       </div>

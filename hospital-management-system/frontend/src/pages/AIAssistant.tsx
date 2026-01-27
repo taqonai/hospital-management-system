@@ -46,7 +46,7 @@ export default function AIAssistant() {
 
   // Diagnosis state
   const [patientAge, setPatientAge] = useState(45);
-  const [gender, setGender] = useState<'MALE' | 'FEMALE' | 'OTHER'>('MALE');
+  const [gender, setGender] = useState<'MALE' | 'FEMALE'>('MALE');
   const [symptoms, setSymptoms] = useState('');
   const [medications, setMedications] = useState('');
   const [diagnosisResult, setDiagnosisResult] = useState<SymptomCheckResult | null>(null);
@@ -344,12 +344,11 @@ export default function AIAssistant() {
                     <label className="label">Gender</label>
                     <select
                       value={gender}
-                      onChange={(e) => setGender(e.target.value as 'MALE' | 'FEMALE' | 'OTHER')}
+                      onChange={(e) => setGender(e.target.value as 'MALE' | 'FEMALE')}
                       className="input"
                     >
                       <option value="MALE">Male</option>
                       <option value="FEMALE">Female</option>
-                      <option value="OTHER">Other</option>
                     </select>
                   </div>
                 </div>

@@ -19,7 +19,7 @@ interface PatientFormData {
   firstName: string;
   lastName: string;
   dateOfBirth: string;
-  gender: 'MALE' | 'FEMALE' | 'OTHER';
+  gender: 'MALE' | 'FEMALE';
   email: string;
   phone: string;
   address: string;
@@ -260,7 +260,6 @@ export default function PatientForm() {
               >
                 <option value="MALE">Male</option>
                 <option value="FEMALE">Female</option>
-                <option value="OTHER">Other</option>
               </select>
             </div>
 

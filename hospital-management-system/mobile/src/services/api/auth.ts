@@ -14,7 +14,7 @@ export interface RegisterData {
   lastName: string;
   phone: string;
   dateOfBirth: string;
-  gender: 'MALE' | 'FEMALE' | 'OTHER';
+  gender: 'MALE' | 'FEMALE';
   hospitalId?: string;
 }
 

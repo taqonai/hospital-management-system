@@ -355,7 +355,7 @@ export default function Surgery() {
     procedureName: '',
     surgeryType: '',
     patientAge: '',
-    gender: 'MALE' as 'MALE' | 'FEMALE' | 'OTHER',
+    gender: 'MALE' as 'MALE' | 'FEMALE',
     asaScore: '',
     bmi: '',
     smokingStatus: 'never' as 'never' | 'former' | 'current',
@@ -835,7 +835,6 @@ export default function Surgery() {
                   >
                     <option value="MALE">Male</option>
                     <option value="FEMALE">Female</option>
-                    <option value="OTHER">Other</option>
                   </select>
                 </div>
                 <div>

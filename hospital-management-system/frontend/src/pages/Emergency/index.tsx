@@ -260,7 +260,6 @@ function NewEDPatientModal({ onClose, onSuccess }: { onClose: () => void; onSucc
                       className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/50">
                       <option value="MALE">Male</option>
                       <option value="FEMALE">Female</option>
-                      <option value="OTHER">Other</option>
                     </select>
                   </div>
                 </div>

@@ -97,7 +97,7 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'] },
       { name: 'Nursing', href: '/nursing', icon: HeartIcon, color: 'from-blue-500 to-indigo-600',
         permission: 'nursing:dashboard',
-        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE', 'DOCTOR'] },
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'NURSE'] },
       { name: 'Early Warning', href: '/early-warning', icon: BellIcon, color: 'from-orange-500 to-red-600',
         permission: 'ai:early_warning',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'] },
