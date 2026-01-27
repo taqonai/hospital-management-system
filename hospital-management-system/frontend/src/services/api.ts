@@ -770,6 +770,17 @@ export const emergencyApi = {
     patientId: string;
     unitsNeeded: number;
   }) => api.post('/emergency/blood-bank/emergency-release', data),
+  // On-Call Doctor System
+  getOnCallDoctors: () => api.get('/emergency/on-call-doctors'),
+  pageDoctor: (data: {
+    doctorId: string;
+    patientId?: string;
+    urgency: 'STAT' | 'URGENT' | 'ROUTINE';
+    message: string;
+  }) => api.post('/emergency/page-doctor', data),
+  getPages: () => api.get('/emergency/pages'),
+  respondToPage: (pageId: string, status: string, declineReason?: string) =>
+    api.patch(`/emergency/page/${pageId}/respond`, { status, declineReason }),
 };
 
 // Radiology APIs

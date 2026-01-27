@@ -248,4 +248,57 @@ router.post(
   })
 );
 
+// ==================== ON-CALL DOCTOR SYSTEM ====================
+
+// Get on-call doctors
+router.get(
+  '/on-call-doctors',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const doctors = await emergencyService.getOnCallDoctors(req.user!.hospitalId);
+    sendSuccess(res, doctors);
+  })
+);
+
+// Page a doctor
+router.post(
+  '/page-doctor',
+  authenticate,
+  authorizeWithPermission('emergency:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const page = await emergencyService.pageDoctor(
+      req.user!.hospitalId,
+      { ...req.body, pagedBy: req.user!.userId }
+    );
+    sendCreated(res, page, 'Doctor paged successfully');
+  })
+);
+
+// Get pages (recent and active)
+router.get(
+  '/pages',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const pages = await emergencyService.getPages(req.user!.hospitalId);
+    sendSuccess(res, pages);
+  })
+);
+
+// Respond to page (doctor endpoint)
+router.patch(
+  '/page/:pageId/respond',
+  authenticate,
+  authorizeWithPermission('emergency:page_respond', ['DOCTOR']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { status, declineReason } = req.body;
+    const page = await emergencyService.respondToPage(
+      req.params.pageId,
+      req.user!.userId,
+      status,
+      declineReason
+    );
+    sendSuccess(res, page, 'Response recorded');
+  })
+);
+
 export default router;

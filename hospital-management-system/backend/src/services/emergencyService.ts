@@ -1287,6 +1287,281 @@ export class EmergencyService {
       warning: 'EMERGENCY RELEASE: Cross-match pending. Monitor patient closely for transfusion reactions.',
     };
   }
+
+  // ==================== ON-CALL DOCTOR SYSTEM ====================
+
+  // Get on-call doctors for Emergency department
+  async getOnCallDoctors(hospitalId: string) {
+    // Get all doctors from Emergency department or with emergency specialization
+    const doctors = await prisma.doctor.findMany({
+      where: {
+        OR: [
+          {
+            department: {
+              hospitalId,
+              name: { contains: 'Emergency', mode: 'insensitive' },
+            },
+          },
+          {
+            specialization: { contains: 'Emergency', mode: 'insensitive' },
+          },
+        ],
+        isAvailable: true,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+            avatar: true,
+          },
+        },
+        department: {
+          select: {
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        user: { firstName: 'asc' },
+      },
+    });
+
+    // Calculate response time stats for each doctor (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const doctorsWithStats = await Promise.all(
+      doctors.map(async (doctor) => {
+        // Get recent pages for this doctor
+        const recentPages = await prisma.emergencyPage.findMany({
+          where: {
+            doctorId: doctor.id,
+            createdAt: { gte: thirtyDaysAgo },
+            status: { in: ['ACKNOWLEDGED', 'EN_ROUTE', 'ARRIVED'] },
+            responseTime: { not: null },
+          },
+          select: {
+            createdAt: true,
+            responseTime: true,
+          },
+        });
+
+        // Calculate average response time in minutes
+        let avgResponseTime = null;
+        if (recentPages.length > 0) {
+          const totalResponseTime = recentPages.reduce((sum, page) => {
+            const responseMs =
+              page.responseTime!.getTime() - page.createdAt.getTime();
+            return sum + responseMs;
+          }, 0);
+          avgResponseTime = Math.round(
+            totalResponseTime / recentPages.length / (1000 * 60)
+          ); // Convert to minutes
+        }
+
+        // Determine current status (simplified - could be enhanced with real-time tracking)
+        // For now, check if doctor has any active pages
+        const activePages = await prisma.emergencyPage.count({
+          where: {
+            doctorId: doctor.id,
+            status: { in: ['EN_ROUTE', 'ACKNOWLEDGED'] },
+          },
+        });
+
+        let status: 'AVAILABLE' | 'RESPONDING' | 'IN_SURGERY' | 'ON_BREAK' = 'AVAILABLE';
+        if (activePages > 0) {
+          status = 'RESPONDING';
+        }
+
+        return {
+          id: doctor.id,
+          user: doctor.user,
+          department: doctor.department.name,
+          specialization: doctor.specialization,
+          experience: doctor.experience,
+          status,
+          avgResponseTime,
+          totalPages: recentPages.length,
+        };
+      })
+    );
+
+    return doctorsWithStats;
+  }
+
+  // Page a doctor
+  async pageDoctor(
+    hospitalId: string,
+    data: {
+      doctorId: string;
+      patientId?: string;
+      urgency: 'STAT' | 'URGENT' | 'ROUTINE';
+      message: string;
+      pagedBy: string;
+    }
+  ) {
+    const page = await prisma.emergencyPage.create({
+      data: {
+        hospitalId,
+        doctorId: data.doctorId,
+        patientId: data.patientId,
+        urgency: data.urgency,
+        message: data.message,
+        pagedBy: data.pagedBy,
+      },
+      include: {
+        doctor: {
+          include: {
+            user: {
+              select: {
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+              },
+            },
+          },
+        },
+        patient: {
+          select: {
+            firstName: true,
+            lastName: true,
+            mrn: true,
+          },
+        },
+        pagedByUser: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+    });
+
+    // TODO: Send notification to doctor (SMS, push notification, etc.)
+    // For now, we just create the page record
+
+    return page;
+  }
+
+  // Get recent pages
+  async getPages(hospitalId: string) {
+    const pages = await prisma.emergencyPage.findMany({
+      where: {
+        hospitalId,
+        createdAt: {
+          gte: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
+        },
+      },
+      include: {
+        doctor: {
+          include: {
+            user: {
+              select: {
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+        },
+        patient: {
+          select: {
+            firstName: true,
+            lastName: true,
+            mrn: true,
+          },
+        },
+        pagedByUser: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+      orderBy: [
+        { urgency: 'asc' }, // STAT first
+        { createdAt: 'desc' },
+      ],
+    });
+
+    return pages.map((page) => {
+      // Calculate elapsed time since page was sent
+      const elapsedMinutes = Math.floor(
+        (Date.now() - page.createdAt.getTime()) / (1000 * 60)
+      );
+
+      // Calculate response time if responded
+      let responseMinutes = null;
+      if (page.responseTime) {
+        responseMinutes = Math.floor(
+          (page.responseTime.getTime() - page.createdAt.getTime()) / (1000 * 60)
+        );
+      }
+
+      return {
+        ...page,
+        doctorName: `${page.doctor.user.firstName} ${page.doctor.user.lastName}`,
+        patientName: page.patient
+          ? `${page.patient.firstName} ${page.patient.lastName}`
+          : null,
+        pagedByName: `${page.pagedByUser.firstName} ${page.pagedByUser.lastName}`,
+        elapsedMinutes,
+        responseMinutes,
+      };
+    });
+  }
+
+  // Respond to page (doctor endpoint)
+  async respondToPage(
+    pageId: string,
+    doctorUserId: string,
+    status: 'ACKNOWLEDGED' | 'EN_ROUTE' | 'ARRIVED' | 'DECLINED',
+    declineReason?: string
+  ) {
+    // Verify the doctor is responding to their own page
+    const page = await prisma.emergencyPage.findUnique({
+      where: { id: pageId },
+      include: {
+        doctor: {
+          select: {
+            userId: true,
+          },
+        },
+      },
+    });
+
+    if (!page) throw new NotFoundError('Page not found');
+    if (page.doctor.userId !== doctorUserId) {
+      throw new Error('Unauthorized: You can only respond to your own pages');
+    }
+
+    const updateData: any = {
+      status,
+    };
+
+    if (status === 'ACKNOWLEDGED' && !page.responseTime) {
+      updateData.responseTime = new Date();
+    } else if (status === 'EN_ROUTE' && !page.responseTime) {
+      updateData.responseTime = new Date();
+    } else if (status === 'ARRIVED') {
+      updateData.arrivedAt = new Date();
+      if (!page.responseTime) {
+        updateData.responseTime = new Date();
+      }
+    } else if (status === 'DECLINED') {
+      updateData.declineReason = declineReason || 'No reason provided';
+      updateData.responseTime = new Date();
+    }
+
+    return prisma.emergencyPage.update({
+      where: { id: pageId },
+      data: updateData,
+    });
+  }
 }
 
 export const emergencyService = new EmergencyService();

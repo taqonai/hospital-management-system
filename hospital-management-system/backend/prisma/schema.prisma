@@ -89,6 +89,9 @@ model Hospital {
   // Consultant Referrals
   referrals            ConsultantReferral[]
 
+  // Emergency On-Call System
+  emergencyPages       EmergencyPage[]
+
   // Procurement Module
   suppliers              Supplier[]
   purchaseRequisitions   PurchaseRequisition[]
@@ -205,6 +208,7 @@ model User {
   prApprovals           PRApproval[]          @relation("PRApprover")
   poApprovals           POApproval[]          @relation("POApprover")
   grnReceivedBy         GoodsReceiptNote[]    @relation("GRNReceivedBy")
+  emergencyPages        EmergencyPage[]       @relation("UserPages")
 
   @@unique([hospitalId, email])
   @@map("users")
@@ -364,6 +368,7 @@ model Doctor {
   consultationParticipants  ConsultationParticipant[]
   referralsMade             ConsultantReferral[] @relation("ReferringDoctor")
   referralsReceived         ConsultantReferral[] @relation("TargetDoctor")
+  emergencyPages            EmergencyPage[] @relation("DoctorPages")
 
   @@map("doctors")
 }
@@ -529,6 +534,9 @@ model Patient {
 
   // Consultant Referrals
   referrals            ConsultantReferral[]
+
+  // Emergency On-Call System
+  emergencyPages       EmergencyPage[]
 
   @@unique([hospitalId, mrn])
   @@unique([hospitalId, phone])
@@ -834,6 +842,55 @@ enum CronJobStatus {
   RUNNING
   COMPLETED
   FAILED
+}
+
+// ==================== EMERGENCY ON-CALL SYSTEM ====================
+
+model EmergencyPage {
+  id            String   @id @default(uuid())
+  hospitalId    String
+  doctorId      String
+  patientId     String?  // optional - which patient needs attention
+  pagedBy       String   // userId who sent the page
+  urgency       PageUrgency
+  message       String
+  status        PageStatus  @default(PENDING)
+  responseTime  DateTime?   // when doctor responded
+  arrivedAt     DateTime?   // when doctor arrived
+  declineReason String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  hospital      Hospital @relation(fields: [hospitalId], references: [id])
+  doctor        Doctor   @relation("DoctorPages", fields: [doctorId], references: [id])
+  patient       Patient? @relation(fields: [patientId], references: [id])
+  pagedByUser   User     @relation("UserPages", fields: [pagedBy], references: [id])
+
+  @@index([hospitalId, status])
+  @@index([doctorId, status])
+  @@map("emergency_pages")
+}
+
+enum PageUrgency {
+  STAT
+  URGENT
+  ROUTINE
+}
+
+enum PageStatus {
+  PENDING
+  ACKNOWLEDGED
+  EN_ROUTE
+  ARRIVED
+  DECLINED
+  EXPIRED
+}
+
+enum DoctorOnCallStatus {
+  AVAILABLE
+  IN_SURGERY
+  ON_BREAK
+  RESPONDING
 }
 
 // ==================== CLINICAL ====================

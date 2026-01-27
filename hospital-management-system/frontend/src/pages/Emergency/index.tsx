@@ -15,6 +15,7 @@ import toast from 'react-hot-toast';
 import EDBeds from './EDBeds';
 import ResuscitationDashboard from './ResuscitationDashboard';
 import BloodBank from './BloodBank';
+import OnCallDoctors from './OnCallDoctors';
 
 interface EDPatient {
   id: string;
@@ -715,7 +716,7 @@ interface IncomingAmbulance {
 }
 
 export default function Emergency() {
-  const [activeTab, setActiveTab] = useState<'tracking' | 'triage' | 'waiting' | 'beds' | 'resus' | 'bloodBank'>('tracking');
+  const [activeTab, setActiveTab] = useState<'tracking' | 'triage' | 'waiting' | 'beds' | 'resus' | 'bloodBank' | 'onCall'>('tracking');
   const [showNewPatientModal, setShowNewPatientModal] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patients, setPatients] = useState<EDPatient[]>([]);
@@ -891,6 +892,7 @@ export default function Emergency() {
     { id: 'beds', label: 'ED Beds' },
     { id: 'resus', label: 'Resuscitation', count: criticalCount },
     { id: 'bloodBank', label: 'Blood Bank' },
+    { id: 'onCall', label: 'On-Call Doctors' },
   ];
 
   return (
@@ -1647,6 +1649,13 @@ export default function Emergency() {
       {activeTab === 'bloodBank' && (
         <div style={{ animationDelay: '0.4s' }}>
           <BloodBank />
+        </div>
+      )}
+
+      {/* On-Call Doctors Tab */}
+      {activeTab === 'onCall' && (
+        <div style={{ animationDelay: '0.4s' }}>
+          <OnCallDoctors />
         </div>
       )}
 
