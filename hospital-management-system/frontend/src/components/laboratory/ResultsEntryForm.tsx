@@ -107,7 +107,10 @@ export default function ResultsEntryForm({
     { name: '', value: '', unit: '', referenceRange: '' },
   ],
 }: ResultsEntryFormProps) {
-  const [parameters, setParameters] = useState<ResultParameter[]>(defaultParameters);
+  const [parameters, setParameters] = useState<ResultParameter[]>(
+    // Initialize with test name pre-filled
+    [{ name: testName, value: '', unit: '', referenceRange: '' }]
+  );
   const [loading, setLoading] = useState(false);
   const [loadingContext, setLoadingContext] = useState(false);
   const [overallNotes, setOverallNotes] = useState('');
