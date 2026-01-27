@@ -2409,11 +2409,11 @@ export default function Consultation() {
         </div>
       </div>
 
-      {/* Custom Diagnosis Input */}
+      {/* Manual Diagnosis Input */}
       <div className="bg-purple-50 border border-purple-200 rounded-2xl p-6">
         <h3 className="text-lg font-semibold text-purple-800 mb-4 flex items-center gap-2">
           <PlusIcon className="h-5 w-5" />
-          Add Custom Diagnosis
+          Add Manual Diagnosis
         </h3>
         <p className="text-sm text-purple-600 mb-4">
           Add a diagnosis not suggested by AI. You can optionally include the ICD-10 code.
@@ -2456,17 +2456,17 @@ export default function Consultation() {
           </button>
         </div>
 
-        {/* Custom Diagnoses List */}
+        {/* Manual Diagnoses List */}
         {customDiagnoses.length > 0 && (
           <div className="mt-4 pt-4 border-t border-purple-200">
-            <h4 className="text-sm font-medium text-purple-700 mb-2">Custom Diagnoses Added:</h4>
+            <h4 className="text-sm font-medium text-purple-700 mb-2">Manual Diagnoses Added:</h4>
             <div className="space-y-2">
               {customDiagnoses.map((d) => (
                 <div key={d.id} className="flex items-center justify-between p-3 bg-white rounded-xl border border-purple-200">
                   <div className="flex-1">
                     <span className="font-medium text-gray-900">{d.name}</span>
                     {d.icd10 && <span className="ml-2 text-sm text-gray-500">({d.icd10})</span>}
-                    <span className="ml-2 text-xs px-2 py-0.5 bg-purple-100 text-purple-600 rounded">Custom</span>
+                    <span className="ml-2 text-xs px-2 py-0.5 bg-purple-100 text-purple-600 rounded">Manual</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -3485,12 +3485,12 @@ export default function Consultation() {
                   <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded">AI</span>
                 </p>
               ))}
-              {/* Custom Diagnoses */}
+              {/* Manual Diagnoses */}
               {customDiagnoses.map((d, i) => (
                 <p key={d.id} className="text-gray-900 flex items-center gap-2">
                   <span>{selectedDiagnoses.length + i + 1}. {d.name}{d.icd10 ? ` (${d.icd10})` : ''}</span>
                   {d.isPrimary && <span className="text-xs px-1.5 py-0.5 bg-purple-500 text-white rounded">Primary</span>}
-                  <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded">Custom</span>
+                  <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded">Manual</span>
                 </p>
               ))}
               {selectedDiagnoses.length === 0 && customDiagnoses.length === 0 && (

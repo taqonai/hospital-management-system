@@ -562,16 +562,17 @@ export default function Laboratory() {
   };
 
   const handleEnterResults = (order: LabOrder) => {
-    // For simplicity, use the first test in the order
-    const firstTest = order.tests?.[0];
-    if (!firstTest) {
+    // Pass the entire order so we can handle ALL tests in one popup
+    if (!order.tests || order.tests.length === 0) {
       toast.error('No tests found in this order');
       return;
     }
     setSelectedOrderForResults({
       orderId: order.id,
-      testId: firstTest.id,
-      testName: firstTest.labTest?.name || firstTest.test?.name || 'Unknown Test',
+      testId: order.tests[0].id, // Keep for backward compatibility
+      testName: order.tests.length === 1
+        ? (order.tests[0].labTest?.name || order.tests[0].test?.name || 'Unknown Test')
+        : `${order.tests.length} Tests`, // Show count for multiple tests
       patientName: `${order.patient?.firstName || ''} ${order.patient?.lastName || ''}`.trim(),
     });
   };
