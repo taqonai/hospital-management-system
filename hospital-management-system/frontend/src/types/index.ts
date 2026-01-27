@@ -45,7 +45,7 @@ export interface Patient {
   firstName: string;
   lastName: string;
   dateOfBirth: string;
-  gender: 'MALE' | 'FEMALE' | 'OTHER';
+  gender: 'MALE' | 'FEMALE';
   bloodGroup?: string;
   phone: string;
   email?: string;

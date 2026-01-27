@@ -224,7 +224,11 @@ function App() {
         <Route path="/quality" element={<Quality />} />
         <Route path="/ipd" element={<IPD />} />
         <Route path="/emergency" element={<Emergency />} />
-        <Route path="/nursing" element={<Nursing />} />
+        <Route path="/nursing" element={
+            <ProtectedRoute allowedRoles={['NURSE', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']} permission="nursing:dashboard">
+              <Nursing />
+            </ProtectedRoute>
+          } />
         <Route path="/laboratory" element={<Laboratory />} />
         <Route path="/radiology" element={<Radiology />} />
         <Route path="/pharmacy" element={<Pharmacy />} />

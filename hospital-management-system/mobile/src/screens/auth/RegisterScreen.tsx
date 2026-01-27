@@ -71,7 +71,7 @@ const RegisterScreen: React.FC = () => {
       phone: data.phone,
       password: data.password,
       dateOfBirth: '1990-01-01', // Default, can be updated in profile
-      gender: 'OTHER',
+      gender: 'MALE', // Default, can be updated in profile
     }));
   };
 

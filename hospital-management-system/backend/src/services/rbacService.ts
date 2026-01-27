@@ -92,6 +92,18 @@ export const PERMISSIONS = {
   EMERGENCY_TRIAGE: 'emergency:triage',
   EMERGENCY_CRITICAL: 'emergency:critical',
 
+  // Nursing Station
+  NURSING_DASHBOARD: 'nursing:dashboard',
+  NURSING_PATIENTS_READ: 'nursing:patients:read',
+  NURSING_PATIENTS_ASSIGN: 'nursing:patients:assign',
+  NURSING_EMAR_ADMINISTER: 'nursing:emar:administer',
+  NURSING_VITALS_WRITE: 'nursing:vitals:write',
+  NURSING_IO_WRITE: 'nursing:io:write',
+  NURSING_ASSESSMENTS_WRITE: 'nursing:assessments:write',
+  NURSING_HANDOFF_WRITE: 'nursing:handoff:write',
+  NURSING_TASKS_WRITE: 'nursing:tasks:write',
+  NURSING_UNIT_OVERVIEW: 'nursing:unit:overview',
+
   // Surgery
   SURGERY_READ: 'surgery:read',
   SURGERY_WRITE: 'surgery:write',
@@ -374,6 +386,17 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     PERMISSIONS.EMERGENCY_READ,
     PERMISSIONS.EMERGENCY_WRITE,
     PERMISSIONS.EMERGENCY_TRIAGE,
+    // Nursing Station
+    PERMISSIONS.NURSING_DASHBOARD,
+    PERMISSIONS.NURSING_PATIENTS_READ,
+    PERMISSIONS.NURSING_PATIENTS_ASSIGN,
+    PERMISSIONS.NURSING_EMAR_ADMINISTER,
+    PERMISSIONS.NURSING_VITALS_WRITE,
+    PERMISSIONS.NURSING_IO_WRITE,
+    PERMISSIONS.NURSING_ASSESSMENTS_WRITE,
+    PERMISSIONS.NURSING_HANDOFF_WRITE,
+    PERMISSIONS.NURSING_TASKS_WRITE,
+    PERMISSIONS.NURSING_UNIT_OVERVIEW,
     // Surgery
     PERMISSIONS.SURGERY_READ,
     PERMISSIONS.SURGERY_WRITE,
@@ -1123,6 +1146,17 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   [PERMISSIONS.EMERGENCY_WRITE]: 'Register emergency cases',
   [PERMISSIONS.EMERGENCY_TRIAGE]: 'Perform triage',
   [PERMISSIONS.EMERGENCY_CRITICAL]: 'Handle critical cases',
+
+  [PERMISSIONS.NURSING_DASHBOARD]: 'Access nursing station dashboard',
+  [PERMISSIONS.NURSING_PATIENTS_READ]: 'View assigned patients',
+  [PERMISSIONS.NURSING_PATIENTS_ASSIGN]: 'Assign patients to nurses',
+  [PERMISSIONS.NURSING_EMAR_ADMINISTER]: 'Administer medications via eMAR',
+  [PERMISSIONS.NURSING_VITALS_WRITE]: 'Record patient vitals',
+  [PERMISSIONS.NURSING_IO_WRITE]: 'Record intake & output',
+  [PERMISSIONS.NURSING_ASSESSMENTS_WRITE]: 'Complete nursing assessments',
+  [PERMISSIONS.NURSING_HANDOFF_WRITE]: 'Create shift handoff notes',
+  [PERMISSIONS.NURSING_TASKS_WRITE]: 'Manage nursing tasks',
+  [PERMISSIONS.NURSING_UNIT_OVERVIEW]: 'View unit overview & staffing',
 
   [PERMISSIONS.SURGERY_READ]: 'View surgery schedules',
   [PERMISSIONS.SURGERY_WRITE]: 'Record surgeries',

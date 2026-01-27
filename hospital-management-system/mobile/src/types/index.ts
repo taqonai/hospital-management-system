@@ -49,7 +49,7 @@ export interface PatientUser {
   photo?: string;
   phone?: string;
   dateOfBirth?: string;
-  gender?: 'MALE' | 'FEMALE' | 'OTHER';
+  gender?: 'MALE' | 'FEMALE';
   address?: string;
   city?: string;
   state?: string;

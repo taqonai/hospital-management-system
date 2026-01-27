@@ -18,6 +18,8 @@ app.use(helmet());
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3001',
+  'http://localhost:3003',
+  'http://localhost:5173',
   'http://spetaar.ai',
   'https://spetaar.ai',
   process.env.CORS_ORIGIN,

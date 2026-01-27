@@ -393,7 +393,7 @@ export default function AICreationAssistant() {
             firstName: createData.firstName || 'Unknown',
             lastName: createData.lastName || 'Patient',
             dateOfBirth: createData.dateOfBirth ? new Date(createData.dateOfBirth).toISOString() : new Date('1990-01-01').toISOString(),
-            gender: createData.gender || 'OTHER',
+            gender: createData.gender || 'MALE',
             phone: createData.phone || '0000000000',
             email: createData.email || '',
             // Address fields with defaults (can be updated later)
