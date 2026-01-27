@@ -13,9 +13,36 @@ const prisma = new PrismaClient();
 
 export class WhatsAppBotService {
   private aiServiceUrl: string;
+  private defaultHospitalId: string;
 
   constructor() {
     this.aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+    // Default hospital ID for WhatsApp bot (hospital-specific number)
+    this.defaultHospitalId = process.env.DEFAULT_HOSPITAL_ID || '';
+  }
+
+  /**
+   * Get default hospital for WhatsApp bot
+   * If no default hospital ID is set, get the first active hospital
+   */
+  private async getDefaultHospital() {
+    if (this.defaultHospitalId) {
+      const hospital = await prisma.hospital.findUnique({
+        where: { id: this.defaultHospitalId, isActive: true }
+      });
+      if (hospital) return hospital;
+    }
+
+    // Fallback: get first active hospital
+    const hospital = await prisma.hospital.findFirst({
+      where: { isActive: true }
+    });
+
+    if (!hospital) {
+      throw new Error('No active hospital found for WhatsApp bot');
+    }
+
+    return hospital;
   }
 
   /**
@@ -213,21 +240,34 @@ export class WhatsAppBotService {
    */
   private async handleRegistrationChoice(phoneNumber: string, choice: string): Promise<void> {
     if (choice === '1' || choice.includes('new')) {
-      // New patient - ask for emirate
-      await whatsappSessionService.updateSessionState(
-        phoneNumber,
-        ConversationStep.ASK_EMIRATE,
-        {}
-      );
+      // New patient - skip emirate/hospital selection, go directly to name collection
+      try {
+        const hospital = await this.getDefaultHospital();
 
-      const emiratesButtons = UAE_EMIRATES.map((emirate, index) =>
-        `${index + 1}. ${emirate}`
-      ).join('\n');
+        await whatsappSessionService.updateSessionState(
+          phoneNumber,
+          ConversationStep.COLLECT_NAME,
+          {
+            hospitalId: hospital.id,
+            hospitalName: hospital.name
+          },
+          {
+            hospitalId: hospital.id,
+            hospitalName: hospital.name
+          }
+        );
 
-      await this.sendWhatsAppMessage(
-        phoneNumber,
-        `Great! In which emirate would you like to book an appointment?\n\n${emiratesButtons}`
-      );
+        await this.sendWhatsAppMessage(
+          phoneNumber,
+          `Great! To register, I'll need some information.\n\nWhat is your full name? (First and Last Name)`
+        );
+      } catch (error) {
+        console.error('Error getting default hospital:', error);
+        await this.sendWhatsAppMessage(
+          phoneNumber,
+          `Sorry, there was an error. Please try again later.`
+        );
+      }
     } else if (choice === '2' || choice.includes('existing')) {
       // Existing patient - ask for phone verification
       await whatsappSessionService.updateSessionState(
@@ -524,6 +564,11 @@ export class WhatsAppBotService {
         throw new Error('Missing required patient data');
       }
 
+      // Get hospital info for address
+      const hospital = await prisma.hospital.findUnique({
+        where: { id: hospitalId }
+      });
+
       // Check if patient already exists
       const existingPatient = await prisma.patient.findFirst({
         where: {
@@ -539,7 +584,7 @@ export class WhatsAppBotService {
         // Generate MRN
         const mrn = `MRN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-        // Create patient
+        // Create patient - use hospital location for address fields
         patient = await prisma.patient.create({
           data: {
             hospitalId,
@@ -550,10 +595,10 @@ export class WhatsAppBotService {
             gender: gender as any,
             phone: cleanPhone,
             email: `${cleanPhone}@whatsapp.patient`,
-            address: session.collectedData.emirate || 'UAE',
-            city: session.collectedData.emirate || 'Dubai',
-            state: session.collectedData.emirate || 'Dubai',
-            zipCode: '00000'
+            address: hospital?.address || 'UAE',
+            city: hospital?.city || 'Dubai',
+            state: hospital?.state || 'Dubai',
+            zipCode: hospital?.zipCode || '00000'
           }
         });
       }
