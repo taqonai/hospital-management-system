@@ -667,7 +667,7 @@ model NurseTask {
   title        String
   description  String?
   category     TaskCategory
-  priority     TaskPriority @default(ROUTINE)
+  priority     NurseTaskPriority @default(ROUTINE)
   
   dueAt        DateTime?
   completedAt  DateTime?
@@ -699,7 +699,7 @@ enum TaskCategory {
   OTHER
 }
 
-enum TaskPriority {
+enum NurseTaskPriority {
   STAT
   URGENT
   ROUTINE
