@@ -422,13 +422,11 @@ function AssignDoctorModal({
   useEffect(() => {
     const fetchDoctors = async () => {
       try {
-        // Using existing doctors API
-        const response = await emergencyApi.getStats(); // Temporary - we'll add proper endpoint later
-        // For now, we'll need to fetch available doctors
-        // TODO: Add GET /emergency/available-doctors endpoint
-        setDoctors([]);
+        const response = await emergencyApi.getAvailableDoctors();
+        setDoctors(response.data.data || []);
       } catch (error) {
         console.error('Failed to fetch doctors:', error);
+        toast.error('Failed to load available doctors');
       } finally {
         setFetchingDoctors(false);
       }
@@ -475,15 +473,8 @@ function AssignDoctorModal({
               </div>
             ) : doctors.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
-                <p>Doctor list temporarily unavailable.</p>
-                <p className="text-sm mt-2">Please enter doctor ID manually or contact IT support.</p>
-                <input
-                  type="text"
-                  value={selectedDoctorId}
-                  onChange={(e) => setSelectedDoctorId(e.target.value)}
-                  placeholder="Enter doctor ID..."
-                  className="mt-4 w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                />
+                <p>No doctors available at the moment.</p>
+                <p className="text-sm mt-2">Please contact the charge nurse.</p>
               </div>
             ) : (
               <select 
@@ -492,9 +483,9 @@ function AssignDoctorModal({
                 className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
               >
                 <option value="">Select a doctor...</option>
-                {doctors.map((doctor) => (
+                {doctors.map((doctor: any) => (
                   <option key={doctor.id} value={doctor.id}>
-                    Dr. {doctor.user.firstName} {doctor.user.lastName}
+                    {doctor.name} - {doctor.specialization} ({doctor.activePatients} patients)
                   </option>
                 ))}
               </select>
@@ -533,8 +524,26 @@ function AdmitPatientModal({
   onClose: () => void; 
   onSuccess: () => void;
 }) {
+  const [beds, setBeds] = useState<any[]>([]);
   const [bedId, setBedId] = useState('');
   const [loading, setLoading] = useState(false);
+  const [fetchingBeds, setFetchingBeds] = useState(true);
+
+  useEffect(() => {
+    const fetchBeds = async () => {
+      try {
+        const response = await emergencyApi.getAvailableBeds();
+        setBeds(response.data.data || []);
+      } catch (error) {
+        console.error('Failed to fetch beds:', error);
+        toast.error('Failed to load available beds');
+      } finally {
+        setFetchingBeds(false);
+      }
+    };
+
+    fetchBeds();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -567,18 +576,31 @@ function AdmitPatientModal({
         
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Bed ID <span className="text-red-500">*</span></label>
-            <input
-              type="text"
-              value={bedId}
-              onChange={(e) => setBedId(e.target.value)}
-              placeholder="Enter bed ID or number..."
-              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/50"
-              required
-            />
-            <p className="text-sm text-gray-500 mt-2">
-              Note: Bed selection UI will be available in Phase 4 Feature 4
-            </p>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Select Bed <span className="text-red-500">*</span></label>
+            {fetchingBeds ? (
+              <div className="flex items-center justify-center py-8">
+                <ArrowPathIcon className="h-8 w-8 animate-spin text-gray-400" />
+              </div>
+            ) : beds.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <p>No beds available at the moment.</p>
+                <p className="text-sm mt-2">Please contact bed management.</p>
+              </div>
+            ) : (
+              <select
+                value={bedId}
+                onChange={(e) => setBedId(e.target.value)}
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500/50"
+                required
+              >
+                <option value="">Select a bed...</option>
+                {beds.map((bed: any) => (
+                  <option key={bed.id} value={bed.id}>
+                    {bed.ward} - Bed {bed.bedNumber} {bed.floor ? `(Floor ${bed.floor})` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">

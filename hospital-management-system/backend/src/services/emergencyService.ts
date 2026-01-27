@@ -614,6 +614,187 @@ export class EmergencyService {
       estimatedResources: 2,
     };
   }
+
+  // NEW: Get available ED doctors
+  async getAvailableDoctors(hospitalId: string) {
+    const doctors = await prisma.doctor.findMany({
+      where: {
+        hospitalId,
+        user: {
+          role: 'DOCTOR',
+          isActive: true,
+        },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+        specialization: true,
+      },
+      orderBy: {
+        user: {
+          firstName: 'asc',
+        },
+      },
+    });
+
+    // Get current patient count per doctor in ED
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const doctorsWithCounts = await Promise.all(
+      doctors.map(async (doctor) => {
+        const activePatients = await prisma.appointment.count({
+          where: {
+            doctorId: doctor.id,
+            type: 'EMERGENCY',
+            status: { in: ['IN_PROGRESS', 'CHECKED_IN'] },
+            appointmentDate: { gte: today },
+          },
+        });
+
+        return {
+          id: doctor.id,
+          name: `Dr. ${doctor.user.firstName} ${doctor.user.lastName}`,
+          specialization: doctor.specialization?.name || 'General',
+          activePatients,
+          availability: activePatients < 5 ? 'available' : activePatients < 8 ? 'busy' : 'overloaded',
+        };
+      })
+    );
+
+    return doctorsWithCounts;
+  }
+
+  // NEW: Get available beds (for admit flow)
+  async getAvailableBeds(hospitalId: string) {
+    const beds = await prisma.bed.findMany({
+      where: {
+        hospitalId,
+        status: 'AVAILABLE',
+        isActive: true,
+      },
+      include: {
+        ward: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+          },
+        },
+      },
+      orderBy: [
+        { ward: { name: 'asc' } },
+        { bedNumber: 'asc' },
+      ],
+    });
+
+    return beds.map((bed) => ({
+      id: bed.id,
+      bedNumber: bed.bedNumber,
+      ward: bed.ward?.name || 'Unknown',
+      wardType: bed.ward?.type || 'GENERAL',
+      floor: bed.floor,
+    }));
+  }
+
+  // NEW: Enhanced stats with hourly trends
+  async getStatsWithTrends(hospitalId: string) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Get all ED patients today
+    const patients = await prisma.appointment.findMany({
+      where: {
+        hospitalId,
+        type: 'EMERGENCY',
+        appointmentDate: { gte: today },
+      },
+    });
+
+    // Calculate ESI distribution
+    const byESI: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    patients.forEach(p => {
+      const notes = p.notes ? JSON.parse(p.notes) : {};
+      const esi = notes.esiLevel || 3;
+      byESI[esi] = (byESI[esi] || 0) + 1;
+    });
+
+    const active = patients.filter(p => ['IN_PROGRESS', 'CHECKED_IN'].includes(p.status));
+    const completed = patients.filter(p => p.status === 'COMPLETED');
+
+    // Count admissions
+    const admitted = await prisma.admission.count({
+      where: {
+        hospitalId,
+        admissionType: 'EMERGENCY',
+        admissionDate: { gte: today },
+      },
+    });
+
+    // Calculate average wait time
+    let avgWaitTime = 0;
+    if (completed.length > 0) {
+      const waitTimes = completed
+        .filter(p => p.createdAt && p.updatedAt)
+        .map(p => {
+          const arrivalTime = p.createdAt.getTime();
+          const seenTime = p.updatedAt.getTime();
+          return Math.round((seenTime - arrivalTime) / (1000 * 60));
+        });
+      
+      if (waitTimes.length > 0) {
+        avgWaitTime = Math.round(
+          waitTimes.reduce((sum, time) => sum + time, 0) / waitTimes.length
+        );
+      }
+    }
+
+    // NEW: Calculate hourly trends (last 12 hours)
+    const now = new Date();
+    const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+    
+    const hourlyData: Array<{ hour: string; count: number }> = [];
+    for (let i = 0; i < 12; i++) {
+      const hourStart = new Date(twelveHoursAgo.getTime() + i * 60 * 60 * 1000);
+      const hourEnd = new Date(hourStart.getTime() + 60 * 60 * 1000);
+      
+      const count = await prisma.appointment.count({
+        where: {
+          hospitalId,
+          type: 'EMERGENCY',
+          createdAt: {
+            gte: hourStart,
+            lt: hourEnd,
+          },
+        },
+      });
+      
+      hourlyData.push({
+        hour: hourStart.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true }),
+        count,
+      });
+    }
+
+    return {
+      inDepartment: active.length,
+      treatedToday: completed.length,
+      admitted,
+      avgWaitTime,
+      byESILevel: byESI,
+      criticalCount: byESI[1] + byESI[2],
+      totalToday: patients.length,
+      activePatients: active.length,
+      completedToday: completed.length,
+      // NEW: Hourly trends
+      hourlyTrends: hourlyData,
+    };
+  }
 }
 
 export const emergencyService = new EmergencyService();

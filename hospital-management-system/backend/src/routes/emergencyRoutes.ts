@@ -107,4 +107,34 @@ router.post(
   })
 );
 
+// Get available ED doctors
+router.get(
+  '/available-doctors',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const doctors = await emergencyService.getAvailableDoctors(req.user!.hospitalId);
+    sendSuccess(res, doctors);
+  })
+);
+
+// Get available beds for admission
+router.get(
+  '/available-beds',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const beds = await emergencyService.getAvailableBeds(req.user!.hospitalId);
+    sendSuccess(res, beds);
+  })
+);
+
+// Get stats with hourly trends
+router.get(
+  '/stats-with-trends',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const stats = await emergencyService.getStatsWithTrends(req.user!.hospitalId);
+    sendSuccess(res, stats);
+  })
+);
+
 export default router;

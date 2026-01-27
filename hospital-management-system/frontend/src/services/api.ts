@@ -741,6 +741,10 @@ export const emergencyApi = {
     isPregnant?: boolean;
     symptoms?: string[];
   }) => api.post('/emergency/calculate-esi', data),
+  // NEW: Phase 4 endpoints
+  getAvailableDoctors: () => api.get('/emergency/available-doctors'),
+  getAvailableBeds: () => api.get('/emergency/available-beds'),
+  getStatsWithTrends: () => api.get('/emergency/stats-with-trends'),
 };
 
 // Radiology APIs
