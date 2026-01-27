@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import {
   BeakerIcon,
@@ -6,6 +6,7 @@ import {
   ExclamationTriangleIcon,
   XCircleIcon,
   ArrowPathIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline';
 import { laboratoryApi } from '../../services/api';
 import toast from 'react-hot-toast';
@@ -108,7 +109,40 @@ export default function ResultsEntryForm({
 }: ResultsEntryFormProps) {
   const [parameters, setParameters] = useState<ResultParameter[]>(defaultParameters);
   const [loading, setLoading] = useState(false);
+  const [loadingContext, setLoadingContext] = useState(false);
   const [overallNotes, setOverallNotes] = useState('');
+  const [clinicalContext, setClinicalContext] = useState<any>(null);
+  const [existingResult, setExistingResult] = useState<any>(null);
+
+  // Load existing result data if available
+  useEffect(() => {
+    const loadExistingResult = async () => {
+      try {
+        const orders = await laboratoryApi.getOrders({ limit: 100 });
+        // Find the test in the orders
+        for (const order of orders.data.data || []) {
+          const test = order.tests?.find((t: any) => t.id === testId);
+          if (test && test.result) {
+            setExistingResult(test);
+            // Pre-fill form with existing data
+            setParameters([{
+              name: testName,
+              value: test.resultValue?.toString() || test.result || '',
+              unit: test.unit || '',
+              referenceRange: test.normalRange || '',
+              notes: test.comments || '',
+            }]);
+            setOverallNotes(test.comments || '');
+            break;
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load existing result:', error);
+      }
+    };
+
+    loadExistingResult();
+  }, [testId, testName]);
 
   const {
     formState: { errors },
@@ -142,41 +176,57 @@ export default function ResultsEntryForm({
     return {};
   };
 
+  const handleGenerateContext = async () => {
+    if (!existingResult) {
+      toast.error('Please save results first before generating clinical context');
+      return;
+    }
+
+    setLoadingContext(true);
+    try {
+      const response = await laboratoryApi.getClinicalContext(testId);
+      if (response.data.success) {
+        setClinicalContext(response.data);
+        toast.success('Clinical context generated');
+      } else {
+        toast.error(response.data.error || 'Failed to generate context');
+      }
+    } catch (error: any) {
+      console.error('Failed to generate clinical context:', error);
+      toast.error('Failed to generate clinical context');
+    } finally {
+      setLoadingContext(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validation
-    const validParameters = parameters.filter(p => p.name && p.value);
-    if (validParameters.length === 0) {
-      toast.error('Please enter at least one test result');
+    // For simplicity, use the first parameter as the main result
+    const mainParam = parameters[0];
+    if (!mainParam || !mainParam.value) {
+      toast.error('Please enter a result value');
       return;
     }
 
     setLoading(true);
     try {
-      // Process each parameter and calculate flags
-      const resultsData = validParameters.map(param => {
-        const { min, max } = parseReferenceRange(param.referenceRange || '');
-        const status = calculateResultStatus(param.value, min, max);
-
-        return {
-          parameterName: param.name,
-          value: param.value,
-          unit: param.unit,
-          referenceRange: param.referenceRange || undefined,
-          isAbnormal: status === 'abnormal' || status === 'critical',
-          isCritical: status === 'critical',
-          notes: param.notes || undefined,
-        };
-      });
+      // Calculate flags based on reference range
+      const { min, max } = parseReferenceRange(mainParam.referenceRange || '');
+      const status = calculateResultStatus(mainParam.value, min, max);
 
       await laboratoryApi.enterResult(testId, {
-        results: resultsData,
-        notes: overallNotes || undefined,
+        result: mainParam.value,
+        resultValue: parseFloat(mainParam.value) || undefined,
+        unit: mainParam.unit || undefined,
+        normalRange: mainParam.referenceRange || undefined,
+        isAbnormal: status === 'abnormal' || status === 'critical',
+        isCritical: status === 'critical',
+        comments: overallNotes || mainParam.notes || undefined,
       });
 
-      const hasCritical = resultsData.some(r => r.isCritical);
-      const hasAbnormal = resultsData.some(r => r.isAbnormal);
+      const hasCritical = status === 'critical';
+      const hasAbnormal = status === 'abnormal';
 
       if (hasCritical) {
         toast.error('Critical values detected! Results submitted and flagged for immediate review.');
@@ -191,7 +241,11 @@ export default function ResultsEntryForm({
         toast.success('Results entered successfully');
       }
 
-      onSuccess();
+      // Reload to get the saved result
+      setExistingResult({ result: mainParam.value, resultValue: parseFloat(mainParam.value), unit: mainParam.unit });
+
+      // Don't close immediately - allow viewing/generating context
+      // onSuccess();
     } catch (error: any) {
       console.error('Failed to enter results:', error);
       toast.error(error.response?.data?.message || 'Failed to enter results');
@@ -392,6 +446,82 @@ export default function ResultsEntryForm({
           </div>
         )}
 
+        {/* Clinical Context Section (for doctors/nurses) */}
+        {existingResult && (
+          <div className="bg-gradient-to-br from-purple-50 to-blue-50 border-2 border-purple-200 rounded-xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <SparklesIcon className="h-5 w-5 text-purple-600" />
+                <h4 className="font-semibold text-purple-900">AI Clinical Context</h4>
+              </div>
+              <button
+                type="button"
+                onClick={handleGenerateContext}
+                disabled={loadingContext}
+                className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {loadingContext ? (
+                  <>
+                    <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <SparklesIcon className="h-4 w-4" />
+                    Generate Context
+                  </>
+                )}
+              </button>
+            </div>
+
+            {clinicalContext ? (
+              <div className="space-y-4">
+                <div className="bg-white rounded-lg p-4">
+                  <h5 className="text-sm font-semibold text-gray-700 mb-2">Clinical Interpretation</h5>
+                  <p className="text-sm text-gray-900 whitespace-pre-wrap">
+                    {clinicalContext.clinicalContext}
+                  </p>
+                </div>
+
+                {clinicalContext.recommendations && clinicalContext.recommendations.length > 0 && (
+                  <div className="bg-white rounded-lg p-4">
+                    <h5 className="text-sm font-semibold text-gray-700 mb-2">Recommendations</h5>
+                    <ul className="list-disc list-inside space-y-1 text-sm text-gray-900">
+                      {clinicalContext.recommendations.map((rec: string, idx: number) => (
+                        <li key={idx}>{rec}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {clinicalContext.concerns && clinicalContext.concerns.length > 0 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    <h5 className="text-sm font-semibold text-amber-800 mb-2 flex items-center gap-2">
+                      <ExclamationTriangleIcon className="h-4 w-4" />
+                      Clinical Concerns
+                    </h5>
+                    <ul className="list-disc list-inside space-y-1 text-sm text-amber-900">
+                      {clinicalContext.concerns.map((concern: string, idx: number) => (
+                        <li key={idx}>{concern}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {clinicalContext.followUpNeeded && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-900">
+                    <strong>Follow-up Recommended:</strong> This result requires additional monitoring or testing.
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-600 italic">
+                Click "Generate Context" to get AI-powered clinical interpretation for doctors and nurses.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
           <button
@@ -399,25 +529,36 @@ export default function ResultsEntryForm({
             onClick={onCancel}
             className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
           >
-            Cancel
+            {existingResult ? 'Close' : 'Cancel'}
           </button>
-          <button
-            type="submit"
-            disabled={loading || parameters.filter(p => p.name && p.value).length === 0}
-            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold hover:from-blue-600 hover:to-indigo-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {loading ? (
-              <>
-                <ArrowPathIcon className="h-5 w-5 animate-spin" />
-                Submitting...
-              </>
-            ) : (
-              <>
-                <CheckCircleIcon className="h-5 w-5" />
-                Submit Results
-              </>
-            )}
-          </button>
+          {!existingResult || parameters[0]?.value !== existingResult.resultValue?.toString() ? (
+            <button
+              type="submit"
+              disabled={loading || parameters.filter(p => p.name && p.value).length === 0}
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold hover:from-blue-600 hover:to-indigo-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <CheckCircleIcon className="h-5 w-5" />
+                  {existingResult ? 'Update Results' : 'Submit Results'}
+                </>
+              )}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onSuccess}
+              className="px-6 py-2.5 rounded-xl bg-green-600 text-white font-semibold hover:bg-green-700 transition-all flex items-center gap-2"
+            >
+              <CheckCircleIcon className="h-5 w-5" />
+              Done
+            </button>
+          )}
         </div>
       </form>
     </div>

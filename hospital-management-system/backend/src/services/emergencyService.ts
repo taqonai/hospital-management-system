@@ -1071,6 +1071,222 @@ export class EmergencyService {
       };
     });
   }
+
+  // ==================== BLOOD BANK INTEGRATION ====================
+
+  // Get blood bank inventory summary for emergency
+  async getBloodBankInventory(hospitalId: string) {
+    const inventory = await prisma.bloodComponent.groupBy({
+      by: ['bloodGroup', 'rhFactor', 'componentType'],
+      where: {
+        hospitalId,
+        status: 'AVAILABLE',
+        expiryDate: { gt: new Date() },
+      },
+      _count: true,
+    });
+
+    // Format inventory by blood type
+    const bloodTypes = ['O', 'A', 'B', 'AB'];
+    const rhFactors = ['NEGATIVE', 'POSITIVE'];
+    
+    const inventorySummary = bloodTypes.flatMap(type => 
+      rhFactors.map(rh => {
+        const items = inventory.filter(
+          item => item.bloodGroup === type && item.rhFactor === rh
+        );
+        
+        const totalUnits = items.reduce((sum, item) => sum + item._count, 0);
+        const componentBreakdown = items.reduce((acc, item) => {
+          acc[item.componentType] = item._count;
+          return acc;
+        }, {} as Record<string, number>);
+
+        // Determine status level (critical <5, low <10, adequate >=10)
+        let statusLevel: 'critical' | 'low' | 'adequate';
+        if (totalUnits < 5) statusLevel = 'critical';
+        else if (totalUnits < 10) statusLevel = 'low';
+        else statusLevel = 'adequate';
+
+        return {
+          bloodType: `${type}${rh === 'POSITIVE' ? '+' : '-'}`,
+          bloodGroup: type,
+          rhFactor: rh,
+          totalUnits,
+          componentBreakdown,
+          statusLevel,
+        };
+      })
+    );
+
+    return inventorySummary;
+  }
+
+  // Create emergency blood request
+  async createEmergencyBloodRequest(hospitalId: string, data: {
+    patientId: string;
+    bloodType: string; // e.g., "A+", "O-"
+    componentType: string;
+    unitsNeeded: number;
+    urgency: 'STAT' | 'URGENT' | 'ROUTINE';
+    indication: string;
+    requestedBy: string;
+  }) {
+    // Parse blood type (e.g., "A+" -> bloodGroup: "A", rhFactor: "POSITIVE")
+    const isNegative = data.bloodType.includes('-');
+    const bloodGroup = data.bloodType.replace(/[+-]/, '');
+    const rhFactor = isNegative ? 'NEGATIVE' : 'POSITIVE';
+
+    // Get patient info
+    const patient = await prisma.patient.findUnique({
+      where: { id: data.patientId },
+      select: {
+        firstName: true,
+        lastName: true,
+        bloodGroup: true,
+      },
+    });
+
+    if (!patient) throw new NotFoundError('Patient not found');
+
+    const requestNumber = `REQ-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
+
+    // Map urgency to BloodPriority enum
+    let priority: 'ROUTINE' | 'URGENT' | 'EMERGENCY' | 'MASSIVE_TRANSFUSION';
+    if (data.urgency === 'STAT') priority = 'EMERGENCY';
+    else if (data.urgency === 'URGENT') priority = 'URGENT';
+    else priority = 'ROUTINE';
+
+    const request = await prisma.bloodRequest.create({
+      data: {
+        hospitalId,
+        requestNumber,
+        patientId: data.patientId,
+        patientName: `${patient.firstName} ${patient.lastName}`,
+        patientBloodGroup: bloodGroup as any,
+        patientRhFactor: rhFactor as any,
+        componentType: data.componentType as any,
+        unitsRequired: data.unitsNeeded,
+        priority,
+        indication: data.indication,
+        requestedBy: data.requestedBy,
+        department: 'Emergency',
+      },
+    });
+
+    return request;
+  }
+
+  // Get emergency blood requests (pending or in progress)
+  async getEmergencyBloodRequests(hospitalId: string) {
+    const requests = await prisma.bloodRequest.findMany({
+      where: {
+        hospitalId,
+        department: 'Emergency',
+        status: {
+          in: ['PENDING', 'APPROVED', 'PARTIALLY_FULFILLED'],
+        },
+      },
+      orderBy: [
+        { priority: 'asc' }, // EMERGENCY first
+        { createdAt: 'desc' },
+      ],
+      take: 50,
+    });
+
+    return requests.map(req => ({
+      ...req,
+      patientBloodType: `${req.patientBloodGroup}${req.patientRhFactor === 'POSITIVE' ? '+' : '-'}`,
+    }));
+  }
+
+  // Emergency blood release (O- universal donor)
+  async emergencyBloodRelease(
+    hospitalId: string,
+    patientId: string,
+    unitsNeeded: number,
+    requestedBy: string
+  ) {
+    // Find available O- blood (universal donor)
+    const availableUnits = await prisma.bloodComponent.findMany({
+      where: {
+        hospitalId,
+        bloodGroup: 'O' as any,
+        rhFactor: 'NEGATIVE',
+        componentType: 'PACKED_RED_CELLS',
+        status: 'AVAILABLE',
+        expiryDate: { gt: new Date() },
+      },
+      orderBy: { expiryDate: 'asc' }, // FIFO
+      take: unitsNeeded,
+    });
+
+    if (availableUnits.length === 0) {
+      throw new Error('No O- blood units available for emergency release');
+    }
+
+    // Get patient info
+    const patient = await prisma.patient.findUnique({
+      where: { id: patientId },
+      select: {
+        firstName: true,
+        lastName: true,
+        bloodGroup: true,
+      },
+    });
+
+    if (!patient) throw new NotFoundError('Patient not found');
+
+    // Create emergency blood request with auto-approval
+    const requestNumber = `REQ-EMER-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
+
+    const request = await prisma.bloodRequest.create({
+      data: {
+        hospitalId,
+        requestNumber,
+        patientId,
+        patientName: `${patient.firstName} ${patient.lastName}`,
+        patientBloodGroup: (patient.bloodGroup || 'O_POSITIVE') as any,
+        patientRhFactor: 'NEGATIVE',
+        componentType: 'PACKED_RED_CELLS',
+        unitsRequired: unitsNeeded,
+        priority: 'EMERGENCY',
+        indication: 'EMERGENCY RELEASE - Life-threatening situation',
+        requestedBy,
+        department: 'Emergency',
+        status: 'APPROVED',
+        approvedBy: requestedBy,
+        approvedAt: new Date(),
+        crossMatchStatus: 'PENDING', // Cross-match to be done later
+      },
+    });
+
+    // Reserve the units
+    await Promise.all(
+      availableUnits.map(unit =>
+        prisma.bloodComponent.update({
+          where: { id: unit.id },
+          data: {
+            status: 'RESERVED',
+            reservedFor: patientId,
+            reservedAt: new Date(),
+          },
+        })
+      )
+    );
+
+    return {
+      request,
+      reservedUnits: availableUnits.length,
+      units: availableUnits.map(u => ({
+        id: u.id,
+        componentId: u.componentId,
+        bagNumber: u.bagNumber,
+        expiryDate: u.expiryDate,
+      })),
+      warning: 'EMERGENCY RELEASE: Cross-match pending. Monitor patient closely for transfusion reactions.',
+    };
+  }
 }
 
 export const emergencyService = new EmergencyService();

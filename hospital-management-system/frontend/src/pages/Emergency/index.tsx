@@ -14,6 +14,7 @@ import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import EDBeds from './EDBeds';
 import ResuscitationDashboard from './ResuscitationDashboard';
+import BloodBank from './BloodBank';
 
 interface EDPatient {
   id: string;
@@ -714,7 +715,7 @@ interface IncomingAmbulance {
 }
 
 export default function Emergency() {
-  const [activeTab, setActiveTab] = useState<'tracking' | 'triage' | 'waiting' | 'beds' | 'resus'>('tracking');
+  const [activeTab, setActiveTab] = useState<'tracking' | 'triage' | 'waiting' | 'beds' | 'resus' | 'bloodBank'>('tracking');
   const [showNewPatientModal, setShowNewPatientModal] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patients, setPatients] = useState<EDPatient[]>([]);
@@ -889,6 +890,7 @@ export default function Emergency() {
     { id: 'waiting', label: 'Waiting Room', count: patients.filter(p => p.status === 'WAITING').length },
     { id: 'beds', label: 'ED Beds' },
     { id: 'resus', label: 'Resuscitation', count: criticalCount },
+    { id: 'bloodBank', label: 'Blood Bank' },
   ];
 
   return (
@@ -1638,6 +1640,13 @@ export default function Emergency() {
       {activeTab === 'resus' && (
         <div style={{ animationDelay: '0.4s' }}>
           <ResuscitationDashboard />
+        </div>
+      )}
+
+      {/* Blood Bank Tab */}
+      {activeTab === 'bloodBank' && (
+        <div style={{ animationDelay: '0.4s' }}>
+          <BloodBank />
         </div>
       )}
 

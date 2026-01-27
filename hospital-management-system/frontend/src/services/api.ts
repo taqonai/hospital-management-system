@@ -437,6 +437,7 @@ export const laboratoryApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
   verifyResult: (testId: string) => api.patch(`/laboratory/results/${testId}/verify`),
+  getClinicalContext: (testId: string) => api.post(`/laboratory/results/${testId}/clinical-context`),
   getCriticalResults: () => api.get('/laboratory/critical'),
   acknowledgeCritical: (testId: string) => api.post(`/laboratory/critical/${testId}/acknowledge`),
   getPendingOrders: () => api.get('/laboratory/pending'),
@@ -754,6 +755,21 @@ export const emergencyApi = {
   getWaitingPatients: () => api.get('/emergency/waiting-patients'),
   // Feature 6: Ambulance Integration
   getIncomingAmbulances: () => api.get('/emergency/incoming-ambulances'),
+  // Blood Bank Integration
+  getBloodBankInventory: () => api.get('/emergency/blood-bank/inventory'),
+  getBloodBankRequests: () => api.get('/emergency/blood-bank/requests'),
+  createBloodRequest: (data: {
+    patientId: string;
+    bloodType: string;
+    componentType: string;
+    unitsNeeded: number;
+    urgency: 'STAT' | 'URGENT' | 'ROUTINE';
+    indication: string;
+  }) => api.post('/emergency/blood-bank/request', data),
+  emergencyBloodRelease: (data: {
+    patientId: string;
+    unitsNeeded: number;
+  }) => api.post('/emergency/blood-bank/emergency-release', data),
 };
 
 // Radiology APIs

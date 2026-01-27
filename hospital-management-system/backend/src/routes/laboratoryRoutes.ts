@@ -186,6 +186,17 @@ router.patch(
   })
 );
 
+// Generate AI clinical context for test result
+router.post(
+  '/results/:testId/clinical-context',
+  authenticate,
+  authorize(['DOCTOR', 'NURSE', 'LAB_TECHNICIAN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const context = await laboratoryService.generateClinicalContext(req.params.testId);
+    sendSuccess(res, context, 'Clinical context generated');
+  })
+);
+
 // Get critical results
 router.get(
   '/critical',

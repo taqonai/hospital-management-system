@@ -519,6 +519,66 @@ export class LaboratoryService {
     });
   }
 
+  /**
+   * Generate AI clinical context for lab result
+   * Provides clinical interpretation for doctors and nurses
+   */
+  async generateClinicalContext(labOrderTestId: string) {
+    try {
+      // Get the test result with patient info
+      const test = await prisma.labOrderTest.findUnique({
+        where: { id: labOrderTestId },
+        include: {
+          labTest: true,
+          labOrder: {
+            include: {
+              patient: {
+                select: {
+                  dateOfBirth: true,
+                  gender: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!test) {
+        throw new NotFoundError('Lab test not found');
+      }
+
+      if (!test.result && !test.resultValue) {
+        throw new ValidationError('No result data available for clinical context generation');
+      }
+
+      // Calculate patient age
+      let patientAge: number | undefined;
+      if (test.labOrder.patient.dateOfBirth) {
+        const today = new Date();
+        const birthDate = new Date(test.labOrder.patient.dateOfBirth);
+        patientAge = today.getFullYear() - birthDate.getFullYear();
+      }
+
+      // Call AI service
+      const response = await axios.post(`${AI_SERVICE_URL}/api/laboratory/generate-clinical-context`, {
+        testName: test.labTest.name,
+        resultValue: test.resultValue?.toString() || test.result || '',
+        unit: test.unit,
+        normalRange: test.normalRange,
+        isAbnormal: test.isAbnormal,
+        isCritical: test.isCritical,
+        comments: test.comments,
+        patientAge,
+        patientGender: test.labOrder.patient.gender,
+      });
+
+      return response.data;
+    } catch (error: any) {
+      logger.error('[LAB CONTEXT] Failed to generate clinical context:', error);
+      throw new Error(`Failed to generate clinical context: ${error.message}`);
+    }
+  }
+
   async getCriticalResults(hospitalId: string) {
     return prisma.labOrderTest.findMany({
       where: {

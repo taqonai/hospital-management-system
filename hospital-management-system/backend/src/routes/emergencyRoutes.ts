@@ -195,4 +195,57 @@ router.get(
   })
 );
 
+// ==================== BLOOD BANK INTEGRATION ====================
+
+// Get blood bank inventory (quick view for emergency)
+router.get(
+  '/blood-bank/inventory',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const inventory = await emergencyService.getBloodBankInventory(req.user!.hospitalId);
+    sendSuccess(res, inventory);
+  })
+);
+
+// Create emergency blood request
+router.post(
+  '/blood-bank/request',
+  authenticate,
+  authorizeWithPermission('emergency:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const request = await emergencyService.createEmergencyBloodRequest(
+      req.user!.hospitalId,
+      { ...req.body, requestedBy: req.user!.userId }
+    );
+    sendCreated(res, request, 'Emergency blood request created');
+  })
+);
+
+// Get emergency blood requests
+router.get(
+  '/blood-bank/requests',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const requests = await emergencyService.getEmergencyBloodRequests(req.user!.hospitalId);
+    sendSuccess(res, requests);
+  })
+);
+
+// Emergency release (O- universal donor)
+router.post(
+  '/blood-bank/emergency-release',
+  authenticate,
+  authorizeWithPermission('emergency:write', ['DOCTOR', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { patientId, unitsNeeded } = req.body;
+    const result = await emergencyService.emergencyBloodRelease(
+      req.user!.hospitalId,
+      patientId,
+      unitsNeeded,
+      req.user!.userId
+    );
+    sendCreated(res, result, 'Emergency blood released');
+  })
+);
+
 export default router;
