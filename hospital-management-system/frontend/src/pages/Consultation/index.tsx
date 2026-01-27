@@ -496,6 +496,8 @@ export default function Consultation() {
   const [drugInteractions, setDrugInteractions] = useState<DrugInteraction[]>([]);
   const [recommendedTests, setRecommendedTests] = useState<string[]>([]);
   const [newTestInput, setNewTestInput] = useState('');
+  const [sidebarTestInput, setSidebarTestInput] = useState('');
+  const [showSidebarTestDropdown, setShowSidebarTestDropdown] = useState(false);
 
   // Custom Diagnosis State
   const [customDiagnoses, setCustomDiagnoses] = useState<Array<{ id: string; name: string; icd10?: string; isPrimary?: boolean }>>([]);
@@ -3708,15 +3710,19 @@ export default function Consultation() {
         </div>
       )}
 
-      {/* Recommended Actions */}
-      {recommendedTests.length > 0 && (
-        <div className="bg-green-50 rounded-2xl p-5 border border-green-200">
-          <h4 className="font-semibold text-green-800 mb-3 flex items-center gap-2">
-            <BeakerIcon className="h-5 w-5" />
-            Recommended Tests
+      {/* Recommended Tests — Add / Delete / Autocomplete */}
+      <div className="bg-green-50 rounded-2xl p-5 border border-green-200">
+        <h4 className="font-semibold text-green-800 mb-3 flex items-center gap-2">
+          <BeakerIcon className="h-5 w-5" />
+          Recommended Tests
+          {recommendedTests.length > 0 && (
             <span className="text-xs font-normal text-green-600">({recommendedTests.length})</span>
-          </h4>
-          <div className="flex flex-wrap gap-1.5">
+          )}
+        </h4>
+
+        {/* Test tags with delete */}
+        {recommendedTests.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-3">
             {recommendedTests.map((test, idx) => {
               const isAvailable = availableLabTests.some(labTest =>
                 labTest.name.toLowerCase() === test.toLowerCase() ||
@@ -3726,7 +3732,7 @@ export default function Consultation() {
               return (
                 <span
                   key={idx}
-                  className={`px-2 py-1 bg-white rounded text-xs border ${
+                  className={`px-2 py-1 bg-white rounded text-xs border flex items-center gap-1 ${
                     isAvailable
                       ? 'text-green-700 border-green-200'
                       : 'text-orange-700 border-orange-300'
@@ -3734,12 +3740,99 @@ export default function Consultation() {
                   title={isAvailable ? 'Available in lab database' : 'Not in lab database'}
                 >
                   {test}
+                  <button
+                    type="button"
+                    onClick={() => setRecommendedTests(prev => prev.filter(t => t !== test))}
+                    className="ml-0.5 hover:text-red-500 transition-colors"
+                  >
+                    <XMarkIcon className="h-3 w-3" />
+                  </button>
                 </span>
               );
             })}
           </div>
+        )}
+
+        {recommendedTests.length === 0 && (
+          <p className="text-green-600 text-xs mb-3 italic">No tests yet. Add from database or type custom.</p>
+        )}
+
+        {/* Add test input with autocomplete */}
+        <div className="relative">
+          <div className="flex gap-1.5">
+            <input
+              type="text"
+              value={sidebarTestInput}
+              onChange={(e) => {
+                setSidebarTestInput(e.target.value);
+                setShowSidebarTestDropdown(e.target.value.length > 0);
+              }}
+              onFocus={() => { if (sidebarTestInput.length > 0) setShowSidebarTestDropdown(true); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && sidebarTestInput.trim()) {
+                  e.preventDefault();
+                  if (!recommendedTests.some(t => t.toLowerCase() === sidebarTestInput.trim().toLowerCase())) {
+                    setRecommendedTests(prev => [...prev, sidebarTestInput.trim()]);
+                  }
+                  setSidebarTestInput('');
+                  setShowSidebarTestDropdown(false);
+                }
+              }}
+              placeholder="Search or add test..."
+              className="flex-1 px-2.5 py-1.5 border border-green-300 rounded-lg text-xs focus:ring-1 focus:ring-green-500 focus:border-green-500 bg-white"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (sidebarTestInput.trim() && !recommendedTests.some(t => t.toLowerCase() === sidebarTestInput.trim().toLowerCase())) {
+                  setRecommendedTests(prev => [...prev, sidebarTestInput.trim()]);
+                  setSidebarTestInput('');
+                  setShowSidebarTestDropdown(false);
+                }
+              }}
+              disabled={!sidebarTestInput.trim()}
+              className="px-2.5 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <PlusIcon className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {/* Autocomplete dropdown */}
+          {showSidebarTestDropdown && sidebarTestInput.trim().length > 0 && (
+            <div className="absolute z-50 mt-1 w-full bg-white border border-green-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+              {availableLabTests
+                .filter(lt =>
+                  lt.name.toLowerCase().includes(sidebarTestInput.toLowerCase()) &&
+                  !recommendedTests.some(t => t.toLowerCase() === lt.name.toLowerCase())
+                )
+                .slice(0, 8)
+                .map((lt) => (
+                  <button
+                    key={lt.id}
+                    type="button"
+                    onClick={() => {
+                      setRecommendedTests(prev => [...prev, lt.name]);
+                      setSidebarTestInput('');
+                      setShowSidebarTestDropdown(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-green-50 border-b border-gray-100 last:border-0 flex items-center justify-between"
+                  >
+                    <span className="text-gray-800">{lt.name}</span>
+                    <span className="text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded">{lt.category}</span>
+                  </button>
+                ))}
+              {availableLabTests.filter(lt =>
+                lt.name.toLowerCase().includes(sidebarTestInput.toLowerCase()) &&
+                !recommendedTests.some(t => t.toLowerCase() === lt.name.toLowerCase())
+              ).length === 0 && (
+                <div className="px-3 py-2 text-xs text-gray-500">
+                  No matching tests. Press Enter to add as custom.
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Consultation Timer */}
       <div className="bg-gradient-to-br from-gray-50 to-slate-100 rounded-2xl p-5 text-center border border-gray-200">
