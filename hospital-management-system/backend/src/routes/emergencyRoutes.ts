@@ -137,4 +137,50 @@ router.get(
   })
 );
 
+// ==================== FEATURE 4: ED BED MANAGEMENT ====================
+
+// Get ED beds with status
+router.get(
+  '/beds',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const beds = await emergencyService.getEDBeds(req.user!.hospitalId);
+    sendSuccess(res, beds);
+  })
+);
+
+// Assign patient to bed
+router.patch(
+  '/beds/:bedId/assign',
+  authenticate,
+  authorizeWithPermission('emergency:write', ['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { appointmentId } = req.body;
+    const result = await emergencyService.assignPatientToBed(appointmentId, req.params.bedId);
+    sendSuccess(res, result, 'Patient assigned to bed');
+  })
+);
+
+// Update bed status
+router.patch(
+  '/beds/:bedId/status',
+  authenticate,
+  authorizeWithPermission('emergency:write', ['NURSE', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { status } = req.body;
+    const bed = await emergencyService.updateEDBedStatus(req.params.bedId, status);
+    sendSuccess(res, bed, 'Bed status updated');
+  })
+);
+
+// Get waiting patients (not assigned to beds)
+router.get(
+  '/waiting-patients',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const patients = await emergencyService.getWaitingPatients(req.user!.hospitalId);
+    sendSuccess(res, patients);
+  })
+);
+
 export default router;

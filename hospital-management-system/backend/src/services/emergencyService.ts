@@ -795,6 +795,234 @@ export class EmergencyService {
       hourlyTrends: hourlyData,
     };
   }
+
+  // ==================== FEATURE 4: ED BED MANAGEMENT ====================
+
+  // Get all ED beds with current status
+  async getEDBeds(hospitalId: string) {
+    // Find the Emergency Department
+    const edDept = await prisma.department.findFirst({
+      where: {
+        hospitalId,
+        name: { contains: 'Emergency', mode: 'insensitive' },
+      },
+    });
+
+    if (!edDept) {
+      // If no ED department exists, return empty array
+      return {
+        beds: [],
+        occupancyRate: 0,
+        availableCount: 0,
+        occupiedCount: 0,
+        cleaningCount: 0,
+      };
+    }
+
+    // Get all beds in the ED
+    const beds = await prisma.bed.findMany({
+      where: {
+        hospitalId,
+        departmentId: edDept.id,
+      },
+      include: {
+        ward: true,
+        admissions: {
+          where: {
+            status: 'ACTIVE',
+          },
+          include: {
+            patient: {
+              select: {
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+          take: 1,
+        },
+      },
+      orderBy: { bedNumber: 'asc' },
+    });
+
+    // For occupied beds, get the current ED patient info
+    const bedsWithPatients = await Promise.all(
+      beds.map(async (bed) => {
+        let currentPatient = null;
+        let esiLevel = null;
+        let timeOccupied = null;
+
+        if (bed.admissions.length > 0) {
+          currentPatient = bed.admissions[0].patient;
+          // If admitted, find the originating emergency appointment
+          const edAppointment = await prisma.appointment.findFirst({
+            where: {
+              patientId: bed.admissions[0].patientId,
+              type: 'EMERGENCY',
+              status: { in: ['IN_PROGRESS', 'COMPLETED'] },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          });
+
+          if (edAppointment?.notes) {
+            const notes = JSON.parse(edAppointment.notes);
+            esiLevel = notes.esiLevel || null;
+          }
+          timeOccupied = bed.admissions[0].createdAt;
+        } else {
+          // Check if there's an ED patient assigned to this bed (via notes field)
+          const appointment = await prisma.appointment.findFirst({
+            where: {
+              hospitalId,
+              type: 'EMERGENCY',
+              status: { in: ['IN_PROGRESS', 'CHECKED_IN'] },
+              notes: {
+                contains: bed.id, // Bed assignment stored in notes
+              },
+            },
+            include: {
+              patient: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                },
+              },
+            },
+          });
+
+          if (appointment) {
+            currentPatient = appointment.patient;
+            const notes = JSON.parse(appointment.notes || '{}');
+            esiLevel = notes.esiLevel || null;
+            timeOccupied = appointment.createdAt;
+          }
+        }
+
+        return {
+          id: bed.id,
+          bedNumber: bed.bedNumber,
+          bedType: bed.bedType,
+          status: bed.status,
+          ward: bed.ward?.name,
+          currentPatient: currentPatient
+            ? {
+                firstName: currentPatient.firstName,
+                lastName: currentPatient.lastName,
+              }
+            : null,
+          esiLevel,
+          timeOccupied,
+        };
+      })
+    );
+
+    // Calculate statistics
+    const totalBeds = beds.length;
+    const occupiedCount = bedsWithPatients.filter(b => b.status === 'OCCUPIED').length;
+    const availableCount = bedsWithPatients.filter(b => b.status === 'AVAILABLE').length;
+    const cleaningCount = bedsWithPatients.filter(b => b.status === 'CLEANING').length;
+    const occupancyRate = totalBeds > 0 ? Math.round((occupiedCount / totalBeds) * 100) : 0;
+
+    return {
+      beds: bedsWithPatients,
+      occupancyRate,
+      availableCount,
+      occupiedCount,
+      cleaningCount,
+      totalBeds,
+    };
+  }
+
+  // Assign patient to ED bed
+  async assignPatientToBed(appointmentId: string, bedId: string) {
+    const appointment = await prisma.appointment.findUnique({
+      where: { id: appointmentId },
+    });
+
+    if (!appointment) {
+      throw new NotFoundError('Emergency case not found');
+    }
+
+    // Update bed status to occupied
+    await prisma.bed.update({
+      where: { id: bedId },
+      data: { status: 'OCCUPIED' },
+    });
+
+    // Update appointment notes with bed assignment
+    const existingNotes = appointment.notes ? JSON.parse(appointment.notes) : {};
+    await prisma.appointment.update({
+      where: { id: appointmentId },
+      data: {
+        notes: JSON.stringify({
+          ...existingNotes,
+          assignedBedId: bedId,
+          bedAssignedAt: new Date(),
+        }),
+      },
+    });
+
+    return { success: true, message: 'Patient assigned to bed' };
+  }
+
+  // Update ED bed status
+  async updateEDBedStatus(bedId: string, status: string) {
+    const bed = await prisma.bed.update({
+      where: { id: bedId },
+      data: { status: status as any },
+    });
+
+    return bed;
+  }
+
+  // Get waiting patients (not assigned to bed)
+  async getWaitingPatients(hospitalId: string) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const appointments = await prisma.appointment.findMany({
+      where: {
+        hospitalId,
+        type: 'EMERGENCY',
+        status: { in: ['IN_PROGRESS', 'CHECKED_IN'] },
+        appointmentDate: { gte: today },
+      },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // Filter out patients who already have beds
+    const waitingPatients = appointments.filter(apt => {
+      if (!apt.notes) return true;
+      try {
+        const notes = JSON.parse(apt.notes);
+        return !notes.assignedBedId;
+      } catch {
+        return true;
+      }
+    });
+
+    return waitingPatients.map(apt => {
+      const notes = apt.notes ? JSON.parse(apt.notes) : {};
+      return {
+        id: apt.id,
+        patient: apt.patient,
+        esiLevel: notes.esiLevel || 3,
+        chiefComplaint: apt.reason || '',
+        arrivalTime: apt.createdAt,
+        waitTime: Math.round((Date.now() - apt.createdAt.getTime()) / (1000 * 60)),
+      };
+    });
+  }
 }
 
 export const emergencyService = new EmergencyService();

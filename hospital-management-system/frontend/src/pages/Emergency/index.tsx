@@ -12,6 +12,7 @@ import { useAIHealth } from '../../hooks/useAI';
 import { emergencyApi, patientApi } from '../../services/api';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
+import EDBeds from './EDBeds';
 
 interface EDPatient {
   id: string;
@@ -698,7 +699,7 @@ function DischargePatientModal({
 }
 
 export default function Emergency() {
-  const [activeTab, setActiveTab] = useState<'tracking' | 'triage' | 'waiting'>('tracking');
+  const [activeTab, setActiveTab] = useState<'tracking' | 'triage' | 'waiting' | 'beds'>('tracking');
   const [showNewPatientModal, setShowNewPatientModal] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patients, setPatients] = useState<EDPatient[]>([]);
@@ -868,6 +869,7 @@ export default function Emergency() {
     { id: 'tracking', label: 'Patient Tracking', count: patients.length },
     { id: 'triage', label: 'Triage Station' },
     { id: 'waiting', label: 'Waiting Room', count: patients.filter(p => p.status === 'WAITING').length },
+    { id: 'beds', label: 'ED Beds' },
   ];
 
   return (
@@ -1406,6 +1408,13 @@ export default function Emergency() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ED Beds Tab - Feature 4 */}
+      {activeTab === 'beds' && (
+        <div style={{ animationDelay: '0.4s' }}>
+          <EDBeds />
         </div>
       )}
 

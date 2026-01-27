@@ -745,6 +745,13 @@ export const emergencyApi = {
   getAvailableDoctors: () => api.get('/emergency/available-doctors'),
   getAvailableBeds: () => api.get('/emergency/available-beds'),
   getStatsWithTrends: () => api.get('/emergency/stats-with-trends'),
+  // Feature 4: ED Bed Management
+  getEDBeds: () => api.get('/emergency/beds'),
+  assignPatientToBed: (bedId: string, appointmentId: string) =>
+    api.patch(`/emergency/beds/${bedId}/assign`, { appointmentId }),
+  updateBedStatus: (bedId: string, status: string) =>
+    api.patch(`/emergency/beds/${bedId}/status`, { status }),
+  getWaitingPatients: () => api.get('/emergency/waiting-patients'),
 };
 
 // Radiology APIs
