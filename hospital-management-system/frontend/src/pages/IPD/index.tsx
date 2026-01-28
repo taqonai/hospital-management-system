@@ -23,6 +23,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { useAIHealth } from '../../hooks/useAI';
 import { usePermissions } from '../../hooks/usePermissions';
+import { CurrencyDisplay } from '../../components/common';
 import { ipdApi, patientApi, doctorApi } from '../../services/api';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
@@ -1195,10 +1196,10 @@ function PatientDetailDrawer({ admissionId, onClose }: { admissionId: string | n
                       <div className="bg-orange-50 rounded-lg p-4">
                         <p className="text-sm text-gray-600 mb-1">Estimated Charges</p>
                         <p className="text-2xl font-bold text-orange-700">
-                          ${((admission.bed?.dailyRate || 0) * calculateLOS()).toFixed(2)}
+                          <CurrencyDisplay amount={(admission.bed?.dailyRate || 0) * calculateLOS()} />
                         </p>
                         <p className="text-xs text-gray-500 mt-1">
-                          Bed: ${admission.bed?.dailyRate || 0}/day
+                          Bed: <CurrencyDisplay amount={admission.bed?.dailyRate || 0} />/day
                         </p>
                       </div>
                     </div>
