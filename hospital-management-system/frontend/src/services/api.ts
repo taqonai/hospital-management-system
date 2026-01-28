@@ -637,6 +637,8 @@ export const ipdApi = {
   createBed: (data: any) => api.post('/ipd/beds', data),
   updateBedStatus: (id: string, status: string) =>
     api.patch(`/ipd/beds/${id}/status`, { status }),
+  updateBed: (id: string, data: { status?: string; dailyRate?: number }) =>
+    api.put(`/ipd/beds/${id}`, data),
   getAvailableBeds: (wardType?: string) =>
     api.get('/ipd/beds/available', { params: { wardType } }),
   // Admissions

@@ -89,6 +89,20 @@ export class IPDService {
     });
   }
 
+  async updateBed(id: string, data: { status?: string; dailyRate?: number }) {
+    return prisma.bed.update({
+      where: { id },
+      data: {
+        ...(data.status && { status: data.status }),
+        ...(data.dailyRate !== undefined && { dailyRate: data.dailyRate }),
+      },
+      include: {
+        ward: true,
+        department: true,
+      },
+    });
+  }
+
   async getAvailableBeds(hospitalId: string, wardType?: string) {
     const where: any = { hospitalId, status: 'AVAILABLE' };
     if (wardType) {

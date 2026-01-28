@@ -20,6 +20,7 @@ import {
   ClipboardDocumentListIcon,
   DocumentTextIcon,
   BeakerIcon,
+  Cog6ToothIcon,
 } from '@heroicons/react/24/outline';
 import { useAIHealth } from '../../hooks/useAI';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -1379,6 +1380,10 @@ export default function IPD() {
   const [showVitalsModal, setShowVitalsModal] = useState(false);
   const [selectedBedAdmission, setSelectedBedAdmission] = useState<string | null>(null);
   const [showPatientDrawer, setShowPatientDrawer] = useState(false);
+  const [showBedEditModal, setShowBedEditModal] = useState(false);
+  const [selectedBedForEdit, setSelectedBedForEdit] = useState<any>(null);
+  const [bedEditForm, setBedEditForm] = useState({ status: '', dailyRate: 0 });
+  const [savingBed, setSavingBed] = useState(false);
   const [vitalsForm, setVitalsForm] = useState({
     respiratoryRate: 16,
     oxygenSaturation: 98,
@@ -1557,6 +1562,38 @@ export default function IPD() {
     if (status === 'MAINTENANCE') return 'bg-gray-500/20 border-gray-500/40 text-gray-600';
     if (status === 'OCCUPIED') return 'bg-blue-500/20 border-blue-500/40 text-blue-700';
     return 'bg-gray-500/20 border-gray-500/40 text-gray-700';
+  };
+
+  const handleEditBed = (bed: any, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent triggering bed click
+    setSelectedBedForEdit(bed);
+    setBedEditForm({
+      status: bed.status || 'AVAILABLE',
+      dailyRate: Number(bed.dailyRate) || 0,
+    });
+    setShowBedEditModal(true);
+  };
+
+  const handleSaveBed = async () => {
+    if (!selectedBedForEdit) return;
+    setSavingBed(true);
+    try {
+      await ipdApi.updateBed(selectedBedForEdit.id, {
+        status: bedEditForm.status,
+        dailyRate: bedEditForm.dailyRate,
+      });
+      toast.success('Bed updated successfully');
+      setShowBedEditModal(false);
+      setSelectedBedForEdit(null);
+      // Refresh wards data
+      const wardsRes = await ipdApi.getWards();
+      setWards(wardsRes.data.data || []);
+    } catch (error: any) {
+      console.error('Failed to update bed:', error);
+      toast.error(error.response?.data?.message || 'Failed to update bed');
+    } finally {
+      setSavingBed(false);
+    }
   };
 
   const handleBedClick = (bed: Ward['beds'][0]) => {
@@ -1792,11 +1829,21 @@ export default function IPD() {
                           key={bed.id}
                           onClick={() => handleBedClick(bed)}
                           className={clsx(
-                            'relative p-3 rounded-xl border-2 transition-all duration-300 backdrop-blur-sm',
+                            'relative p-3 rounded-xl border-2 transition-all duration-300 backdrop-blur-sm group',
                             isOccupied ? 'cursor-pointer hover:scale-105 hover:shadow-lg' : 'cursor-default',
                             getBedColor(bed.status)
                           )}
                         >
+                          {/* Settings icon for admins */}
+                          {canManageBeds && (
+                            <button
+                              onClick={(e) => handleEditBed(bed, e)}
+                              className="absolute top-1 right-1 p-1 rounded-md bg-white/80 hover:bg-white shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                              title="Edit bed settings"
+                            >
+                              <Cog6ToothIcon className="h-3.5 w-3.5 text-gray-600" />
+                            </button>
+                          )}
                           <div className="text-center">
                             <p className="font-mono text-sm font-semibold">{bed.bedNumber}</p>
                             {currentAdmission?.patient && (
@@ -2300,6 +2347,95 @@ export default function IPD() {
             setSelectedBedAdmission(null);
           }}
         />
+      )}
+
+      {/* Bed Edit Modal */}
+      {showBedEditModal && selectedBedForEdit && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowBedEditModal(false)} />
+            <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-4">
+                <h2 className="text-lg font-bold text-white">Edit Bed Settings</h2>
+                <p className="text-indigo-100 text-sm">Bed {selectedBedForEdit.bedNumber}</p>
+              </div>
+
+              <div className="p-6 space-y-4">
+                {/* Status */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                  <select
+                    value={bedEditForm.status}
+                    onChange={(e) => setBedEditForm({ ...bedEditForm, status: e.target.value })}
+                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
+                    disabled={selectedBedForEdit.status === 'OCCUPIED'}
+                  >
+                    <option value="AVAILABLE">Available</option>
+                    <option value="OCCUPIED" disabled>Occupied</option>
+                    <option value="RESERVED">Reserved</option>
+                    <option value="MAINTENANCE">Maintenance</option>
+                    <option value="CLEANING">Cleaning</option>
+                  </select>
+                  {selectedBedForEdit.status === 'OCCUPIED' && (
+                    <p className="text-xs text-amber-600 mt-1">Status cannot be changed while bed is occupied</p>
+                  )}
+                </div>
+
+                {/* Daily Rate */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Daily Rate (AED)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">Đ</span>
+                    <input
+                      type="number"
+                      value={bedEditForm.dailyRate}
+                      onChange={(e) => setBedEditForm({ ...bedEditForm, dailyRate: Number(e.target.value) })}
+                      min="0"
+                      step="10"
+                      className="w-full rounded-xl border border-gray-300 bg-white pl-8 pr-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Bed Info (read-only) */}
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <p className="text-sm text-gray-600">
+                    <span className="font-medium">Ward:</span> {selectedBedForEdit.ward?.name || 'N/A'}
+                  </p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    <span className="font-medium">Bed Type:</span> {selectedBedForEdit.bedType || 'Standard'}
+                  </p>
+                </div>
+
+                {/* Actions */}
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => setShowBedEditModal(false)}
+                    className="px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveBed}
+                    disabled={savingBed}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-500 text-white font-semibold hover:from-indigo-600 hover:to-violet-600 transition-all disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {savingBed ? (
+                      <>
+                        <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      'Save Changes'
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

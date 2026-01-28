@@ -69,6 +69,18 @@ router.patch(
   })
 );
 
+// Update bed (status and/or dailyRate)
+router.put(
+  '/beds/:id',
+  authenticate,
+  authorizeWithPermission('ipd:beds:manage', ['HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { status, dailyRate } = req.body;
+    const bed = await ipdService.updateBed(req.params.id, { status, dailyRate });
+    sendSuccess(res, bed, 'Bed updated successfully');
+  })
+);
+
 // Get available beds
 router.get(
   '/beds/available',
