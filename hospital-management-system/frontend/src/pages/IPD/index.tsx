@@ -17,6 +17,7 @@ import {
   MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 import { useAIHealth } from '../../hooks/useAI';
+import { usePermissions } from '../../hooks/usePermissions';
 import { ipdApi, patientApi, doctorApi } from '../../services/api';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
@@ -446,6 +447,7 @@ function NewAdmissionModal({ onClose, onSuccess, wards }: { onClose: () => void;
 
 export default function IPD() {
   const navigate = useNavigate();
+  const { hasPermission } = usePermissions();
   const [activeTab, setActiveTab] = useState<'beds' | 'admissions' | 'monitoring' | 'discharge'>('beds');
   const [showAdmissionModal, setShowAdmissionModal] = useState(false);
   const [wards, setWards] = useState<Ward[]>([]);
@@ -637,12 +639,19 @@ export default function IPD() {
 
   const dischargeReadyPatients = admissions.filter(a => a.lengthOfStay >= 3);
 
-  const tabs = [
+  const canAdmit = hasPermission('ipd:admissions:write');
+  const canDischarge = hasPermission('ipd:discharge');
+  const canManageBeds = hasPermission('ipd:beds:manage');
+  const canRecordVitals = hasPermission('ipd:admissions:write');
+  const canDoRounds = hasPermission('ipd:rounds');
+
+  const allTabs = [
     { id: 'beds', label: 'Bed Management' },
     { id: 'admissions', label: 'Admissions', count: admissions.length },
     { id: 'monitoring', label: 'NEWS2 Monitoring', count: deteriorationData?.summary.highRisk, alert: true },
-    { id: 'discharge', label: 'Discharge Planning', count: dischargeReadyPatients.length },
+    { id: 'discharge', label: 'Discharge Planning', count: dischargeReadyPatients.length, permission: 'ipd:discharge' },
   ];
+  const tabs = allTabs.filter(tab => !tab.permission || hasPermission(tab.permission));
 
   return (
     <div className="space-y-6">
@@ -680,22 +689,26 @@ export default function IPD() {
                   <HeartIcon className="h-5 w-5" />
                   <span className="font-medium">Deterioration Monitor</span>
                 </button>
-                <button
-                  onClick={handleOptimizeBeds}
-                  className="group relative flex items-center gap-2 px-4 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl border border-white/30 hover:bg-white/30 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-purple-500/25"
-                >
-                  <SparklesIcon className="h-5 w-5" />
-                  <span className="font-medium">Optimize Beds</span>
-                </button>
+                {canManageBeds && (
+                  <button
+                    onClick={handleOptimizeBeds}
+                    className="group relative flex items-center gap-2 px-4 py-2.5 bg-white/20 backdrop-blur-xl text-white rounded-xl border border-white/30 hover:bg-white/30 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-purple-500/25"
+                  >
+                    <SparklesIcon className="h-5 w-5" />
+                    <span className="font-medium">Optimize Beds</span>
+                  </button>
+                )}
               </>
             )}
-            <button
-              onClick={() => setShowAdmissionModal(true)}
-              className="group relative flex items-center gap-2 px-5 py-2.5 bg-white text-indigo-600 rounded-xl font-semibold hover:bg-indigo-50 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-white/25"
-            >
-              <PlusIcon className="h-5 w-5" />
-              New Admission
-            </button>
+            {canAdmit && (
+              <button
+                onClick={() => setShowAdmissionModal(true)}
+                className="group relative flex items-center gap-2 px-5 py-2.5 bg-white text-indigo-600 rounded-xl font-semibold hover:bg-indigo-50 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-white/25"
+              >
+                <PlusIcon className="h-5 w-5" />
+                New Admission
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -906,13 +919,15 @@ export default function IPD() {
                       <span className="w-2 h-2 rounded-full bg-green-500" />
                       Ready
                     </span>
-                    <button
-                      onClick={() => handleDischarge(patient.id)}
-                      className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:shadow-lg hover:shadow-indigo-500/25 transition-all duration-300 hover:scale-105"
-                    >
-                      <ArrowRightOnRectangleIcon className="h-4 w-4" />
-                      Discharge
-                    </button>
+                    {canDischarge && (
+                      <button
+                        onClick={() => handleDischarge(patient.id)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:shadow-lg hover:shadow-indigo-500/25 transition-all duration-300 hover:scale-105"
+                      >
+                        <ArrowRightOnRectangleIcon className="h-4 w-4" />
+                        Discharge
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1114,15 +1129,17 @@ export default function IPD() {
                           <span className="font-medium">Response:</span> {patient.clinicalResponse}
                         </p>
                       </div>
-                      <button
-                        onClick={() => {
-                          setSelectedPatient(patient);
-                          setShowVitalsModal(true);
-                        }}
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:shadow-lg hover:shadow-indigo-500/25 transition-all duration-300 hover:scale-105"
-                      >
-                        Record Vitals
-                      </button>
+                      {canRecordVitals && (
+                        <button
+                          onClick={() => {
+                            setSelectedPatient(patient);
+                            setShowVitalsModal(true);
+                          }}
+                          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:shadow-lg hover:shadow-indigo-500/25 transition-all duration-300 hover:scale-105"
+                        >
+                          Record Vitals
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}

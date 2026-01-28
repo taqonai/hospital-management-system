@@ -15,6 +15,7 @@ import {
   TrashIcon,
 } from '@heroicons/react/24/outline';
 import { ipdApi } from '../../services/api';
+import { usePermissions } from '../../hooks/usePermissions';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import VitalsTrendChart from '../../components/nursing/VitalsTrendChart';
@@ -103,8 +104,16 @@ interface Note {
 export default function AdmissionDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { hasPermission } = usePermissions();
   const [searchParams] = useSearchParams();
   const initialTab = (searchParams.get('tab') as Tab) || 'overview';
+
+  // Permission flags
+  const canDischarge = hasPermission('ipd:discharge');
+  const canWriteOrders = hasPermission('ipd:admissions:write');
+  const canWriteNotes = hasPermission('ipd:admissions:write');
+  const canRecordVitals = hasPermission('ipd:admissions:write');
+  const canWriteNursingNotes = hasPermission('ipd:nursing:notes');
   
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [loading, setLoading] = useState(true);
@@ -279,14 +288,15 @@ export default function AdmissionDetail() {
     }
   };
 
-  const tabs = [
+  const allTabs = [
     { id: 'overview' as Tab, label: 'Overview', icon: ClipboardDocumentListIcon },
     { id: 'orders' as Tab, label: 'Orders', icon: DocumentTextIcon },
     { id: 'vitals' as Tab, label: 'Vitals', icon: HeartIcon },
     { id: 'notes' as Tab, label: 'Notes', icon: DocumentTextIcon },
     { id: 'medications' as Tab, label: 'Medications', icon: BeakerIcon },
-    { id: 'discharge' as Tab, label: 'Discharge', icon: ArrowRightOnRectangleIcon },
+    { id: 'discharge' as Tab, label: 'Discharge', icon: ArrowRightOnRectangleIcon, permission: 'ipd:discharge' },
   ];
+  const tabs = allTabs.filter(tab => !(tab as any).permission || hasPermission((tab as any).permission));
 
   const getPriorityBadgeClass = (priority: string) => {
     switch (priority) {
@@ -558,13 +568,15 @@ export default function AdmissionDetail() {
         {activeTab === 'orders' && (
           <div className="space-y-6">
             <div className="flex justify-end">
-              <button
-                onClick={() => setShowOrderModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all"
-              >
-                <PlusIcon className="h-5 w-5" />
-                New Order
-              </button>
+              {canWriteOrders && (
+                <button
+                  onClick={() => setShowOrderModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all"
+                >
+                  <PlusIcon className="h-5 w-5" />
+                  New Order
+                </button>
+              )}
             </div>
 
             {orders.length === 0 ? (
@@ -602,7 +614,7 @@ export default function AdmissionDetail() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {order.status !== 'CANCELLED' && order.status !== 'COMPLETED' && (
+                        {canWriteOrders && order.status !== 'CANCELLED' && order.status !== 'COMPLETED' && (
                           <>
                             <select
                               className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
@@ -635,13 +647,15 @@ export default function AdmissionDetail() {
         {activeTab === 'vitals' && (
           <div className="space-y-6">
             <div className="flex justify-end">
-              <button
-                onClick={() => setShowVitalsModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all"
-              >
-                <PlusIcon className="h-5 w-5" />
-                Record Vitals
-              </button>
+              {canRecordVitals && (
+                <button
+                  onClick={() => setShowVitalsModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all"
+                >
+                  <PlusIcon className="h-5 w-5" />
+                  Record Vitals
+                </button>
+              )}
             </div>
 
             {/* Vitals History Table */}
@@ -734,13 +748,15 @@ export default function AdmissionDetail() {
         {activeTab === 'notes' && (
           <div className="space-y-6">
             <div className="flex justify-end">
-              <button
-                onClick={() => setShowNoteModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all"
-              >
-                <PlusIcon className="h-5 w-5" />
-                Add Note
-              </button>
+              {canWriteNotes && (
+                <button
+                  onClick={() => setShowNoteModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all"
+                >
+                  <PlusIcon className="h-5 w-5" />
+                  Add Note
+                </button>
+              )}
             </div>
 
             {notes.length === 0 ? (
