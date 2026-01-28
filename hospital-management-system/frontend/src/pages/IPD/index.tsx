@@ -16,6 +16,9 @@ import {
   BuildingOffice2Icon,
   MagnifyingGlassIcon,
   UserPlusIcon,
+  XMarkIcon,
+  ClipboardDocumentListIcon,
+  DocumentTextIcon,
 } from '@heroicons/react/24/outline';
 import { useAIHealth } from '../../hooks/useAI';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -31,12 +34,16 @@ interface Ward {
     id: string;
     bedNumber: string;
     status: string;
-    currentAdmission?: {
+    admissions?: Array<{
+      id: string;
       patient: {
+        id: string;
         firstName: string;
         lastName: string;
+        mrn?: string;
       };
-    };
+      status: string;
+    }>;
   }>;
 }
 
@@ -672,6 +679,427 @@ function NewAdmissionModal({ onClose, onSuccess, wards }: { onClose: () => void;
   );
 }
 
+// Patient Detail Drawer Component
+function PatientDetailDrawer({ admissionId, onClose }: { admissionId: string | null; onClose: () => void }) {
+  const [loading, setLoading] = useState(true);
+  const [admission, setAdmission] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'vitals' | 'notes'>('overview');
+
+  useEffect(() => {
+    if (!admissionId) return;
+
+    const fetchAdmission = async () => {
+      try {
+        setLoading(true);
+        const response = await ipdApi.getAdmissionDetail(admissionId);
+        setAdmission(response.data.data);
+      } catch (error) {
+        console.error('Failed to fetch admission:', error);
+        toast.error('Failed to load patient details');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAdmission();
+  }, [admissionId]);
+
+  if (!admissionId) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-hidden">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+        onClick={onClose}
+      />
+
+      {/* Drawer */}
+      <div className="absolute inset-y-0 right-0 w-full max-w-4xl flex">
+        <div className="w-full bg-white shadow-2xl overflow-y-auto">
+          {/* Header */}
+          <div className="sticky top-0 z-10 bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <UserIcon className="h-8 w-8 text-white" />
+                <div>
+                  <h2 className="text-xl font-bold text-white">Patient Details</h2>
+                  {admission && (
+                    <p className="text-sm text-indigo-100">
+                      {admission.patient?.firstName} {admission.patient?.lastName} • MRN: {admission.patient?.mrn}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className="p-2 rounded-lg hover:bg-white/20 transition-colors"
+              >
+                <XMarkIcon className="h-6 w-6 text-white" />
+              </button>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600" />
+            </div>
+          ) : admission ? (
+            <div className="p-6 space-y-6">
+              {/* Tabs */}
+              <div className="border-b border-gray-200">
+                <nav className="flex gap-4">
+                  {[
+                    { id: 'overview', label: 'Overview', icon: UserIcon },
+                    { id: 'orders', label: 'Orders', icon: ClipboardDocumentListIcon },
+                    { id: 'vitals', label: 'Vitals', icon: HeartIcon },
+                    { id: 'notes', label: 'Notes', icon: DocumentTextIcon },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id as any)}
+                      className={clsx(
+                        'flex items-center gap-2 px-4 py-2 border-b-2 font-medium transition-colors',
+                        activeTab === tab.id
+                          ? 'border-indigo-600 text-indigo-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      )}
+                    >
+                      <tab.icon className="h-5 w-5" />
+                      {tab.label}
+                    </button>
+                  ))}
+                </nav>
+              </div>
+
+              {/* Tab Content */}
+              {activeTab === 'overview' && (() => {
+                const latestVitals = admission.patient?.vitals?.[0];
+                const news2Score = admission.latestNEWS2Score;
+
+                return (
+                <div className="space-y-6">
+                  {/* Patient Demographics */}
+                  <div className="bg-white border border-gray-200 rounded-xl p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                      <UserIcon className="h-5 w-5 text-indigo-600" />
+                      Patient Information
+                    </h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm text-gray-500">Name</p>
+                        <p className="font-medium">{admission.patient?.firstName} {admission.patient?.lastName}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">MRN</p>
+                        <p className="font-medium">{admission.patient?.mrn}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Date of Birth</p>
+                        <p className="font-medium">{admission.patient?.dateOfBirth ? new Date(admission.patient.dateOfBirth).toLocaleDateString() : 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Gender</p>
+                        <p className="font-medium capitalize">{admission.patient?.gender || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Blood Group</p>
+                        <p className="font-medium">{admission.patient?.bloodGroup || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Phone</p>
+                        <p className="font-medium">{admission.patient?.phone || 'N/A'}</p>
+                      </div>
+                      {admission.patient?.address && (
+                        <div className="col-span-2">
+                          <p className="text-sm text-gray-500">Address</p>
+                          <p className="font-medium">{admission.patient.address}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Admission Details */}
+                  <div className="bg-white border border-gray-200 rounded-xl p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                      <BuildingOffice2Icon className="h-5 w-5 text-indigo-600" />
+                      Admission Details
+                    </h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm text-gray-500">Admission Date</p>
+                        <p className="font-medium">{new Date(admission.admissionDate).toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Type</p>
+                        <p className="font-medium capitalize">{admission.admissionType || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Ward & Bed</p>
+                        <p className="font-medium">{admission.bed?.ward?.name} - {admission.bed?.bedNumber}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Status</p>
+                        <span className={clsx(
+                          'inline-flex px-2 py-1 rounded-full text-xs font-medium',
+                          admission.status === 'ADMITTED' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
+                        )}>
+                          {admission.status}
+                        </span>
+                      </div>
+                      {admission.admittingDoctor && (
+                        <div>
+                          <p className="text-sm text-gray-500">Admitting Doctor</p>
+                          <p className="font-medium">
+                            Dr. {admission.admittingDoctor.user?.firstName} {admission.admittingDoctor.user?.lastName}
+                          </p>
+                          {admission.admittingDoctor.specialization && (
+                            <p className="text-xs text-gray-500">{admission.admittingDoctor.specialization}</p>
+                          )}
+                        </div>
+                      )}
+                      {news2Score !== undefined && news2Score !== null && (
+                        <div>
+                          <p className="text-sm text-gray-500">NEWS2 Score</p>
+                          <p className={clsx(
+                            'font-bold text-lg',
+                            news2Score >= 7 ? 'text-red-600' :
+                            news2Score >= 5 ? 'text-orange-600' :
+                            news2Score >= 3 ? 'text-yellow-600' :
+                            'text-green-600'
+                          )}>
+                            {news2Score}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    {admission.chiefComplaint && (
+                      <div className="mt-4">
+                        <p className="text-sm text-gray-500">Chief Complaint</p>
+                        <p className="font-medium">{admission.chiefComplaint}</p>
+                      </div>
+                    )}
+                    {admission.diagnosis && admission.diagnosis.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-sm text-gray-500 mb-2">Diagnosis</p>
+                        <div className="flex flex-wrap gap-2">
+                          {admission.diagnosis.map((d: string, i: number) => (
+                            <span key={i} className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-sm">
+                              {d}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {admission.icdCodes && admission.icdCodes.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-sm text-gray-500 mb-2">ICD Codes</p>
+                        <div className="flex flex-wrap gap-2">
+                          {admission.icdCodes.map((code: string, i: number) => (
+                            <span key={i} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-mono">
+                              {code}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {admission.treatmentPlan && (
+                      <div className="mt-4">
+                        <p className="text-sm text-gray-500">Treatment Plan</p>
+                        <p className="font-medium whitespace-pre-wrap">{admission.treatmentPlan}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Latest Vitals */}
+                  {latestVitals && (
+                    <div className="bg-white border border-gray-200 rounded-xl p-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <HeartIcon className="h-5 w-5 text-red-600" />
+                        Latest Vitals
+                      </h3>
+                      <div className="grid grid-cols-3 gap-4">
+                        {latestVitals.respiratoryRate && (
+                          <div>
+                            <p className="text-sm text-gray-500">Respiratory Rate</p>
+                            <p className="font-medium">{latestVitals.respiratoryRate} /min</p>
+                          </div>
+                        )}
+                        {latestVitals.oxygenSaturation && (
+                          <div>
+                            <p className="text-sm text-gray-500">O₂ Saturation</p>
+                            <p className="font-medium">{latestVitals.oxygenSaturation}%</p>
+                          </div>
+                        )}
+                        {latestVitals.heartRate && (
+                          <div>
+                            <p className="text-sm text-gray-500">Heart Rate</p>
+                            <p className="font-medium">{latestVitals.heartRate} bpm</p>
+                          </div>
+                        )}
+                        {latestVitals.bloodPressureSys && (
+                          <div>
+                            <p className="text-sm text-gray-500">Blood Pressure</p>
+                            <p className="font-medium">{latestVitals.bloodPressureSys}/{latestVitals.bloodPressureDia} mmHg</p>
+                          </div>
+                        )}
+                        {latestVitals.temperature && (
+                          <div>
+                            <p className="text-sm text-gray-500">Temperature</p>
+                            <p className="font-medium">{latestVitals.temperature}°C</p>
+                          </div>
+                        )}
+                        {latestVitals.consciousness && (
+                          <div>
+                            <p className="text-sm text-gray-500">Consciousness</p>
+                            <p className="font-medium capitalize">{latestVitals.consciousness}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                );
+              })()}
+
+              {activeTab === 'orders' && (
+                <div className="space-y-4">
+                  {admission.doctorOrders && admission.doctorOrders.length > 0 ? (
+                    admission.doctorOrders.map((order: any) => (
+                      <div key={order.id} className="bg-white border border-gray-200 rounded-xl p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded text-xs font-medium">
+                                {order.orderType}
+                              </span>
+                              <span className={clsx(
+                                'px-2 py-1 rounded text-xs font-medium',
+                                order.priority === 'STAT' ? 'bg-red-100 text-red-700' :
+                                order.priority === 'URGENT' ? 'bg-orange-100 text-orange-700' :
+                                'bg-gray-100 text-gray-700'
+                              )}>
+                                {order.priority}
+                              </span>
+                              <span className={clsx(
+                                'px-2 py-1 rounded text-xs font-medium',
+                                order.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
+                                order.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
+                                order.status === 'CANCELLED' ? 'bg-gray-100 text-gray-700' :
+                                'bg-yellow-100 text-yellow-700'
+                              )}>
+                                {order.status}
+                              </span>
+                            </div>
+                            <p className="font-medium text-gray-900">{order.description}</p>
+                            {order.notes && (
+                              <p className="text-sm text-gray-600 mt-1">{order.notes}</p>
+                            )}
+                            <p className="text-xs text-gray-500 mt-2">
+                              Ordered: {new Date(order.createdAt).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-12 text-gray-500">
+                      <ClipboardDocumentListIcon className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                      <p>No doctor's orders found</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'vitals' && (
+                <div className="bg-white border border-gray-200 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Vitals History</h3>
+                  {admission.patient?.vitals && admission.patient.vitals.length > 0 ? (
+                    <div className="space-y-4">
+                      <p className="text-sm text-gray-600">
+                        Displaying latest vitals recorded at {new Date().toLocaleString()}
+                      </p>
+                      {/* VitalsTrendChart component can be added here if needed */}
+                      <div className="text-center text-gray-500 py-8">
+                        Vitals trend chart will be displayed here
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 text-gray-500">
+                      <HeartIcon className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                      <p>No vitals recorded yet</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'notes' && (
+                <div className="space-y-4">
+                  {admission.progressNotes && admission.progressNotes.length > 0 ? (
+                    admission.progressNotes.map((note: any) => (
+                      <div key={note.id} className="bg-white border border-gray-200 rounded-xl p-4">
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium">
+                              {note.noteType}
+                            </span>
+                            <p className="text-xs text-gray-500 mt-1">
+                              By {note.authorRole} • {new Date(note.createdAt).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                        {note.noteType === 'SOAP' ? (
+                          <div className="space-y-2">
+                            {note.subjective && (
+                              <div>
+                                <p className="text-sm font-semibold text-gray-700">Subjective:</p>
+                                <p className="text-sm text-gray-600">{note.subjective}</p>
+                              </div>
+                            )}
+                            {note.objective && (
+                              <div>
+                                <p className="text-sm font-semibold text-gray-700">Objective:</p>
+                                <p className="text-sm text-gray-600">{note.objective}</p>
+                              </div>
+                            )}
+                            {note.assessment && (
+                              <div>
+                                <p className="text-sm font-semibold text-gray-700">Assessment:</p>
+                                <p className="text-sm text-gray-600">{note.assessment}</p>
+                              </div>
+                            )}
+                            {note.plan && (
+                              <div>
+                                <p className="text-sm font-semibold text-gray-700">Plan:</p>
+                                <p className="text-sm text-gray-600">{note.plan}</p>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-600 whitespace-pre-wrap">{note.content}</p>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-12 text-gray-500">
+                      <DocumentTextIcon className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                      <p>No progress notes found</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="p-6 text-center text-gray-500">
+              <p>Failed to load patient details</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function IPD() {
   const navigate = useNavigate();
   const { hasPermission } = usePermissions();
@@ -684,6 +1112,8 @@ export default function IPD() {
   const [monitoringLoading, setMonitoringLoading] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<DeteriorationPatient | null>(null);
   const [showVitalsModal, setShowVitalsModal] = useState(false);
+  const [selectedBedAdmission, setSelectedBedAdmission] = useState<string | null>(null);
+  const [showPatientDrawer, setShowPatientDrawer] = useState(false);
   const [vitalsForm, setVitalsForm] = useState({
     respiratoryRate: 16,
     oxygenSaturation: 98,
@@ -862,6 +1292,17 @@ export default function IPD() {
     if (status === 'MAINTENANCE') return 'bg-gray-500/20 border-gray-500/40 text-gray-600';
     if (status === 'OCCUPIED') return 'bg-blue-500/20 border-blue-500/40 text-blue-700';
     return 'bg-gray-500/20 border-gray-500/40 text-gray-700';
+  };
+
+  const handleBedClick = (bed: Ward['beds'][0]) => {
+    // Only handle clicks on occupied beds with an admission
+    if (bed.status === 'OCCUPIED' && bed.admissions && bed.admissions.length > 0) {
+      const currentAdmission = bed.admissions.find(a => a.status === 'ADMITTED');
+      if (currentAdmission) {
+        setSelectedBedAdmission(currentAdmission.id);
+        setShowPatientDrawer(true);
+      }
+    }
   };
 
   const dischargeReadyPatients = admissions.filter(a => a.lengthOfStay >= 3);
@@ -1070,30 +1511,37 @@ export default function IPD() {
                 </div>
                 <div className="p-5">
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                    {ward.beds?.map((bed) => (
-                      <div
-                        key={bed.id}
-                        className={clsx(
-                          'relative p-3 rounded-xl border-2 cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-lg backdrop-blur-sm',
-                          getBedColor(bed.status)
-                        )}
-                      >
-                        <div className="text-center">
-                          <p className="font-mono text-sm font-semibold">{bed.bedNumber}</p>
-                          {bed.currentAdmission?.patient && (
-                            <p className="text-xs mt-1 truncate opacity-80">
-                              {bed.currentAdmission.patient.firstName} {bed.currentAdmission.patient.lastName}
-                            </p>
+                    {ward.beds?.map((bed) => {
+                      const currentAdmission = bed.admissions?.find(a => a.status === 'ADMITTED');
+                      const isOccupied = bed.status === 'OCCUPIED' && currentAdmission;
+
+                      return (
+                        <div
+                          key={bed.id}
+                          onClick={() => handleBedClick(bed)}
+                          className={clsx(
+                            'relative p-3 rounded-xl border-2 transition-all duration-300 backdrop-blur-sm',
+                            isOccupied ? 'cursor-pointer hover:scale-105 hover:shadow-lg' : 'cursor-default',
+                            getBedColor(bed.status)
                           )}
-                          {bed.status === 'AVAILABLE' && (
-                            <p className="text-xs mt-1 opacity-80">Available</p>
-                          )}
-                          {bed.status === 'MAINTENANCE' && (
-                            <p className="text-xs mt-1 opacity-80">Maintenance</p>
-                          )}
+                        >
+                          <div className="text-center">
+                            <p className="font-mono text-sm font-semibold">{bed.bedNumber}</p>
+                            {currentAdmission?.patient && (
+                              <p className="text-xs mt-1 truncate opacity-80">
+                                {currentAdmission.patient.firstName} {currentAdmission.patient.lastName}
+                              </p>
+                            )}
+                            {bed.status === 'AVAILABLE' && (
+                              <p className="text-xs mt-1 opacity-80">Available</p>
+                            )}
+                            {bed.status === 'MAINTENANCE' && (
+                              <p className="text-xs mt-1 opacity-80">Maintenance</p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -1567,6 +2015,17 @@ export default function IPD() {
             } catch (error) {
               console.error('Failed to refresh data:', error);
             }
+          }}
+        />
+      )}
+
+      {/* Patient Detail Drawer */}
+      {showPatientDrawer && selectedBedAdmission && (
+        <PatientDetailDrawer
+          admissionId={selectedBedAdmission}
+          onClose={() => {
+            setShowPatientDrawer(false);
+            setSelectedBedAdmission(null);
           }}
         />
       )}
