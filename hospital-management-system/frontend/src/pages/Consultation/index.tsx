@@ -3771,12 +3771,12 @@ export default function Consultation() {
       )}
 
       {/* Recommended Tests — Add / Delete / Autocomplete */}
-      <div className="bg-green-50 rounded-2xl p-5 border border-green-200">
-        <h4 className="font-semibold text-green-800 mb-3 flex items-center gap-2">
+      <div className="bg-purple-50 rounded-2xl p-5 border border-purple-200">
+        <h4 className="font-semibold text-purple-800 mb-3 flex items-center gap-2">
           <BeakerIcon className="h-5 w-5" />
           Recommended Tests
           {recommendedTests.length > 0 && (
-            <span className="text-xs font-normal text-green-600">({recommendedTests.length})</span>
+            <span className="text-xs font-normal text-purple-600">({recommendedTests.length})</span>
           )}
         </h4>
 
@@ -3794,7 +3794,7 @@ export default function Consultation() {
                   key={idx}
                   className={`px-2 py-1 bg-white rounded text-xs border flex items-center gap-1 ${
                     isAvailable
-                      ? 'text-green-700 border-green-200'
+                      ? 'text-purple-700 border-purple-200'
                       : 'text-orange-700 border-orange-300'
                   }`}
                   title={isAvailable ? 'Available in lab database' : 'Not in lab database'}
@@ -3814,7 +3814,7 @@ export default function Consultation() {
         )}
 
         {recommendedTests.length === 0 && (
-          <p className="text-green-600 text-xs mb-3 italic">No tests yet. Add from database or type custom.</p>
+          <p className="text-purple-600 text-xs mb-3 italic">No tests yet. Add from database or type custom.</p>
         )}
 
         {/* Add test input with autocomplete */}
@@ -3839,7 +3839,7 @@ export default function Consultation() {
                 }
               }}
               placeholder="Search or add test..."
-              className="flex-1 px-2.5 py-1.5 border border-green-300 rounded-lg text-xs focus:ring-1 focus:ring-green-500 focus:border-green-500 bg-white"
+              className="flex-1 px-2.5 py-1.5 border border-purple-300 rounded-lg text-xs focus:ring-1 focus:ring-purple-500 focus:border-purple-500 bg-white"
             />
             <button
               type="button"
@@ -3851,7 +3851,7 @@ export default function Consultation() {
                 }
               }}
               disabled={!sidebarTestInput.trim()}
-              className="px-2.5 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-2.5 py-1.5 bg-purple-600 text-white rounded-lg text-xs font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <PlusIcon className="h-3.5 w-3.5" />
             </button>
@@ -3859,7 +3859,7 @@ export default function Consultation() {
 
           {/* Autocomplete dropdown */}
           {showSidebarTestDropdown && sidebarTestInput.trim().length > 0 && (
-            <div className="absolute z-50 mt-1 w-full bg-white border border-green-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+            <div className="absolute z-50 mt-1 w-full bg-white border border-purple-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
               {availableLabTests
                 .filter(lt =>
                   lt.name.toLowerCase().includes(sidebarTestInput.toLowerCase()) &&
@@ -3875,10 +3875,10 @@ export default function Consultation() {
                       setSidebarTestInput('');
                       setShowSidebarTestDropdown(false);
                     }}
-                    className="w-full text-left px-3 py-2 text-xs hover:bg-green-50 border-b border-gray-100 last:border-0 flex items-center justify-between"
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-purple-50 border-b border-gray-100 last:border-0 flex items-center justify-between"
                   >
                     <span className="text-gray-800">{lt.name}</span>
-                    <span className="text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded">{lt.category}</span>
+                    <span className="text-[10px] text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">{lt.category}</span>
                   </button>
                 ))}
               {availableLabTests.filter(lt =>
