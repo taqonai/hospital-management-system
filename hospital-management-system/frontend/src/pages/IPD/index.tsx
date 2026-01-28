@@ -2125,11 +2125,15 @@ export default function IPD() {
                       </div>
                       {canRecordVitals && (
                         <button
-                          onClick={() => {
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            console.log('Record Vitals clicked for:', patient.patientName);
                             setSelectedPatient(patient);
                             setShowVitalsModal(true);
                           }}
-                          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:shadow-lg hover:shadow-indigo-500/25 transition-all duration-300 hover:scale-105"
+                          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:shadow-lg hover:shadow-indigo-500/25 transition-all duration-300 hover:scale-105 cursor-pointer"
                         >
                           Record Vitals
                         </button>
