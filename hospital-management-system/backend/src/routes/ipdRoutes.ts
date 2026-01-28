@@ -278,6 +278,17 @@ router.get(
   })
 );
 
+// Create prescription for admitted patient
+router.post(
+  '/admissions/:id/prescriptions',
+  authenticate,
+  authorizeWithPermission('ipd:admissions:write', ['DOCTOR']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const prescription = await ipdService.createPrescription(req.params.id, req.user!.userId, req.body);
+    sendCreated(res, prescription, 'Prescription created successfully');
+  })
+);
+
 // Get IPD stats
 router.get(
   '/stats',

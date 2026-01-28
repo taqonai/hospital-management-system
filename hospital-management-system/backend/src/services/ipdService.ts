@@ -792,6 +792,77 @@ export class IPDService {
     return { notes: enrichedNotes, total, page, limit };
   }
 
+  // ==================== PRESCRIPTIONS ====================
+  async createPrescription(admissionId: string, userId: string, data: {
+    medications: Array<{
+      drugId: string;
+      dosage: string;
+      frequency: string;
+      route: string;
+      duration?: string;
+      instructions?: string;
+    }>;
+    notes?: string;
+  }) {
+    // Get admission details
+    const admission = await prisma.admission.findUnique({
+      where: { id: admissionId },
+      select: { patientId: true, hospitalId: true },
+    });
+
+    if (!admission) {
+      throw new NotFoundError('Admission not found');
+    }
+
+    // Get doctor from user
+    const doctor = await prisma.doctor.findFirst({
+      where: { userId },
+    });
+
+    if (!doctor) {
+      throw new ValidationError('Only doctors can create prescriptions');
+    }
+
+    // Create prescription with medications
+    const prescription = await prisma.prescription.create({
+      data: {
+        patientId: admission.patientId,
+        doctorId: doctor.id,
+        admissionId,
+        prescriptionDate: new Date(),
+        status: 'ACTIVE',
+        notes: data.notes,
+        medications: {
+          create: data.medications.map(med => ({
+            drugId: med.drugId,
+            dosage: med.dosage,
+            frequency: med.frequency,
+            route: med.route,
+            duration: med.duration,
+            instructions: med.instructions,
+            status: 'PENDING',
+          })),
+        },
+      },
+      include: {
+        medications: {
+          include: {
+            drug: true,
+          },
+        },
+        doctor: {
+          include: {
+            user: {
+              select: { firstName: true, lastName: true },
+            },
+          },
+        },
+      },
+    });
+
+    return prescription;
+  }
+
   // Get deterioration monitoring dashboard data
   async getDeteriorationDashboard(hospitalId: string) {
     const admissions = await prisma.admission.findMany({

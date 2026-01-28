@@ -686,6 +686,9 @@ export const ipdApi = {
   // Progress Notes
   createNote: (admissionId: string, data: any) => api.post(`/ipd/admissions/${admissionId}/notes`, data),
   getNotes: (admissionId: string, params?: any) => api.get(`/ipd/admissions/${admissionId}/notes`, { params }),
+
+  // Prescriptions
+  createPrescription: (admissionId: string, data: any) => api.post(`/ipd/admissions/${admissionId}/prescriptions`, data),
 };
 
 // OPD APIs
