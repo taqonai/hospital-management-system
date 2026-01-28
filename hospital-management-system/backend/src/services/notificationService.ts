@@ -376,12 +376,13 @@ export class NotificationService {
     phoneNumber: string,
     message: string,
     templateId?: string,
-    notificationId?: string
+    notificationId?: string,
+    hospitalId?: string
   ): Promise<{ success: boolean; logId: string }> {
     const log = this.logDelivery('whatsapp', phoneNumber, 'pending', notificationId);
 
     try {
-      const result = await whatsappService.send(phoneNumber, message, templateId);
+      const result = await whatsappService.send(phoneNumber, message, templateId, hospitalId);
 
       if (result.success) {
         this.updateDeliveryLog(log.id, {
@@ -537,7 +538,7 @@ export class NotificationService {
     const results: { channel: NotificationChannel; success: boolean; error?: string }[] = [];
     let inAppNotificationId: string | undefined;
 
-    // Get user data
+    // Get user data with hospitalId for Twilio routing
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -546,12 +547,15 @@ export class NotificationService {
         phone: true,
         firstName: true,
         lastName: true,
+        hospitalId: true,
       },
     });
 
     if (!user) {
       throw new NotFoundError('User not found');
     }
+
+    const hospitalId = user.hospitalId;
 
     // Get user preferences
     const preferences = await this.getUserPreferences(userId);
@@ -586,7 +590,8 @@ export class NotificationService {
               const smsResult = await this.sendSMS(
                 user.phone,
                 `${data.title}: ${data.message}`,
-                inAppNotificationId
+                inAppNotificationId,
+                hospitalId
               );
               results.push({ channel, success: smsResult.success });
             } else {
@@ -600,7 +605,8 @@ export class NotificationService {
                 user.phone,
                 `*${data.title}*\n\n${data.message}`,
                 undefined,
-                inAppNotificationId
+                inAppNotificationId,
+                hospitalId
               );
               results.push({ channel, success: waResult.success });
             } else {
@@ -671,7 +677,8 @@ export class NotificationService {
     contact: string,
     otp: string,
     channel: 'email' | 'sms' | 'whatsapp',
-    purpose: OTPNotificationData['purpose'] = 'LOGIN'
+    purpose: OTPNotificationData['purpose'] = 'LOGIN',
+    hospitalId?: string
   ): Promise<{ success: boolean; error?: string }> {
     const purposeText = {
       LOGIN: 'login',
@@ -690,11 +697,11 @@ export class NotificationService {
           return { success: emailResult.success };
 
         case 'sms':
-          const smsResult = await this.sendSMS(contact, message);
+          const smsResult = await this.sendSMS(contact, message, undefined, hospitalId);
           return { success: smsResult.success };
 
         case 'whatsapp':
-          const waResult = await this.sendWhatsApp(contact, message, 'otp_template');
+          const waResult = await this.sendWhatsApp(contact, message, 'otp_template', undefined, hospitalId);
           return { success: waResult.success };
 
         default:
@@ -784,7 +791,9 @@ export class NotificationService {
       if (appointment.patient.phone) {
         const smsResult = await this.sendSMS(
           appointment.patient.phone,
-          `${notifData.title}: ${notifData.message}`
+          `${notifData.title}: ${notifData.message}`,
+          undefined,
+          appointment.hospitalId
         );
         results.push({ recipient: 'patient_phone', ...smsResult });
       }
@@ -1032,7 +1041,9 @@ export class NotificationService {
       if (invoice.patient.phone) {
         const smsResult = await this.sendSMS(
           invoice.patient.phone,
-          `${notifData.title}: ${notifData.message}`
+          `${notifData.title}: ${notifData.message}`,
+          undefined,
+          invoice.hospitalId
         );
         results.push({ recipient: 'patient_phone', ...smsResult });
       }
