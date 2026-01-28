@@ -2267,8 +2267,8 @@ export default function Consultation() {
 
       {/* Diagnosis Results */}
       {diagnosisMutation.data && (
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Differential Diagnoses</h3>
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-purple-200">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><SparklesIcon className="h-5 w-5 text-purple-600" />Differential Diagnoses</h3>
           <div className="space-y-3">
             {(diagnosisMutation.data.diagnoses || []).map((diagnosis: Diagnosis) => (
               <div
@@ -2277,8 +2277,8 @@ export default function Consultation() {
                 className={clsx(
                   'p-4 rounded-xl border-2 cursor-pointer transition-all',
                   selectedDiagnoses.find(d => d.icd10 === diagnosis.icd10)
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 hover:border-blue-300'
+                    ? 'border-purple-500 bg-purple-50'
+                    : 'border-gray-200 hover:border-purple-300'
                 )}
               >
                 <div className="flex items-center justify-between">
@@ -2286,7 +2286,7 @@ export default function Consultation() {
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-gray-900">{diagnosis.name}</span>
                       {selectedDiagnoses.find(d => d.icd10 === diagnosis.icd10)?.isPrimary && (
-                        <span className="px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
+                        <span className="px-2 py-0.5 bg-purple-500 text-white text-xs rounded-full">
                           Primary
                         </span>
                       )}
@@ -2312,11 +2312,11 @@ export default function Consultation() {
       )}
 
       {/* Recommended Tests */}
-      <div className="bg-green-50 border border-green-200 rounded-2xl p-6">
-        <h3 className="text-lg font-semibold text-green-800 mb-4 flex items-center gap-2">
+      <div className="bg-purple-50 border border-purple-200 rounded-2xl p-6">
+        <h3 className="text-lg font-semibold text-purple-800 mb-4 flex items-center gap-2">
           <BeakerIcon className="h-5 w-5" />
           Recommended Tests
-          <span className="text-sm font-normal text-green-600 ml-2">
+          <span className="text-sm font-normal text-purple-600 ml-2">
             ({recommendedTests.length} test{recommendedTests.length !== 1 ? 's' : ''})
           </span>
           {recommendedTests.length > 0 && (() => {
@@ -2349,7 +2349,7 @@ export default function Consultation() {
                   key={test}
                   className={`px-3 py-1.5 bg-white rounded-lg text-sm flex items-center gap-2 ${
                     isAvailable
-                      ? 'text-green-700 border border-green-300'
+                      ? 'text-purple-700 border border-purple-300'
                       : 'text-orange-700 border border-orange-300'
                   }`}
                   title={isAvailable ? 'Available in lab database' : 'Not available in lab database'}
@@ -2553,19 +2553,19 @@ export default function Consultation() {
 
       {/* Selected AI Diagnoses Summary */}
       {selectedDiagnoses.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6">
-          <h3 className="text-lg font-semibold text-blue-800 mb-4 flex items-center gap-2">
+        <div className="bg-purple-50 border border-purple-200 rounded-2xl p-6">
+          <h3 className="text-lg font-semibold text-purple-800 mb-4 flex items-center gap-2">
             <SparklesIcon className="h-5 w-5" />
             Selected AI Diagnoses
-            <span className="text-sm font-normal text-blue-600">(from AI analysis)</span>
+            <span className="text-sm font-normal text-purple-600">(from AI analysis)</span>
           </h3>
           <div className="space-y-2">
             {selectedDiagnoses.map((d) => (
-              <div key={d.icd10} className="flex items-center justify-between p-3 bg-white rounded-xl border border-blue-200">
+              <div key={d.icd10} className="flex items-center justify-between p-3 bg-white rounded-xl border border-purple-200">
                 <div className="flex-1">
                   <span className="font-medium text-gray-900">{d.name}</span>
                   <span className="ml-2 text-sm text-gray-500">({d.icd10})</span>
-                  <span className="ml-2 text-xs px-2 py-0.5 bg-blue-100 text-blue-600 rounded">AI</span>
+                  <span className="ml-2 text-xs px-2 py-0.5 bg-purple-100 text-purple-600 rounded">AI</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -2578,8 +2578,8 @@ export default function Consultation() {
                     className={clsx(
                       'text-xs font-medium px-2 py-1 rounded transition-colors',
                       d.isPrimary
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-700'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-purple-100 hover:text-purple-700'
                     )}
                   >
                     {d.isPrimary ? 'Primary' : 'Set Primary'}
@@ -2982,7 +2982,7 @@ export default function Consultation() {
                         </button>
                       </div>
                     ) : isPrescriptionFieldProcessing(rx.id, 'medication') ? (
-                      <button type="button" disabled className="px-2 py-2 rounded-lg bg-blue-100 text-blue-600">
+                      <button type="button" disabled className="px-2 py-2 rounded-lg bg-purple-100 text-purple-600">
                         <ArrowPathIcon className="h-4 w-4 animate-spin" />
                       </button>
                     ) : (
@@ -3043,7 +3043,7 @@ export default function Consultation() {
                         </button>
                       </div>
                     ) : isPrescriptionFieldProcessing(rx.id, 'dosage') ? (
-                      <button type="button" disabled className="px-2 py-2 rounded-lg bg-blue-100 text-blue-600">
+                      <button type="button" disabled className="px-2 py-2 rounded-lg bg-purple-100 text-purple-600">
                         <ArrowPathIcon className="h-4 w-4 animate-spin" />
                       </button>
                     ) : (
@@ -3133,7 +3133,7 @@ export default function Consultation() {
                         </button>
                       </div>
                     ) : isPrescriptionFieldProcessing(rx.id, 'instructions') ? (
-                      <button type="button" disabled className="px-2 py-2 rounded-lg bg-blue-100 text-blue-600">
+                      <button type="button" disabled className="px-2 py-2 rounded-lg bg-purple-100 text-purple-600">
                         <ArrowPathIcon className="h-4 w-4 animate-spin" />
                       </button>
                     ) : (
@@ -3531,8 +3531,8 @@ export default function Consultation() {
               {selectedDiagnoses.map((d, i) => (
                 <p key={d.icd10} className="text-gray-900 flex items-center gap-2">
                   <span>{i + 1}. {d.name} ({d.icd10})</span>
-                  {d.isPrimary && <span className="text-xs px-1.5 py-0.5 bg-blue-500 text-white rounded">Primary</span>}
-                  <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded">AI</span>
+                  {d.isPrimary && <span className="text-xs px-1.5 py-0.5 bg-purple-500 text-white rounded">Primary</span>}
+                  <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded">AI</span>
                 </p>
               ))}
               {/* Manual Diagnoses */}
@@ -3627,7 +3627,7 @@ export default function Consultation() {
       {patientData && (
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200">
           <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
-            <ShieldExclamationIcon className="h-5 w-5 text-blue-500" />
+            <ShieldExclamationIcon className="h-5 w-5 text-purple-500" />
             Patient Risk Level
           </h4>
           {(() => {
@@ -3679,7 +3679,7 @@ export default function Consultation() {
       {aiInsights.length > 0 && (
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200">
           <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
-            <LightBulbIcon className="h-5 w-5 text-amber-500" />
+            <LightBulbIcon className="h-5 w-5 text-purple-500" />
             AI Suggestions
           </h4>
           <div className="space-y-3">
@@ -3929,7 +3929,7 @@ export default function Consultation() {
             <ArrowLeftIcon className="h-5 w-5 text-gray-600" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">AI-Enhanced Consultation</h1>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">AI-Enhanced Consultation</h1>
             <p className="text-sm text-gray-500">
               {patientData ? `${patientData.firstName} ${patientData.lastName} (${patientData.mrn})` : 'Select a patient to begin'}
             </p>
