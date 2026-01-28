@@ -440,11 +440,21 @@ export default function Laboratory() {
   const isAIOnline = healthStatus?.status === 'connected';
 
   // Fetch booking ticket data for selected appointment
-  const { data: bookingTicketData, isLoading: loadingBookingTicket, refetch: refetchBookingTicket } = useBookingData(
+  const { data: bookingTicketData, isLoading: loadingBookingTicket, error: bookingError, refetch: refetchBookingTicket } = useBookingData(
     selectedBookingId,
     15000, // Poll every 15 seconds
     !!selectedBookingId
   );
+
+  // Debug logging
+  useEffect(() => {
+    if (selectedBookingId) {
+      console.log('[Laboratory] Selected Booking ID:', selectedBookingId);
+      console.log('[Laboratory] Loading:', loadingBookingTicket);
+      console.log('[Laboratory] Data:', bookingTicketData);
+      console.log('[Laboratory] Error:', bookingError);
+    }
+  }, [selectedBookingId, loadingBookingTicket, bookingTicketData, bookingError]);
 
   // Fetch orders function with polling support
   const fetchOrders = useCallback(async (showLoading = true) => {
@@ -1033,13 +1043,37 @@ export default function Laboratory() {
           <div className="flex min-h-full items-center justify-center p-4">
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setSelectedBookingId(null)} />
             <div className="relative w-full max-w-3xl">
-              <BookingTicket
-                data={bookingTicketData}
-                isLoading={loadingBookingTicket}
-                onRefresh={() => refetchBookingTicket()}
-                onClose={() => setSelectedBookingId(null)}
-                showActions={true}
-              />
+              {bookingError ? (
+                <div className="bg-white rounded-lg shadow-lg p-12 text-center">
+                  <ExclamationTriangleIcon className="h-16 w-16 text-red-500 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Error Loading Booking</h3>
+                  <p className="text-gray-600 mb-6">
+                    {bookingError instanceof Error ? bookingError.message : 'Failed to load booking details'}
+                  </p>
+                  <div className="flex justify-center gap-3">
+                    <button
+                      onClick={() => refetchBookingTicket()}
+                      className="px-6 py-2.5 rounded-xl bg-blue-500 text-white font-semibold hover:bg-blue-600"
+                    >
+                      Try Again
+                    </button>
+                    <button
+                      onClick={() => setSelectedBookingId(null)}
+                      className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <BookingTicket
+                  data={bookingTicketData}
+                  isLoading={loadingBookingTicket}
+                  onRefresh={() => refetchBookingTicket()}
+                  onClose={() => setSelectedBookingId(null)}
+                  showActions={true}
+                />
+              )}
             </div>
           </div>
         </div>
