@@ -132,8 +132,9 @@ export class LaboratoryService {
     patientId?: string;
     startDate?: string;
     endDate?: string;
+    search?: string;
   }) {
-    const { page = 1, limit = 20, status, priority, patientId, startDate, endDate } = params;
+    const { page = 1, limit = 20, status, priority, patientId, startDate, endDate, search } = params;
     const skip = (page - 1) * limit;
 
     const where: any = { hospitalId };
@@ -144,6 +145,16 @@ export class LaboratoryService {
       where.orderedAt = {};
       if (startDate) where.orderedAt.gte = new Date(startDate);
       if (endDate) where.orderedAt.lte = new Date(endDate);
+    }
+
+    // Search by order number, patient name, or patient MRN
+    if (search) {
+      where.OR = [
+        { orderNumber: { contains: search, mode: 'insensitive' } },
+        { patient: { firstName: { contains: search, mode: 'insensitive' } } },
+        { patient: { lastName: { contains: search, mode: 'insensitive' } } },
+        { patient: { mrn: { contains: search, mode: 'insensitive' } } },
+      ];
     }
 
     const [orders, total] = await Promise.all([

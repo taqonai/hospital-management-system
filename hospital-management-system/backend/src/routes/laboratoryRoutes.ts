@@ -80,7 +80,7 @@ router.get(
   '/orders',
   authenticate,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const { page, limit, status, priority, patientId, startDate, endDate } = req.query;
+    const { page, limit, status, priority, patientId, startDate, endDate, search } = req.query;
     const result = await laboratoryService.getLabOrders(req.user!.hospitalId, {
       page: Number(page) || 1,
       limit: Number(limit) || 20,
@@ -89,6 +89,7 @@ router.get(
       patientId: patientId as string,
       startDate: startDate as string,
       endDate: endDate as string,
+      search: search as string,
     });
     const pagination = calculatePagination(result.page, result.limit, result.total);
     sendPaginated(res, result.orders, pagination);
