@@ -63,6 +63,10 @@ services:
       AWS_S3_BUCKET: ${AWS_S3_BUCKET:-}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      # Email / SES
+      AWS_SES_FROM_EMAIL: ${AWS_SES_FROM_EMAIL:-noreply@spetaar.ai}
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@spetaar.ai}
+      FRONTEND_URL: ${FRONTEND_URL:-https://spetaar.ai}
       # MinIO for local development
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
