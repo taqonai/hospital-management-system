@@ -892,7 +892,7 @@ export class PatientPortalService {
 
     const where: any = { patientId, hospitalId };
     if (filters?.status === 'ready') {
-      where.status = { in: ['RESULTED', 'VERIFIED'] };
+      where.status = { in: ['COMPLETED', 'RESULTED', 'VERIFIED', 'PARTIALLY_COMPLETED'] };
     } else if (filters?.status === 'pending') {
       where.status = { in: ['ORDERED', 'SAMPLE_COLLECTED', 'RECEIVED', 'IN_PROGRESS'] };
     }
@@ -971,10 +971,17 @@ export class PatientPortalService {
 
         // Map status for frontend
         let frontendStatus: 'PENDING' | 'IN_PROGRESS' | 'READY' | 'REVIEWED' = 'PENDING';
-        if (order.status === 'RESULTED' || order.status === 'VERIFIED') {
+        // READY: Results are available (COMPLETED is set when all tests are done)
+        if (order.status === 'COMPLETED' || order.status === 'RESULTED' || order.status === 'VERIFIED' || order.status === 'PARTIALLY_COMPLETED') {
           frontendStatus = 'READY';
-        } else if (order.status === 'SAMPLE_COLLECTED' || order.status === 'RECEIVED' || order.status === 'IN_PROGRESS') {
+        }
+        // IN_PROGRESS: Sample collected and being processed
+        else if (order.status === 'SAMPLE_COLLECTED' || order.status === 'RECEIVED' || order.status === 'IN_PROGRESS') {
           frontendStatus = 'IN_PROGRESS';
+        }
+        // CANCELLED: Show as pending
+        else if (order.status === 'CANCELLED') {
+          frontendStatus = 'PENDING';
         }
 
         return {
@@ -1090,10 +1097,17 @@ export class PatientPortalService {
 
     // Map status for frontend
     let frontendStatus: 'PENDING' | 'IN_PROGRESS' | 'READY' | 'REVIEWED' = 'PENDING';
-    if (labOrder.status === 'RESULTED' || labOrder.status === 'VERIFIED') {
+    // READY: Results are available (COMPLETED is set when all tests are done)
+    if (labOrder.status === 'COMPLETED' || labOrder.status === 'RESULTED' || labOrder.status === 'VERIFIED' || labOrder.status === 'PARTIALLY_COMPLETED') {
       frontendStatus = 'READY';
-    } else if (labOrder.status === 'SAMPLE_COLLECTED' || labOrder.status === 'RECEIVED' || labOrder.status === 'IN_PROGRESS') {
+    }
+    // IN_PROGRESS: Sample collected and being processed
+    else if (labOrder.status === 'SAMPLE_COLLECTED' || labOrder.status === 'RECEIVED' || labOrder.status === 'IN_PROGRESS') {
       frontendStatus = 'IN_PROGRESS';
+    }
+    // CANCELLED: Show as pending
+    else if (labOrder.status === 'CANCELLED') {
+      frontendStatus = 'PENDING';
     }
 
     return {
