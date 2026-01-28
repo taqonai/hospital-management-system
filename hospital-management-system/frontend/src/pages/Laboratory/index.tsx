@@ -225,7 +225,7 @@ function ActionsPanel({
   onProcess: (id: string) => void;
   onEnterResults: (order: LabOrder) => void;
   onViewBooking: (appointmentId: string) => void;
-  onInterpretResults: (orderId: string) => void;
+  onInterpretResults: (order: LabOrder) => void;
   isAIOnline: boolean;
 }) {
   const firstTest = order.tests?.[0];
@@ -286,7 +286,7 @@ function ActionsPanel({
             </button>
             {isAIOnline && (
               <button
-                onClick={() => onInterpretResults(order.id)}
+                onClick={() => onInterpretResults(order)}
                 className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-purple-600 bg-purple-500/10 hover:bg-purple-500/20 transition-all"
               >
                 <SparklesIcon className="h-4 w-4" />
@@ -396,7 +396,7 @@ function ExpandedOrderDetails({
   onProcess: (id: string) => void;
   onEnterResults: (order: LabOrder) => void;
   onViewBooking: (appointmentId: string) => void;
-  onInterpretResults: (orderId: string) => void;
+  onInterpretResults: (order: LabOrder) => void;
   isAIOnline: boolean;
 }) {
   // Check if any test has critical values
@@ -773,6 +773,7 @@ export default function Laboratory() {
   const [bookingError, setBookingError] = useState<Error | null>(null);
   const [selectedOrderForResults, setSelectedOrderForResults] = useState<{ orderId: string; testId: string; testName: string; patientName: string } | null>(null);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [aiInterpretation, setAiInterpretation] = useState<{ order: LabOrder; interpretations: Array<{ testId: string; testName: string; interpretation: string; loading: boolean; error?: string }> } | null>(null);
   const { data: healthStatus } = useAIHealth();
   const tabsRef = useRef<HTMLDivElement>(null);
 
@@ -914,8 +915,59 @@ export default function Laboratory() {
     toast.success('AI is analyzing patient history to suggest appropriate tests...');
   };
 
-  const handleInterpretResults = (_orderId: string) => {
-    toast.success('AI is interpreting lab results...');
+  const handleInterpretResults = async (order: LabOrder) => {
+    // Check if order has tests with results
+    const testsWithResults = order.tests.filter(t => t.result || t.resultValue);
+
+    if (testsWithResults.length === 0) {
+      toast.error('No test results available to interpret');
+      return;
+    }
+
+    // Initialize interpretation state
+    const interpretations = testsWithResults.map(test => ({
+      testId: test.id,
+      testName: test.labTest?.name || test.test?.name || 'Unknown Test',
+      interpretation: '',
+      loading: true
+    }));
+
+    setAiInterpretation({ order, interpretations });
+
+    // Fetch interpretations for each test
+    for (let i = 0; i < testsWithResults.length; i++) {
+      const test = testsWithResults[i];
+      try {
+        const response = await laboratoryApi.getClinicalContext(test.id);
+
+        // Update the specific test's interpretation
+        setAiInterpretation(prev => {
+          if (!prev) return null;
+          const updated = [...prev.interpretations];
+          updated[i] = {
+            ...updated[i],
+            interpretation: response.data.data?.interpretation || response.data.data?.context || 'No interpretation available',
+            loading: false
+          };
+          return { ...prev, interpretations: updated };
+        });
+      } catch (error: any) {
+        console.error(`Failed to get interpretation for test ${test.id}:`, error);
+
+        // Update with error
+        setAiInterpretation(prev => {
+          if (!prev) return null;
+          const updated = [...prev.interpretations];
+          updated[i] = {
+            ...updated[i],
+            interpretation: '',
+            loading: false,
+            error: error.response?.data?.message || 'Failed to generate interpretation'
+          };
+          return { ...prev, interpretations: updated };
+        });
+      }
+    }
   };
 
   const handleCollectSample = async (orderId: string) => {
@@ -1499,6 +1551,112 @@ export default function Laboratory() {
                 }}
                 onCancel={() => setSelectedOrderForResults(null)}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Interpretation Modal */}
+      {aiInterpretation && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setAiInterpretation(null)} />
+            <div className="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-purple-600 via-purple-500 to-indigo-600 px-6 py-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                      <SparklesIcon className="h-6 w-6" />
+                      AI Clinical Interpretation
+                    </h2>
+                    <p className="text-white/80 text-sm mt-1">
+                      Order: {aiInterpretation.order.orderNumber} | Patient: {aiInterpretation.order.patient.firstName} {aiInterpretation.order.patient.lastName}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setAiInterpretation(null)}
+                    className="text-white/80 hover:text-white transition-colors"
+                  >
+                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="p-6 max-h-[70vh] overflow-y-auto">
+                <div className="space-y-6">
+                  {aiInterpretation.interpretations.map((item, idx) => (
+                    <div key={item.testId} className="bg-gray-50 rounded-xl p-5 border border-gray-200">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                            <BeakerIcon className="h-5 w-5 text-purple-600" />
+                            {item.testName}
+                          </h3>
+                        </div>
+                        {item.loading && (
+                          <div className="flex items-center gap-2 text-sm text-purple-600">
+                            <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                            Analyzing...
+                          </div>
+                        )}
+                      </div>
+
+                      {item.loading ? (
+                        <div className="animate-pulse space-y-2">
+                          <div className="h-4 bg-gray-300 rounded w-full"></div>
+                          <div className="h-4 bg-gray-300 rounded w-5/6"></div>
+                          <div className="h-4 bg-gray-300 rounded w-4/6"></div>
+                        </div>
+                      ) : item.error ? (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                          <div className="flex items-start gap-3">
+                            <ExclamationTriangleIcon className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-medium text-red-900">Failed to generate interpretation</p>
+                              <p className="text-sm text-red-700 mt-1">{item.error}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="prose prose-sm max-w-none">
+                          <div className="bg-white rounded-lg p-4 border border-purple-200">
+                            <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">
+                              {item.interpretation}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Disclaimer */}
+                <div className="mt-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <ExclamationTriangleIcon className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-amber-900">Clinical Judgment Required</p>
+                      <p className="text-xs text-amber-700 mt-1">
+                        This AI interpretation is for informational purposes only. Always verify with clinical judgment and consult appropriate medical guidelines.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
+                <button
+                  onClick={() => setAiInterpretation(null)}
+                  className="w-full px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold hover:from-purple-700 hover:to-indigo-700 transition-all"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
