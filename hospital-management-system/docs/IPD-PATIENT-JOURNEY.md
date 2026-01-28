@@ -11,21 +11,44 @@ Patient Arrives → Admission → Bed Assigned → Daily Care → Discharge
 
 ---
 
-## Step 1: Patient Registration
+## Step 1: Patient Registration (or Search Existing)
 **Who does it:** Receptionist / Nurse / Doctor
-**Where in system:** Patients Module
+**Where in system:** Directly inside the IPD Admission Modal — no need to leave the page!
 
-Before IPD admission, the patient must exist in the system.
-- Register patient with name, MRN, DOB, gender, blood group, contact, address
-- If patient already exists (returning patient), skip this step
+The admission modal has a **Smart Patient Selector** with two modes:
 
-✅ **Implemented** — Patient registration works
+### 🔍 Search Existing Patient (default)
+- Type patient name or MRN in the search box
+- Results appear instantly (debounced search)
+- Click to select the patient
+- If no results found (3+ characters typed), a prompt appears:
+  *"No patient found. Register new?"* → click to switch to registration mode
+
+### ➕ Register New Patient (inline)
+- Toggle to "Register New" tab — a compact form appears right inside the modal:
+
+| Row | Fields |
+|-----|--------|
+| 1 | First Name* | Last Name* |
+| 2 | Date of Birth* | Gender* (Male/Female/Other) |
+| 3 | Phone* | Email (optional) |
+| 4 | Address* | City* |
+| 5 | State* | Zip Code* |
+| 6 | Blood Group (optional) | Nationality (optional) |
+
+- Click **"Register & Select"** → patient is created instantly
+- System auto-generates MRN and shows toast: *"Patient registered — MRN: HMS001-XXXXX"*
+- Patient is auto-selected for admission — continue filling the rest of the form
+
+**No page navigation needed.** Everything happens inside the admission modal.
+
+✅ **Implemented** — Inline patient search + registration in one place
 
 ---
 
 ## Step 2: Check Bed Availability
 **Who does it:** Receptionist / Nurse / Admin
-**Where in system:** IPD → Beds tab
+**Where in system:** IPD → Beds tab (or directly in the admission modal bed selector)
 
 Before admitting, check which beds are free.
 - View all beds across wards (General, ICU, CCU, Private, Pediatric)
@@ -44,26 +67,27 @@ Before admitting, check which beds are free.
 **Who does it:** Doctor / Nurse / Receptionist / Admin
 **Where in system:** IPD → Admissions → "New Admission" button
 
-Fill in the admission form:
+The admission modal combines patient selection + admission in one screen:
+
+**Part A — Select or Register Patient** *(see Step 1 above)*
+
+**Part B — Fill Admission Details:**
 
 | Field | Required | Example |
 |-------|----------|---------|
-| Patient | ✅ | Select from registered patients |
-| Bed | ✅ | Select from available beds |
-| Admitting Doctor | ✅ | Select doctor |
-| Admission Type | ✅ | Emergency / Elective / Transfer / Maternity |
-| Chief Complaint | ✅ | "Chest pain and shortness of breath" |
-| Diagnosis | Optional | ["Acute MI", "Hypertension"] |
-| ICD Codes | Optional | ["I21.9", "I10"] |
-| Treatment Plan | Optional | "Monitor vitals, start heparin drip" |
-| Estimated Days | Optional | 5 |
+| Patient | ✅ | Already selected/registered in Part A |
+| Bed | ✅ | Select from available beds (grouped by ward) |
+| Attending Doctor | ✅ | Select from doctor list (with specialization) |
+| Admission Type | ✅ | Elective / Emergency / Transfer (pill-style toggle) |
+| Admission Reason | Optional | "Chest pain and shortness of breath" |
+| Diagnosis | Optional | "Acute MI, Hypertension" |
 
 **What happens automatically:**
 - Bed status changes from AVAILABLE → OCCUPIED
 - Patient appears in Admissions list with status "ADMITTED"
 - Admission date/time is recorded
 
-✅ **Implemented** — Full admission creation with auto bed allocation
+✅ **Implemented** — Full admission creation with inline patient registration + auto bed allocation
 
 ---
 
@@ -248,20 +272,21 @@ When patient is ready to go home, doctor fills the discharge form:
 └────────────────────────┬────────────────────────────────┘
                          ▼
 ┌─────────────────────────────────────────────────────────┐
-│  STEP 1: Register Patient (if new)                       │
-│  👤 Receptionist / Nurse                                 │
-└────────────────────────┬────────────────────────────────┘
-                         ▼
-┌─────────────────────────────────────────────────────────┐
-│  STEP 2: Check Available Beds                            │
-│  👤 Receptionist / Nurse / Admin                         │
-└────────────────────────┬────────────────────────────────┘
-                         ▼
-┌─────────────────────────────────────────────────────────┐
-│  STEP 3: Create Admission                                │
+│  STEP 1-3: Open Admission Modal (all in one screen!)     │
 │  👤 Doctor / Nurse / Receptionist                        │
-│  📋 Patient + Bed + Doctor + Complaint + Diagnosis       │
-│  ⚡ Bed auto → OCCUPIED                                  │
+│                                                          │
+│  ┌────────────────────────────────────────┐              │
+│  │ 🔍 Search Existing  │ ➕ Register New  │              │
+│  ├────────────────────────────────────────┤              │
+│  │ Search by name/MRN → select patient    │              │
+│  │   OR                                   │              │
+│  │ Fill inline form → auto-register       │              │
+│  │ "No patient found? Register new?"      │              │
+│  └────────────────────────────────────────┘              │
+│                                                          │
+│  📋 Select Bed (grouped by ward) + Doctor + Type         │
+│  📋 Admission Reason + Diagnosis                         │
+│  ⚡ Submit → Bed auto → OCCUPIED                         │
 └────────────────────────┬────────────────────────────────┘
                          ▼
 ┌─────────────────────────────────────────────────────────┐
@@ -307,10 +332,10 @@ When patient is ready to go home, doctor fills the discharge form:
 
 ## What's Implemented vs What's Not
 
-### ✅ Fully Working (15 features)
-1. Patient registration
-2. Ward management (6 wards)
-3. Bed management (25 beds, 5 statuses)
+### ✅ Fully Working (20 features)
+1. Patient registration (standalone + inline in admission modal)
+2. Smart patient selector (search existing + register new in one place)
+3. Ward management (6 wards)
 4. Bed availability check
 5. Create admission (4 types)
 6. Admission detail page (6 tabs)
