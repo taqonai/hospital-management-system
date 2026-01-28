@@ -735,7 +735,7 @@ export class IPDService {
     plan?: string;
     content?: string;
   }) {
-    return prisma.progressNote.create({
+    const note = await prisma.progressNote.create({
       data: {
         admissionId,
         authorId: data.authorId,
@@ -748,6 +748,17 @@ export class IPDService {
         content: data.content,
       },
     });
+
+    // Fetch author user information to include in response
+    const author = await prisma.user.findUnique({
+      where: { id: data.authorId },
+      select: { id: true, firstName: true, lastName: true }
+    });
+
+    return {
+      ...note,
+      author: { user: author || { firstName: 'Unknown', lastName: 'User' } }
+    };
   }
 
   async getProgressNotes(admissionId: string, page: number = 1, limit: number = 20) {
@@ -763,7 +774,22 @@ export class IPDService {
       prisma.progressNote.count({ where: { admissionId } }),
     ]);
 
-    return { notes, total, page, limit };
+    // Resolve author users for progress notes
+    const noteAuthorIds = [...new Set(notes.map((n: any) => n.authorId).filter(Boolean))];
+    const noteAuthors = noteAuthorIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: noteAuthorIds } },
+          select: { id: true, firstName: true, lastName: true }
+        })
+      : [];
+    const noteAuthorMap = Object.fromEntries(noteAuthors.map(u => [u.id, u]));
+
+    const enrichedNotes = notes.map((note: any) => ({
+      ...note,
+      author: { user: noteAuthorMap[note.authorId] || { firstName: 'Unknown', lastName: 'User' } },
+    }));
+
+    return { notes: enrichedNotes, total, page, limit };
   }
 
   // Get deterioration monitoring dashboard data
