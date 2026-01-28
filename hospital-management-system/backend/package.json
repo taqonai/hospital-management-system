@@ -22,6 +22,7 @@
     "db:seed:amad": "ts-node prisma/seed-amad.ts",
     "db:seed:dashboard": "ts-node prisma/seed-dashboard.ts",
     "db:seed:uae-drugs": "ts-node prisma/seed-uae-drugs.ts",
+    "fix:lab-orders": "ts-node scripts/fix-incomplete-lab-orders.ts",
     "lint": "eslint src/**/*.ts",
     "test": "jest"
   },

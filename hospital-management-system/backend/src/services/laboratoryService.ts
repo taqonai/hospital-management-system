@@ -1512,6 +1512,60 @@ export class LaboratoryService {
       latestTemperature: sample.custodyLog[0]?.temperature || undefined
     }));
   }
+
+  /**
+   * Fix incomplete lab orders - marks orders as COMPLETED if all tests have results
+   * This is a utility function that can be called periodically or manually
+   * to ensure data consistency
+   */
+  async fixIncompleteLabOrders(hospitalId: string) {
+    logger.info('[LAB] Running fixIncompleteLabOrders for hospital:', hospitalId);
+
+    // Get all non-completed, non-cancelled orders for this hospital
+    const orders = await prisma.labOrder.findMany({
+      where: {
+        hospitalId,
+        status: {
+          notIn: ['COMPLETED', 'CANCELLED']
+        }
+      },
+      include: {
+        tests: true
+      }
+    });
+
+    const ordersFixed: string[] = [];
+
+    for (const order of orders) {
+      // Skip if no tests
+      if (order.tests.length === 0) continue;
+
+      // Check if ALL tests are completed and have results
+      const allTestsCompleted = order.tests.every(test =>
+        test.status === 'COMPLETED' && (test.result || test.resultValue)
+      );
+
+      if (allTestsCompleted) {
+        // Update order to COMPLETED
+        await prisma.labOrder.update({
+          where: { id: order.id },
+          data: {
+            status: 'COMPLETED',
+            completedAt: new Date()
+          }
+        });
+
+        ordersFixed.push(order.orderNumber);
+        logger.info(`[LAB] Fixed incomplete order: ${order.orderNumber} → COMPLETED`);
+      }
+    }
+
+    return {
+      scanned: orders.length,
+      fixed: ordersFixed.length,
+      orderNumbers: ordersFixed
+    };
+  }
 }
 
 export const laboratoryService = new LaboratoryService();
