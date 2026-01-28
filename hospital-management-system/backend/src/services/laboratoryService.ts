@@ -729,10 +729,10 @@ export class LaboratoryService {
   }
 
   async getPendingOrders(hospitalId: string) {
-    return prisma.labOrder.findMany({
+    const orders = await prisma.labOrder.findMany({
       where: {
         hospitalId,
-        status: { in: ['ORDERED', 'SAMPLE_COLLECTED', 'IN_PROGRESS'] },
+        status: { in: ['PENDING', 'ORDERED', 'SAMPLE_COLLECTED', 'IN_PROGRESS'] },
       },
       include: {
         patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
@@ -741,6 +741,25 @@ export class LaboratoryService {
       },
       orderBy: [{ priority: 'asc' }, { orderedAt: 'asc' }],
     });
+
+    // Transform for dashboard display - flatten test names and patient names
+    return orders.map(order => ({
+      id: order.id,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      priority: order.priority,
+      patientName: `${order.patient.firstName} ${order.patient.lastName}`,
+      patientMrn: order.patient.mrn,
+      testName: order.tests.length === 1
+        ? order.tests[0].labTest?.name || 'Unknown Test'
+        : `${order.tests.length} Tests`,
+      testsCount: order.tests.length,
+      orderedAt: order.orderedAt,
+      // Include full objects for additional details if needed
+      patient: order.patient,
+      tests: order.tests,
+      consultation: order.consultation,
+    }));
   }
 
   async getLabStats(hospitalId: string) {
@@ -749,10 +768,10 @@ export class LaboratoryService {
 
     const [pendingOrders, inProgressOrders, completedToday, criticalResults] = await Promise.all([
       prisma.labOrder.count({
-        where: { hospitalId, status: 'ORDERED' },
+        where: { hospitalId, status: { in: ['PENDING', 'ORDERED'] } },
       }),
       prisma.labOrder.count({
-        where: { hospitalId, status: { in: ['SAMPLE_COLLECTED', 'IN_PROGRESS'] } },
+        where: { hospitalId, status: { in: ['SAMPLE_COLLECTED', 'IN_PROGRESS', 'PROCESSING'] } },
       }),
       prisma.labOrder.count({
         where: { hospitalId, completedAt: { gte: today } },
