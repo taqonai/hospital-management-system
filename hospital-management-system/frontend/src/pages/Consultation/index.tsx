@@ -41,6 +41,7 @@ import {
   PayerRulesAlert,
 } from '../../components/insurance';
 import { useBookingData, usePatientHistory } from '../../hooks/useBookingData';
+import { LabOrdersCard } from '../../components/booking/LabOrdersCard';
 import DrugPicker, { DrugSelection } from '../../components/consultation/DrugPicker';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
@@ -3757,6 +3758,18 @@ export default function Consultation() {
         </div>
       )}
 
+      {/* Lab Orders & Results */}
+      {bookingData?.labOrders && bookingData.labOrders.length > 0 && (
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200">
+          <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+            <BeakerIcon className="h-5 w-5 text-purple-500" />
+            Current Lab Orders & Results
+            <span className="text-xs font-normal text-gray-500">({bookingData.labOrders.length})</span>
+          </h4>
+          <LabOrdersCard labOrders={bookingData.labOrders} className="!shadow-none !border-0" />
+        </div>
+      )}
+
       {/* Recommended Tests — Add / Delete / Autocomplete */}
       <div className="bg-green-50 rounded-2xl p-5 border border-green-200">
         <h4 className="font-semibold text-green-800 mb-3 flex items-center gap-2">
@@ -4073,26 +4086,12 @@ export default function Consultation() {
                               {booking.vitals.temperature && <span>Temp: {Number(booking.vitals.temperature).toFixed(1)}°C</span>}
                             </div>
                           )}
-                          {booking.consultation.labResults && booking.consultation.labResults.length > 0 && (
+                          {booking.consultation.labOrderCount > 0 && (
                             <div className="mt-2">
-                              <span className="text-xs font-medium text-gray-500 uppercase">Lab Results</span>
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {booking.consultation.labResults.map((lab, idx) => (
-                                  <span
-                                    key={idx}
-                                    className={clsx(
-                                      'px-2 py-0.5 rounded text-xs',
-                                      lab.isCritical
-                                        ? 'bg-red-100 text-red-800'
-                                        : lab.isAbnormal
-                                        ? 'bg-yellow-100 text-yellow-800'
-                                        : 'bg-green-100 text-green-800'
-                                    )}
-                                  >
-                                    {lab.testName}: {lab.result || 'N/A'}
-                                  </span>
-                                ))}
-                              </div>
+                              <span className="text-xs font-medium text-gray-500 uppercase">Lab Orders</span>
+                              <p className="text-sm text-gray-600 mt-1">
+                                {booking.consultation.labOrderCount} test(s) ordered
+                              </p>
                             </div>
                           )}
                         </div>
