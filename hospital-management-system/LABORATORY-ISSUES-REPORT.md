@@ -6,6 +6,33 @@
 
 ---
 
+## ✅ FIXED ISSUES
+
+### **Lab Order Status Not Updating - FIXED**
+
+**Status:** ✅ FIXED AND DEPLOYED
+**Priority:** HIGH
+**Fixed Date:** January 28, 2026 11:15 AM
+**Commit:** `9cf1a7f`
+
+#### Problem:
+When lab technicians entered test results, the parent lab order status remained stuck (e.g., ORDERED) even after entering results. Orders with results entered still showed as ORDERED/PENDING.
+
+#### Solution:
+Implemented automatic status transition logic in `enterTestResult()` and `uploadAndExtractLabResult()`:
+- **ORDERED/SAMPLE_COLLECTED/RECEIVED → IN_PROGRESS** (when first result entered)
+- **IN_PROGRESS → COMPLETED** (when all tests have results)
+
+#### Testing:
+Test with order **LAB-MKXWVGVWAPC** (Harry Chase):
+1. Login as `labtech@hospital.com`
+2. Enter results for tests in order LAB-MKXWVGVWAPC
+3. Watch status change from ORDERED → IN_PROGRESS → COMPLETED
+
+See full details: `/docs/LAB-STATUS-FLOW-FIX.md`
+
+---
+
 ## 🔴 CRITICAL ISSUE IDENTIFIED
 
 ### **"View Booking" Button Flickering - STILL OCCURRING**
