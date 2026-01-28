@@ -782,7 +782,8 @@ function PatientDetailDrawer({ admissionId, onClose }: { admissionId: string | n
               {/* Tab Content */}
               {activeTab === 'overview' && (() => {
                 const latestVitals = admission.patient?.vitals?.[0];
-                const news2Score = admission.latestNEWS2Score;
+                const news2Data = admission.latestNEWS2Score;
+                const news2Score = typeof news2Data === 'object' && news2Data?.score !== undefined ? news2Data.score : news2Data;
 
                 // Calculate age from DOB
                 const calculateAge = (dob: string) => {
@@ -934,6 +935,9 @@ function PatientDetailDrawer({ admissionId, onClose }: { admissionId: string | n
                           )}>
                             {news2Score}
                           </p>
+                          {news2Data?.riskLevel && (
+                            <p className="text-xs text-gray-600">Risk: {news2Data.riskLevel}</p>
+                          )}
                         </div>
                       )}
                     </div>

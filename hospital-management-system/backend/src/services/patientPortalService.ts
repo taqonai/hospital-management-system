@@ -997,7 +997,7 @@ export class PatientPortalService {
           },
           testCategory,
           testName,
-          specimenType: order.tests[0]?.labTest ? 'Blood' : undefined,
+          specimenType: order.tests[0]?.labTest ? 'Blood' : undefined, // Default specimen type
           collectionDate: order.collectedAt?.toISOString(),
           results: order.tests.map(test => {
             const numericValue = test.resultValue !== null ? Number(test.resultValue) : null;
@@ -1052,6 +1052,13 @@ export class PatientPortalService {
           select: {
             id: true,
             diagnosis: true,
+          },
+        },
+        orderedByUser: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
           },
         },
       },

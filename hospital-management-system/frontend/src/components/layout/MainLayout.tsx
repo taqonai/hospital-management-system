@@ -42,6 +42,7 @@ import {
 import { useAuth } from '../../hooks/useAuth';
 import { usePermissions } from '../../hooks/usePermissions';
 import AICreationAssistant from '../ai/AICreationAssistant';
+import NotificationDropdown from '../notifications/NotificationDropdown';
 
 // Role-based access configuration
 type UserRole = 'SUPER_ADMIN' | 'HOSPITAL_ADMIN' | 'DOCTOR' | 'NURSE' | 'RECEPTIONIST' |
@@ -475,10 +476,7 @@ export default function MainLayout() {
               </div>
 
               {/* Notifications */}
-              <button className="relative p-2.5 rounded-xl text-gray-500 hover:bg-gray-100 transition-colors">
-                <BellIcon className="h-5 w-5" />
-                <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
-              </button>
+              <NotificationDropdown />
 
               <div className="hidden lg:block h-6 w-px bg-gray-200" />
 

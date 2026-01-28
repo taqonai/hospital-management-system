@@ -745,7 +745,7 @@ export class LaboratoryService {
     const orders = await prisma.labOrder.findMany({
       where: {
         hospitalId,
-        status: { in: ['PENDING', 'ORDERED', 'SAMPLE_COLLECTED', 'IN_PROGRESS'] },
+        status: { in: ['ORDERED', 'SAMPLE_COLLECTED', 'RECEIVED', 'IN_PROGRESS'] },
       },
       include: {
         patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
@@ -781,10 +781,10 @@ export class LaboratoryService {
 
     const [pendingOrders, inProgressOrders, completedToday, criticalResults] = await Promise.all([
       prisma.labOrder.count({
-        where: { hospitalId, status: { in: ['PENDING', 'ORDERED'] } },
+        where: { hospitalId, status: { in: ['ORDERED'] } },
       }),
       prisma.labOrder.count({
-        where: { hospitalId, status: { in: ['SAMPLE_COLLECTED', 'IN_PROGRESS', 'PROCESSING'] } },
+        where: { hospitalId, status: { in: ['SAMPLE_COLLECTED', 'RECEIVED', 'IN_PROGRESS'] } },
       }),
       prisma.labOrder.count({
         where: { hospitalId, completedAt: { gte: today } },

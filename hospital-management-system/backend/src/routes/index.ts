@@ -43,6 +43,7 @@ import pdfRoutes from './pdfRoutes';
 import rbacRoutes from './rbacRoutes';
 import patientAuthRoutes from './patientAuthRoutes';
 import notificationRoutes from './notificationRoutes';
+import notificationAdminRoutes from './notificationAdminRoutes';
 import wellnessRoutes from './wellnessRoutes';
 import aiSettingsRoutes from './aiSettingsRoutes';
 import insuranceCodingRoutes from './insuranceCodingRoutes';
@@ -125,6 +126,7 @@ router.use('/rbac', rbacRoutes);
 
 // Notification routes
 router.use('/notifications', notificationRoutes);
+router.use('/admin/notifications', notificationAdminRoutes);
 
 // Wellness & Health Sync routes (Patient Portal)
 router.use('/wellness', wellnessRoutes);
