@@ -18,6 +18,8 @@ import {
   CogIcon,
   PencilSquareIcon,
   DocumentArrowUpIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
 } from '@heroicons/react/24/outline';
 import { useAIHealth } from '../../hooks/useAI';
 import { laboratoryApi, opdApi } from '../../services/api';
@@ -106,6 +108,22 @@ const priorityConfig: Record<string, { bg: string; text: string }> = {
   STAT: { bg: 'bg-rose-500/10', text: 'text-rose-600' },
 };
 
+// Time formatting utility
+const formatTimeAgo = (dateString: string): string => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+  if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  return date.toLocaleDateString();
+};
+
 interface Patient {
   id: string;
   firstName: string;
@@ -119,6 +137,315 @@ interface LabTest {
   code: string;
   category: string;
   price: number;
+}
+
+// Patient Info Card Component
+function PatientInfoCard({ patient }: { patient: { firstName: string; lastName: string; mrn: string } }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <h4 className="text-sm font-semibold text-gray-700 mb-3">Patient Information</h4>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-gray-500">Name:</span>
+          <span className="text-sm font-medium text-gray-900">
+            {patient.firstName} {patient.lastName}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-gray-500">MRN:</span>
+          <span className="text-sm font-mono font-medium text-gray-900">{patient.mrn}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Tests List Card Component
+function TestsListCard({ tests }: { tests: LabOrder['tests'] }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <h4 className="text-sm font-semibold text-gray-700 mb-3">Tests Ordered ({tests.length})</h4>
+      <div className="space-y-2">
+        {tests.map((test) => {
+          const testName = test.labTest?.name || test.test?.name || 'Unknown Test';
+          const testCode = test.labTest?.code || test.test?.code || 'N/A';
+          const status = statusConfig[test.status] || statusConfig.PENDING;
+
+          return (
+            <div key={test.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
+              <div>
+                <p className="text-sm font-medium text-gray-900">{testName}</p>
+                <p className="text-xs text-gray-500">{testCode}</p>
+              </div>
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${status.bg} ${status.text}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
+                {test.status?.replace('_', ' ')}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Clinical Notes Card Component
+function ClinicalNotesCard({ notes, createdAt, orderedBy }: { notes?: string; createdAt: string; orderedBy?: any }) {
+  if (!notes) return null;
+
+  return (
+    <div className="bg-amber-50 rounded-xl border border-amber-200 p-4">
+      <h4 className="text-sm font-semibold text-amber-900 mb-2">Clinical Notes</h4>
+      <p className="text-sm text-amber-800 whitespace-pre-wrap">{notes}</p>
+      <div className="mt-3 pt-3 border-t border-amber-200 text-xs text-amber-700">
+        <p>Ordered by: Dr. {orderedBy?.firstName || ''} {orderedBy?.lastName || ''}</p>
+        <p>{formatTimeAgo(createdAt)}</p>
+      </div>
+    </div>
+  );
+}
+
+// Actions Panel Component
+function ActionsPanel({
+  order,
+  onRefresh,
+  onCollect,
+  onReceive,
+  onProcess,
+  onEnterResults,
+  onViewBooking,
+  onInterpretResults,
+  isAIOnline
+}: {
+  order: LabOrder;
+  onRefresh: () => void;
+  onCollect: (id: string) => void;
+  onReceive: (id: string) => void;
+  onProcess: (id: string) => void;
+  onEnterResults: (order: LabOrder) => void;
+  onViewBooking: (appointmentId: string) => void;
+  onInterpretResults: (orderId: string) => void;
+  isAIOnline: boolean;
+}) {
+  const firstTest = order.tests?.[0];
+  const hasResults = firstTest?.result || firstTest?.resultValue;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <h4 className="text-sm font-semibold text-gray-700 mb-3">Actions</h4>
+      <div className="space-y-2">
+        {order.status === 'PENDING' && (
+          <button
+            onClick={() => onCollect(order.id)}
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 transition-all"
+          >
+            <TruckIcon className="h-4 w-4" />
+            Collect Sample
+          </button>
+        )}
+
+        {order.status === 'SAMPLE_COLLECTED' && (
+          <button
+            onClick={() => onReceive(order.id)}
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-indigo-600 bg-indigo-500/10 hover:bg-indigo-500/20 transition-all"
+          >
+            <InboxArrowDownIcon className="h-4 w-4" />
+            Receive Sample
+          </button>
+        )}
+
+        {order.status === 'RECEIVED' && (
+          <button
+            onClick={() => onProcess(order.id)}
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-purple-600 bg-purple-500/10 hover:bg-purple-500/20 transition-all"
+          >
+            <CogIcon className="h-4 w-4" />
+            Start Processing
+          </button>
+        )}
+
+        {(order.status === 'PROCESSING' || order.status === 'IN_PROGRESS' || order.status === 'RECEIVED') && (
+          <button
+            onClick={() => onEnterResults(order)}
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-green-600 bg-green-500/10 hover:bg-green-500/20 transition-all"
+          >
+            <PencilSquareIcon className="h-4 w-4" />
+            {hasResults ? 'Update Results' : 'Enter Results'}
+          </button>
+        )}
+
+        {hasResults && (
+          <>
+            <button
+              onClick={() => onEnterResults(order)}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 transition-all"
+            >
+              <EyeIcon className="h-4 w-4" />
+              View Results
+            </button>
+            {isAIOnline && (
+              <button
+                onClick={() => onInterpretResults(order.id)}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-purple-600 bg-purple-500/10 hover:bg-purple-500/20 transition-all"
+              >
+                <SparklesIcon className="h-4 w-4" />
+                AI Interpretation
+              </button>
+            )}
+          </>
+        )}
+
+        {order.consultation?.appointmentId && (
+          <button
+            onClick={() => onViewBooking(order.consultation!.appointmentId!)}
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-all"
+          >
+            <EyeIcon className="h-4 w-4" />
+            View Full Appointment
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Status Timeline Component
+function StatusTimeline({ order }: { order: LabOrder }) {
+  const timeline = [
+    {
+      label: 'Ordered',
+      status: 'completed',
+      time: formatTimeAgo(order.createdAt),
+      icon: CheckCircleIcon
+    },
+    {
+      label: 'Sample Collection',
+      status: ['SAMPLE_COLLECTED', 'RECEIVED', 'PROCESSING', 'IN_PROGRESS', 'COMPLETED'].includes(order.status) ? 'completed' : 'pending',
+      icon: TruckIcon
+    },
+    {
+      label: 'Sample Received',
+      status: ['RECEIVED', 'PROCESSING', 'IN_PROGRESS', 'COMPLETED'].includes(order.status) ? 'completed' : 'pending',
+      icon: InboxArrowDownIcon
+    },
+    {
+      label: 'Processing',
+      status: ['PROCESSING', 'IN_PROGRESS', 'COMPLETED'].includes(order.status) ? 'completed' : 'pending',
+      icon: CogIcon
+    },
+    {
+      label: 'Results Complete',
+      status: order.status === 'COMPLETED' ? 'completed' : 'pending',
+      time: order.completedAt ? formatTimeAgo(order.completedAt) : undefined,
+      icon: CheckCircleIcon
+    },
+  ];
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <h4 className="text-sm font-semibold text-gray-700 mb-4">Status Timeline</h4>
+      <div className="space-y-4">
+        {timeline.map((item, idx) => {
+          const Icon = item.icon;
+          const isCompleted = item.status === 'completed';
+          const isLast = idx === timeline.length - 1;
+
+          return (
+            <div key={item.label} className="flex gap-3">
+              <div className="flex flex-col items-center">
+                <div className={`rounded-full p-2 ${isCompleted ? 'bg-green-500' : 'bg-gray-200'}`}>
+                  <Icon className={`h-4 w-4 ${isCompleted ? 'text-white' : 'text-gray-400'}`} />
+                </div>
+                {!isLast && (
+                  <div className={`w-0.5 h-8 ${isCompleted ? 'bg-green-500' : 'bg-gray-200'}`} />
+                )}
+              </div>
+              <div className="flex-1 pt-1">
+                <p className={`text-sm font-medium ${isCompleted ? 'text-gray-900' : 'text-gray-500'}`}>
+                  {item.label}
+                </p>
+                {item.time && (
+                  <p className="text-xs text-gray-400 mt-0.5">{item.time}</p>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Expanded Order Details Component
+function ExpandedOrderDetails({
+  order,
+  onRefresh,
+  onCollect,
+  onReceive,
+  onProcess,
+  onEnterResults,
+  onViewBooking,
+  onInterpretResults,
+  isAIOnline
+}: {
+  order: LabOrder;
+  onRefresh: () => void;
+  onCollect: (id: string) => void;
+  onReceive: (id: string) => void;
+  onProcess: (id: string) => void;
+  onEnterResults: (order: LabOrder) => void;
+  onViewBooking: (appointmentId: string) => void;
+  onInterpretResults: (orderId: string) => void;
+  isAIOnline: boolean;
+}) {
+  // Check if any test has critical values
+  const hasCriticalTests = order.tests.some(t => t.status === 'CRITICAL');
+
+  return (
+    <div className="p-6 bg-gray-50 border-t border-gray-200">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left column: Patient info + Tests */}
+        <div className="space-y-4">
+          <PatientInfoCard patient={order.patient} />
+          <TestsListCard tests={order.tests} />
+          <ClinicalNotesCard
+            notes={(order as any).clinicalNotes}
+            createdAt={order.createdAt}
+            orderedBy={order.orderedByUser || order.orderedBy}
+          />
+        </div>
+
+        {/* Right column: Actions + Timeline */}
+        <div className="space-y-4">
+          <ActionsPanel
+            order={order}
+            onRefresh={onRefresh}
+            onCollect={onCollect}
+            onReceive={onReceive}
+            onProcess={onProcess}
+            onEnterResults={onEnterResults}
+            onViewBooking={onViewBooking}
+            onInterpretResults={onInterpretResults}
+            isAIOnline={isAIOnline}
+          />
+          <StatusTimeline order={order} />
+
+          {/* Critical Alert */}
+          {hasCriticalTests && (
+            <div className="bg-rose-50 rounded-xl border border-rose-200 p-4">
+              <div className="flex items-start gap-3">
+                <ExclamationTriangleIcon className="h-5 w-5 text-rose-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <h4 className="text-sm font-semibold text-rose-900 mb-1">Critical Values Detected</h4>
+                  <p className="text-xs text-rose-700">This order contains test results with critical values that require immediate attention.</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function NewLabOrderModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
@@ -437,10 +764,16 @@ export default function Laboratory() {
   const [loadingBookingTicket, setLoadingBookingTicket] = useState(false);
   const [bookingError, setBookingError] = useState<Error | null>(null);
   const [selectedOrderForResults, setSelectedOrderForResults] = useState<{ orderId: string; testId: string; testName: string; patientName: string } | null>(null);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const { data: healthStatus } = useAIHealth();
   const tabsRef = useRef<HTMLDivElement>(null);
 
   const isAIOnline = healthStatus?.status === 'connected';
+
+  // Toggle expand/collapse for order details
+  const toggleExpand = (orderId: string) => {
+    setExpandedOrderId(prev => prev === orderId ? null : orderId);
+  };
 
   // Handle View Booking - direct API call instead of hook
   const handleViewBooking = useCallback(async (appointmentId: string) => {
@@ -644,6 +977,76 @@ export default function Laboratory() {
     { id: 'sample-tracking', label: 'Sample Tracking', count: stats.pendingOrders, icon: QrCodeIcon },
   ];
 
+  // Get primary action button based on order status
+  const getPrimaryAction = (order: LabOrder) => {
+    const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
+
+    if (order.status === 'PENDING') {
+      return (
+        <button
+          onClick={(e) => { stopPropagation(e); handleCollectSample(order.id); }}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 transition-all"
+        >
+          <TruckIcon className="h-4 w-4" />
+          Collect Sample
+        </button>
+      );
+    }
+
+    if (order.status === 'SAMPLE_COLLECTED') {
+      return (
+        <button
+          onClick={(e) => { stopPropagation(e); handleReceiveSample(order.id); }}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-indigo-600 bg-indigo-500/10 hover:bg-indigo-500/20 transition-all"
+        >
+          <InboxArrowDownIcon className="h-4 w-4" />
+          Receive Sample
+        </button>
+      );
+    }
+
+    if (order.status === 'RECEIVED') {
+      return (
+        <button
+          onClick={(e) => { stopPropagation(e); handleProcessSample(order.id); }}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-purple-600 bg-purple-500/10 hover:bg-purple-500/20 transition-all"
+        >
+          <CogIcon className="h-4 w-4" />
+          Start Processing
+        </button>
+      );
+    }
+
+    const firstTest = order.tests?.[0];
+    const hasResults = firstTest?.result || firstTest?.resultValue;
+
+    if (order.status === 'PROCESSING' || order.status === 'IN_PROGRESS' || !hasResults) {
+      return (
+        <button
+          onClick={(e) => { stopPropagation(e); handleEnterResults(order); }}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-green-600 bg-green-500/10 hover:bg-green-500/20 transition-all"
+        >
+          <PencilSquareIcon className="h-4 w-4" />
+          Enter Results
+        </button>
+      );
+    }
+
+    if (hasResults || order.status === 'COMPLETED') {
+      return (
+        <button
+          onClick={(e) => { stopPropagation(e); handleEnterResults(order); }}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 transition-all"
+        >
+          <EyeIcon className="h-4 w-4" />
+          View Results
+        </button>
+      );
+    }
+
+    return null;
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -810,128 +1213,84 @@ export default function Laboratory() {
                 {labOrders.map((order, idx) => {
                   const status = statusConfig[order.status] || statusConfig.PENDING;
                   const priority = priorityConfig[order.priority] || priorityConfig.ROUTINE;
+                  const isExpanded = expandedOrderId === order.id;
+
                   return (
                     <div
                       key={order.id}
                       className={clsx(
-                        'p-5 hover:bg-gray-50 transition-all animate-fade-in-up opacity-0',
+                        'transition-all animate-fade-in-up opacity-0',
                         order.status === 'CRITICAL' && 'bg-rose-50'
                       )}
                       style={{ animationDelay: `${700 + idx * 50}ms`, animationFillMode: 'forwards' }}
                     >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <span className="font-mono text-sm px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600">
-                              {order.orderNumber}
-                            </span>
-                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${status.bg} ${status.text} border ${status.border}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
-                              {order.status?.replace('_', ' ')}
-                            </span>
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${priority.bg} ${priority.text}`}>
-                              {order.priority}
-                            </span>
-                          </div>
-                          <h3 className="mt-3 font-semibold text-gray-900">
-                            {order.patient?.firstName || ''} {order.patient?.lastName || ''}
-                          </h3>
-                          <p className="text-sm text-gray-500">MRN: {order.patient?.mrn}</p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {order.tests?.map((test) => (
-                              <span key={test.id} className="px-2.5 py-1 bg-amber-500/10 text-amber-700 text-xs rounded-lg font-medium">
-                                {(test.labTest?.name || test.test?.name || 'Unknown Test')}
+                      {/* Collapsed View */}
+                      <div
+                        className="p-5 hover:bg-gray-50 cursor-pointer transition-colors"
+                        onClick={() => toggleExpand(order.id)}
+                      >
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <span className="font-mono text-sm px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600">
+                                {order.orderNumber}
                               </span>
-                            ))}
+                              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${status.bg} ${status.text} border ${status.border}`}>
+                                <span className={`w-2 h-2 rounded-full ${status.dot}`} />
+                                {order.status?.replace('_', ' ')}
+                              </span>
+                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${priority.bg} ${priority.text} ${priority.text === 'text-rose-600' ? 'animate-pulse' : ''}`}>
+                                {order.priority}
+                              </span>
+                            </div>
+                            <h3 className="mt-3 font-semibold text-gray-900 text-lg">
+                              {order.patient?.firstName || ''} {order.patient?.lastName || ''}
+                            </h3>
+                            <p className="text-sm text-gray-500 mt-1">
+                              MRN: {order.patient?.mrn} | Tests: {order.tests?.length || 0} | {formatTimeAgo(order.createdAt)}
+                            </p>
                           </div>
-                        </div>
-                        <div className="text-right text-sm space-y-2">
-                          <p className="text-gray-500">
-                            Dr. {(order.orderedByUser?.firstName || order.orderedBy?.firstName || '')} {(order.orderedByUser?.lastName || order.orderedBy?.lastName || '')}
-                          </p>
-                          <p className="text-gray-400">{new Date(order.createdAt).toLocaleString()}</p>
-                          <div className="flex flex-wrap gap-2 justify-end mt-3">
-                            {/* Contextual action buttons based on status */}
-                            {order.status === 'PENDING' && (
-                              <button
-                                onClick={() => handleCollectSample(order.id)}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 transition-all"
-                              >
-                                <TruckIcon className="h-3.5 w-3.5" />
-                                Collect Sample
-                              </button>
-                            )}
-                            {order.status === 'SAMPLE_COLLECTED' && (
-                              <button
-                                onClick={() => handleReceiveSample(order.id)}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-indigo-600 bg-indigo-500/10 hover:bg-indigo-500/20 transition-all"
-                              >
-                                <InboxArrowDownIcon className="h-3.5 w-3.5" />
-                                Receive Sample
-                              </button>
-                            )}
-                            {order.status === 'RECEIVED' && (
-                              <button
-                                onClick={() => handleProcessSample(order.id)}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-purple-600 bg-purple-500/10 hover:bg-purple-500/20 transition-all"
-                              >
-                                <CogIcon className="h-3.5 w-3.5" />
-                                Process
-                              </button>
-                            )}
-                            {/* Show button based on whether test has results, not order status */}
-                            {(() => {
-                              const firstTest = order.tests?.[0];
-                              const hasResults = firstTest?.result || firstTest?.resultValue;
 
-                              if (hasResults) {
-                                // Test has results - show View/Edit button
-                                return (
-                                  <>
-                                    <button
-                                      onClick={() => handleEnterResults(order)}
-                                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 transition-all"
-                                    >
-                                      <EyeIcon className="h-3.5 w-3.5" />
-                                      View/Edit Results
-                                    </button>
-                                    {isAIOnline && (
-                                      <button
-                                        onClick={() => handleInterpretResults(order.id)}
-                                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-purple-600 bg-purple-500/10 hover:bg-purple-500/20 transition-all"
-                                      >
-                                        <SparklesIcon className="h-3.5 w-3.5" />
-                                        AI Context
-                                      </button>
-                                    )}
-                                  </>
-                                );
-                              } else if (order.status === 'PROCESSING' || order.status === 'IN_PROGRESS' || order.status === 'ORDERED' || order.status === 'RECEIVED') {
-                                // No results yet and order is ready for results entry
-                                return (
-                                  <button
-                                    onClick={() => handleEnterResults(order)}
-                                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-green-600 bg-green-500/10 hover:bg-green-500/20 transition-all"
-                                  >
-                                    <PencilSquareIcon className="h-3.5 w-3.5" />
-                                    Enter Results
-                                  </button>
-                                );
-                              }
-                              return null;
-                            })()}
-                            {order.consultation?.appointmentId && (
-                              <button
-                                onClick={() => handleViewBooking(order.consultation!.appointmentId!)}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 transition-all"
-                              >
-                                <EyeIcon className="h-3.5 w-3.5" />
-                                View Booking
-                              </button>
-                            )}
+                          {/* Primary Action + Expand Button */}
+                          <div className="flex items-center gap-3">
+                            {getPrimaryAction(order)}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleExpand(order.id);
+                              }}
+                              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-all"
+                            >
+                              {isExpanded ? (
+                                <>
+                                  <ChevronUpIcon className="h-4 w-4" />
+                                  Hide Details
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronDownIcon className="h-4 w-4" />
+                                  View Details
+                                </>
+                              )}
+                            </button>
                           </div>
                         </div>
                       </div>
+
+                      {/* Expanded View */}
+                      {isExpanded && (
+                        <ExpandedOrderDetails
+                          order={order}
+                          onRefresh={fetchOrders}
+                          onCollect={handleCollectSample}
+                          onReceive={handleReceiveSample}
+                          onProcess={handleProcessSample}
+                          onEnterResults={handleEnterResults}
+                          onViewBooking={handleViewBooking}
+                          onInterpretResults={handleInterpretResults}
+                          isAIOnline={isAIOnline}
+                        />
+                      )}
                     </div>
                   );
                 })}

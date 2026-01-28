@@ -19,6 +19,7 @@ import {
   XMarkIcon,
   ClipboardDocumentListIcon,
   DocumentTextIcon,
+  BeakerIcon,
 } from '@heroicons/react/24/outline';
 import { useAIHealth } from '../../hooks/useAI';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -781,6 +782,32 @@ function PatientDetailDrawer({ admissionId, onClose }: { admissionId: string | n
                 const latestVitals = admission.patient?.vitals?.[0];
                 const news2Score = admission.latestNEWS2Score;
 
+                // Calculate age from DOB
+                const calculateAge = (dob: string) => {
+                  if (!dob) return 'N/A';
+                  const birthDate = new Date(dob);
+                  const today = new Date();
+                  let age = today.getFullYear() - birthDate.getFullYear();
+                  const monthDiff = today.getMonth() - birthDate.getMonth();
+                  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                    age--;
+                  }
+                  return age;
+                };
+
+                // Calculate length of stay
+                const calculateLOS = () => {
+                  const admitDate = new Date(admission.admissionDate);
+                  const endDate = admission.dischargeDate ? new Date(admission.dischargeDate) : new Date();
+                  const days = Math.ceil((endDate.getTime() - admitDate.getTime()) / (1000 * 60 * 60 * 24));
+                  return days >= 0 ? days : 0;
+                };
+
+                // Count pending orders
+                const pendingOrders = admission.doctorOrders?.filter((o: any) =>
+                  o.status === 'ORDERED' || o.status === 'IN_PROGRESS'
+                ).length || 0;
+
                 return (
                 <div className="space-y-6">
                   {/* Patient Demographics */}
@@ -789,14 +816,18 @@ function PatientDetailDrawer({ admissionId, onClose }: { admissionId: string | n
                       <UserIcon className="h-5 w-5 text-indigo-600" />
                       Patient Information
                     </h3>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-4">
                       <div>
                         <p className="text-sm text-gray-500">Name</p>
                         <p className="font-medium">{admission.patient?.firstName} {admission.patient?.lastName}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-500">MRN</p>
-                        <p className="font-medium">{admission.patient?.mrn}</p>
+                        <p className="text-sm text-gray-500">MRN / Patient ID</p>
+                        <p className="font-medium font-mono">{admission.patient?.mrn}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Age</p>
+                        <p className="font-medium">{calculateAge(admission.patient?.dateOfBirth)} years</p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-500">Date of Birth</p>
@@ -811,11 +842,19 @@ function PatientDetailDrawer({ admissionId, onClose }: { admissionId: string | n
                         <p className="font-medium">{admission.patient?.bloodGroup || 'N/A'}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-500">Phone</p>
+                        <p className="text-sm text-gray-500">Contact Number</p>
                         <p className="font-medium">{admission.patient?.phone || 'N/A'}</p>
                       </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Email</p>
+                        <p className="font-medium text-sm">{admission.patient?.email || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Emergency Contact</p>
+                        <p className="font-medium">{admission.patient?.emergencyContact || 'N/A'}</p>
+                      </div>
                       {admission.patient?.address && (
-                        <div className="col-span-2">
+                        <div className="col-span-3">
                           <p className="text-sm text-gray-500">Address</p>
                           <p className="font-medium">{admission.patient.address}</p>
                         </div>
@@ -829,27 +868,18 @@ function PatientDetailDrawer({ admissionId, onClose }: { admissionId: string | n
                       <BuildingOffice2Icon className="h-5 w-5 text-indigo-600" />
                       Admission Details
                     </h3>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-4">
                       <div>
-                        <p className="text-sm text-gray-500">Admission Date</p>
+                        <p className="text-sm text-gray-500">Admission Date & Time</p>
                         <p className="font-medium">{new Date(admission.admissionDate).toLocaleString()}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-500">Type</p>
+                        <p className="text-sm text-gray-500">Length of Stay</p>
+                        <p className="font-medium text-lg text-indigo-600">{calculateLOS()} days</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Admission Type</p>
                         <p className="font-medium capitalize">{admission.admissionType || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Ward & Bed</p>
-                        <p className="font-medium">{admission.bed?.ward?.name} - {admission.bed?.bedNumber}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Status</p>
-                        <span className={clsx(
-                          'inline-flex px-2 py-1 rounded-full text-xs font-medium',
-                          admission.status === 'ADMITTED' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
-                        )}>
-                          {admission.status}
-                        </span>
                       </div>
                       {admission.admittingDoctor && (
                         <div>
@@ -860,6 +890,34 @@ function PatientDetailDrawer({ admissionId, onClose }: { admissionId: string | n
                           {admission.admittingDoctor.specialization && (
                             <p className="text-xs text-gray-500">{admission.admittingDoctor.specialization}</p>
                           )}
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-sm text-gray-500">Department</p>
+                        <p className="font-medium">{admission.bed?.department?.name || admission.bed?.ward?.type || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Ward & Bed</p>
+                        <p className="font-medium">{admission.bed?.ward?.name} - Bed {admission.bed?.bedNumber}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Status</p>
+                        <span className={clsx(
+                          'inline-flex px-2 py-1 rounded-full text-xs font-medium',
+                          admission.status === 'ADMITTED' ? 'bg-blue-100 text-blue-700' :
+                          admission.status === 'DISCHARGED' ? 'bg-green-100 text-green-700' :
+                          'bg-gray-100 text-gray-700'
+                        )}>
+                          {admission.status}
+                        </span>
+                      </div>
+                      {admission.estimatedDays && (
+                        <div>
+                          <p className="text-sm text-gray-500">Expected Discharge</p>
+                          <p className="font-medium">
+                            {new Date(new Date(admission.admissionDate).getTime() + admission.estimatedDays * 24 * 60 * 60 * 1000).toLocaleDateString()}
+                          </p>
+                          <p className="text-xs text-gray-500">({admission.estimatedDays} days planned)</p>
                         </div>
                       )}
                       {news2Score !== undefined && news2Score !== null && (
@@ -962,6 +1020,208 @@ function PatientDetailDrawer({ admissionId, onClose }: { admissionId: string | n
                       </div>
                     </div>
                   )}
+
+                  {/* Treatment History Summary */}
+                  <div className="bg-white border border-gray-200 rounded-xl p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                      <BeakerIcon className="h-5 w-5 text-green-600" />
+                      Treatment History
+                    </h3>
+                    <div className="grid grid-cols-2 gap-6">
+                      {/* Medications Summary */}
+                      <div>
+                        <p className="text-sm font-medium text-gray-700 mb-2">Active Medications</p>
+                        {admission.prescriptions && admission.prescriptions.length > 0 ? (
+                          <div className="space-y-2">
+                            {admission.prescriptions.slice(0, 3).map((prescription: any, idx: number) => (
+                              <div key={idx} className="text-sm border-l-2 border-blue-400 pl-3 py-1">
+                                <p className="font-medium text-gray-900">{prescription.medications?.[0]?.drug?.name || prescription.drugName || 'Medication'}</p>
+                                <p className="text-xs text-gray-600">{prescription.dosage || 'As prescribed'}</p>
+                              </div>
+                            ))}
+                            {admission.prescriptions.length > 3 && (
+                              <p className="text-xs text-indigo-600">+ {admission.prescriptions.length - 3} more</p>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">No active medications</p>
+                        )}
+                      </div>
+
+                      {/* Procedures Done */}
+                      <div>
+                        <p className="text-sm font-medium text-gray-700 mb-2">Procedures Performed</p>
+                        {admission.surgeries && admission.surgeries.length > 0 ? (
+                          <div className="space-y-2">
+                            {admission.surgeries.slice(0, 3).map((surgery: any, idx: number) => (
+                              <div key={idx} className="text-sm border-l-2 border-purple-400 pl-3 py-1">
+                                <p className="font-medium text-gray-900">{surgery.procedureName || 'Procedure'}</p>
+                                <p className="text-xs text-gray-600">{new Date(surgery.scheduledDate).toLocaleDateString()}</p>
+                              </div>
+                            ))}
+                            {admission.surgeries.length > 3 && (
+                              <p className="text-xs text-indigo-600">+ {admission.surgeries.length - 3} more</p>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">No procedures recorded</p>
+                        )}
+                      </div>
+
+                      {/* Lab Results Summary */}
+                      <div>
+                        <p className="text-sm font-medium text-gray-700 mb-2">Recent Lab Tests</p>
+                        {admission.doctorOrders?.filter((o: any) => o.orderType === 'LAB').length > 0 ? (
+                          <div className="space-y-2">
+                            {admission.doctorOrders
+                              .filter((o: any) => o.orderType === 'LAB')
+                              .slice(0, 3)
+                              .map((order: any, idx: number) => (
+                                <div key={idx} className="text-sm border-l-2 border-green-400 pl-3 py-1">
+                                  <p className="font-medium text-gray-900">{order.description}</p>
+                                  <p className="text-xs text-gray-600">
+                                    Status: <span className={clsx(
+                                      order.status === 'COMPLETED' ? 'text-green-600' :
+                                      order.status === 'IN_PROGRESS' ? 'text-blue-600' :
+                                      'text-yellow-600'
+                                    )}>{order.status}</span>
+                                  </p>
+                                </div>
+                              ))
+                            }
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">No lab tests ordered</p>
+                        )}
+                      </div>
+
+                      {/* Vitals History */}
+                      <div>
+                        <p className="text-sm font-medium text-gray-700 mb-2">Vitals Monitoring</p>
+                        {admission.patient?.vitals && admission.patient.vitals.length > 0 ? (
+                          <div className="space-y-1">
+                            <p className="text-sm text-gray-900">
+                              <span className="font-medium">{admission.patient.vitals.length}</span> recordings
+                            </p>
+                            <p className="text-xs text-gray-600">
+                              Last recorded: {new Date(admission.patient.vitals[0].recordedAt).toLocaleString()}
+                            </p>
+                            {news2Score !== undefined && news2Score !== null && (
+                              <p className="text-xs text-gray-600">
+                                Current risk level:
+                                <span className={clsx(
+                                  'ml-1 font-medium',
+                                  news2Score >= 7 ? 'text-red-600' :
+                                  news2Score >= 5 ? 'text-orange-600' :
+                                  news2Score >= 3 ? 'text-yellow-600' :
+                                  'text-green-600'
+                                )}>
+                                  {news2Score >= 7 ? 'High' : news2Score >= 5 ? 'Medium-High' : news2Score >= 3 ? 'Low-Medium' : 'Low'}
+                                </span>
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">No vitals recorded</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* IPD-Specific Data */}
+                  <div className="bg-white border border-gray-200 rounded-xl p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                      <ClipboardDocumentListIcon className="h-5 w-5 text-purple-600" />
+                      IPD Status & Activity
+                    </h3>
+                    <div className="grid grid-cols-3 gap-4">
+                      {/* Pending Orders */}
+                      <div className="bg-yellow-50 rounded-lg p-4">
+                        <p className="text-sm text-gray-600 mb-1">Pending Orders</p>
+                        <p className="text-2xl font-bold text-yellow-700">{pendingOrders}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {admission.doctorOrders?.filter((o: any) => o.status === 'ORDERED').length || 0} ordered,
+                          {admission.doctorOrders?.filter((o: any) => o.status === 'IN_PROGRESS').length || 0} in progress
+                        </p>
+                      </div>
+
+                      {/* Total Orders */}
+                      <div className="bg-blue-50 rounded-lg p-4">
+                        <p className="text-sm text-gray-600 mb-1">Total Orders</p>
+                        <p className="text-2xl font-bold text-blue-700">{admission.doctorOrders?.length || 0}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {admission.doctorOrders?.filter((o: any) => o.status === 'COMPLETED').length || 0} completed
+                        </p>
+                      </div>
+
+                      {/* Ward Transfers */}
+                      <div className="bg-indigo-50 rounded-lg p-4">
+                        <p className="text-sm text-gray-600 mb-1">Ward Transfers</p>
+                        <p className="text-2xl font-bold text-indigo-700">
+                          {admission.bedTransfers?.length || 0}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Current: {admission.bed?.ward?.name}
+                        </p>
+                      </div>
+
+                      {/* Nursing Notes */}
+                      <div className="bg-green-50 rounded-lg p-4">
+                        <p className="text-sm text-gray-600 mb-1">Nursing Notes</p>
+                        <p className="text-2xl font-bold text-green-700">
+                          {admission.nursingNotes?.length || 0}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {admission.nursingNotes?.[0] ?
+                            `Last: ${new Date(admission.nursingNotes[0].createdAt).toLocaleDateString()}` :
+                            'No notes yet'}
+                        </p>
+                      </div>
+
+                      {/* Progress Notes */}
+                      <div className="bg-purple-50 rounded-lg p-4">
+                        <p className="text-sm text-gray-600 mb-1">Progress Notes</p>
+                        <p className="text-2xl font-bold text-purple-700">
+                          {admission.progressNotes?.length || 0}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {admission.progressNotes?.[0] ?
+                            `Last: ${new Date(admission.progressNotes[0].createdAt).toLocaleDateString()}` :
+                            'No notes yet'}
+                        </p>
+                      </div>
+
+                      {/* Billing Summary */}
+                      <div className="bg-orange-50 rounded-lg p-4">
+                        <p className="text-sm text-gray-600 mb-1">Estimated Charges</p>
+                        <p className="text-2xl font-bold text-orange-700">
+                          ${((admission.bed?.dailyRate || 0) * calculateLOS()).toFixed(2)}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Bed: ${admission.bed?.dailyRate || 0}/day
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Ward Transfer History */}
+                    {admission.bedTransfers && admission.bedTransfers.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-sm font-medium text-gray-700 mb-2">Transfer History</p>
+                        <div className="space-y-2">
+                          {admission.bedTransfers.map((transfer: any, idx: number) => (
+                            <div key={idx} className="text-sm border-l-2 border-indigo-400 pl-3 py-1">
+                              <p className="font-medium text-gray-900">
+                                {transfer.fromBed?.ward?.name} → {transfer.toBed?.ward?.name}
+                              </p>
+                              <p className="text-xs text-gray-600">
+                                {new Date(transfer.transferDate).toLocaleString()} - {transfer.reason || 'No reason specified'}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 );
               })()}
