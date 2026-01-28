@@ -2234,21 +2234,21 @@ export default function Consultation() {
   const renderDiagnosisStep = () => (
     <div className="space-y-6">
       {/* Run AI Diagnosis */}
-      <div className="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl p-6 text-white">
+      <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl p-6 text-white">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold flex items-center gap-2">
               <SparklesIcon className="h-5 w-5" />
               AI-Assisted Diagnosis
             </h3>
-            <p className="text-blue-100 text-sm mt-1">
+            <p className="text-purple-100 text-sm mt-1">
               Based on {symptoms.length} symptom(s) and patient context
             </p>
           </div>
           <button
             onClick={runAIDiagnosis}
             disabled={diagnosisMutation.isPending || symptoms.length === 0}
-            className="px-6 py-2.5 bg-white text-blue-600 rounded-xl font-semibold hover:bg-blue-50 transition-colors disabled:opacity-50 flex items-center gap-2"
+            className="px-6 py-2.5 bg-white text-purple-600 rounded-xl font-semibold hover:bg-purple-50 transition-colors disabled:opacity-50 flex items-center gap-2"
           >
             {diagnosisMutation.isPending ? (
               <>
@@ -2460,13 +2460,13 @@ export default function Consultation() {
       </div>
 
       {/* Manual Diagnosis Input */}
-      <div className="bg-purple-50 border border-purple-200 rounded-2xl p-6">
-        <h3 className="text-lg font-semibold text-purple-800 mb-4 flex items-center gap-2">
+      <div className="bg-green-50 border border-green-200 rounded-2xl p-6">
+        <h3 className="text-lg font-semibold text-green-800 mb-4 flex items-center gap-2">
           <PlusIcon className="h-5 w-5" />
           Add Manual Diagnosis
         </h3>
-        <p className="text-sm text-purple-600 mb-4">
-          Add a diagnosis not suggested by AI. You can optionally include the ICD-10 code.
+        <p className="text-sm text-green-600 mb-4">
+          Add a diagnosis manually. You can optionally include the ICD-10 code.
         </p>
         <div className="flex flex-col md:flex-row gap-3">
           <input
@@ -2474,14 +2474,14 @@ export default function Consultation() {
             value={customDiagnosisInput}
             onChange={(e) => setCustomDiagnosisInput(e.target.value)}
             placeholder="Diagnosis name (e.g., Type 2 Diabetes Mellitus)"
-            className="flex-1 px-4 py-2.5 border border-purple-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            className="flex-1 px-4 py-2.5 border border-green-300 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
           />
           <input
             type="text"
             value={customDiagnosisIcd}
             onChange={(e) => setCustomDiagnosisIcd(e.target.value)}
             placeholder="ICD-10 Code (optional)"
-            className="w-full md:w-40 px-4 py-2.5 border border-purple-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            className="w-full md:w-40 px-4 py-2.5 border border-green-300 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
           />
           <button
             type="button"
@@ -2499,7 +2499,7 @@ export default function Consultation() {
               }
             }}
             disabled={!customDiagnosisInput.trim()}
-            className="px-6 py-2.5 bg-purple-600 text-white rounded-xl font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 whitespace-nowrap"
+            className="px-6 py-2.5 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 whitespace-nowrap"
           >
             <PlusIcon className="h-4 w-4" />
             Add Diagnosis
@@ -2508,15 +2508,15 @@ export default function Consultation() {
 
         {/* Manual Diagnoses List */}
         {customDiagnoses.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-purple-200">
-            <h4 className="text-sm font-medium text-purple-700 mb-2">Manual Diagnoses Added:</h4>
+          <div className="mt-4 pt-4 border-t border-green-200">
+            <h4 className="text-sm font-medium text-green-700 mb-2">Doctor's Diagnoses Added:</h4>
             <div className="space-y-2">
               {customDiagnoses.map((d) => (
-                <div key={d.id} className="flex items-center justify-between p-3 bg-white rounded-xl border border-purple-200">
+                <div key={d.id} className="flex items-center justify-between p-3 bg-white rounded-xl border border-green-200">
                   <div className="flex-1">
                     <span className="font-medium text-gray-900">{d.name}</span>
                     {d.icd10 && <span className="ml-2 text-sm text-gray-500">({d.icd10})</span>}
-                    <span className="ml-2 text-xs px-2 py-0.5 bg-purple-100 text-purple-600 rounded">Manual</span>
+                    <span className="ml-2 text-xs px-2 py-0.5 bg-green-100 text-green-600 rounded">Manual</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -2529,8 +2529,8 @@ export default function Consultation() {
                       className={clsx(
                         'text-xs font-medium px-2 py-1 rounded transition-colors',
                         d.isPrimary
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-purple-100 hover:text-purple-700'
+                          ? 'bg-green-600 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-green-100 hover:text-green-700'
                       )}
                     >
                       {d.isPrimary ? 'Primary' : 'Set Primary'}
