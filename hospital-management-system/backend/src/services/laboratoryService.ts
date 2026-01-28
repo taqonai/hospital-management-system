@@ -149,12 +149,25 @@ export class LaboratoryService {
 
     // Search by order number, patient name, or patient MRN
     if (search) {
+      const searchTerm = search.trim();
+      const searchWords = searchTerm.split(/\s+/); // Split by whitespace
+
       where.OR = [
-        { orderNumber: { contains: search, mode: 'insensitive' } },
-        { patient: { firstName: { contains: search, mode: 'insensitive' } } },
-        { patient: { lastName: { contains: search, mode: 'insensitive' } } },
-        { patient: { mrn: { contains: search, mode: 'insensitive' } } },
+        { orderNumber: { contains: searchTerm, mode: 'insensitive' } },
+        { patient: { firstName: { contains: searchTerm, mode: 'insensitive' } } },
+        { patient: { lastName: { contains: searchTerm, mode: 'insensitive' } } },
+        { patient: { mrn: { contains: searchTerm, mode: 'insensitive' } } },
       ];
+
+      // If multiple words, also search for first name + last name combination
+      if (searchWords.length === 2) {
+        where.OR.push({
+          AND: [
+            { patient: { firstName: { contains: searchWords[0], mode: 'insensitive' } } },
+            { patient: { lastName: { contains: searchWords[1], mode: 'insensitive' } } },
+          ],
+        });
+      }
     }
 
     const [orders, total] = await Promise.all([
@@ -732,7 +745,7 @@ export class LaboratoryService {
     const orders = await prisma.labOrder.findMany({
       where: {
         hospitalId,
-        status: { in: ['PENDING', 'ORDERED', 'SAMPLE_COLLECTED', 'IN_PROGRESS'] },
+        status: { in: ['ORDERED', 'SAMPLE_COLLECTED', 'RECEIVED', 'IN_PROGRESS'] },
       },
       include: {
         patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
@@ -768,10 +781,10 @@ export class LaboratoryService {
 
     const [pendingOrders, inProgressOrders, completedToday, criticalResults] = await Promise.all([
       prisma.labOrder.count({
-        where: { hospitalId, status: { in: ['PENDING', 'ORDERED'] } },
+        where: { hospitalId, status: { in: ['ORDERED'] } },
       }),
       prisma.labOrder.count({
-        where: { hospitalId, status: { in: ['SAMPLE_COLLECTED', 'IN_PROGRESS', 'PROCESSING'] } },
+        where: { hospitalId, status: { in: ['SAMPLE_COLLECTED', 'RECEIVED', 'IN_PROGRESS'] } },
       }),
       prisma.labOrder.count({
         where: { hospitalId, completedAt: { gte: today } },

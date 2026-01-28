@@ -916,33 +916,105 @@ export class PatientPortalService {
             },
           },
         },
+        orderedByUser: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
       },
     });
 
+    // Get doctor info for each order
+    const ordersWithDoctorInfo = await Promise.all(
+      labOrders.map(async (order) => {
+        let orderingDoctor = null;
+        if (order.orderedBy) {
+          const doctor = await prisma.doctor.findUnique({
+            where: { id: order.orderedBy },
+            select: {
+              id: true,
+              specialization: true,
+              user: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                },
+              },
+            },
+          });
+          if (doctor) {
+            orderingDoctor = {
+              id: doctor.id,
+              name: `Dr. ${doctor.user.firstName} ${doctor.user.lastName}`,
+              specialization: doctor.specialization,
+            };
+          }
+        }
+
+        // If no doctor found, use orderedByUser as fallback
+        if (!orderingDoctor && order.orderedByUser) {
+          orderingDoctor = {
+            id: order.orderedByUser.id,
+            name: `${order.orderedByUser.firstName} ${order.orderedByUser.lastName}`,
+            specialization: 'General',
+          };
+        }
+
+        // Determine test category and name for display
+        const testCategories = [...new Set(order.tests.map(t => t.labTest?.category).filter(Boolean))];
+        const testCategory = testCategories.length > 0 ? testCategories[0] : 'General';
+        const testName = order.tests.length === 1
+          ? order.tests[0].labTest?.name || 'Lab Test'
+          : `${order.tests.length} Tests`;
+
+        // Map status for frontend
+        let frontendStatus: 'PENDING' | 'IN_PROGRESS' | 'READY' | 'REVIEWED' = 'PENDING';
+        if (order.status === 'RESULTED' || order.status === 'VERIFIED') {
+          frontendStatus = 'READY';
+        } else if (order.status === 'SAMPLE_COLLECTED' || order.status === 'RECEIVED') {
+          frontendStatus = 'IN_PROGRESS';
+        }
+
+        return {
+          id: order.id,
+          orderNumber: order.orderNumber,
+          testDate: order.orderedAt.toISOString(),
+          reportDate: order.completedAt?.toISOString(),
+          status: frontendStatus,
+          orderingDoctor: orderingDoctor || {
+            id: 'unknown',
+            name: 'Unknown',
+            specialization: 'General',
+          },
+          testCategory,
+          testName,
+          specimenType: order.tests[0]?.labTest ? 'Blood' : undefined, // Default specimen type
+          collectionDate: order.collectedAt?.toISOString(),
+          results: order.tests.map(test => {
+            const numericValue = test.resultValue !== null ? Number(test.resultValue) : null;
+            return {
+              id: test.id,
+              testName: test.labTest?.name || 'Unknown Test',
+              testCode: test.labTest?.code || '',
+              value: numericValue !== null ? numericValue : (test.result || ''),
+              unit: test.unit || test.labTest?.unit || '',
+              normalRange: test.normalRange || test.labTest?.normalRange || '',
+              status: test.isCritical
+                ? (numericValue && numericValue > 0 ? 'CRITICAL_HIGH' : 'CRITICAL_LOW')
+                : test.isAbnormal
+                ? (numericValue && numericValue > 0 ? 'HIGH' : 'LOW')
+                : 'NORMAL',
+              notes: test.comments,
+            };
+          }),
+        };
+      })
+    );
+
     return {
-      data: labOrders.map(order => ({
-        id: order.id,
-        orderNumber: order.orderNumber,
-        date: order.createdAt,
-        status: order.status,
-        priority: order.priority,
-        clinicalNotes: order.clinicalNotes,
-        completedAt: order.completedAt,
-        tests: order.tests.map(test => ({
-          id: test.id,
-          name: test.labTest?.name || 'Unknown Test',
-          code: test.labTest?.code || '',
-          category: test.labTest?.category || '',
-          result: test.result,
-          resultValue: test.resultValue ? Number(test.resultValue) : null,
-          unit: test.unit || test.labTest?.unit || '',
-          normalRange: test.normalRange || test.labTest?.normalRange || '',
-          status: test.status,
-          isAbnormal: test.isAbnormal,
-          isCritical: test.isCritical,
-          comments: test.comments,
-        })),
-      })),
+      data: ordersWithDoctorInfo,
       pagination: { page, limit, total: labOrders.length, totalPages: 1 },
     };
   }
@@ -975,6 +1047,13 @@ export class PatientPortalService {
             diagnosis: true,
           },
         },
+        orderedByUser: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
       },
     });
 
@@ -982,49 +1061,88 @@ export class PatientPortalService {
       throw new NotFoundError('Lab result not found');
     }
 
-    // Get ordering doctor info separately
-    let orderedByDoctor = null;
+    // Get ordering doctor info
+    let orderingDoctor = null;
     if (labOrder.orderedBy) {
       const doctor = await prisma.doctor.findUnique({
         where: { id: labOrder.orderedBy },
-        include: { user: { select: { firstName: true, lastName: true } } },
+        select: {
+          id: true,
+          specialization: true,
+          user: {
+            select: {
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
       });
       if (doctor) {
-        orderedByDoctor = {
+        orderingDoctor = {
           id: doctor.id,
           name: `Dr. ${doctor.user.firstName} ${doctor.user.lastName}`,
+          specialization: doctor.specialization,
         };
       }
+    }
+
+    // Fallback to orderedByUser if doctor not found
+    if (!orderingDoctor && labOrder.orderedByUser) {
+      orderingDoctor = {
+        id: labOrder.orderedByUser.id,
+        name: `${labOrder.orderedByUser.firstName} ${labOrder.orderedByUser.lastName}`,
+        specialization: 'General',
+      };
+    }
+
+    // Map status for frontend
+    let frontendStatus: 'PENDING' | 'IN_PROGRESS' | 'READY' | 'REVIEWED' = 'PENDING';
+    if (labOrder.status === 'RESULTED' || labOrder.status === 'VERIFIED') {
+      frontendStatus = 'READY';
+    } else if (labOrder.status === 'SAMPLE_COLLECTED' || labOrder.status === 'RECEIVED') {
+      frontendStatus = 'IN_PROGRESS';
     }
 
     return {
       id: labOrder.id,
       orderNumber: labOrder.orderNumber,
-      date: labOrder.createdAt,
-      status: labOrder.status,
+      testDate: labOrder.orderedAt.toISOString(),
+      reportDate: labOrder.completedAt?.toISOString(),
+      status: frontendStatus,
       priority: labOrder.priority,
       clinicalNotes: labOrder.clinicalNotes,
       specialInstructions: labOrder.specialInstructions,
       orderedAt: labOrder.orderedAt,
       collectedAt: labOrder.collectedAt,
       completedAt: labOrder.completedAt,
-      orderedBy: orderedByDoctor,
+      orderingDoctor: orderingDoctor || {
+        id: 'unknown',
+        name: 'Unknown',
+        specialization: 'General',
+      },
       consultation: labOrder.consultation ? {
         id: labOrder.consultation.id,
         diagnosis: labOrder.consultation.diagnosis,
       } : null,
-      tests: labOrder.tests.map(test => ({
-        id: test.id,
-        name: test.labTest?.name || 'Unknown Test',
-        code: test.labTest?.code || '',
-        category: test.labTest?.category || '',
-        result: test.result,
-        resultValue: test.resultValue ? Number(test.resultValue) : null,
-        unit: test.unit || test.labTest?.unit || '',
-        normalRange: test.normalRange || test.labTest?.normalRange || '',
-        status: test.status,
-        isAbnormal: test.isAbnormal,
-      })),
+      results: labOrder.tests.map(test => {
+        const numericValue = test.resultValue !== null ? Number(test.resultValue) : null;
+        return {
+          id: test.id,
+          testName: test.labTest?.name || 'Unknown Test',
+          testCode: test.labTest?.code || '',
+          value: numericValue !== null ? numericValue : (test.result || ''),
+          unit: test.unit || test.labTest?.unit || '',
+          normalRange: test.normalRange || test.labTest?.normalRange || '',
+          status: test.isCritical
+            ? (numericValue && numericValue > 0 ? 'CRITICAL_HIGH' : 'CRITICAL_LOW')
+            : test.isAbnormal
+            ? (numericValue && numericValue > 0 ? 'HIGH' : 'LOW')
+            : 'NORMAL',
+          notes: test.comments,
+          isAbnormal: test.isAbnormal,
+          isCritical: test.isCritical,
+        };
+      }),
     };
   }
 
