@@ -90,4 +90,24 @@ router.post(
   })
 );
 
+// Forgot password - Send reset link
+router.post(
+  '/forgot-password',
+  asyncHandler(async (req, res: Response) => {
+    const { email } = req.body;
+    const result = await authService.forgotPassword(email);
+    sendSuccess(res, result, result.message);
+  })
+);
+
+// Reset password - Verify token and set new password
+router.post(
+  '/reset-password',
+  asyncHandler(async (req, res: Response) => {
+    const { token, newPassword } = req.body;
+    const result = await authService.resetPassword(token, newPassword);
+    sendSuccess(res, result, result.message);
+  })
+);
+
 export default router;

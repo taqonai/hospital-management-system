@@ -10,6 +10,8 @@ import AuthLayout from './components/layout/AuthLayout';
 // Pages
 import Home from './pages/Home';
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import Patients from './pages/Patients';
 import PatientDetail from './pages/PatientDetail';
@@ -96,6 +98,8 @@ import Quality from './pages/Quality';
 
 // Patient Portal (Separate public section with own auth)
 import PatientPortalLogin from './pages/PatientPortal/Login';
+import PatientForgotPassword from './pages/PatientPortal/ForgotPassword';
+import PatientResetPassword from './pages/PatientPortal/ResetPassword';
 import PatientPortalDashboard from './pages/PatientPortal/Dashboard';
 import PatientPortalAppointments from './pages/PatientPortal/Appointments';
 import PatientPortalMedicalRecords from './pages/PatientPortal/MedicalRecords';
@@ -188,6 +192,8 @@ function App() {
             isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />
           }
         />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
       </Route>
 
       {/* Protected Routes */}
@@ -374,6 +380,8 @@ function App() {
 
       {/* Patient Portal - Separate public section with own authentication */}
       <Route path="/patient-portal/login" element={<PatientPortalLogin />} />
+      <Route path="/patient-portal/forgot-password" element={<PatientForgotPassword />} />
+      <Route path="/patient-portal/reset-password" element={<PatientResetPassword />} />
       <Route path="/patient-portal" element={<PatientPortalLayout />}>
         <Route index element={<PatientPortalDashboard />} />
         <Route path="dashboard" element={<PatientPortalDashboard />} />
