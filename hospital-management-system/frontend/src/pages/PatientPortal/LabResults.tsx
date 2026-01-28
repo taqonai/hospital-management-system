@@ -179,9 +179,17 @@ export default function LabResults() {
         const response = await patientPortalApi.getLabResults({
           status: statusFilter || undefined,
         });
-        return response.data?.data || response.data || [];
-      } catch {
-        return mockLabResults;
+        // Response structure: { success, message, data: { data: [], pagination: {} } }
+        // We need the array inside data.data.data
+        const innerData = response.data?.data;
+        if (innerData && typeof innerData === 'object' && 'data' in innerData) {
+          return innerData.data || [];
+        }
+        // Fallback for direct array or old format
+        return Array.isArray(response.data?.data) ? response.data.data : [];
+      } catch (err) {
+        console.error('Failed to fetch lab results:', err);
+        return [];
       }
     },
   });
