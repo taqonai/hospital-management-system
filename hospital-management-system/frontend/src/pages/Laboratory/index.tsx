@@ -481,49 +481,51 @@ export default function Laboratory() {
     return () => clearInterval(interval);
   }, [fetchOrders]);
 
+  // Fetch critical results function
+  const fetchCritical = useCallback(async () => {
+    try {
+      const response = await laboratoryApi.getCriticalResults();
+      const mapped = (response.data.data || []).map((cv: any) => ({
+        ...cv,
+        patient: cv.labOrder?.patient || cv.patient,
+        test: cv.labTest || cv.test,
+        value: cv.resultValue || cv.result || cv.value,
+        referenceRange: cv.normalRange || cv.referenceRange,
+      }));
+      setCriticalResults(mapped);
+    } catch (error) {
+      console.error('Failed to fetch critical results:', error);
+    }
+  }, []);
+
+  // Fetch stats function
+  const fetchStats = useCallback(async () => {
+    try {
+      const response = await laboratoryApi.getStats();
+      setStats(response.data.data || {
+        pendingOrders: 0,
+        inProgressOrders: 0,
+        criticalResults: 0,
+        completedToday: 0,
+      });
+    } catch (error) {
+      console.error('Failed to fetch stats:', error);
+    }
+  }, []);
+
   // Fetch critical results with polling
   useEffect(() => {
-    const fetchCritical = async () => {
-      try {
-        const response = await laboratoryApi.getCriticalResults();
-        const mapped = (response.data.data || []).map((cv: any) => ({
-          ...cv,
-          patient: cv.labOrder?.patient || cv.patient,
-          test: cv.labTest || cv.test,
-          value: cv.resultValue || cv.result || cv.value,
-          referenceRange: cv.normalRange || cv.referenceRange,
-        }));
-        setCriticalResults(mapped);
-      } catch (error) {
-        console.error('Failed to fetch critical results:', error);
-      }
-    };
-
     fetchCritical();
     const interval = setInterval(fetchCritical, 15000); // Poll every 15 seconds
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchCritical]);
 
   // Fetch stats with polling
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const response = await laboratoryApi.getStats();
-        setStats(response.data.data || {
-          pendingOrders: 0,
-          inProgressOrders: 0,
-          criticalResults: 0,
-          completedToday: 0,
-        });
-      } catch (error) {
-        console.error('Failed to fetch stats:', error);
-      }
-    };
-
     fetchStats();
     const interval = setInterval(fetchStats, 15000); // Poll every 15 seconds
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchStats]);
 
   const handleAISuggestTests = () => {
     toast.success('AI is analyzing patient history to suggest appropriate tests...');
@@ -1016,7 +1018,7 @@ export default function Laboratory() {
       )}
 
       {/* Booking Ticket Modal */}
-      {selectedBookingId && bookingTicketData && (
+      {selectedBookingId && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4">
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setSelectedBookingId(null)} />
@@ -1047,6 +1049,8 @@ export default function Laboratory() {
                 onSuccess={() => {
                   setSelectedOrderForResults(null);
                   fetchOrders();
+                  fetchCritical(); // Refresh critical values immediately
+                  fetchStats(); // Refresh stats immediately
                 }}
                 onCancel={() => setSelectedOrderForResults(null)}
               />
