@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   BeakerIcon,
   PlusIcon,
@@ -435,6 +435,7 @@ export default function Laboratory() {
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [selectedOrderForResults, setSelectedOrderForResults] = useState<{ orderId: string; testId: string; testName: string; patientName: string } | null>(null);
   const { data: healthStatus } = useAIHealth();
+  const tabsRef = useRef<HTMLDivElement>(null);
 
   const isAIOnline = healthStatus?.status === 'connected';
 
@@ -526,6 +527,15 @@ export default function Laboratory() {
     const interval = setInterval(fetchStats, 15000); // Poll every 15 seconds
     return () => clearInterval(interval);
   }, [fetchStats]);
+
+  // Handle tab switching with smooth scroll
+  const handleTabChange = (tab: typeof activeTab) => {
+    setActiveTab(tab);
+    // Scroll to tabs section smoothly
+    setTimeout(() => {
+      tabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  };
 
   const handleAISuggestTests = () => {
     toast.success('AI is analyzing patient history to suggest appropriate tests...');
@@ -663,7 +673,7 @@ export default function Laboratory() {
                   </p>
                 ))}
               </div>
-              <button onClick={() => setActiveTab('critical')} className="mt-3 text-sm font-semibold text-rose-600 hover:text-rose-700">
+              <button onClick={() => handleTabChange('critical')} className="mt-3 text-sm font-semibold text-rose-600 hover:text-rose-700">
                 View All Critical Values →
               </button>
             </div>
@@ -728,7 +738,7 @@ export default function Laboratory() {
         </div>
 
         {/* Tabs */}
-        <div className="flex overflow-x-auto border-b border-gray-200">
+        <div ref={tabsRef} className="flex overflow-x-auto border-b border-gray-200">
           {tabs.map((tab) => (
             <button
               key={tab.id}
