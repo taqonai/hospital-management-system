@@ -137,6 +137,12 @@ import ClinicianDashboard from './pages/Clinician';
 import ClinicianPatientSummary from './pages/Clinician/PatientSummary';
 import ClinicianAlerts from './pages/Clinician/Alerts';
 
+// Notifications
+import Notifications from './pages/Notifications';
+import NotificationSettingsPage from './pages/Settings/Notifications';
+import TeamContacts from './pages/Settings/Notifications/TeamContacts';
+import DeliveryLogs from './pages/Settings/Notifications/DeliveryLogs';
+
 // Protected Route Component with RBAC permission support
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -316,6 +322,33 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['DOCTOR', 'NURSE', 'HOSPITAL_ADMIN']} permission="opd:consultations">
               <ClinicianAlerts />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Notifications */}
+        <Route path="/notifications" element={<Notifications />} />
+        <Route
+          path="/settings/notifications"
+          element={
+            <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'SUPER_ADMIN']} permission="settings:write">
+              <NotificationSettingsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/notifications/team-contacts"
+          element={
+            <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'SUPER_ADMIN']} permission="settings:write">
+              <TeamContacts />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/notifications/delivery-logs"
+          element={
+            <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'SUPER_ADMIN']} permission="settings:write">
+              <DeliveryLogs />
             </ProtectedRoute>
           }
         />

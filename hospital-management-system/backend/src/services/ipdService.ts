@@ -478,10 +478,15 @@ export class IPDService {
     });
     if (!admission) throw new NotFoundError('Admission not found');
 
+    // Find nurse record for the user
+    const nurse = await prisma.nurse.findFirst({
+      where: { userId: recordedBy },
+    });
+
     // Calculate NEWS2 score
     const news2 = this.calculateNEWS2Score(vitalsData);
 
-    // Record vitals
+    // Record vitals in Vital table
     const vitals = await prisma.vital.create({
       data: {
         patientId: admission.patientId,
@@ -495,6 +500,33 @@ export class IPDService {
         temperature: vitalsData.temperature,
         notes: vitalsData.consciousness ? `Consciousness: ${vitalsData.consciousness}` : null,
       },
+    });
+
+    // Create nursing note with vitals data for display in admission detail
+    if (nurse) {
+      await prisma.nursingNote.create({
+        data: {
+          admissionId,
+          nurseId: nurse.id,
+          noteType: 'VITALS',
+          content: `Vitals recorded - NEWS2 Score: ${news2.score} (${news2.riskLevel})`,
+          respiratoryRate: vitalsData.respiratoryRate,
+          oxygenSaturation: vitalsData.oxygenSaturation,
+          supplementalOxygen: vitalsData.supplementalOxygen,
+          bloodPressureSys: vitalsData.bloodPressureSys,
+          bloodPressureDia: vitalsData.bloodPressureDia,
+          heartRate: vitalsData.heartRate,
+          temperature: vitalsData.temperature,
+          consciousness: vitalsData.consciousness,
+          news2Score: news2.score,
+        },
+      });
+    }
+
+    // Update admission's latest NEWS2 score
+    await prisma.admission.update({
+      where: { id: admissionId },
+      data: { news2Score: news2.score },
     });
 
     // Map NEWS2 risk level to Prisma RiskLevel enum

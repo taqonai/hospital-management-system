@@ -108,6 +108,12 @@ model Hospital {
   // Doctor's Orders
   doctorOrders DoctorOrder[]
 
+  // Notification Module
+  notificationSettings     NotificationSettings?
+  teamContacts             TeamContact[]
+  notificationDeliveryLogs NotificationDeliveryLog[]
+  notificationTemplates    NotificationTemplate[]
+
   @@map("hospitals")
 }
 
@@ -1389,6 +1395,19 @@ model NursingNote {
   noteType    String
   content     String
   vitals      Json?
+
+  // Vitals fields (for easy access and charting)
+  respiratoryRate    Int?
+  oxygenSaturation   Int?
+  supplementalOxygen Boolean?
+  bloodPressureSys   Int?
+  bloodPressureDia   Int?
+  heartRate          Int?
+  temperature        Float?
+  consciousness      String?
+  painLevel          Int?
+  news2Score         Int?
+
   createdAt   DateTime @default(now())
 
   admission Admission @relation(fields: [admissionId], references: [id])
@@ -2039,6 +2058,173 @@ enum NotificationType {
   ALERT
   SYSTEM
   AI_INSIGHT
+  EMERGENCY
+  BILLING
+  TEAM_BROADCAST
+}
+
+// ==================== NOTIFICATION SETTINGS & DELIVERY ====================
+
+model NotificationSettings {
+  id         String   @id @default(uuid())
+  hospitalId String   @unique
+  
+  // Twilio SMS Configuration
+  twilioAccountSid   String?
+  twilioAuthToken    String?
+  twilioPhoneNumber  String?
+  twilioEnabled      Boolean @default(false)
+  
+  // Twilio WhatsApp Configuration  
+  twilioWhatsappNumber String?
+  twilioWhatsappEnabled Boolean @default(false)
+  
+  // Email Configuration (SMTP)
+  smtpHost     String?
+  smtpPort     Int?
+  smtpSecure   Boolean @default(true)
+  smtpUser     String?
+  smtpPassword String?
+  smtpFrom     String?
+  emailEnabled Boolean @default(false)
+  
+  // Pager/Alternative SMS Provider
+  pagerProvider     String?  // e.g., "pageone", "custom"
+  pagerApiKey       String?
+  pagerApiEndpoint  String?
+  pagerEnabled      Boolean @default(false)
+  
+  // General Settings
+  defaultChannels   Json     @default("[\"in_app\"]") // default notification channels
+  quietHoursEnabled Boolean  @default(false)
+  quietHoursStart   String?  // HH:mm format
+  quietHoursEnd     String?  // HH:mm format
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  hospital Hospital @relation(fields: [hospitalId], references: [id])
+  
+  @@map("notification_settings")
+}
+
+model TeamContact {
+  id         String   @id @default(uuid())
+  hospitalId String
+  
+  // Contact Info
+  name          String
+  role          String    // e.g., "On-Call Doctor", "Nurse Manager", "Lab Supervisor"
+  department    String?
+  email         String?
+  phone         String?
+  pagerNumber   String?
+  whatsappNumber String?
+  
+  // Notification Preferences
+  enabledChannels   Json     @default("[\"sms\", \"email\"]") // ["sms", "email", "whatsapp", "pager"]
+  enabledAlertTypes Json     @default("[]") // specific alert types this contact receives
+  isEmergencyContact Boolean @default(false)
+  isActive          Boolean  @default(true)
+  
+  // Scheduling
+  onCallSchedule Json? // optional schedule for when this contact is active
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  hospital Hospital @relation(fields: [hospitalId], references: [id])
+  deliveryLogs NotificationDeliveryLog[]
+  
+  @@map("team_contacts")
+}
+
+model NotificationDeliveryLog {
+  id             String   @id @default(uuid())
+  hospitalId     String
+  notificationId String?
+  teamContactId  String?
+  
+  // Delivery Details
+  channel       String   // "sms", "email", "whatsapp", "pager", "in_app"
+  recipient     String   // email/phone number
+  recipientName String?
+  
+  // Message Content
+  subject       String?
+  message       String
+  templateId    String?
+  
+  // Status Tracking
+  status        DeliveryStatus @default(PENDING)
+  sentAt        DateTime?
+  deliveredAt   DateTime?
+  readAt        DateTime?
+  failedAt      DateTime?
+  failureReason String?
+  
+  // Provider Response
+  externalMessageId String?
+  providerResponse  Json?
+  
+  // Retry Info
+  retryCount    Int      @default(0)
+  maxRetries    Int      @default(3)
+  nextRetryAt   DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  hospital    Hospital     @relation(fields: [hospitalId], references: [id])
+  teamContact TeamContact? @relation(fields: [teamContactId], references: [id])
+  
+  @@index([hospitalId, createdAt])
+  @@index([status, nextRetryAt])
+  @@map("notification_delivery_logs")
+}
+
+enum DeliveryStatus {
+  PENDING
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  CANCELLED
+}
+
+model NotificationTemplate {
+  id         String   @id @default(uuid())
+  hospitalId String
+  
+  // Template Info
+  name        String
+  code        String   // unique code for referencing
+  description String?
+  category    String   // "appointment", "lab", "emergency", "billing", etc.
+  
+  // Channel-specific Templates
+  smsTemplate       String?
+  emailSubject      String?
+  emailBodyHtml     String?
+  emailBodyText     String?
+  whatsappTemplate  String?
+  pushTitle         String?
+  pushBody          String?
+  
+  // Variables
+  variables   Json?    // list of available variables like {{patientName}}, {{appointmentDate}}
+  
+  isActive    Boolean  @default(true)
+  isSystem    Boolean  @default(false)  // system templates can't be deleted
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  hospital Hospital @relation(fields: [hospitalId], references: [id])
+  
+  @@unique([hospitalId, code])
+  @@map("notification_templates")
 }
 
 // ==================== HR & STAFF MANAGEMENT ====================
