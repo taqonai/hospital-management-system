@@ -1624,6 +1624,170 @@ export class PatientPortalService {
 
     return reminders;
   }
+
+  /**
+   * Generate lab result PDF for download
+   */
+  async generateLabResultPDF(hospitalId: string, patientId: string, labOrderId: string): Promise<Buffer> {
+    const labResult = await this.getLabResultById(hospitalId, patientId, labOrderId);
+
+    // Get patient details
+    const patient = await prisma.patient.findFirst({
+      where: { id: patientId, hospitalId },
+      select: {
+        firstName: true,
+        lastName: true,
+        mrn: true,
+        dateOfBirth: true,
+        gender: true,
+        phone: true,
+      },
+    });
+
+    // Get hospital details
+    const hospital = await prisma.hospital.findUnique({
+      where: { id: hospitalId },
+      select: { name: true, address: true, phone: true, email: true },
+    });
+
+    // Import PDFKit dynamically
+    const PDFDocument = require('pdfkit');
+
+    return new Promise((resolve, reject) => {
+      try {
+        const doc = new PDFDocument({ size: 'A4', margin: 50 });
+        const chunks: Buffer[] = [];
+
+        // Collect PDF data
+        doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+        doc.on('end', () => resolve(Buffer.concat(chunks)));
+        doc.on('error', reject);
+
+        // Colors
+        const primaryColor = '#6366f1'; // Indigo
+        const textColor = '#1f2937';
+        const lightGray = '#f3f4f6';
+
+        // Header
+        doc.fontSize(24).fillColor(primaryColor).text(hospital?.name || 'Hospital', { align: 'center' });
+        if (hospital?.address) {
+          doc.fontSize(10).fillColor(textColor).text(hospital.address, { align: 'center' });
+        }
+        if (hospital?.phone) {
+          doc.text(`Phone: ${hospital.phone}`, { align: 'center' });
+        }
+
+        doc.moveDown(1.5);
+
+        // Title
+        doc.fontSize(18).fillColor(primaryColor).text('Laboratory Test Report', { align: 'center', underline: true });
+        doc.moveDown(1);
+
+        // Order Information Box
+        const startY = doc.y;
+        doc.rect(50, startY, 495, 90).fillAndStroke(lightGray, textColor);
+
+        doc.fillColor(textColor).fontSize(11);
+        doc.text(`Order Number: ${labResult.orderNumber}`, 60, startY + 10);
+        doc.text(`Test Date: ${new Date(labResult.testDate).toLocaleDateString()}`, 60, startY + 30);
+        if (labResult.reportDate) {
+          doc.text(`Report Date: ${new Date(labResult.reportDate).toLocaleDateString()}`, 60, startY + 50);
+        }
+        doc.text(`Status: ${labResult.status}`, 60, startY + 70);
+
+        // Patient Information
+        doc.text(`Patient: ${patient?.firstName} ${patient?.lastName}`, 300, startY + 10);
+        doc.text(`MRN: ${patient?.mrn}`, 300, startY + 30);
+        if (patient?.dateOfBirth) {
+          const age = Math.floor((Date.now() - new Date(patient.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+          doc.text(`Age: ${age} years`, 300, startY + 50);
+        }
+        doc.text(`Gender: ${patient?.gender || 'N/A'}`, 300, startY + 70);
+
+        doc.y = startY + 100;
+        doc.moveDown(1);
+
+        // Ordering Doctor
+        if (labResult.orderingDoctor) {
+          doc.fontSize(10).text(`Ordered by: ${labResult.orderingDoctor.name} (${labResult.orderingDoctor.specialization})`, { align: 'left' });
+          doc.moveDown(1);
+        }
+
+        // Test Results Table
+        doc.fontSize(14).fillColor(primaryColor).text('Test Results', { underline: true });
+        doc.moveDown(0.5);
+
+        // Table headers
+        const tableTop = doc.y;
+        const col1 = 50;
+        const col2 = 200;
+        const col3 = 320;
+        const col4 = 420;
+        const col5 = 480;
+
+        doc.fontSize(10).fillColor(textColor);
+        doc.rect(col1, tableTop, 495, 25).fillAndStroke(lightGray, textColor);
+        doc.fillColor(textColor).font('Helvetica-Bold');
+        doc.text('Test Name', col1 + 5, tableTop + 8);
+        doc.text('Result', col2 + 5, tableTop + 8);
+        doc.text('Unit', col3 + 5, tableTop + 8);
+        doc.text('Normal Range', col4 + 5, tableTop + 8);
+        doc.text('Status', col5 + 5, tableTop + 8);
+
+        doc.font('Helvetica');
+        let currentY = tableTop + 30;
+
+        // Table rows
+        labResult.results.forEach((test: any, index: number) => {
+          if (currentY > 700) {
+            doc.addPage();
+            currentY = 50;
+          }
+
+          const rowColor = index % 2 === 0 ? '#ffffff' : lightGray;
+          doc.rect(col1, currentY, 495, 30).fillAndStroke(rowColor, textColor);
+
+          const statusColor = test.isCritical ? '#dc2626' : test.isAbnormal ? '#f59e0b' : '#10b981';
+
+          doc.fillColor(textColor).text(test.testName || '', col1 + 5, currentY + 8, { width: 140 });
+          doc.text(test.value?.toString() || 'Pending', col2 + 5, currentY + 8);
+          doc.text(test.unit || '', col3 + 5, currentY + 8);
+          doc.text(test.normalRange || '', col4 + 5, currentY + 8, { width: 50 });
+          doc.fillColor(statusColor).text(test.status || '', col5 + 5, currentY + 8);
+
+          if (test.notes) {
+            currentY += 30;
+            doc.fillColor(textColor).fontSize(9).text(`Note: ${test.notes}`, col1 + 5, currentY, { width: 490 });
+            currentY += 15;
+          } else {
+            currentY += 30;
+          }
+
+          doc.fontSize(10);
+        });
+
+        // Clinical Notes
+        if (labResult.clinicalNotes) {
+          doc.moveDown(2);
+          doc.fontSize(12).fillColor(primaryColor).text('Clinical Notes', { underline: true });
+          doc.moveDown(0.5);
+          doc.fontSize(10).fillColor(textColor).text(labResult.clinicalNotes, { align: 'justify' });
+        }
+
+        // Footer
+        doc.fontSize(8).fillColor('#6b7280').text(
+          `Generated on: ${new Date().toLocaleString()} | This is a computer-generated report`,
+          50,
+          doc.page.height - 50,
+          { align: 'center' }
+        );
+
+        doc.end();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
 }
 
 export const patientPortalService = new PatientPortalService();

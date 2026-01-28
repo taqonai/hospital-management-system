@@ -325,6 +325,29 @@ router.get(
 );
 
 /**
+ * Download lab result as PDF
+ * GET /api/v1/patient-portal/labs/:id/download
+ */
+router.get(
+  '/labs/:id/download',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
+
+    const pdfBuffer = await patientPortalService.generateLabResultPDF(hospitalId, patientId, req.params.id);
+
+    const labResult = await patientPortalService.getLabResultById(hospitalId, patientId, req.params.id);
+    const filename = `Lab-Report-${labResult.orderNumber}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+  })
+);
+
+/**
  * Get messages (placeholder - returns empty)
  * GET /api/v1/patient-portal/messages
  */
