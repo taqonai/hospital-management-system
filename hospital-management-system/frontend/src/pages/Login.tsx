@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { Link } from 'react-router-dom';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../hooks/useAuth';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -100,9 +101,9 @@ export default function Login() {
             </label>
           </div>
 
-          <a href="#" className="text-sm font-medium text-primary-600 hover:text-primary-500">
+          <Link to="/forgot-password" className="text-sm font-medium text-primary-600 hover:text-primary-500">
             Forgot password?
-          </a>
+          </Link>
         </div>
 
         <button

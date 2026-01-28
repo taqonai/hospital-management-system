@@ -428,4 +428,34 @@ router.post(
   })
 );
 
+/**
+ * Forgot Password - Send password reset link
+ * POST /api/v1/patient-auth/forgot-password
+ * Body: { email: string }
+ * Returns: { success, message }
+ */
+router.post(
+  '/forgot-password',
+  asyncHandler(async (req, res: Response) => {
+    const { email } = req.body;
+    const result = await patientAuthService.forgotPassword(email);
+    sendSuccess(res, result, result.message);
+  })
+);
+
+/**
+ * Reset Password - Verify token and set new password
+ * POST /api/v1/patient-auth/reset-password
+ * Body: { token: string, newPassword: string }
+ * Returns: { success, message }
+ */
+router.post(
+  '/reset-password',
+  asyncHandler(async (req, res: Response) => {
+    const { token, newPassword } = req.body;
+    const result = await patientAuthService.resetPassword(token, newPassword);
+    sendSuccess(res, result, result.message);
+  })
+);
+
 export default router;
