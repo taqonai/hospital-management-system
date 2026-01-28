@@ -20,7 +20,7 @@ import {
   DocumentArrowUpIcon,
 } from '@heroicons/react/24/outline';
 import { useAIHealth } from '../../hooks/useAI';
-import { laboratoryApi } from '../../services/api';
+import { laboratoryApi, opdApi } from '../../services/api';
 import { useBookingData } from '../../hooks/useBookingData';
 import { BookingTicket } from '../../components/booking';
 import clsx from 'clsx';
