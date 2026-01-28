@@ -1282,22 +1282,106 @@ function PatientDetailDrawer({ admissionId, onClose }: { admissionId: string | n
               )}
 
               {activeTab === 'vitals' && (
-                <div className="bg-white border border-gray-200 rounded-xl p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Vitals History</h3>
+                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                  <div className="px-6 py-4 bg-gradient-to-r from-red-50 to-pink-50 border-b border-gray-200">
+                    <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                      <HeartIcon className="h-5 w-5 text-red-600" />
+                      Vitals History (Last 48 Hours)
+                    </h3>
+                  </div>
                   {admission.patient?.vitals && admission.patient.vitals.length > 0 ? (
-                    <div className="space-y-4">
-                      <p className="text-sm text-gray-600">
-                        Displaying latest vitals recorded at {new Date().toLocaleString()}
-                      </p>
-                      {/* VitalsTrendChart component can be added here if needed */}
-                      <div className="text-center text-gray-500 py-8">
-                        Vitals trend chart will be displayed here
+                    <div className="p-6">
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date/Time</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">BP</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">HR</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">RR</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">SpO2</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Temp</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Consciousness</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200">
+                            {admission.patient.vitals.map((vital: any, idx: number) => (
+                              <tr key={vital.id || idx} className={idx === 0 ? 'bg-blue-50' : 'hover:bg-gray-50'}>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                  <div>
+                                    <p className="font-medium text-gray-900">
+                                      {new Date(vital.recordedAt).toLocaleDateString()}
+                                    </p>
+                                    <p className="text-gray-500">
+                                      {new Date(vital.recordedAt).toLocaleTimeString()}
+                                    </p>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                                  {vital.bloodPressureSys && vital.bloodPressureDia ? (
+                                    <span className="font-medium">{vital.bloodPressureSys}/{vital.bloodPressureDia}</span>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                                  {vital.heartRate ? (
+                                    <span className="font-medium">{vital.heartRate} bpm</span>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                                  {vital.respiratoryRate ? (
+                                    <span className="font-medium">{vital.respiratoryRate} /min</span>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                                  {vital.oxygenSaturation ? (
+                                    <span className={clsx(
+                                      'font-medium',
+                                      Number(vital.oxygenSaturation) < 90 ? 'text-red-600' :
+                                      Number(vital.oxygenSaturation) < 95 ? 'text-yellow-600' :
+                                      'text-green-600'
+                                    )}>
+                                      {vital.oxygenSaturation}%
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                                  {vital.temperature ? (
+                                    <span className="font-medium">{Number(vital.temperature).toFixed(1)}°C</span>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                  {vital.consciousness || vital.notes ? (
+                                    <span className="capitalize text-gray-700">{vital.consciousness || vital.notes}</span>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
+                      {admission.patient.vitals.length > 0 && (
+                        <div className="mt-4 text-sm text-gray-500 text-center">
+                          Showing {admission.patient.vitals.length} vital{admission.patient.vitals.length !== 1 ? 's' : ''} recording{admission.patient.vitals.length !== 1 ? 's' : ''} from the last 48 hours
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <div className="text-center py-12 text-gray-500">
+                    <div className="p-12 text-center">
                       <HeartIcon className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-                      <p>No vitals recorded yet</p>
+                      <p className="text-gray-600 mb-2">No vitals recorded in the last 48 hours</p>
+                      <p className="text-sm text-gray-500">Vitals will appear here once recorded</p>
                     </div>
                   )}
                 </div>
