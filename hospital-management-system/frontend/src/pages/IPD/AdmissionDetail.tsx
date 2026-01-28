@@ -143,6 +143,18 @@ export default function AdmissionDetail() {
     content: '',
   });
   
+  const [vitalsForm, setVitalsForm] = useState({
+    respiratoryRate: 16,
+    oxygenSaturation: 98,
+    supplementalOxygen: false,
+    bloodPressureSys: 120,
+    bloodPressureDia: 80,
+    heartRate: 80,
+    temperature: 37.0,
+    consciousness: 'alert' as string,
+  });
+  const [savingVitals, setSavingVitals] = useState(false);
+  
   const [dischargeForm, setDischargeForm] = useState({
     dischargeDate: new Date().toISOString().split('T')[0],
     dischargeType: 'REGULAR',
@@ -262,6 +274,34 @@ export default function AdmissionDetail() {
     } catch (error) {
       console.error('Failed to create note:', error);
       toast.error('Failed to add note');
+    }
+  };
+
+  const handleRecordVitals = async () => {
+    setSavingVitals(true);
+    try {
+      const result = await ipdApi.recordVitals(id!, vitalsForm);
+      const data = result.data?.data;
+      toast.success(`Vitals recorded. NEWS2 Score: ${data?.news2Score || 'N/A'} (${data?.riskLevel || 'N/A'})`);
+      setShowVitalsModal(false);
+      // Reset form
+      setVitalsForm({
+        respiratoryRate: 16,
+        oxygenSaturation: 98,
+        supplementalOxygen: false,
+        bloodPressureSys: 120,
+        bloodPressureDia: 80,
+        heartRate: 80,
+        temperature: 37.0,
+        consciousness: 'alert',
+      });
+      // Refresh admission data
+      loadAdmissionDetail();
+    } catch (error: any) {
+      console.error('Failed to record vitals:', error);
+      toast.error(error.response?.data?.message || 'Failed to record vitals');
+    } finally {
+      setSavingVitals(false);
     }
   };
 
@@ -1392,6 +1432,143 @@ export default function AdmissionDetail() {
                     : !noteForm.content.trim()}
                 >
                   Add Note
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Vitals Modal */}
+      {showVitalsModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 flex items-center justify-between sticky top-0">
+              <h3 className="text-lg font-semibold text-white">Record Vitals</h3>
+              <button onClick={() => setShowVitalsModal(false)} className="text-white hover:bg-white/20 rounded-lg p-1">
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {/* Blood Pressure */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Systolic BP (mmHg)</label>
+                  <input
+                    type="number"
+                    value={vitalsForm.bloodPressureSys}
+                    onChange={(e) => setVitalsForm({ ...vitalsForm, bloodPressureSys: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Diastolic BP (mmHg)</label>
+                  <input
+                    type="number"
+                    value={vitalsForm.bloodPressureDia}
+                    onChange={(e) => setVitalsForm({ ...vitalsForm, bloodPressureDia: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* Heart Rate & Respiratory Rate */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Heart Rate (bpm)</label>
+                  <input
+                    type="number"
+                    value={vitalsForm.heartRate}
+                    onChange={(e) => setVitalsForm({ ...vitalsForm, heartRate: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Respiratory Rate (/min)</label>
+                  <input
+                    type="number"
+                    value={vitalsForm.respiratoryRate}
+                    onChange={(e) => setVitalsForm({ ...vitalsForm, respiratoryRate: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* SpO2 & Temperature */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">SpO2 (%)</label>
+                  <input
+                    type="number"
+                    value={vitalsForm.oxygenSaturation}
+                    onChange={(e) => setVitalsForm({ ...vitalsForm, oxygenSaturation: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Temperature (°C)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={vitalsForm.temperature}
+                    onChange={(e) => setVitalsForm({ ...vitalsForm, temperature: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* Supplemental Oxygen */}
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={vitalsForm.supplementalOxygen}
+                    onChange={(e) => setVitalsForm({ ...vitalsForm, supplementalOxygen: e.target.checked })}
+                    className="rounded text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-sm text-gray-700">On Supplemental Oxygen</span>
+                </label>
+              </div>
+
+              {/* Consciousness */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Consciousness (AVPU)</label>
+                <select
+                  value={vitalsForm.consciousness}
+                  onChange={(e) => setVitalsForm({ ...vitalsForm, consciousness: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="alert">Alert</option>
+                  <option value="voice">Responds to Voice</option>
+                  <option value="pain">Responds to Pain</option>
+                  <option value="unresponsive">Unresponsive</option>
+                </select>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setShowVitalsModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRecordVitals}
+                  disabled={savingVitals}
+                  className="flex-1 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:shadow-lg disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {savingVitals ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Saving...
+                    </>
+                  ) : (
+                    'Save Vitals'
+                  )}
                 </button>
               </div>
             </div>
