@@ -247,10 +247,76 @@ export class LaboratoryService {
         labOrder: {
           include: {
             patient: { select: { id: true, firstName: true, lastName: true, mrn: true, email: true, phone: true, oderId: true } },
+            tests: {
+              include: {
+                labTest: true,
+              },
+            },
           },
         },
       },
     });
+
+    // ==================== AUTOMATIC STATUS TRANSITION ====================
+    // Professional lab workflow: ORDERED → IN_PROGRESS → COMPLETED
+
+    const labOrder = updatedTest.labOrder;
+
+    // Step 1: If order is ORDERED and this is the first result, change to IN_PROGRESS
+    if (labOrder.status === 'ORDERED' || labOrder.status === 'SAMPLE_COLLECTED' || labOrder.status === 'RECEIVED') {
+      await prisma.labOrder.update({
+        where: { id: labOrder.id },
+        data: { status: 'IN_PROGRESS' },
+      });
+      console.log(`[LAB STATUS] Order ${labOrder.orderNumber} transitioned: ${labOrder.status} → IN_PROGRESS (first result entered)`);
+    }
+
+    // Step 2: Check if ALL tests in the order now have results
+    const allTestsComplete = labOrder.tests.every(test => {
+      // If this is the test we just updated, check our new data
+      if (test.id === labOrderTestId) {
+        return true; // We just completed this one
+      }
+      // For other tests, check if they have a result
+      return test.status === 'COMPLETED' && (test.result || test.resultValue);
+    });
+
+    // Step 3: If all tests complete, change order to COMPLETED
+    if (allTestsComplete && labOrder.status !== 'COMPLETED') {
+      await prisma.labOrder.update({
+        where: { id: labOrder.id },
+        data: {
+          status: 'COMPLETED',
+          completedAt: new Date(),
+        },
+      });
+      console.log(`[LAB STATUS] Order ${labOrder.orderNumber} transitioned: IN_PROGRESS → COMPLETED (all tests finished)`);
+
+      // Send notification when all results are ready
+      try {
+        const testNames = labOrder.tests.map(t => t.labTest?.name || 'Test');
+        const hasCritical = labOrder.tests.some(t => t.isCritical);
+        const hasAbnormal = labOrder.tests.some(t => t.isAbnormal);
+
+        if (labOrder.patient.oderId) {
+          await notificationService.sendLabResultNotification({
+            labOrderId: labOrder.id,
+            orderNumber: labOrder.orderNumber,
+            patientName: `${labOrder.patient.firstName} ${labOrder.patient.lastName}`,
+            testNames,
+            hasCriticalResults: hasCritical,
+            hasAbnormalResults: hasAbnormal,
+            title: hasCritical ? 'Critical Lab Results Available' : 'Lab Results Ready',
+            message: hasCritical
+              ? `Your lab results for order ${labOrder.orderNumber} are ready and require immediate attention. Please contact your healthcare provider.`
+              : `Your lab results for order ${labOrder.orderNumber} are now available. You can view them in the patient portal.`,
+          });
+        }
+      } catch (error) {
+        console.error('[LAB NOTIFICATION] Failed to send completion notification:', error);
+      }
+    }
+    // ==================== END AUTOMATIC STATUS TRANSITION ====================
 
     // Send urgent alert for critical or abnormal values
     if (data.isCritical || data.isAbnormal) {
@@ -431,10 +497,48 @@ export class LaboratoryService {
                   oderId: true,
                 },
               },
+              tests: {
+                include: {
+                  labTest: true,
+                },
+              },
             },
           },
         },
       });
+
+      // ==================== AUTOMATIC STATUS TRANSITION (AI Upload) ====================
+      const labOrder = updatedTest.labOrder;
+
+      // Step 1: If order is ORDERED/SAMPLE_COLLECTED/RECEIVED, change to IN_PROGRESS
+      if (labOrder.status === 'ORDERED' || labOrder.status === 'SAMPLE_COLLECTED' || labOrder.status === 'RECEIVED') {
+        await prisma.labOrder.update({
+          where: { id: labOrder.id },
+          data: { status: 'IN_PROGRESS' },
+        });
+        logger.info(`[LAB STATUS] Order ${labOrder.orderNumber} transitioned: ${labOrder.status} → IN_PROGRESS (AI-extracted result)`);
+      }
+
+      // Step 2: Check if ALL tests in the order now have results
+      const allTestsComplete = labOrder.tests.every(testItem => {
+        if (testItem.id === labOrderTestId) {
+          return true; // We just completed this one
+        }
+        return testItem.status === 'COMPLETED' && (testItem.result || testItem.resultValue);
+      });
+
+      // Step 3: If all tests complete, change order to COMPLETED
+      if (allTestsComplete && labOrder.status !== 'COMPLETED') {
+        await prisma.labOrder.update({
+          where: { id: labOrder.id },
+          data: {
+            status: 'COMPLETED',
+            completedAt: new Date(),
+          },
+        });
+        logger.info(`[LAB STATUS] Order ${labOrder.orderNumber} transitioned: IN_PROGRESS → COMPLETED (all AI-extracted)`);
+      }
+      // ==================== END AUTOMATIC STATUS TRANSITION ====================
 
       // Step 5: Send notifications (critical/abnormal results + AI summary to doctor)
       const order = updatedTest.labOrder;
