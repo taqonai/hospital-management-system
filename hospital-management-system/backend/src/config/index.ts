@@ -52,11 +52,15 @@ export const config = {
   },
 
   email: {
+    // SendGrid (primary)
+    sendgridApiKey: process.env.SENDGRID_API_KEY || '',
+    sendgridFromEmail: process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_FROM || 'noreply@spetaar.ai',
+    // SMTP (fallback)
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
     port: parseInt(process.env.SMTP_PORT || '587', 10),
     user: process.env.SMTP_USER || '',
     pass: process.env.SMTP_PASS || '',
-    from: process.env.EMAIL_FROM || 'noreply@hospital.com',
+    from: process.env.EMAIL_FROM || 'noreply@spetaar.ai',
   },
 
   ai: {

@@ -1,9 +1,19 @@
+import sgMail from '@sendgrid/mail';
 import { SESClient, SendEmailCommand, SendEmailCommandInput } from '@aws-sdk/client-ses';
 import nodemailer, { Transporter } from 'nodemailer';
 import { config } from '../config';
 import logger from '../utils/logger';
 
-// Email configuration from environment variables
+// ── SendGrid (Primary) ──────────────────────────────────────────────
+const sendgridApiKey = process.env.SENDGRID_API_KEY || '';
+const isSendGridConfigured = (): boolean => !!sendgridApiKey;
+
+if (isSendGridConfigured()) {
+  sgMail.setApiKey(sendgridApiKey);
+  logger.info('SendGrid email service initialized (primary)');
+}
+
+// ── AWS SES (Fallback) ──────────────────────────────────────────────
 const sesConfig = {
   region: process.env.AWS_SES_REGION || process.env.AWS_REGION || 'us-east-1',
   accessKeyId: process.env.AWS_SES_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '',
@@ -11,14 +21,12 @@ const sesConfig = {
   fromEmail: process.env.AWS_SES_FROM_EMAIL || process.env.EMAIL_FROM || 'noreply@hospital.com',
 };
 
-// Check if SES is configured
 const isSESConfigured = (): boolean => {
   return !!(sesConfig.accessKeyId && sesConfig.secretAccessKey && sesConfig.region);
 };
 
-// Initialize SES client
 let sesClient: SESClient | null = null;
-if (isSESConfigured()) {
+if (!isSendGridConfigured() && isSESConfigured()) {
   sesClient = new SESClient({
     region: sesConfig.region,
     credentials: {
@@ -26,10 +34,10 @@ if (isSESConfigured()) {
       secretAccessKey: sesConfig.secretAccessKey,
     },
   });
-  logger.info('AWS SES email service initialized');
+  logger.info('AWS SES email service initialized (fallback)');
 }
 
-// Initialize Nodemailer transporter as fallback
+// ── SMTP (Last resort) ─────────────────────────────────────────────
 let smtpTransporter: Transporter | null = null;
 const initSMTPTransporter = (): Transporter | null => {
   if (config.email.host && config.email.user && config.email.pass) {
@@ -46,14 +54,17 @@ const initSMTPTransporter = (): Transporter | null => {
   return null;
 };
 
-if (!isSESConfigured()) {
+if (!isSendGridConfigured() && !isSESConfigured()) {
   smtpTransporter = initSMTPTransporter();
   if (smtpTransporter) {
     logger.info('SMTP email service initialized as fallback');
   } else {
-    logger.warn('No email service configured. Emails will not be sent.');
+    logger.warn('No email service configured (SendGrid / SES / SMTP). Emails will not be sent.');
   }
 }
+
+// From address — used by all providers
+const fromEmail = process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_FROM || 'noreply@spetaar.ai';
 
 // Email interfaces
 interface EmailOptions {
@@ -432,11 +443,40 @@ const welcomeEmailTemplate = (
 export async function sendEmail(options: EmailOptions): Promise<EmailResult> {
   const toAddresses = Array.isArray(options.to) ? options.to : [options.to];
 
-  // Try SES first
+  // ── 1. Try SendGrid first ────────────────────────────────────────
+  if (isSendGridConfigured()) {
+    try {
+      const msg: sgMail.MailDataRequired = {
+        to: toAddresses,
+        from: fromEmail,
+        subject: options.subject,
+        html: options.html,
+        ...(options.text && { text: options.text }),
+        ...(options.replyTo && { replyTo: options.replyTo }),
+        ...(options.cc && { cc: Array.isArray(options.cc) ? options.cc : [options.cc] }),
+        ...(options.bcc && { bcc: Array.isArray(options.bcc) ? options.bcc : [options.bcc] }),
+      };
+
+      const [response] = await sgMail.send(msg);
+
+      logger.info(`Email sent via SendGrid: ${options.subject} to ${toAddresses.join(', ')}`);
+
+      return {
+        success: true,
+        messageId: response.headers['x-message-id'] as string,
+      };
+    } catch (error: any) {
+      const errMsg = error?.response?.body?.errors?.[0]?.message || error?.message || 'Unknown error';
+      logger.error(`SendGrid email failed: ${errMsg}`);
+      // Fall through to SES fallback
+    }
+  }
+
+  // ── 2. Try SES fallback ──────────────────────────────────────────
   if (sesClient && isSESConfigured()) {
     try {
       const params: SendEmailCommandInput = {
-        Source: sesConfig.fromEmail,
+        Source: sesConfig.fromEmail || fromEmail,
         Destination: {
           ToAddresses: toAddresses,
           CcAddresses: options.cc ? (Array.isArray(options.cc) ? options.cc : [options.cc]) : undefined,
@@ -478,7 +518,7 @@ export async function sendEmail(options: EmailOptions): Promise<EmailResult> {
     }
   }
 
-  // Try SMTP fallback
+  // ── 3. Try SMTP last resort ──────────────────────────────────────
   if (!smtpTransporter) {
     smtpTransporter = initSMTPTransporter();
   }
@@ -486,7 +526,7 @@ export async function sendEmail(options: EmailOptions): Promise<EmailResult> {
   if (smtpTransporter) {
     try {
       const mailOptions = {
-        from: config.email.from,
+        from: fromEmail,
         to: toAddresses.join(', '),
         cc: options.cc ? (Array.isArray(options.cc) ? options.cc.join(', ') : options.cc) : undefined,
         bcc: options.bcc ? (Array.isArray(options.bcc) ? options.bcc.join(', ') : options.bcc) : undefined,
@@ -517,7 +557,7 @@ export async function sendEmail(options: EmailOptions): Promise<EmailResult> {
   logger.warn(`No email service available. Would have sent: ${options.subject} to ${toAddresses.join(', ')}`);
   return {
     success: false,
-    error: 'No email service configured',
+    error: 'No email service configured (SendGrid / SES / SMTP)',
   };
 }
 
@@ -764,11 +804,12 @@ export class EmailService {
 
   // Utility method to check if email service is configured
   isConfigured(): boolean {
-    return isSESConfigured() || !!smtpTransporter || !!initSMTPTransporter();
+    return isSendGridConfigured() || isSESConfigured() || !!smtpTransporter || !!initSMTPTransporter();
   }
 
   // Get the current email provider type
-  getProvider(): 'ses' | 'smtp' | 'none' {
+  getProvider(): 'sendgrid' | 'ses' | 'smtp' | 'none' {
+    if (isSendGridConfigured()) return 'sendgrid';
     if (isSESConfigured()) return 'ses';
     if (smtpTransporter || initSMTPTransporter()) return 'smtp';
     return 'none';
