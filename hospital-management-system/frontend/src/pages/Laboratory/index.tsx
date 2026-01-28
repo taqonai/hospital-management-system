@@ -467,6 +467,11 @@ export default function Laboratory() {
     }
   }, [page, statusFilter, search]);
 
+  // Reset page to 1 when search or status filter changes
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter]);
+
   // Initial fetch and polling for orders
   useEffect(() => {
     fetchOrders();

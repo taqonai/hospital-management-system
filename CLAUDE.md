@@ -63,6 +63,20 @@ npm run lint                 # ESLint
 # Note: No test suite configured for frontend yet
 ```
 
+### E2E Testing (Playwright)
+```bash
+cd hospital-management-system
+npx playwright test                    # Run all E2E tests
+npx playwright test tests/ipd-e2e.spec.ts  # Run specific test file
+npx playwright test --ui               # Run tests in UI mode
+npx playwright test --debug            # Run tests in debug mode
+npx playwright show-report             # View test report
+npx playwright codegen                 # Generate test code
+```
+
+Configuration: `playwright.config.ts` (baseURL: https://spetaar.ai)
+Test files: `tests/*.spec.ts`
+
 ### Mobile App (React Native/Expo)
 ```bash
 cd hospital-management-system/mobile
