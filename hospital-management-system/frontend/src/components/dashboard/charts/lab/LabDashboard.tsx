@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   BeakerIcon,
   ClockIcon,
@@ -15,6 +15,7 @@ import ChartCard from '../ChartCard';
 import { doughnutChartOptions, chartColors } from '../chartSetup';
 
 export default function LabDashboard() {
+  const navigate = useNavigate();
   const {
     labStats,
     pendingOrders,
@@ -59,6 +60,7 @@ export default function LabDashboard() {
           color="blue"
           subtitle="Today"
           isLoading={isLoading}
+          onClick={() => navigate('/laboratory?tab=orders')}
         />
         <KPICard
           title="Pending"
@@ -67,6 +69,7 @@ export default function LabDashboard() {
           color="amber"
           subtitle="Awaiting processing"
           isLoading={isLoading}
+          onClick={() => navigate('/laboratory?tab=orders')}
         />
         <KPICard
           title="Completed"
@@ -75,6 +78,7 @@ export default function LabDashboard() {
           color="emerald"
           subtitle="Today"
           isLoading={isLoading}
+          onClick={() => navigate('/laboratory?tab=orders')}
         />
         <KPICard
           title="Critical Results"
@@ -83,6 +87,7 @@ export default function LabDashboard() {
           color="red"
           subtitle="Need attention"
           isLoading={isLoading}
+          onClick={() => navigate('/laboratory?tab=critical')}
         />
       </div>
 
@@ -100,7 +105,7 @@ export default function LabDashboard() {
               </div>
             </div>
             <Link
-              to="/laboratory/critical"
+              to="/laboratory?tab=critical"
               className="text-sm text-red-600 hover:text-red-700 font-medium"
             >
               View all
@@ -117,7 +122,7 @@ export default function LabDashboard() {
                   </p>
                 </div>
                 <Link
-                  to={`/laboratory/results/${result.id}`}
+                  to="/laboratory?tab=critical"
                   className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
                 >
                   Review
@@ -159,7 +164,7 @@ export default function LabDashboard() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Pending Orders</h3>
             <Link
-              to="/laboratory/pending"
+              to="/laboratory?tab=orders"
               className="text-sm text-blue-600 hover:text-blue-700 font-medium"
             >
               View all
@@ -177,10 +182,10 @@ export default function LabDashboard() {
                   <p className="text-xs text-gray-500">{order.patientName}</p>
                 </div>
                 <Link
-                  to={`/laboratory/samples/collect/${order.id}`}
+                  to="/laboratory?tab=orders"
                   className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium"
                 >
-                  Collect
+                  View
                 </Link>
               </div>
             ))}
@@ -198,50 +203,50 @@ export default function LabDashboard() {
       {/* Quick Actions */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Link
-          to="/laboratory/samples/collect"
+          to="/laboratory?tab=sample-tracking"
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-blue-500 group-hover:scale-110 transition-transform">
             <BeakerIcon className="h-5 w-5 text-white" />
           </div>
           <div>
-            <p className="font-semibold text-gray-900">Collect Sample</p>
-            <p className="text-xs text-gray-500">Start collection</p>
+            <p className="font-semibold text-gray-900">Sample Tracking</p>
+            <p className="text-xs text-gray-500">Track samples</p>
           </div>
         </Link>
         <Link
-          to="/laboratory/results"
+          to="/laboratory?tab=results"
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-emerald-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-emerald-500 group-hover:scale-110 transition-transform">
             <DocumentTextIcon className="h-5 w-5 text-white" />
           </div>
           <div>
-            <p className="font-semibold text-gray-900">Enter Results</p>
-            <p className="text-xs text-gray-500">Record values</p>
+            <p className="font-semibold text-gray-900">Results Entry</p>
+            <p className="text-xs text-gray-500">Enter results</p>
           </div>
         </Link>
         <Link
-          to="/laboratory/pending"
+          to="/laboratory?tab=orders"
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-amber-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-amber-500 group-hover:scale-110 transition-transform">
             <ClockIcon className="h-5 w-5 text-white" />
           </div>
           <div>
-            <p className="font-semibold text-gray-900">Pending</p>
-            <p className="text-xs text-gray-500">View queue</p>
+            <p className="font-semibold text-gray-900">Lab Orders</p>
+            <p className="text-xs text-gray-500">View all orders</p>
           </div>
         </Link>
         <Link
-          to="/laboratory/critical"
+          to="/laboratory?tab=critical"
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-red-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-red-500 group-hover:scale-110 transition-transform">
             <ExclamationTriangleIcon className="h-5 w-5 text-white" />
           </div>
           <div>
-            <p className="font-semibold text-gray-900">Critical</p>
+            <p className="font-semibold text-gray-900">Critical Values</p>
             <p className="text-xs text-gray-500">Review alerts</p>
           </div>
         </Link>

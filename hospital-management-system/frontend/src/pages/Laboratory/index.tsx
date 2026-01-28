@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   BeakerIcon,
   PlusIcon,
@@ -744,7 +745,14 @@ function NewLabOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
 }
 
 export default function Laboratory() {
-  const [activeTab, setActiveTab] = useState<'orders' | 'results' | 'critical' | 'sample-tracking'>('orders');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Initialize activeTab from URL query param, default to 'orders'
+  const tabFromUrl = searchParams.get('tab') as 'orders' | 'results' | 'critical' | 'sample-tracking' | null;
+  const validTabs = ['orders', 'results', 'critical', 'sample-tracking'];
+  const initialTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : 'orders';
+
+  const [activeTab, setActiveTab] = useState<'orders' | 'results' | 'critical' | 'sample-tracking'>(initialTab);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [labOrders, setLabOrders] = useState<LabOrder[]>([]);
@@ -769,6 +777,15 @@ export default function Laboratory() {
   const tabsRef = useRef<HTMLDivElement>(null);
 
   const isAIOnline = healthStatus?.status === 'connected';
+
+  // Update URL when tab changes
+  useEffect(() => {
+    if (activeTab !== 'orders') {
+      setSearchParams({ tab: activeTab }, { replace: true });
+    } else {
+      setSearchParams({}, { replace: true });
+    }
+  }, [activeTab, setSearchParams]);
 
   // Toggle expand/collapse for order details
   const toggleExpand = (orderId: string) => {
