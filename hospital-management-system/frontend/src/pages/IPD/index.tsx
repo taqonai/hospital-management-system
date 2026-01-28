@@ -280,16 +280,20 @@ function NewAdmissionModal({ onClose, onSuccess, wards }: { onClose: () => void;
       toast.error('Please select a bed');
       return;
     }
+    if (!admissionReason.trim()) {
+      toast.error('Please provide admission reason');
+      return;
+    }
 
     setLoading(true);
     try {
       await ipdApi.createAdmission({
         patientId: selectedPatient.id,
-        attendingDoctorId: selectedDoctor,
+        admittingDoctorId: selectedDoctor,
         bedId: selectedBed,
         admissionType,
-        admissionReason: admissionReason || undefined,
-        diagnosis: diagnosis || undefined,
+        chiefComplaint: admissionReason,
+        diagnosis: diagnosis ? [diagnosis] : undefined,
       });
       toast.success('Patient admitted successfully');
       onSuccess();
