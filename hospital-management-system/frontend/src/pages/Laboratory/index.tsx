@@ -433,28 +433,41 @@ export default function Laboratory() {
   const [totalPages, setTotalPages] = useState(1);
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+  const [bookingTicketData, setBookingTicketData] = useState<any>(null);
+  const [loadingBookingTicket, setLoadingBookingTicket] = useState(false);
+  const [bookingError, setBookingError] = useState<Error | null>(null);
   const [selectedOrderForResults, setSelectedOrderForResults] = useState<{ orderId: string; testId: string; testName: string; patientName: string } | null>(null);
   const { data: healthStatus } = useAIHealth();
   const tabsRef = useRef<HTMLDivElement>(null);
 
   const isAIOnline = healthStatus?.status === 'connected';
 
-  // Fetch booking ticket data for selected appointment
-  const { data: bookingTicketData, isLoading: loadingBookingTicket, error: bookingError, refetch: refetchBookingTicket } = useBookingData(
-    selectedBookingId,
-    15000, // Poll every 15 seconds
-    !!selectedBookingId
-  );
+  // Handle View Booking - direct API call instead of hook
+  const handleViewBooking = useCallback(async (appointmentId: string) => {
+    console.log('[Laboratory] Opening booking for appointment:', appointmentId);
+    setSelectedBookingId(appointmentId);
+    setLoadingBookingTicket(true);
+    setBookingError(null);
 
-  // Debug logging
-  useEffect(() => {
-    if (selectedBookingId) {
-      console.log('[Laboratory] Selected Booking ID:', selectedBookingId);
-      console.log('[Laboratory] Loading:', loadingBookingTicket);
-      console.log('[Laboratory] Data:', bookingTicketData);
-      console.log('[Laboratory] Error:', bookingError);
+    try {
+      const response = await opdApi.getBookingTicket(appointmentId);
+      console.log('[Laboratory] Booking data loaded:', response.data);
+      setBookingTicketData(response.data.data);
+    } catch (error: any) {
+      console.error('[Laboratory] Failed to load booking:', error);
+      setBookingError(error);
+      toast.error('Failed to load booking details');
+    } finally {
+      setLoadingBookingTicket(false);
     }
-  }, [selectedBookingId, loadingBookingTicket, bookingTicketData, bookingError]);
+  }, []);
+
+  // Refresh booking data
+  const refetchBookingTicket = useCallback(async () => {
+    if (selectedBookingId) {
+      await handleViewBooking(selectedBookingId);
+    }
+  }, [selectedBookingId, handleViewBooking]);
 
   // Fetch orders function with polling support
   const fetchOrders = useCallback(async (showLoading = true) => {
@@ -909,7 +922,7 @@ export default function Laboratory() {
                             })()}
                             {order.consultation?.appointmentId && (
                               <button
-                                onClick={() => setSelectedBookingId(order.consultation!.appointmentId!)}
+                                onClick={() => handleViewBooking(order.consultation!.appointmentId!)}
                                 className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 transition-all"
                               >
                                 <EyeIcon className="h-3.5 w-3.5" />
@@ -1041,7 +1054,11 @@ export default function Laboratory() {
       {selectedBookingId && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setSelectedBookingId(null)} />
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => {
+              setSelectedBookingId(null);
+              setBookingTicketData(null);
+              setBookingError(null);
+            }} />
             <div className="relative w-full max-w-3xl">
               {bookingError ? (
                 <div className="bg-white rounded-lg shadow-lg p-12 text-center">
@@ -1058,7 +1075,11 @@ export default function Laboratory() {
                       Try Again
                     </button>
                     <button
-                      onClick={() => setSelectedBookingId(null)}
+                      onClick={() => {
+                        setSelectedBookingId(null);
+                        setBookingTicketData(null);
+                        setBookingError(null);
+                      }}
                       className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50"
                     >
                       Close
@@ -1070,7 +1091,11 @@ export default function Laboratory() {
                   data={bookingTicketData}
                   isLoading={loadingBookingTicket}
                   onRefresh={() => refetchBookingTicket()}
-                  onClose={() => setSelectedBookingId(null)}
+                  onClose={() => {
+                    setSelectedBookingId(null);
+                    setBookingTicketData(null);
+                    setBookingError(null);
+                  }}
                   showActions={true}
                 />
               )}
