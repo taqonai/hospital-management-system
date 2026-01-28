@@ -15,6 +15,7 @@ import {
   BellAlertIcon,
   BuildingOffice2Icon,
   MagnifyingGlassIcon,
+  UserPlusIcon,
 } from '@heroicons/react/24/outline';
 import { useAIHealth } from '../../hooks/useAI';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -131,6 +132,28 @@ function NewAdmissionModal({ onClose, onSuccess, wards }: { onClose: () => void;
   const [loadingDoctors, setLoadingDoctors] = useState(true);
   const [loadingBeds, setLoadingBeds] = useState(true);
 
+  // Patient mode: search existing or register new
+  const [patientMode, setPatientMode] = useState<'search' | 'register'>('search');
+  const [registering, setRegistering] = useState(false);
+  const [regForm, setRegForm] = useState({
+    firstName: '',
+    lastName: '',
+    dateOfBirth: '',
+    gender: '',
+    phone: '',
+    email: '',
+    address: '',
+    city: '',
+    state: '',
+    zipCode: '',
+    bloodGroup: '',
+    nationality: '',
+  });
+
+  const updateRegForm = (field: string, value: string) => {
+    setRegForm(prev => ({ ...prev, [field]: value }));
+  };
+
   // Fetch doctors
   useEffect(() => {
     const fetchDoctors = async () => {
@@ -189,6 +212,53 @@ function NewAdmissionModal({ onClose, onSuccess, wards }: { onClose: () => void;
     return () => clearTimeout(debounce);
   }, [searchQuery]);
 
+  // Handle inline patient registration
+  const handleRegisterPatient = async () => {
+    const { firstName, lastName, dateOfBirth, gender, phone, address, city, state, zipCode } = regForm;
+    if (!firstName || !lastName || !dateOfBirth || !gender || !phone || !address || !city || !state || !zipCode) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    if (phone.length < 10) {
+      toast.error('Phone number must be at least 10 digits');
+      return;
+    }
+
+    setRegistering(true);
+    try {
+      const payload: Record<string, string> = {
+        firstName: regForm.firstName,
+        lastName: regForm.lastName,
+        dateOfBirth: new Date(regForm.dateOfBirth).toISOString(),
+        gender: regForm.gender,
+        phone: regForm.phone,
+        address: regForm.address,
+        city: regForm.city,
+        state: regForm.state,
+        zipCode: regForm.zipCode,
+      };
+      if (regForm.email) payload.email = regForm.email;
+      if (regForm.bloodGroup) payload.bloodGroup = regForm.bloodGroup;
+      if (regForm.nationality) payload.nationality = regForm.nationality;
+
+      const response = await patientApi.create(payload);
+      const newPatient = response.data.data;
+      toast.success(`Patient registered successfully — MRN: ${newPatient.mrn}`);
+      setSelectedPatient({
+        id: newPatient.id,
+        firstName: newPatient.firstName,
+        lastName: newPatient.lastName,
+        mrn: newPatient.mrn,
+      });
+      setPatientMode('search');
+    } catch (error: any) {
+      console.error('Failed to register patient:', error);
+      toast.error(error.response?.data?.message || 'Failed to register patient');
+    } finally {
+      setRegistering(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPatient) {
@@ -232,6 +302,8 @@ function NewAdmissionModal({ onClose, onSuccess, wards }: { onClose: () => void;
     return acc;
   }, {} as Record<string, Bed[]>);
 
+  const inputClass = "w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 text-sm";
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex min-h-full items-center justify-center p-4">
@@ -243,7 +315,7 @@ function NewAdmissionModal({ onClose, onSuccess, wards }: { onClose: () => void;
             <p className="text-indigo-100 text-sm">Admit a patient to the inpatient department</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+          <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
             {/* Patient Selection */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -266,39 +338,194 @@ function NewAdmissionModal({ onClose, onSuccess, wards }: { onClose: () => void;
                   </button>
                 </div>
               ) : (
-                <div className="relative">
-                  <div className="relative">
-                    <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search by name or MRN..."
-                      className="w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
-                    />
-                    {searching && (
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                        <ArrowPathIcon className="h-5 w-5 animate-spin text-gray-400" />
-                      </div>
-                    )}
+                <div>
+                  {/* Mode Toggle Tabs */}
+                  <div className="flex gap-2 mb-3">
+                    <button
+                      type="button"
+                      onClick={() => setPatientMode('search')}
+                      className={clsx(
+                        'flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium text-sm transition-all border',
+                        patientMode === 'search'
+                          ? 'bg-indigo-500 text-white border-indigo-500'
+                          : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                      )}
+                    >
+                      <MagnifyingGlassIcon className="h-4 w-4" />
+                      Search Existing
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPatientMode('register')}
+                      className={clsx(
+                        'flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium text-sm transition-all border',
+                        patientMode === 'register'
+                          ? 'bg-indigo-500 text-white border-indigo-500'
+                          : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                      )}
+                    >
+                      <UserPlusIcon className="h-4 w-4" />
+                      Register New
+                    </button>
                   </div>
-                  {patients.length > 0 && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
-                      {patients.map((patient) => (
-                        <button
-                          key={patient.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedPatient(patient);
-                            setSearchQuery('');
-                            setPatients([]);
-                          }}
-                          className="w-full text-left px-4 py-2 hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl"
-                        >
-                          <span className="font-medium">{patient.firstName} {patient.lastName}</span>
-                          <span className="ml-2 text-sm text-gray-500">MRN: {patient.mrn}</span>
-                        </button>
-                      ))}
+
+                  {/* Search Existing Mode */}
+                  {patientMode === 'search' && (
+                    <div className="relative">
+                      <div className="relative">
+                        <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                        <input
+                          type="text"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          placeholder="Search by name or MRN..."
+                          className="w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
+                        />
+                        {searching && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <ArrowPathIcon className="h-5 w-5 animate-spin text-gray-400" />
+                          </div>
+                        )}
+                      </div>
+                      {patients.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                          {patients.map((patient) => (
+                            <button
+                              key={patient.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedPatient(patient);
+                                setSearchQuery('');
+                                setPatients([]);
+                              }}
+                              className="w-full text-left px-4 py-2 hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl"
+                            >
+                              <span className="font-medium">{patient.firstName} {patient.lastName}</span>
+                              <span className="ml-2 text-sm text-gray-500">MRN: {patient.mrn}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {/* No results prompt */}
+                      {!searching && patients.length === 0 && searchQuery.trim().length >= 3 && (
+                        <div className="mt-2 flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                          <span className="text-sm text-amber-800">No patient found. Register new?</span>
+                          <button
+                            type="button"
+                            onClick={() => setPatientMode('register')}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-indigo-500 hover:bg-indigo-600 rounded-lg transition-colors"
+                          >
+                            <UserPlusIcon className="h-4 w-4" />
+                            Register
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Register New Mode */}
+                  {patientMode === 'register' && (
+                    <div className="space-y-3 p-4 bg-gray-50 border border-gray-200 rounded-xl">
+                      {/* Row 1: First Name | Last Name */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">First Name <span className="text-red-500">*</span></label>
+                          <input type="text" value={regForm.firstName} onChange={(e) => updateRegForm('firstName', e.target.value)} placeholder="First name" className={inputClass} required />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Last Name <span className="text-red-500">*</span></label>
+                          <input type="text" value={regForm.lastName} onChange={(e) => updateRegForm('lastName', e.target.value)} placeholder="Last name" className={inputClass} required />
+                        </div>
+                      </div>
+                      {/* Row 2: Date of Birth | Gender */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Date of Birth <span className="text-red-500">*</span></label>
+                          <input type="date" value={regForm.dateOfBirth} onChange={(e) => updateRegForm('dateOfBirth', e.target.value)} className={inputClass} required />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Gender <span className="text-red-500">*</span></label>
+                          <select value={regForm.gender} onChange={(e) => updateRegForm('gender', e.target.value)} className={inputClass} required>
+                            <option value="">Select gender</option>
+                            <option value="MALE">Male</option>
+                            <option value="FEMALE">Female</option>
+                            <option value="OTHER">Other</option>
+                          </select>
+                        </div>
+                      </div>
+                      {/* Row 3: Phone | Email */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Phone <span className="text-red-500">*</span></label>
+                          <input type="tel" value={regForm.phone} onChange={(e) => updateRegForm('phone', e.target.value)} placeholder="Phone number" className={inputClass} required />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
+                          <input type="email" value={regForm.email} onChange={(e) => updateRegForm('email', e.target.value)} placeholder="Email (optional)" className={inputClass} />
+                        </div>
+                      </div>
+                      {/* Row 4: Address | City */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Address <span className="text-red-500">*</span></label>
+                          <input type="text" value={regForm.address} onChange={(e) => updateRegForm('address', e.target.value)} placeholder="Street address" className={inputClass} required />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">City <span className="text-red-500">*</span></label>
+                          <input type="text" value={regForm.city} onChange={(e) => updateRegForm('city', e.target.value)} placeholder="City" className={inputClass} required />
+                        </div>
+                      </div>
+                      {/* Row 5: State | Zip Code */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">State <span className="text-red-500">*</span></label>
+                          <input type="text" value={regForm.state} onChange={(e) => updateRegForm('state', e.target.value)} placeholder="State" className={inputClass} required />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Zip Code <span className="text-red-500">*</span></label>
+                          <input type="text" value={regForm.zipCode} onChange={(e) => updateRegForm('zipCode', e.target.value)} placeholder="Zip code" className={inputClass} required />
+                        </div>
+                      </div>
+                      {/* Row 6: Blood Group | Nationality */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Blood Group</label>
+                          <select value={regForm.bloodGroup} onChange={(e) => updateRegForm('bloodGroup', e.target.value)} className={inputClass}>
+                            <option value="">Select (optional)</option>
+                            <option value="A_POSITIVE">A+</option>
+                            <option value="A_NEGATIVE">A-</option>
+                            <option value="B_POSITIVE">B+</option>
+                            <option value="B_NEGATIVE">B-</option>
+                            <option value="AB_POSITIVE">AB+</option>
+                            <option value="AB_NEGATIVE">AB-</option>
+                            <option value="O_POSITIVE">O+</option>
+                            <option value="O_NEGATIVE">O-</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Nationality</label>
+                          <input type="text" value={regForm.nationality} onChange={(e) => updateRegForm('nationality', e.target.value)} placeholder="Nationality (optional)" className={inputClass} />
+                        </div>
+                      </div>
+                      {/* Register & Select Button */}
+                      <button
+                        type="button"
+                        onClick={handleRegisterPatient}
+                        disabled={registering}
+                        className="w-full mt-2 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-500 text-white font-semibold text-sm hover:from-indigo-600 hover:to-violet-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {registering ? (
+                          <>
+                            <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                            Registering...
+                          </>
+                        ) : (
+                          <>
+                            <UserPlusIcon className="h-4 w-4" />
+                            Register &amp; Select
+                          </>
+                        )}
+                      </button>
                     </div>
                   )}
                 </div>
