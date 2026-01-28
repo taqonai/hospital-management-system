@@ -56,7 +56,7 @@ export default function Notifications() {
   const [selectedType, setSelectedType] = useState<string>('');
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
 
-  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN' || user?.role === 'MANAGER' || user?.role === 'HOSPITAL_ADMIN';
+  const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'HOSPITAL_ADMIN';
 
   const fetchNotifications = async (page = 1) => {
     setLoading(true);
