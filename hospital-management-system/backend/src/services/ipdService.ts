@@ -20,7 +20,23 @@ export class IPDService {
     return prisma.ward.findMany({
       where: { isActive: true },
       include: {
-        beds: { include: { admissions: { where: { status: 'ADMITTED' } } } },
+        beds: {
+          include: {
+            admissions: {
+              where: { status: 'ADMITTED' },
+              include: {
+                patient: {
+                  select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    mrn: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
   }

@@ -1559,13 +1559,20 @@ export default function IPD() {
   };
 
   const handleBedClick = (bed: Ward['beds'][0]) => {
+    console.log('Bed clicked:', bed);
     // Only handle clicks on occupied beds with an admission
     if (bed.status === 'OCCUPIED' && bed.admissions && bed.admissions.length > 0) {
       const currentAdmission = bed.admissions.find(a => a.status === 'ADMITTED');
+      console.log('Current admission found:', currentAdmission);
       if (currentAdmission) {
         setSelectedBedAdmission(currentAdmission.id);
         setShowPatientDrawer(true);
       }
+    } else {
+      console.log('Bed not occupied or no admissions:', {
+        status: bed.status,
+        admissions: bed.admissions,
+      });
     }
   };
 
