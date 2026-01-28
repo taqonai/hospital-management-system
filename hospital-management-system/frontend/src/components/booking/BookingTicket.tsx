@@ -69,6 +69,20 @@ export function BookingTicket({
 }: BookingTicketProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'notes'>('overview');
 
+  // Show loading state if data is not available yet
+  if (!data || isLoading) {
+    return (
+      <div className={clsx('bg-white rounded-lg shadow-lg overflow-hidden', className)}>
+        <div className="flex items-center justify-center p-12">
+          <div className="text-center">
+            <ArrowPathIcon className="h-12 w-12 animate-spin text-blue-500 mx-auto mb-4" />
+            <p className="text-gray-500">Loading booking details...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const { appointment, patient, doctor, vitals, riskPrediction, consultation, labOrders, timeline } = data;
 
   const hasAllergies = patient.allergies && patient.allergies.length > 0;
