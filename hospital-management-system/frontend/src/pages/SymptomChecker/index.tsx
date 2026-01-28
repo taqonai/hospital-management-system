@@ -527,7 +527,7 @@ export default function SymptomChecker() {
                 // Redirect to homepage booking section (public booking for patients)
                 window.location.href = `/#booking?department=${encodeURIComponent(result.recommendedDepartment || '')}`;
               }}
-              className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-medium hover:shadow-lg transition-all flex items-center justify-center gap-2 text-sm"
+              className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-medium hover:shadow-lg transition-all flex items-center justify-center gap-2 text-sm shadow-lg shadow-purple-500/25"
             >
               <CalendarDaysIcon className="w-4 h-4" />Book Appointment
             </button>
@@ -598,7 +598,7 @@ export default function SymptomChecker() {
           <div className="text-center">
             <button
               onClick={startSession}
-              className="px-8 py-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-medium text-lg hover:shadow-xl transition-all inline-flex items-center gap-3"
+              className="px-8 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-medium text-lg hover:shadow-xl transition-all inline-flex items-center gap-3 shadow-lg shadow-purple-500/25"
             >
               <ChatBubbleLeftRightIcon className="w-6 h-6" />
               Start Symptom Check
@@ -629,8 +629,8 @@ export default function SymptomChecker() {
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl">
-              <SparklesIcon className="w-5 h-5 text-white" />
+            <div className="p-2 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl shadow-lg shadow-purple-500/25">
+              <SparklesIcon className="w-5 w-5 text-white" />
             </div>
             <div>
               <h1 className="text-lg font-bold text-gray-900">AI Symptom Checker</h1>

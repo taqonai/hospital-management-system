@@ -615,7 +615,7 @@ export default function SymptomCheckerChat({ onComplete, onBookAppointment, auto
     return (
       <div className="flex flex-col h-full">
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-          <div className="inline-flex p-4 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl mb-6 shadow-lg">
+          <div className="inline-flex p-4 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl mb-6 shadow-lg shadow-purple-500/25">
             <SparklesIcon className="w-10 h-10 text-white" />
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-3">AI Symptom Checker</h2>
@@ -666,7 +666,7 @@ export default function SymptomCheckerChat({ onComplete, onBookAppointment, auto
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl">
+          <div className="p-2 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl shadow-lg shadow-purple-500/25">
             <SparklesIcon className="w-5 h-5 text-white" />
           </div>
           <div>

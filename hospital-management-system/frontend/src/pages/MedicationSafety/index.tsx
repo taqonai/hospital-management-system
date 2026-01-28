@@ -655,12 +655,12 @@ export default function MedicationSafety() {
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="p-3 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30">
+              <div className="p-3 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/30">
                 <ShieldCheckIcon className="h-8 w-8" />
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Medication Safety</h1>
-                <p className="text-sm text-gray-500">5 Rights Verification & Administration</p>
+                <p className="text-sm text-gray-500">AI-Powered 5 Rights Verification & Administration</p>
               </div>
             </div>
 
@@ -701,7 +701,7 @@ export default function MedicationSafety() {
               </button>
               <button
                 onClick={() => { setScannerType('medication'); setShowScanner(true); }}
-                className="px-4 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:from-blue-600 hover:to-indigo-700 transition-colors shadow-lg shadow-blue-500/30 flex items-center gap-2 text-sm font-medium"
+                className="px-4 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:from-purple-700 hover:to-indigo-700 transition-colors shadow-lg shadow-purple-500/30 flex items-center gap-2 text-sm font-medium"
               >
                 <BeakerIcon className="h-5 w-5" />
                 Scan Medication

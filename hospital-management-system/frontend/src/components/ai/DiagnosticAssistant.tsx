@@ -237,14 +237,14 @@ export default function DiagnosticAssistant({
   return (
     <div className={`bg-white rounded-xl border border-gray-200 shadow-sm ${className}`}>
       {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-t-xl">
+      <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-t-xl">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-white/20 rounded-lg">
             <SparklesIcon className="h-6 w-6 text-white" />
           </div>
           <div>
             <h3 className="text-lg font-bold text-white">AI Diagnostic Assistant</h3>
-            <p className="text-sm text-blue-100">Enter symptoms for AI-powered analysis</p>
+            <p className="text-sm text-purple-100">Enter symptoms for AI-powered analysis</p>
           </div>
         </div>
       </div>
@@ -276,11 +276,11 @@ export default function DiagnosticAssistant({
               onChange={(e) => setSymptomInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Type a symptom and press Enter..."
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
             />
             <button
               onClick={() => symptomInput && addSymptom(symptomInput)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-purple-600 hover:bg-purple-50 rounded-lg"
             >
               <PlusIcon className="h-5 w-5" />
             </button>
@@ -306,10 +306,10 @@ export default function DiagnosticAssistant({
               {symptoms.map((symptom) => (
                 <span
                   key={symptom}
-                  className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm"
+                  className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm"
                 >
                   {symptom}
-                  <button onClick={() => removeSymptom(symptom)} className="hover:text-blue-900">
+                  <button onClick={() => removeSymptom(symptom)} className="hover:text-purple-900">
                     <XMarkIcon className="h-4 w-4" />
                   </button>
                 </span>
@@ -325,7 +325,7 @@ export default function DiagnosticAssistant({
                 <button
                   key={s}
                   onClick={() => addSymptom(s)}
-                  className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-blue-100 hover:text-blue-600 transition-colors"
+                  className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-purple-100 hover:text-purple-600 transition-colors"
                 >
                   + {s}
                 </button>
@@ -338,10 +338,10 @@ export default function DiagnosticAssistant({
         <button
           onClick={analyzeSymptoms}
           disabled={loading || symptoms.length === 0}
-          className={`w-full py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${
+          className={`w-full py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2 shadow-lg ${
             loading || symptoms.length === 0
               ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-              : 'bg-blue-600 text-white hover:bg-blue-700'
+              : 'bg-purple-600 text-white hover:bg-purple-700 shadow-purple-500/25'
           }`}
         >
           {loading ? (

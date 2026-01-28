@@ -252,8 +252,8 @@ export default function AIAssistant() {
           className={clsx(
             'p-4 rounded-xl border-2 transition-all',
             activeTab === 'diagnosis'
-              ? 'border-purple-500 bg-purple-50'
-              : 'border-gray-200 hover:border-gray-300'
+              ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-200'
+              : 'border-gray-200 hover:border-purple-300'
           )}
         >
           <div className="flex items-center gap-3">
@@ -274,8 +274,8 @@ export default function AIAssistant() {
           className={clsx(
             'p-4 rounded-xl border-2 transition-all',
             activeTab === 'risk'
-              ? 'border-purple-500 bg-purple-50'
-              : 'border-gray-200 hover:border-gray-300'
+              ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-200'
+              : 'border-gray-200 hover:border-purple-300'
           )}
         >
           <div className="flex items-center gap-3">
@@ -296,8 +296,8 @@ export default function AIAssistant() {
           className={clsx(
             'p-4 rounded-xl border-2 transition-all',
             activeTab === 'imaging'
-              ? 'border-purple-500 bg-purple-50'
-              : 'border-gray-200 hover:border-gray-300'
+              ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-200'
+              : 'border-gray-200 hover:border-purple-300'
           )}
         >
           <div className="flex items-center gap-3">
@@ -459,7 +459,7 @@ export default function AIAssistant() {
                     className={clsx(
                       'flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all',
                       inputMode === 'upload'
-                        ? 'bg-purple-500 text-white'
+                        ? 'bg-purple-600 text-white'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     )}
                   >
@@ -471,7 +471,7 @@ export default function AIAssistant() {
                     className={clsx(
                       'flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all',
                       inputMode === 'url'
-                        ? 'bg-purple-500 text-white'
+                        ? 'bg-purple-600 text-white'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     )}
                   >

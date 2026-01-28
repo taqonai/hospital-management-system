@@ -259,7 +259,7 @@ export default function HealthAssistant() {
                 <div
                   className={`max-w-[80%] rounded-2xl p-4 ${
                     message.role === 'user'
-                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white'
+                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white'
                       : 'bg-gray-100 text-gray-900'
                   }`}
                 >
