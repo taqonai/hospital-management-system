@@ -139,6 +139,10 @@ export default function Settings() {
         const response = await patientPortalApi.getProfile();
         const profile = response.data?.data || response.data;
         if (profile) {
+          // Normalize dateOfBirth to YYYY-MM-DD for date input
+          if (profile.dateOfBirth && profile.dateOfBirth.includes('T')) {
+            profile.dateOfBirth = profile.dateOfBirth.split('T')[0];
+          }
           setProfileForm(profile);
           // Sync photo/profile to localStorage for sidebar/header
           try {
@@ -448,7 +452,7 @@ export default function Settings() {
                       </h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">First Name <span className="text-red-500">*</span></label>
                           <input
                             type="text"
                             value={profileForm.firstName}
@@ -458,7 +462,7 @@ export default function Settings() {
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Last Name <span className="text-red-500">*</span></label>
                           <input
                             type="text"
                             value={profileForm.lastName}
