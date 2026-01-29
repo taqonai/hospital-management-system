@@ -258,8 +258,23 @@ export default function AppointmentForm() {
   };
 
   const isLoading = createMutation.isPending || updateMutation.isPending;
-  const patients = patientsData?.data || [];
-  const doctors = doctorsData?.data || [];
+  const rawPatients = patientsData?.data || [];
+  const rawDoctors = doctorsData?.data || [];
+
+  // In edit mode, ensure the appointment's patient and doctor are always in the list
+  const patients = (() => {
+    if (isEditMode && appointmentData?.patient && !rawPatients.find((p: any) => p.id === appointmentData.patientId)) {
+      return [appointmentData.patient, ...rawPatients];
+    }
+    return rawPatients;
+  })();
+
+  const doctors = (() => {
+    if (isEditMode && appointmentData?.doctor && !rawDoctors.find((d: any) => d.id === appointmentData.doctorId)) {
+      return [appointmentData.doctor, ...rawDoctors];
+    }
+    return rawDoctors;
+  })();
 
   if (isEditMode && loadingAppointment) {
     return (
@@ -303,6 +318,22 @@ export default function AppointmentForm() {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Select Patient <span className="text-red-500">*</span>
             </label>
+            {/* Show selected patient in edit mode */}
+            {isEditMode && appointmentData?.patient && formData.patientId && (
+              <div className="mb-4 p-4 rounded-lg border-2 border-blue-500 bg-blue-50">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-medium">
+                    {appointmentData.patient.firstName[0]}{appointmentData.patient.lastName[0]}
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-gray-900">{appointmentData.patient.firstName} {appointmentData.patient.lastName}</p>
+                    <p className="text-sm text-gray-500">{appointmentData.patient.mrn}</p>
+                  </div>
+                  <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">Selected</span>
+                </div>
+              </div>
+            )}
+
             <input
               type="text"
               placeholder="Search patients by name or MRN..."
@@ -352,6 +383,24 @@ export default function AppointmentForm() {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Select Doctor <span className="text-red-500">*</span>
             </label>
+            {/* Show selected doctor in edit mode */}
+            {isEditMode && appointmentData?.doctor && formData.doctorId && (
+              <div className="mb-4 p-4 rounded-lg border-2 border-green-500 bg-green-50">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-green-600 flex items-center justify-center text-white font-medium">
+                    {(appointmentData.doctor.user?.firstName || 'D')[0]}
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-gray-900">
+                      Dr. {appointmentData.doctor.user?.firstName} {appointmentData.doctor.user?.lastName}
+                    </p>
+                    <p className="text-sm text-gray-500">{appointmentData.doctor.specialization}</p>
+                  </div>
+                  <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">Selected</span>
+                </div>
+              </div>
+            )}
+
             <input
               type="text"
               placeholder="Search doctors by name or specialization..."
