@@ -173,10 +173,10 @@ export default function DoctorDashboard() {
                       </div>
                       <div>
                         <p className="font-medium text-gray-900 text-sm">
-                          {patient.patient?.firstName} {patient.patient?.lastName}
+                          {patient.patient?.firstName || 'Unknown'} {patient.patient?.lastName || 'Patient'}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {patient.startTime} - {patient.type}
+                          {patient.startTime || 'N/A'} - {patient.type || 'General'}
                         </p>
                       </div>
                     </div>
@@ -232,9 +232,9 @@ export default function DoctorDashboard() {
                   <td className="py-3 px-4 text-sm text-gray-900">{apt.startTime}</td>
                   <td className="py-3 px-4">
                     <p className="text-sm font-medium text-gray-900">
-                      {apt.patient?.firstName} {apt.patient?.lastName}
+                      {apt.patient?.firstName || 'Unknown'} {apt.patient?.lastName || 'Patient'}
                     </p>
-                    <p className="text-xs text-gray-500">{apt.patient?.mrn}</p>
+                    <p className="text-xs text-gray-500">{apt.patient?.mrn || 'No MRN'}</p>
                   </td>
                   <td className="py-3 px-4 text-sm text-gray-600">{apt.type}</td>
                   <td className="py-3 px-4">
