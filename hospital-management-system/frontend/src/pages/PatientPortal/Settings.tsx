@@ -140,6 +140,11 @@ export default function Settings() {
         const profile = response.data?.data || response.data;
         if (profile) {
           setProfileForm(profile);
+          // Sync photo/profile to localStorage for sidebar/header
+          try {
+            const existing = JSON.parse(localStorage.getItem('patientUser') || '{}');
+            localStorage.setItem('patientUser', JSON.stringify({ ...existing, ...profile }));
+          } catch {}
         }
         return profile || emptyProfile;
       } catch {
@@ -174,6 +179,11 @@ export default function Settings() {
       const updated = response?.data?.data || response?.data;
       if (updated) {
         setProfileForm(updated);
+        // Sync to localStorage so sidebar/header picks up changes (including photo)
+        try {
+          const existing = JSON.parse(localStorage.getItem('patientUser') || '{}');
+          localStorage.setItem('patientUser', JSON.stringify({ ...existing, ...updated }));
+        } catch {}
       }
       toast.success('Profile updated successfully');
       setIsEditing(false);
@@ -402,9 +412,17 @@ export default function Settings() {
                     {/* Avatar */}
                     <div className="flex items-center gap-6">
                       <div className="relative">
-                        <div className="h-24 w-24 rounded-full bg-gradient-to-br from-slate-500 to-slate-700 flex items-center justify-center text-white text-3xl font-bold shadow-lg">
-                          {profileForm.firstName?.[0]}{profileForm.lastName?.[0]}
-                        </div>
+                        {(profileForm.photo || profileForm.avatarUrl) ? (
+                          <img
+                            src={profileForm.photo || profileForm.avatarUrl}
+                            alt={`${profileForm.firstName} ${profileForm.lastName}`}
+                            className="h-24 w-24 rounded-full object-cover shadow-lg"
+                          />
+                        ) : (
+                          <div className="h-24 w-24 rounded-full bg-gradient-to-br from-slate-500 to-slate-700 flex items-center justify-center text-white text-3xl font-bold shadow-lg">
+                            {profileForm.firstName?.[0]}{profileForm.lastName?.[0]}
+                          </div>
+                        )}
                         {isEditing && (
                           <button className="absolute bottom-0 right-0 p-2 bg-white rounded-full shadow-lg hover:bg-gray-100 transition-colors">
                             <CameraIcon className="h-5 w-5 text-gray-600" />

@@ -38,6 +38,8 @@ interface PatientTokenPayload {
   role: string;
   patientId?: string;
   hospitalId: string;
+  photo?: string;
+  avatarUrl?: string;
   exp: number;
   iat: number;
 }
@@ -117,6 +119,7 @@ const getPatientInfo = (): PatientInfo | null => {
           lastName: patient.lastName,
           fullName: `${patient.firstName} ${patient.lastName}`,
           initials: `${patient.firstName?.[0] || ''}${patient.lastName?.[0] || ''}`.toUpperCase(),
+          avatarUrl: patient.photo || patient.avatarUrl,
         };
       }
     }
@@ -131,6 +134,7 @@ const getPatientInfo = (): PatientInfo | null => {
         lastName: decoded.lastName,
         fullName: `${decoded.firstName} ${decoded.lastName}`,
         initials: `${decoded.firstName?.[0] || ''}${decoded.lastName?.[0] || ''}`.toUpperCase(),
+        avatarUrl: decoded.photo || decoded.avatarUrl,
       };
     }
 
@@ -288,11 +292,15 @@ export default function PatientPortalLayout() {
               {/* Mobile patient profile */}
               <div className="px-4 py-4 border-b border-gray-100 bg-gray-50/50">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center shadow-lg">
-                    <span className="text-lg font-bold text-white">
-                      {patientInfo?.initials || 'P'}
-                    </span>
-                  </div>
+                  {patientInfo?.avatarUrl ? (
+                    <img src={patientInfo.avatarUrl} alt="" className="w-12 h-12 rounded-full object-cover shadow-lg" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center shadow-lg">
+                      <span className="text-lg font-bold text-white">
+                        {patientInfo?.initials || 'P'}
+                      </span>
+                    </div>
+                  )}
                   <div>
                     <p className="font-semibold text-gray-900">{patientInfo?.fullName || 'Patient'}</p>
                     <p className="text-sm text-gray-500">{patientInfo?.email}</p>
@@ -532,11 +540,15 @@ export default function PatientPortalLayout() {
               {/* Profile dropdown */}
               <Menu as="div" className="relative">
                 <Menu.Button className="flex items-center gap-3 p-1.5 pr-3 rounded-xl hover:bg-gray-100 transition-colors">
-                  <div className="h-9 w-9 rounded-full bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center shadow-md">
-                    <span className="text-sm font-bold text-white">
-                      {patientInfo?.initials || 'P'}
-                    </span>
-                  </div>
+                  {patientInfo?.avatarUrl ? (
+                    <img src={patientInfo.avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover shadow-md" />
+                  ) : (
+                    <div className="h-9 w-9 rounded-full bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center shadow-md">
+                      <span className="text-sm font-bold text-white">
+                        {patientInfo?.initials || 'P'}
+                      </span>
+                    </div>
+                  )}
                   <div className="hidden sm:block text-left">
                     <p className="text-sm font-medium text-gray-900">
                       {patientInfo?.firstName || 'Patient'}
