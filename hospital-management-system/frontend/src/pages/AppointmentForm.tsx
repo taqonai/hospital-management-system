@@ -315,58 +315,63 @@ export default function AppointmentForm() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select Patient <span className="text-red-500">*</span>
-            </label>
-            {/* Show selected patient in edit mode */}
-            {isEditMode && appointmentData?.patient && formData.patientId && (
-              <div className="mb-4 p-4 rounded-lg border-2 border-blue-500 bg-blue-50">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-medium">
-                    {appointmentData.patient.firstName[0]}{appointmentData.patient.lastName[0]}
+            {isEditMode && appointmentData?.patient ? (
+              /* Edit mode: show patient as read-only */
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Patient</label>
+                <div className="p-4 rounded-lg border-2 border-blue-500 bg-blue-50">
+                  <div className="flex items-center gap-3">
+                    <div className="h-12 w-12 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-lg">
+                      {appointmentData.patient.firstName[0]}{appointmentData.patient.lastName[0]}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-900 text-lg">{appointmentData.patient.firstName} {appointmentData.patient.lastName}</p>
+                      <p className="text-sm text-gray-500">{appointmentData.patient.mrn}</p>
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <p className="font-semibold text-gray-900">{appointmentData.patient.firstName} {appointmentData.patient.lastName}</p>
-                    <p className="text-sm text-gray-500">{appointmentData.patient.mrn}</p>
-                  </div>
-                  <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">Selected</span>
                 </div>
               </div>
+            ) : (
+              /* Create mode: show patient selection */
+              <>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Patient <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Search patients by name or MRN..."
+                  value={patientSearch}
+                  onChange={(e) => setPatientSearch(e.target.value)}
+                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-3"
+                />
+                {errors.patientId && <p className="mb-2 text-sm text-red-500">{errors.patientId}</p>}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-60 overflow-y-auto">
+                  {patients.map((patient: any) => (
+                    <button
+                      key={patient.id}
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, patientId: patient.id }))}
+                      className={`p-4 rounded-lg border-2 text-left transition-all ${
+                        formData.patientId === patient.id
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-medium">
+                          {patient.firstName[0]}{patient.lastName[0]}
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">{patient.firstName} {patient.lastName}</p>
+                          <p className="text-sm text-gray-500">{patient.mrn}</p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
-
-            <input
-              type="text"
-              placeholder="Search patients by name or MRN..."
-              value={patientSearch}
-              onChange={(e) => setPatientSearch(e.target.value)}
-              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-3"
-            />
-            {errors.patientId && <p className="mb-2 text-sm text-red-500">{errors.patientId}</p>}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-60 overflow-y-auto">
-              {patients.map((patient: any) => (
-                <button
-                  key={patient.id}
-                  type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, patientId: patient.id }))}
-                  className={`p-4 rounded-lg border-2 text-left transition-all ${
-                    formData.patientId === patient.id
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-medium">
-                      {patient.firstName[0]}{patient.lastName[0]}
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900">{patient.firstName} {patient.lastName}</p>
-                      <p className="text-sm text-gray-500">{patient.mrn}</p>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
           </div>
         </div>
 
