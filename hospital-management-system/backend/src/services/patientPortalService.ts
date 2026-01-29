@@ -226,16 +226,19 @@ export class PatientPortalService {
       where.appointmentDate = { gte: startOfToday };
       where.status = { notIn: ['CANCELLED', 'COMPLETED', 'NO_SHOW'] };
     } else if (filters.type === 'past') {
-      // Only appointments before today
-      where.appointmentDate = { lt: startOfToday };
+      // Include today and before — today's past-time appointments will be filtered in JS
+      const tomorrowDate = new Date(startOfToday);
+      tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+      where.appointmentDate = { lt: tomorrowDate };
     }
 
     if (filters.status) {
       where.status = filters.status;
     }
 
-    // For upcoming: fetch extra to account for filtering out past time slots today
-    const fetchLimit = filters.type === 'upcoming' ? limit + 20 : limit;
+    // For upcoming/past: fetch extra to account for filtering out time-based slots today
+    const needsTimeFilter = filters.type === 'upcoming' || filters.type === 'past';
+    const fetchLimit = needsTimeFilter ? limit + 20 : limit;
 
     const [rawAppointments, rawTotal] = await Promise.all([
       prisma.appointment.findMany({
@@ -253,31 +256,43 @@ export class PatientPortalService {
         orderBy: filters.type === 'upcoming'
           ? [{ appointmentDate: 'asc' }, { startTime: 'asc' }]
           : [{ appointmentDate: 'desc' }, { startTime: 'desc' }],
-        skip: filters.type === 'upcoming' ? 0 : skip,
-        take: filters.type === 'upcoming' ? fetchLimit + skip : limit,
+        skip: needsTimeFilter ? 0 : skip,
+        take: needsTimeFilter ? fetchLimit + skip : limit,
       }),
       prisma.appointment.count({ where }),
     ]);
 
-    // For upcoming: filter out today's appointments where time has already passed
+    // Filter today's appointments by time
     let appointments = rawAppointments;
     let total = rawTotal;
+    const todayStr = getTodayInUAE();
+    const currentTimeUAE = getCurrentTimeUAE(); // "HH:MM"
+
     if (filters.type === 'upcoming') {
-      const todayStr = getTodayInUAE();
-      const currentTimeUAE = getCurrentTimeUAE(); // "HH:MM"
+      // Keep only today's appointments where time hasn't passed yet + all future dates
       appointments = rawAppointments.filter((apt: any) => {
         const aptDateStr = apt.appointmentDate instanceof Date
           ? apt.appointmentDate.toISOString().split('T')[0]
           : String(apt.appointmentDate).split('T')[0];
-        // If appointment is today, check if startTime hasn't passed yet
         if (aptDateStr === todayStr && apt.startTime) {
           return apt.startTime >= currentTimeUAE;
         }
-        // Future dates always included
         return true;
       });
       total = appointments.length;
-      // Apply pagination after filtering
+      appointments = appointments.slice(skip, skip + limit);
+    } else if (filters.type === 'past') {
+      // Keep all dates before today + today's appointments where time HAS passed
+      appointments = rawAppointments.filter((apt: any) => {
+        const aptDateStr = apt.appointmentDate instanceof Date
+          ? apt.appointmentDate.toISOString().split('T')[0]
+          : String(apt.appointmentDate).split('T')[0];
+        if (aptDateStr === todayStr && apt.startTime) {
+          return apt.startTime < currentTimeUAE;
+        }
+        return true;
+      });
+      total = appointments.length;
       appointments = appointments.slice(skip, skip + limit);
     }
 
