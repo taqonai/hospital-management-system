@@ -1217,7 +1217,30 @@ router.get(
       return;
     }
 
-    sendSuccess(res, medicalHistory, 'Medical history retrieved');
+    // Fetch detailed past surgeries from separate table
+    const detailedPastSurgeries = await prisma.pastSurgery.findMany({
+      where: { patientId },
+      orderBy: { surgeryDate: 'desc' },
+    });
+
+    // Fetch detailed immunizations from separate table
+    const detailedImmunizations = await prisma.immunization.findMany({
+      where: { patientId },
+      orderBy: { dateAdministered: 'desc' },
+    });
+
+    // Combine old JSON fields with new detailed records
+    const combinedHistory = {
+      ...medicalHistory,
+      pastSurgeries: detailedPastSurgeries.length > 0
+        ? detailedPastSurgeries
+        : medicalHistory.pastSurgeries || [],
+      immunizations: detailedImmunizations.length > 0
+        ? detailedImmunizations
+        : medicalHistory.immunizations || [],
+    };
+
+    sendSuccess(res, combinedHistory, 'Medical history retrieved');
   })
 );
 

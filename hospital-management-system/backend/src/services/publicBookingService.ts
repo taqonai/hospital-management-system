@@ -133,9 +133,10 @@ export class PublicBookingService {
     const endOfDay = new Date(startOfDay);
     endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
 
-    // Calculate end time (30 min slot by default)
+    // Calculate end time using doctor's configured slot duration
+    const slotDuration = doctor.slotDuration || 30;
     const [hours, mins] = startTime.split(':').map(Number);
-    const endMinutes = hours * 60 + mins + 30;
+    const endMinutes = hours * 60 + mins + slotDuration;
     const endTime = `${Math.floor(endMinutes / 60).toString().padStart(2, '0')}:${(endMinutes % 60).toString().padStart(2, '0')}`;
 
     // Check for conflicting appointments

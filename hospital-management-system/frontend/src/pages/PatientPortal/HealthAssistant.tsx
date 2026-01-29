@@ -171,7 +171,7 @@ export default function HealthAssistant() {
     }
 
     if (lowerQuery.includes('emergency') || lowerQuery.includes('urgent') || lowerQuery.includes('serious')) {
-      return "If you're experiencing a medical emergency, please call 911 immediately. Signs of emergency include severe chest pain, difficulty breathing, severe bleeding, or signs of stroke. Don't delay seeking emergency care.";
+      return "If you're experiencing a medical emergency, please call 998 immediately. Signs of emergency include severe chest pain, difficulty breathing, severe bleeding, or signs of stroke. Don't delay seeking emergency care.";
     }
 
     if (lowerQuery.includes('billing') || lowerQuery.includes('payment') || lowerQuery.includes('invoice') || lowerQuery.includes('bill')) {

@@ -60,7 +60,7 @@ const HOW_IT_WORKS = [
 const DISCLAIMER_ITEMS = [
   'This tool provides general health information and is not a substitute for professional medical advice',
   'Always consult a healthcare provider for diagnosis and treatment',
-  'If you have a medical emergency, call 911 or go to the nearest emergency room',
+  'If you have a medical emergency, call 998 or go to the nearest emergency room',
   'Results are based on the information you provide and may not be comprehensive',
 ];
 
@@ -258,11 +258,11 @@ export default function SymptomChecker() {
             </p>
             <div className="flex flex-wrap gap-4">
               <a
-                href="tel:911"
+                href="tel:998"
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors"
               >
                 <PhoneIcon className="h-5 w-5" />
-                Call 911
+                Call 998
               </a>
               <button
                 onClick={() => navigate('/emergency')}

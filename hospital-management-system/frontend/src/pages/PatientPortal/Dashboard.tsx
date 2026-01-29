@@ -588,7 +588,7 @@ export default function PatientPortalDashboard() {
               )}
             </button>
             <a
-              href="tel:911"
+              href="tel:998"
               className="inline-flex items-center gap-2 px-5 py-3 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors font-medium"
             >
               <PhoneIcon className="h-5 w-5" />
