@@ -187,6 +187,7 @@ export default function Appointments() {
       // Clear the URL params
       setSearchParams({});
     }
+
   }, [searchParams, setSearchParams]);
 
   // Reschedule state
@@ -456,6 +457,21 @@ export default function Appointments() {
     // Navigate to symptom checker with autoStart to immediately begin the session
     window.location.href = '/patient-portal/symptom-checker?autoStart=true';
   };
+
+  // Handle booking type from dashboard navigation (?booking=emergency|quick|standard)
+  useEffect(() => {
+    const bookingType = searchParams.get('booking');
+    if (bookingType) {
+      setSearchParams({});
+      if (bookingType === 'emergency') {
+        handleStartEmergencyBooking();
+      } else if (bookingType === 'quick') {
+        handleStartQuickBooking();
+      } else if (bookingType === 'standard') {
+        handleStartDirectBooking();
+      }
+    }
+  }, []); // Run once on mount
 
   const handleOpenCancelModal = (appointment: Appointment) => {
     setSelectedAppointment(appointment);

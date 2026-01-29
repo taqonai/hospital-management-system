@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSelector } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
+import { Fragment } from 'react';
+import { Dialog, Transition } from '@headlessui/react';
 import {
   CalendarDaysIcon,
   ClipboardDocumentListIcon,
@@ -27,6 +29,8 @@ import {
   SunIcon,
   LightBulbIcon,
   ShieldExclamationIcon,
+  XMarkIcon,
+  InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 import { patientPortalApi } from '../../services/api';
 import { CurrencyDisplay } from '../../components/common';
@@ -519,6 +523,9 @@ export default function PatientPortalDashboard() {
     },
   });
 
+  // Booking choice modal state
+  const [showBookingChoice, setShowBookingChoice] = useState(false);
+
   // Navigation handlers
   const navigateToAppointments = () => navigate('/patient-portal/appointments');
   const navigateToPrescriptions = () => navigate('/patient-portal/prescriptions');
@@ -684,7 +691,7 @@ export default function PatientPortalDashboard() {
 
                 {/* Book another appointment button - only shown when appointments exist */}
                 <button
-                  onClick={navigateToAppointments}
+                  onClick={() => setShowBookingChoice(true)}
                   className="w-full mt-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all flex items-center justify-center gap-2"
                 >
                   <PlusIcon className="h-5 w-5" />
@@ -696,7 +703,7 @@ export default function PatientPortalDashboard() {
                 <CalendarDaysIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
                 <p className="text-gray-500 font-medium">No upcoming appointments</p>
                 <button
-                  onClick={navigateToAppointments}
+                  onClick={() => setShowBookingChoice(true)}
                   className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors"
                 >
                   <PlusIcon className="h-4 w-4" />
@@ -1064,7 +1071,7 @@ export default function PatientPortalDashboard() {
             icon={CalendarDaysIcon}
             label="Book Appointment"
             description="Schedule a visit"
-            onClick={navigateToAppointments}
+            onClick={() => setShowBookingChoice(true)}
             gradient="bg-gradient-to-br from-blue-500 to-blue-600"
           />
           <QuickActionButton
@@ -1134,6 +1141,147 @@ export default function PatientPortalDashboard() {
           </div>
         </div>
       </GlassCard>
+
+      {/* Booking Choice Modal */}
+      <Transition appear show={showBookingChoice} as={Fragment}>
+        <Dialog as="div" className="relative z-50" onClose={() => setShowBookingChoice(false)}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-lg transform overflow-hidden rounded-2xl bg-white p-6 shadow-2xl transition-all">
+                  <Dialog.Title className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900">Book Appointment</h3>
+                      <p className="text-sm text-gray-500 mt-1">Choose how you'd like to proceed</p>
+                    </div>
+                    <button
+                      onClick={() => setShowBookingChoice(false)}
+                      className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                    >
+                      <XMarkIcon className="h-6 w-6 text-gray-500" />
+                    </button>
+                  </Dialog.Title>
+
+                  <div className="space-y-3">
+                    {/* Emergency Booking */}
+                    <button
+                      onClick={() => {
+                        setShowBookingChoice(false);
+                        navigate('/patient-portal/appointments?booking=emergency');
+                      }}
+                      className="w-full p-5 rounded-2xl border-2 border-red-300 bg-gradient-to-br from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 hover:shadow-xl transition-all text-left group"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 bg-white/20 backdrop-blur rounded-xl text-white">
+                          <ExclamationTriangleIcon className="h-8 w-8" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-white text-lg">Emergency</h4>
+                            <span className="px-2 py-0.5 text-xs font-bold bg-white text-red-600 rounded-full animate-pulse">INSTANT</span>
+                          </div>
+                          <p className="text-sm text-red-100 mt-1">One-click booking for urgent care today</p>
+                        </div>
+                        <ChevronRightIcon className="h-6 w-6 text-white/80" />
+                      </div>
+                    </button>
+
+                    {/* Quick Booking */}
+                    <button
+                      onClick={() => {
+                        setShowBookingChoice(false);
+                        navigate('/patient-portal/appointments?booking=quick');
+                      }}
+                      className="w-full p-5 rounded-2xl border-2 border-blue-300 bg-gradient-to-br from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 hover:shadow-xl transition-all text-left group"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 bg-white/20 backdrop-blur rounded-xl text-white">
+                          <ClockIcon className="h-8 w-8" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-white text-lg">Quick Book</h4>
+                            <span className="px-2 py-0.5 text-xs font-bold bg-white text-blue-600 rounded-full">2 STEPS</span>
+                          </div>
+                          <p className="text-sm text-blue-100 mt-1">Select department → Pick doctor & time</p>
+                        </div>
+                        <ChevronRightIcon className="h-6 w-6 text-white/80" />
+                      </div>
+                    </button>
+
+                    {/* AI-Guided */}
+                    <button
+                      onClick={() => {
+                        setShowBookingChoice(false);
+                        navigate('/patient-portal/symptom-checker?autoStart=true');
+                      }}
+                      className="w-full p-4 rounded-2xl border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50 hover:border-purple-400 hover:shadow-lg transition-all text-left group"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl text-white shadow-lg group-hover:scale-110 transition-transform">
+                          <SparklesIcon className="h-6 w-6" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-semibold text-gray-900">AI-Guided</h4>
+                            <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">Smart</span>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1">Unsure which doctor? AI recommends based on symptoms</p>
+                        </div>
+                        <ChevronRightIcon className="h-5 w-5 text-gray-400 group-hover:text-purple-500" />
+                      </div>
+                    </button>
+
+                    {/* Standard Booking */}
+                    <button
+                      onClick={() => {
+                        setShowBookingChoice(false);
+                        navigate('/patient-portal/appointments?booking=standard');
+                      }}
+                      className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-all text-left"
+                    >
+                      <div className="flex items-center justify-center gap-2 text-gray-600">
+                        <CalendarDaysIcon className="h-5 w-5" />
+                        <span className="text-sm font-medium">Standard Booking (4 steps)</span>
+                      </div>
+                    </button>
+                  </div>
+
+                  <div className="mt-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
+                    <div className="flex items-start gap-3">
+                      <InformationCircleIcon className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                      <div className="text-sm text-blue-700">
+                        <p className="font-medium">Not sure which option to choose?</p>
+                        <p className="mt-1">The AI-Guided Booking helps identify the best specialist for your needs based on your symptoms.</p>
+                      </div>
+                    </div>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
 
       {/* CSS Animations */}
       <style>{`
