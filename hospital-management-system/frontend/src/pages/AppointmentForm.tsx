@@ -130,10 +130,15 @@ export default function AppointmentForm() {
   };
 
   // Extract slots from response and filter past slots for today
+  // In edit mode, include the appointment's current time slot even if past
   const rawSlots = slotsResponse?.slots || [];
-  const slotsData = rawSlots.filter((slot: Slot) =>
-    !isSlotPast(slot.startTime, formData.appointmentDate)
-  );
+  const slotsData = isEditMode
+    ? rawSlots.filter((slot: Slot) =>
+        !isSlotPast(slot.startTime, formData.appointmentDate) || slot.startTime === formData.appointmentTime
+      )
+    : rawSlots.filter((slot: Slot) =>
+        !isSlotPast(slot.startTime, formData.appointmentDate)
+      );
 
   // Fetch appointment data if editing
   const { data: appointmentData, isLoading: loadingAppointment } = useQuery({
@@ -150,11 +155,13 @@ export default function AppointmentForm() {
   useEffect(() => {
     if (appointmentData) {
       const apptDate = new Date(appointmentData.scheduledAt || appointmentData.appointmentDate);
+      // Use startTime field (HH:MM) if available, otherwise extract from date
+      const timeValue = appointmentData.startTime || format(apptDate, 'HH:mm');
       setFormData({
         patientId: appointmentData.patientId || '',
         doctorId: appointmentData.doctorId || '',
         appointmentDate: format(apptDate, 'yyyy-MM-dd'),
-        appointmentTime: format(apptDate, 'HH:mm'),
+        appointmentTime: timeValue,
         type: appointmentData.type || 'CONSULTATION',
         reason: appointmentData.reason || '',
         notes: appointmentData.notes || '',

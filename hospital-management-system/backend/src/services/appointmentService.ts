@@ -367,12 +367,17 @@ export class AppointmentService {
       };
     }
 
+    // When viewing a specific date, sort by startTime ascending (earliest slot first)
+    const effectiveOrderBy = date
+      ? [{ startTime: 'asc' as const }, { appointmentDate: 'asc' as const }]
+      : [{ [sortBy]: sortOrder }];
+
     const [appointments, total] = await Promise.all([
       prisma.appointment.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { [sortBy]: sortOrder },
+        orderBy: effectiveOrderBy,
         include: {
           patient: {
             select: {
