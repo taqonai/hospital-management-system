@@ -779,22 +779,52 @@ export class LaboratoryService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const [pendingOrders, inProgressOrders, completedToday, criticalResults] = await Promise.all([
+    const [
+      pendingOrders,
+      collected,
+      processing,
+      completedToday,
+      totalOrders,
+      criticalResults
+    ] = await Promise.all([
+      // Orders awaiting sample collection
       prisma.labOrder.count({
-        where: { hospitalId, status: { in: ['ORDERED'] } },
+        where: { hospitalId, status: 'ORDERED' },
       }),
+      // Samples collected but not yet processing
       prisma.labOrder.count({
-        where: { hospitalId, status: { in: ['SAMPLE_COLLECTED', 'RECEIVED', 'IN_PROGRESS'] } },
+        where: { hospitalId, status: { in: ['SAMPLE_COLLECTED', 'RECEIVED'] } },
       }),
+      // Orders currently being processed
+      prisma.labOrder.count({
+        where: { hospitalId, status: 'IN_PROGRESS' },
+      }),
+      // Orders completed today
       prisma.labOrder.count({
         where: { hospitalId, completedAt: { gte: today } },
       }),
+      // Total orders created today (for completion rate calculation)
+      prisma.labOrder.count({
+        where: { hospitalId, createdAt: { gte: today } },
+      }),
+      // Critical results needing verification
       prisma.labOrderTest.count({
         where: { isCritical: true, labOrder: { hospitalId }, verifiedAt: null },
       }),
     ]);
 
-    return { pendingOrders, inProgressOrders, completedToday, criticalResults };
+    // Calculate in-progress orders (collected + processing) for backward compatibility
+    const inProgressOrders = collected + processing;
+
+    return {
+      pendingOrders,
+      collected,
+      processing,
+      inProgressOrders,
+      completedToday,
+      totalOrders,
+      criticalResults,
+    };
   }
 
   // ==================== AI SMART LAB ORDERING ====================
