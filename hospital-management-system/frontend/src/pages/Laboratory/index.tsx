@@ -946,7 +946,7 @@ export default function Laboratory() {
           const updated = [...prev.interpretations];
           updated[i] = {
             ...updated[i],
-            interpretation: response.data.data?.interpretation || response.data.data?.context || 'No interpretation available',
+            interpretation: response.data.data?.clinicalContext || response.data.data?.interpretation || 'No interpretation available',
             loading: false
           };
           return { ...prev, interpretations: updated };
