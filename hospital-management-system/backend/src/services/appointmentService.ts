@@ -367,9 +367,9 @@ export class AppointmentService {
       };
     }
 
-    // When viewing a specific date, sort by startTime ascending (earliest slot first)
+    // When viewing a specific date, sort by startTime descending (latest slot first)
     const effectiveOrderBy = date
-      ? [{ startTime: 'asc' as const }, { appointmentDate: 'asc' as const }]
+      ? [{ startTime: 'desc' as const }, { appointmentDate: 'desc' as const }]
       : [{ [sortBy]: sortOrder }];
 
     const [appointments, total] = await Promise.all([
