@@ -498,12 +498,22 @@ export class AppointmentService {
       }
     }
 
+    // Build clean update data — only include fields Prisma accepts
+    const updateData: any = {};
+    if (data.appointmentDate) updateData.appointmentDate = new Date(data.appointmentDate);
+    if (data.startTime) updateData.startTime = data.startTime;
+    if (data.endTime) updateData.endTime = data.endTime;
+    if (data.type) updateData.type = data.type;
+    if (data.reason !== undefined) updateData.reason = data.reason;
+    if (data.notes !== undefined) updateData.notes = data.notes;
+    if (data.status) updateData.status = data.status;
+    // Handle relations via connect
+    if (data.doctorId) updateData.doctor = { connect: { id: data.doctorId } };
+    if (data.patientId) updateData.patient = { connect: { id: data.patientId } };
+
     const updated = await prisma.appointment.update({
       where: { id },
-      data: {
-        ...data,
-        appointmentDate: data.appointmentDate ? new Date(data.appointmentDate) : undefined,
-      },
+      data: updateData,
       include: {
         patient: {
           select: { id: true, firstName: true, lastName: true, phone: true, email: true },

@@ -94,7 +94,14 @@ export const errorHandler = (
 
   if (err instanceof Prisma.PrismaClientValidationError) {
     console.error('[PRISMA VALIDATION ERROR]', err.message);
-    sendError(res, 'Invalid data provided', 400);
+    // Extract a more meaningful message from Prisma error
+    const msg = err.message;
+    const unknownArg = msg.match(/Unknown argument `(\w+)`/);
+    const missingArg = msg.match(/Missing required argument `(\w+)`/);
+    let userMessage = 'Invalid data provided';
+    if (unknownArg) userMessage = `Invalid field: ${unknownArg[1]}`;
+    else if (missingArg) userMessage = `Missing required field: ${missingArg[1]}`;
+    sendError(res, userMessage, 400);
     return;
   }
 
