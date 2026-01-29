@@ -40,6 +40,9 @@ interface AuthResponse {
     role: UserRole;
     hospitalId: string;
     avatar?: string | null;
+    doctorId?: string;
+    nurseId?: string;
+    patientId?: string;
   };
   tokens: TokenPair;
 }
@@ -99,6 +102,7 @@ export class AuthService {
         hospitalId: data.hospitalId,
         role: data.role,
       },
+      include: { doctor: true, nurse: true, patient: true },
     });
 
     // Generate tokens
@@ -132,6 +136,9 @@ export class AuthService {
         role: user.role,
         hospitalId: user.hospitalId,
         avatar: user.avatar,
+        doctorId: user.doctor?.id,
+        nurseId: user.nurse?.id,
+        patientId: user.patient?.id,
       },
       tokens,
     };
@@ -147,10 +154,12 @@ export class AuthService {
     if (data.hospitalId) {
       user = await prisma.user.findUnique({
         where: { hospitalId_email: { hospitalId: data.hospitalId, email: data.email } },
+        include: { doctor: true, nurse: true, patient: true },
       });
     } else {
       user = await prisma.user.findFirst({
         where: { email: data.email },
+        include: { doctor: true, nurse: true, patient: true },
       });
     }
 
@@ -206,6 +215,9 @@ export class AuthService {
         role: user.role,
         hospitalId: user.hospitalId,
         avatar: user.avatar,
+        doctorId: user.doctor?.id,
+        nurseId: user.nurse?.id,
+        patientId: user.patient?.id,
       },
       tokens,
     };
@@ -333,6 +345,7 @@ export class AuthService {
             department: true,
           },
         },
+        patient: true,
       },
     });
 
@@ -341,7 +354,14 @@ export class AuthService {
     }
 
     const { password, ...userWithoutPassword } = user;
-    return userWithoutPassword;
+
+    // Add flattened IDs for easier access
+    return {
+      ...userWithoutPassword,
+      doctorId: user.doctor?.id,
+      nurseId: user.nurse?.id,
+      patientId: user.patient?.id,
+    };
   }
 
   async updateProfile(
