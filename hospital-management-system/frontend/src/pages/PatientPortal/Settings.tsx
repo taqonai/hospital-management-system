@@ -70,24 +70,24 @@ interface CommunicationPreferences {
 }
 
 // Mock data (flat structure matching backend)
-const mockProfile: UserProfile = {
-  id: 'patient-1',
-  firstName: 'John',
-  lastName: 'Doe',
-  email: 'john.doe@example.com',
-  phone: '(555) 123-4567',
-  dateOfBirth: '1985-06-15',
-  gender: 'Male',
-  address: '123 Main Street',
-  city: 'New York',
-  state: 'NY',
-  zipCode: '10001',
-  nationality: 'United States',
-  emergencyContact: 'Jane Doe - Spouse',
-  emergencyPhone: '(555) 987-6543',
-  bloodGroup: 'O+',
-  language: 'en',
-  timezone: 'America/New_York',
+const emptyProfile: UserProfile = {
+  id: '',
+  firstName: '',
+  lastName: '',
+  email: '',
+  phone: '',
+  dateOfBirth: '',
+  gender: '',
+  address: '',
+  city: '',
+  state: '',
+  zipCode: '',
+  nationality: '',
+  emergencyContact: '',
+  emergencyPhone: '',
+  bloodGroup: '',
+  language: '',
+  timezone: '',
 };
 
 const mockNotificationPrefs: NotificationPreferences = {
@@ -116,7 +116,7 @@ export default function Settings() {
   const queryClient = useQueryClient();
 
   // Profile form state
-  const [profileForm, setProfileForm] = useState<UserProfile>(mockProfile);
+  const [profileForm, setProfileForm] = useState<UserProfile>(emptyProfile);
 
   // Password form state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -137,11 +137,13 @@ export default function Settings() {
     queryFn: async () => {
       try {
         const response = await patientPortalApi.getProfile();
-        const profile = response.data?.data || response.data || mockProfile;
-        setProfileForm(profile);
-        return profile;
+        const profile = response.data?.data || response.data;
+        if (profile) {
+          setProfileForm(profile);
+        }
+        return profile || emptyProfile;
       } catch {
-        return mockProfile;
+        return emptyProfile;
       }
     },
   });
@@ -359,7 +361,7 @@ export default function Settings() {
                   ) : (
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => { setIsEditing(false); setProfileForm(profileData || mockProfile); }}
+                        onClick={() => { setIsEditing(false); setProfileForm(profileData || emptyProfile); }}
                         className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
                       >
                         Cancel
