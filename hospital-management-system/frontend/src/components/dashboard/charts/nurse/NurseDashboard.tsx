@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ClipboardDocumentCheckIcon,
@@ -18,8 +19,10 @@ import KPICard from '../shared/KPICard';
 import OccupancyGauge from '../shared/OccupancyGauge';
 import ChartCard from '../ChartCard';
 import { barChartOptions } from '../chartSetup';
+import VitalsRecordingModal from '../../../vitals/VitalsRecordingModal';
 
 export default function NurseDashboard() {
+  const [vitalsPatient, setVitalsPatient] = useState<any>(null);
   const {
     opdStats,
     opdQueue,
@@ -197,12 +200,12 @@ export default function NurseDashboard() {
                     </span>
                   </td>
                   <td className="py-3 px-4 text-right">
-                    <Link
-                      to="/opd"
+                    <button
+                      onClick={() => setVitalsPatient(patient)}
                       className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                     >
                       Record Vitals
-                    </Link>
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -420,6 +423,18 @@ export default function NurseDashboard() {
           </div>
         </Link>
       </div>
+
+      {/* Vitals Recording Modal */}
+      {vitalsPatient && (
+        <VitalsRecordingModal
+          appointment={vitalsPatient}
+          onClose={() => setVitalsPatient(null)}
+          onSuccess={() => {
+            setVitalsPatient(null);
+            refetchAll();
+          }}
+        />
+      )}
     </div>
   );
 }
