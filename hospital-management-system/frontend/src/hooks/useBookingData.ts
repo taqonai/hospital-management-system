@@ -1,6 +1,20 @@
 import { useQuery } from '@tanstack/react-query';
 import { opdApi } from '../services/api';
 
+// Prescription and medication types
+export interface Medication {
+  name: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  quantity: number;
+  instructions: string | null;
+}
+
+export interface Prescription {
+  medications: Medication[];
+}
+
 // Types for booking ticket data
 export interface BookingTicketData {
   appointment: {
@@ -98,7 +112,7 @@ export interface BookingTicketData {
     treatmentPlan: string | null;
     advice: string | null;
     followUpDate: string | null;
-    prescriptions: any[];
+    prescriptions: Prescription[];
     createdAt: string;
   } | null;
   labOrders: Array<{
