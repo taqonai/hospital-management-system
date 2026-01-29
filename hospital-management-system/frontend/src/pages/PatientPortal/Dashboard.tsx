@@ -659,6 +659,15 @@ export default function PatientPortalDashboard() {
                     </div>
                   </div>
                 ))}
+
+                {/* Book another appointment button - only shown when appointments exist */}
+                <button
+                  onClick={navigateToAppointments}
+                  className="w-full mt-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all flex items-center justify-center gap-2"
+                >
+                  <PlusIcon className="h-5 w-5" />
+                  Book New Appointment
+                </button>
               </div>
             ) : (
               <div className="text-center py-8">
@@ -669,18 +678,10 @@ export default function PatientPortalDashboard() {
                   className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors"
                 >
                   <PlusIcon className="h-4 w-4" />
-                  Book Appointment
+                  Book Your First Appointment
                 </button>
               </div>
             )}
-
-            <button
-              onClick={navigateToAppointments}
-              className="w-full mt-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all flex items-center justify-center gap-2"
-            >
-              <PlusIcon className="h-5 w-5" />
-              Book New Appointment
-            </button>
           </GlassCard>
 
           {/* Recent Prescriptions Card */}
