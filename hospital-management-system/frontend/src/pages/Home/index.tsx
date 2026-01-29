@@ -82,7 +82,7 @@ const banners = [
     description: 'World-class emergency services with rapid response teams, advanced trauma facilities, and AI-assisted triage for critical care prioritization.',
     image: 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?w=1920&q=80',
     cta: 'Emergency Contact',
-    ctaLink: 'tel:108',
+    ctaLink: 'tel:998',
     secondaryCta: 'Ambulance Services',
     secondaryLink: '#contact',
     gradient: 'from-red-900/95 via-red-800/90 to-transparent',
@@ -207,7 +207,7 @@ const quickServices = [
   { icon: CalendarDaysIcon, title: 'Book Appointment', description: 'AI-powered scheduling', link: '#booking', color: 'from-blue-500 to-blue-600' },
   { icon: ChatBubbleBottomCenterTextIcon, title: 'Symptom Checker', description: 'Get instant assessment', link: '/symptom-checker', color: 'from-violet-500 to-purple-600' },
   { icon: DocumentTextIcon, title: 'Patient Portal', description: 'Access your records', link: '/patient-portal/login', color: 'from-teal-500 to-cyan-600' },
-  { icon: TruckIcon, title: 'Ambulance', description: '24/7 Emergency', link: 'tel:108', color: 'from-red-500 to-rose-600' },
+  { icon: TruckIcon, title: 'Ambulance', description: '24/7 Emergency', link: 'tel:998', color: 'from-red-500 to-rose-600' },
 ];
 
 // Stats with animation
@@ -611,7 +611,7 @@ export default function Home() {
         if (symptoms.includes('appointment') || symptoms.includes('book')) {
           botResponse = "I'd be happy to help you book an appointment! Please scroll down to our booking section or tell me your symptoms, and I'll recommend the right specialist for you.";
         } else if (symptoms.includes('emergency') || symptoms.includes('urgent')) {
-          botResponse = "For medical emergencies, please call 108 immediately or visit our 24/7 Emergency Department. If this is not an emergency, I can help you find the right specialist.";
+          botResponse = "For medical emergencies, please call 998 immediately or visit our 24/7 Emergency Department. If this is not an emergency, I can help you find the right specialist.";
         } else if (symptoms.includes('doctor') || symptoms.includes('specialist')) {
           botResponse = "We have over 200 expert doctors across 50+ specializations. Tell me your symptoms, and I'll recommend the best specialist for your needs.";
         } else {
@@ -819,7 +819,7 @@ export default function Home() {
             </span>
             <span className="hidden sm:flex items-center gap-2">
               <PhoneIcon className="w-4 h-4" />
-              Emergency: 108
+              Emergency: 998
             </span>
             <span className="hidden md:flex items-center gap-2">
               <ClockIcon className="w-4 h-4" />
@@ -1739,12 +1739,12 @@ export default function Home() {
               <h4 className="text-white font-semibold mb-6">Emergency</h4>
               <p className="text-sm mb-6">For medical emergencies, call our 24/7 emergency hotline immediately:</p>
               <a
-                href="tel:108"
+                href="tel:998"
                 className="inline-flex items-center gap-3 px-6 py-4 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-xl font-semibold hover:from-red-700 hover:to-rose-700 transition-all shadow-lg"
               >
                 <PhoneIcon className="w-6 h-6" />
                 <div>
-                  <p className="text-lg">Call: 108</p>
+                  <p className="text-lg">Call: 998</p>
                   <p className="text-xs font-normal opacity-80">24/7 Emergency Line</p>
                 </div>
               </a>

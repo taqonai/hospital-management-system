@@ -557,7 +557,7 @@ router.get(
         name: 'Emergency',
         color: 'red',
         description: 'Requires immediate emergency medical attention',
-        action: 'Call 911 or go to nearest Emergency Room immediately',
+        action: 'Call 998 or go to nearest Emergency Room immediately',
         urgencyScore: { min: 9, max: 10 },
       },
       {

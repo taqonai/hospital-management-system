@@ -207,7 +207,7 @@ interface LegacyTriageResult {
 
 const RED_FLAG_KEYWORDS: Record<string, { message: string; triageLevel: TriageLevel; department: string; severity: number }> = {
   'chest pain': {
-    message: 'CRITICAL: Chest pain may indicate a cardiac emergency. Call 911 or seek immediate medical attention.',
+    message: 'CRITICAL: Chest pain may indicate a cardiac emergency. Call 998 or seek immediate medical attention.',
     triageLevel: TriageLevel.EMERGENCY,
     department: 'Emergency/Cardiology',
     severity: 10,
@@ -225,7 +225,7 @@ const RED_FLAG_KEYWORDS: Record<string, { message: string; triageLevel: TriageLe
     severity: 10,
   },
   'can\'t breathe': {
-    message: 'CRITICAL: Severe breathing difficulty requires immediate emergency care. Call 911.',
+    message: 'CRITICAL: Severe breathing difficulty requires immediate emergency care. Call 998.',
     triageLevel: TriageLevel.EMERGENCY,
     department: 'Emergency',
     severity: 10,
@@ -273,19 +273,19 @@ const RED_FLAG_KEYWORDS: Record<string, { message: string; triageLevel: TriageLe
     severity: 10,
   },
   'stroke': {
-    message: 'CRITICAL: Stroke symptoms require immediate emergency care. Remember FAST: Face, Arms, Speech, Time. Call 911.',
+    message: 'CRITICAL: Stroke symptoms require immediate emergency care. Remember FAST: Face, Arms, Speech, Time. Call 998.',
     triageLevel: TriageLevel.EMERGENCY,
     department: 'Emergency/Neurology',
     severity: 10,
   },
   'face drooping': {
-    message: 'CRITICAL: Facial drooping may indicate a stroke. Call 911 immediately.',
+    message: 'CRITICAL: Facial drooping may indicate a stroke. Call 998 immediately.',
     triageLevel: TriageLevel.EMERGENCY,
     department: 'Emergency/Neurology',
     severity: 10,
   },
   'slurred speech': {
-    message: 'CRITICAL: Sudden slurred speech may indicate a stroke. Call 911 immediately.',
+    message: 'CRITICAL: Sudden slurred speech may indicate a stroke. Call 998 immediately.',
     triageLevel: TriageLevel.EMERGENCY,
     department: 'Emergency/Neurology',
     severity: 10,
@@ -297,7 +297,7 @@ const RED_FLAG_KEYWORDS: Record<string, { message: string; triageLevel: TriageLe
     severity: 9,
   },
   'severe allergic': {
-    message: 'CRITICAL: Severe allergic reaction (anaphylaxis) is life-threatening. Use epinephrine if available and call 911.',
+    message: 'CRITICAL: Severe allergic reaction (anaphylaxis) is life-threatening. Use epinephrine if available and call 998.',
     triageLevel: TriageLevel.EMERGENCY,
     department: 'Emergency',
     severity: 10,
@@ -921,7 +921,7 @@ export class SymptomCheckerService {
 
   private getRecommendedAction(triageLevel: TriageLevel, department: string): string {
     const actions: Record<TriageLevel, string> = {
-      [TriageLevel.EMERGENCY]: `SEEK IMMEDIATE EMERGENCY CARE. Go to the nearest Emergency Room or call 911. Your symptoms require urgent evaluation by ${department}.`,
+      [TriageLevel.EMERGENCY]: `SEEK IMMEDIATE EMERGENCY CARE. Go to the nearest Emergency Room or call 998. Your symptoms require urgent evaluation by ${department}.`,
       [TriageLevel.URGENT]: `Seek medical attention within the next few hours. Contact ${department} or visit urgent care. If symptoms worsen, go to Emergency Room.`,
       [TriageLevel.ROUTINE]: `Schedule an appointment with ${department} within the next few days. Monitor symptoms and seek earlier care if they worsen.`,
       [TriageLevel.SELF_CARE]: `Your symptoms appear manageable with self-care. If symptoms persist beyond a few days or worsen, schedule an appointment with ${department}.`,

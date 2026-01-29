@@ -598,7 +598,7 @@ function generateLocalResponse(query: string): string {
   }
 
   if (lowerQuery.includes('emergency') || lowerQuery.includes('urgent') || lowerQuery.includes('serious')) {
-    return "If you're experiencing a medical emergency, please call 911 immediately. Signs of emergency include severe chest pain, difficulty breathing, severe bleeding, sudden weakness or numbness, or signs of a stroke (face drooping, arm weakness, speech difficulty). Don't delay seeking emergency care.";
+    return "If you're experiencing a medical emergency, please call 998 immediately. Signs of emergency include severe chest pain, difficulty breathing, severe bleeding, sudden weakness or numbness, or signs of a stroke (face drooping, arm weakness, speech difficulty). Don't delay seeking emergency care.";
   }
 
   if (lowerQuery.includes('billing') || lowerQuery.includes('payment') || lowerQuery.includes('invoice') || lowerQuery.includes('bill')) {
