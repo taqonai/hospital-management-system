@@ -361,7 +361,7 @@ export default function Settings() {
                   ) : (
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => { setIsEditing(false); setProfileForm(profileData || mockProfile); }}
+                        onClick={() => { setIsEditing(false); setProfileForm(profileData || emptyProfile); }}
                         className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
                       >
                         Cancel
