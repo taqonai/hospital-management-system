@@ -244,6 +244,13 @@ export default function Settings() {
     if (!profileForm.lastName?.trim()) {
       errors.push('Last name is required');
     }
+    if (!profileForm.emergencyContact?.trim()) {
+      errors.push('Emergency contact name is required');
+    }
+    if (!profileForm.emergencyPhone?.trim()) {
+      errors.push('Emergency contact phone is required');
+    }
+
     if (errors.length > 0) {
       errors.forEach(err => toast.error(err));
       return;
