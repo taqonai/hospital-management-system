@@ -22,6 +22,29 @@ interface VitalsData {
   expectedDueDate?: string;
   currentMedications?: Array<{ name: string; dosage?: string; frequency?: string }>;
   currentTreatment?: string;
+  // Detailed medical history (filled during first consultation)
+  pastSurgeries?: Array<{
+    surgeryName: string;
+    surgeryDate: string;
+    hospitalName: string;
+    hospitalLocation?: string;
+    surgeonName?: string;
+    indication?: string;
+    complications?: string;
+    outcome?: string;
+    notes?: string;
+  }>;
+  immunizations?: Array<{
+    vaccineName: string;
+    vaccineType?: string;
+    doseNumber?: number;
+    dateAdministered: string;
+    administeredBy?: string;
+    lotNumber?: string;
+    nextDueDate?: string;
+    reactions?: string;
+    notes?: string;
+  }>;
 }
 
 // Helper function to generate clinical response based on NEWS2 score
@@ -618,6 +641,55 @@ export class OPDService {
             pastSurgeries: [],
             familyHistory: [],
             immunizations: [],
+          },
+        });
+      }
+    }
+
+    // SAVE DETAILED MEDICAL HISTORY (Past Surgeries & Immunizations)
+    // These are saved as separate records for first-time comprehensive data collection
+    if (vitalsData.pastSurgeries && vitalsData.pastSurgeries.length > 0) {
+      // Create past surgery records
+      for (const surgery of vitalsData.pastSurgeries) {
+        await prisma.pastSurgery.create({
+          data: {
+            patientId: appointment.patientId,
+            surgeryName: surgery.surgeryName,
+            procedureDetails: surgery.notes,
+            surgeryDate: new Date(surgery.surgeryDate),
+            hospitalName: surgery.hospitalName,
+            hospitalLocation: surgery.hospitalLocation,
+            surgeonName: surgery.surgeonName,
+            indication: surgery.indication,
+            complications: surgery.complications,
+            outcome: surgery.outcome,
+            notes: surgery.notes,
+            verificationStatus: 'NURSE_VERIFIED',
+            verifiedBy: recordedBy,
+            verifiedAt: new Date(),
+          },
+        });
+      }
+    }
+
+    if (vitalsData.immunizations && vitalsData.immunizations.length > 0) {
+      // Create immunization records
+      for (const immunization of vitalsData.immunizations) {
+        await prisma.immunization.create({
+          data: {
+            patientId: appointment.patientId,
+            vaccineName: immunization.vaccineName,
+            vaccineType: immunization.vaccineType,
+            doseNumber: immunization.doseNumber,
+            dateAdministered: new Date(immunization.dateAdministered),
+            administeredBy: immunization.administeredBy,
+            lotNumber: immunization.lotNumber,
+            nextDueDate: immunization.nextDueDate ? new Date(immunization.nextDueDate) : null,
+            reactions: immunization.reactions,
+            notes: immunization.notes,
+            verificationStatus: 'NURSE_VERIFIED',
+            verifiedBy: recordedBy,
+            verifiedAt: new Date(),
           },
         });
       }

@@ -763,6 +763,8 @@ model Patient {
   user             User?              @relation(fields: [oderId], references: [id])
   medicalHistory   MedicalHistory?
   allergies        Allergy[]
+  pastSurgeries    PastSurgery[]
+  immunizations    Immunization[]
   vitals           Vital[]
   appointments     Appointment[]
   consultations    Consultation[]
@@ -895,6 +897,66 @@ enum AllergySeverity {
   MODERATE
   SEVERE
   LIFE_THREATENING
+}
+
+model PastSurgery {
+  id                String                   @id @default(uuid())
+  patientId         String
+  surgeryName       String // e.g., "Appendectomy", "Cesarean Section"
+  procedureDetails  String? // Detailed description
+  surgeryDate       DateTime
+  hospitalName      String // External hospital name
+  hospitalLocation  String? // City/country
+  surgeonName       String?
+  indication        String? // Reason for surgery
+  complications     String? // Any complications
+  outcome           String? // Success/partial/complications
+  notes             String?
+  verificationStatus MedicalHistoryStatus @default(NURSE_VERIFIED)
+  verifiedBy        String? // User ID who verified
+  verifiedAt        DateTime?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  @@index([patientId])
+  @@map("past_surgeries")
+}
+
+model Immunization {
+  id                String                   @id @default(uuid())
+  patientId         String
+  vaccineName       String // e.g., "COVID-19", "MMR", "Hepatitis B"
+  vaccineType       String? // e.g., "Pfizer-BioNTech", "Moderna"
+  doseNumber        Int? // 1st dose, 2nd dose, booster
+  dateAdministered  DateTime
+  administeredBy    String? // Healthcare provider/clinic name
+  lotNumber         String? // For tracking recalls
+  expiryDate        DateTime?
+  nextDueDate       DateTime? // When next booster is due
+  route             String? // Intramuscular, oral, etc.
+  site              String? // Left arm, right arm, etc.
+  reactions         String? // Any adverse reactions
+  notes             String?
+  verificationStatus MedicalHistoryStatus @default(NURSE_VERIFIED)
+  verifiedBy        String? // User ID who verified
+  verifiedAt        DateTime?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  @@index([patientId])
+  @@index([vaccineName])
+  @@map("immunizations")
+}
+
+enum MedicalHistoryStatus {
+  PATIENT_REPORTED
+  NURSE_VERIFIED
+  DOCTOR_VALIDATED
+  UNVERIFIABLE
 }
 
 model Vital {
