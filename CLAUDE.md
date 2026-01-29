@@ -42,9 +42,10 @@ npm run db:seed:uae-drugs    # Seed UAE pharmaceutical database
 npm run dev                  # Start dev server (port 3001)
 npm run build                # TypeScript compile
 npm run build:strict         # TypeScript compile with strict mode
-npm test                     # Run Jest tests
+npm test                     # Run Jest tests (note: no test files exist yet)
 npm test -- path/to/test.ts  # Run single test file
 npm run lint                 # ESLint
+npm run fix:lab-orders       # Fix incomplete lab orders (utility script)
 
 # Additional Prisma aliases
 npm run db:generate          # Alias for prisma generate
@@ -243,6 +244,8 @@ Key routes (`/api/v1/`):
 - `authorize(...roles)` middleware for RBAC
 - `authorizeHospital` ensures tenant isolation
 - `optionalAuth` for endpoints with optional authentication
+- Password reset: Email-based OTP for staff (`/api/v1/auth/forgot-password`) and patients (`/api/v1/patient-auth/forgot-password`)
+- Mobile OTP login: Phone-based authentication for patient portal
 
 ### RBAC (Role-Based Access Control)
 - Custom roles with granular permissions stored in database (`CustomRole`, `UserPermission`)
@@ -250,6 +253,13 @@ Key routes (`/api/v1/`):
 - RBAC audit logging via `RBACAuditLog` model
 - Routes: `/api/v1/rbac/*` - Role and permission management
 - Middleware: `rbac.ts` for permission checking
+
+### Notification System
+- Multi-channel: Email (SendGrid primary, SES fallback), SMS (Twilio), Push (Expo)
+- Email templates for: appointment reminders, password reset, OTP verification, lab results
+- SMS integration via Twilio for appointment reminders and alerts
+- Push notifications for mobile app (managed via `/api/v1/notifications`)
+- Service location: `backend/src/services/notificationService.ts`, `backend/src/services/emailService.ts`, `backend/src/services/twilioService.ts`
 
 ### Unified Booking Workflow
 
@@ -304,6 +314,10 @@ See `mobile/src/*/AGENT.md` files for detailed implementation patterns.
 - `JWT_SECRET`, `JWT_REFRESH_SECRET`
 - `AI_SERVICE_URL` (default: http://localhost:8000)
 - `REDIS_HOST`, `REDIS_PORT`
+- `SENDGRID_API_KEY` - Primary email provider (SendGrid)
+- `AWS_SES_REGION`, `AWS_SES_FROM_EMAIL`, `AWS_SES_ACCESS_KEY_ID`, `AWS_SES_SECRET_ACCESS_KEY` - Fallback email (SES)
+- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` - SMS notifications
+- `FRONTEND_URL` - Frontend URL for email links
 
 **Frontend** (`frontend/.env`):
 - `VITE_API_URL` (default: http://localhost:3001/api/v1)
@@ -319,6 +333,11 @@ See `mobile/src/*/AGENT.md` files for detailed implementation patterns.
 - `AWS_REGION`, `AWS_S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` - For AWS S3
 - `MINIO_ENDPOINT` - For local MinIO (default: http://minio:9000)
 - S3 is prioritized over MinIO when AWS credentials are configured
+
+**Email Service**:
+- Primary: SendGrid (requires `SENDGRID_API_KEY`)
+- Fallback: AWS SES (requires AWS SES credentials)
+- Email service automatically falls back to SES if SendGrid fails
 
 ### Default Dev Credentials
 | Role | Email | Password |
