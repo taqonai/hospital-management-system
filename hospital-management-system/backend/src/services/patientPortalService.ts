@@ -209,8 +209,9 @@ export class PatientPortalService {
     const startOfToday = getTodayDateUAE();
 
     if (filters.type === 'upcoming') {
-      // Include today and future appointments
+      // Include today and future appointments, exclude cancelled/completed/no-show
       where.appointmentDate = { gte: startOfToday };
+      where.status = { notIn: ['CANCELLED', 'COMPLETED', 'NO_SHOW'] };
     } else if (filters.type === 'past') {
       // Only appointments before today
       where.appointmentDate = { lt: startOfToday };
@@ -231,12 +232,11 @@ export class PatientPortalService {
             },
           },
         },
-        // Sort by createdAt DESC so latest bookings appear first
-        // Then by appointmentDate for consistent ordering within same creation time
-        orderBy: [
-          { createdAt: 'desc' },
-          { appointmentDate: filters.type === 'past' ? 'desc' : 'asc' },
-        ],
+        // Upcoming: soonest first (appointmentDate ASC, then startTime ASC)
+        // Past: most recent first (appointmentDate DESC)
+        orderBy: filters.type === 'upcoming'
+          ? [{ appointmentDate: 'asc' }, { startTime: 'asc' }]
+          : [{ appointmentDate: 'desc' }, { startTime: 'desc' }],
         skip,
         take: limit,
       }),

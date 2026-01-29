@@ -154,6 +154,23 @@ const formatTime = (timeString: string): string => {
 };
 
 
+// Appointment status formatting
+const getAppointmentStatusConfig = (status: string) => {
+  const normalized = status?.toUpperCase()?.replace(/[\s-]/g, '_') || '';
+  const configs: Record<string, { bg: string; text: string; label: string }> = {
+    SCHEDULED: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Scheduled' },
+    CONFIRMED: { bg: 'bg-green-100', text: 'text-green-700', label: 'Confirmed' },
+    CHECKED_IN: { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Checked In' },
+    IN_PROGRESS: { bg: 'bg-purple-100', text: 'text-purple-700', label: 'In Progress' },
+    COMPLETED: { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Completed' },
+    CANCELLED: { bg: 'bg-red-100', text: 'text-red-700', label: 'Cancelled' },
+    NO_SHOW: { bg: 'bg-red-100', text: 'text-red-600', label: 'No Show' },
+    RESCHEDULED: { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Rescheduled' },
+    WAITING: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Waiting' },
+  };
+  return configs[normalized] || { bg: 'bg-blue-100', text: 'text-blue-700', label: status?.replace(/_/g, ' ') || 'Unknown' };
+};
+
 // Prescription status badge component
 const PrescriptionStatusBadge = ({ status }: { status: Prescription['status'] }) => {
   const statusConfig = {
@@ -652,10 +669,15 @@ export default function PatientPortalDashboard() {
                     </div>
                     <div className="text-right">
                       <p className="font-medium text-gray-900">{formatTime(apt.time)}</p>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-                        <CheckCircleIcon className="h-3 w-3" />
-                        {apt.status}
-                      </span>
+                      {(() => {
+                        const statusConfig = getAppointmentStatusConfig(apt.status);
+                        return (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig.bg} ${statusConfig.text}`}>
+                            <CheckCircleIcon className="h-3 w-3" />
+                            {statusConfig.label}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
                 ))}
