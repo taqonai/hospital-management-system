@@ -15,6 +15,7 @@ import { BookingTicketData } from '../../hooks/useBookingData';
 import { BookingStatusTimeline } from './BookingStatusTimeline';
 import { VitalsSummaryCard } from './VitalsSummaryCard';
 import { LabOrdersCard } from './LabOrdersCard';
+import { PrescriptionCard } from './PrescriptionCard';
 
 interface BookingTicketProps {
   data: BookingTicketData;
@@ -305,6 +306,11 @@ export function BookingTicket({
                   )}
                 </div>
               </div>
+            )}
+
+            {/* Prescriptions */}
+            {consultation && consultation.prescriptions && (
+              <PrescriptionCard prescriptions={consultation.prescriptions} />
             )}
 
             {/* Lab Orders */}
