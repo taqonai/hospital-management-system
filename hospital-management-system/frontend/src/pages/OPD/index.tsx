@@ -419,6 +419,31 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
     frequency: '',
   });
 
+  // State for detailed medical history (first consultation)
+  const [showMedicalHistory, setShowMedicalHistory] = useState(false);
+  const [pastSurgeries, setPastSurgeries] = useState<Array<{
+    surgeryName: string;
+    surgeryDate: string;
+    hospitalName: string;
+    hospitalLocation: string;
+    surgeonName: string;
+    indication: string;
+    complications: string;
+    outcome: string;
+    notes: string;
+  }>>([]);
+  const [immunizations, setImmunizations] = useState<Array<{
+    vaccineName: string;
+    vaccineType: string;
+    doseNumber: string;
+    dateAdministered: string;
+    administeredBy: string;
+    lotNumber: string;
+    nextDueDate: string;
+    reactions: string;
+    notes: string;
+  }>>([]);
+
   // State for AI risk assessment display
   const [riskAssessment, setRiskAssessment] = useState<any>(null);
   const [showRiskAssessment, setShowRiskAssessment] = useState(false);
@@ -618,6 +643,11 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
     e.preventDefault();
     setLoading(true);
     try {
+      // Filter out empty surgery records (only include those with at least name and date)
+      const validSurgeries = pastSurgeries.filter(s => s.surgeryName.trim() && s.surgeryDate);
+      // Filter out empty immunization records (only include those with at least vaccine name and date)
+      const validImmunizations = immunizations.filter(i => i.vaccineName.trim() && i.dateAdministered);
+
       const vitalsData = {
         temperature: vitals.temperature ? parseFloat(vitals.temperature) : undefined,
         bloodPressureSys: vitals.bloodPressureSys ? parseInt(vitals.bloodPressureSys) : undefined,
@@ -635,6 +665,29 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
         expectedDueDate: vitals.expectedDueDate || undefined,
         currentMedications: vitals.currentMedications.length > 0 ? vitals.currentMedications : undefined,
         currentTreatment: vitals.currentTreatment || undefined,
+        // Detailed medical history (first consultation)
+        pastSurgeries: validSurgeries.length > 0 ? validSurgeries.map(s => ({
+          surgeryName: s.surgeryName,
+          surgeryDate: s.surgeryDate,
+          hospitalName: s.hospitalName,
+          hospitalLocation: s.hospitalLocation || undefined,
+          surgeonName: s.surgeonName || undefined,
+          indication: s.indication || undefined,
+          complications: s.complications || undefined,
+          outcome: s.outcome || undefined,
+          notes: s.notes || undefined,
+        })) : undefined,
+        immunizations: validImmunizations.length > 0 ? validImmunizations.map(i => ({
+          vaccineName: i.vaccineName,
+          vaccineType: i.vaccineType || undefined,
+          doseNumber: i.doseNumber ? parseInt(i.doseNumber) : undefined,
+          dateAdministered: i.dateAdministered,
+          administeredBy: i.administeredBy || undefined,
+          lotNumber: i.lotNumber || undefined,
+          nextDueDate: i.nextDueDate || undefined,
+          reactions: i.reactions || undefined,
+          notes: i.notes || undefined,
+        })) : undefined,
       };
 
       const response = await opdApi.recordVitals(appointment.id, vitalsData);
@@ -686,6 +739,55 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
   const handleContinueAfterRiskAssessment = () => {
     setShowRiskAssessment(false);
     onSuccess();
+  };
+
+  // Medical history helpers
+  const addPastSurgery = () => {
+    setPastSurgeries([...pastSurgeries, {
+      surgeryName: '',
+      surgeryDate: '',
+      hospitalName: '',
+      hospitalLocation: '',
+      surgeonName: '',
+      indication: '',
+      complications: '',
+      outcome: '',
+      notes: '',
+    }]);
+  };
+
+  const removePastSurgery = (index: number) => {
+    setPastSurgeries(pastSurgeries.filter((_, i) => i !== index));
+  };
+
+  const updatePastSurgery = (index: number, field: string, value: string) => {
+    const updated = [...pastSurgeries];
+    updated[index] = { ...updated[index], [field]: value };
+    setPastSurgeries(updated);
+  };
+
+  const addImmunization = () => {
+    setImmunizations([...immunizations, {
+      vaccineName: '',
+      vaccineType: '',
+      doseNumber: '',
+      dateAdministered: '',
+      administeredBy: '',
+      lotNumber: '',
+      nextDueDate: '',
+      reactions: '',
+      notes: '',
+    }]);
+  };
+
+  const removeImmunization = (index: number) => {
+    setImmunizations(immunizations.filter((_, i) => i !== index));
+  };
+
+  const updateImmunization = (index: number, field: string, value: string) => {
+    const updated = [...immunizations];
+    updated[index] = { ...updated[index], [field]: value };
+    setImmunizations(updated);
   };
 
   return (
@@ -1180,6 +1282,283 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
                 </div>
               </div>
             )}
+
+            {/* Detailed Medical History (First Consultation) */}
+            <div className="border border-purple-200 rounded-xl overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowMedicalHistory(!showMedicalHistory)}
+                className="w-full px-4 py-3 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 transition-colors flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2">
+                  <ClipboardDocumentListIcon className="h-5 w-5 text-purple-600" />
+                  <span className="font-semibold text-purple-900">
+                    Detailed Medical History
+                  </span>
+                  <span className="text-xs text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full">
+                    First Visit Collection
+                  </span>
+                </div>
+                <span className="text-purple-600">
+                  {showMedicalHistory ? '▼' : '▶'}
+                </span>
+              </button>
+
+              {showMedicalHistory && (
+                <div className="p-4 space-y-4 bg-white">
+                  {/* Past Surgeries Section */}
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="block text-sm font-semibold text-gray-700">
+                        Past Surgeries <span className="text-gray-400 font-normal">(optional)</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={addPastSurgery}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors"
+                      >
+                        <PlusIcon className="h-4 w-4" />
+                        Add Surgery
+                      </button>
+                    </div>
+
+                    {pastSurgeries.length === 0 && (
+                      <p className="text-sm text-gray-500 text-center py-3 bg-gray-50 rounded-lg">
+                        No past surgeries recorded. Click "Add Surgery" to enter details.
+                      </p>
+                    )}
+
+                    {pastSurgeries.map((surgery, index) => (
+                      <div key={index} className="p-4 mb-3 border border-gray-200 rounded-lg bg-gray-50">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="font-medium text-gray-700">Surgery #{index + 1}</span>
+                          <button
+                            type="button"
+                            onClick={() => removePastSurgery(index)}
+                            className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                          >
+                            <XMarkIcon className="h-5 w-5" />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="col-span-2">
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Surgery Name <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g., Appendectomy, Cesarean Section"
+                              value={surgery.surgeryName}
+                              onChange={(e) => updatePastSurgery(index, 'surgeryName', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Date <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="date"
+                              value={surgery.surgeryDate}
+                              onChange={(e) => updatePastSurgery(index, 'surgeryDate', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Hospital Name <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="Hospital name"
+                              value={surgery.hospitalName}
+                              onChange={(e) => updatePastSurgery(index, 'hospitalName', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Location (City/Country)
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g., Dubai, UAE"
+                              value={surgery.hospitalLocation}
+                              onChange={(e) => updatePastSurgery(index, 'hospitalLocation', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Surgeon Name
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="Dr. name"
+                              value={surgery.surgeonName}
+                              onChange={(e) => updatePastSurgery(index, 'surgeonName', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+                            />
+                          </div>
+
+                          <div className="col-span-2">
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Complications / Outcome
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g., Successful, no complications"
+                              value={surgery.complications}
+                              onChange={(e) => updatePastSurgery(index, 'complications', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Immunizations Section */}
+                  <div className="pt-4 border-t border-gray-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="block text-sm font-semibold text-gray-700">
+                        Immunization Records <span className="text-gray-400 font-normal">(optional)</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={addImmunization}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+                      >
+                        <PlusIcon className="h-4 w-4" />
+                        Add Vaccine
+                      </button>
+                    </div>
+
+                    {immunizations.length === 0 && (
+                      <p className="text-sm text-gray-500 text-center py-3 bg-gray-50 rounded-lg">
+                        No immunizations recorded. Click "Add Vaccine" to enter details.
+                      </p>
+                    )}
+
+                    {immunizations.map((immunization, index) => (
+                      <div key={index} className="p-4 mb-3 border border-gray-200 rounded-lg bg-gray-50">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="font-medium text-gray-700">Vaccine #{index + 1}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeImmunization(index)}
+                            className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                          >
+                            <XMarkIcon className="h-5 w-5" />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Vaccine Name <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g., COVID-19, MMR, Hepatitis B"
+                              value={immunization.vaccineName}
+                              onChange={(e) => updateImmunization(index, 'vaccineName', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Brand/Type
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g., Pfizer-BioNTech"
+                              value={immunization.vaccineType}
+                              onChange={(e) => updateImmunization(index, 'vaccineType', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Date Administered <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="date"
+                              value={immunization.dateAdministered}
+                              onChange={(e) => updateImmunization(index, 'dateAdministered', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Dose Number
+                            </label>
+                            <input
+                              type="number"
+                              placeholder="1, 2, 3..."
+                              value={immunization.doseNumber}
+                              onChange={(e) => updateImmunization(index, 'doseNumber', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                            />
+                          </div>
+
+                          <div className="col-span-2">
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Healthcare Provider/Clinic
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g., City Health Clinic"
+                              value={immunization.administeredBy}
+                              onChange={(e) => updateImmunization(index, 'administeredBy', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Lot Number
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="For tracking"
+                              value={immunization.lotNumber}
+                              onChange={(e) => updateImmunization(index, 'lotNumber', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Next Due Date
+                            </label>
+                            <input
+                              type="date"
+                              value={immunization.nextDueDate}
+                              onChange={(e) => updateImmunization(index, 'nextDueDate', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <p className="text-xs text-gray-500 italic">
+                    💡 Tip: This detailed medical history is typically collected during the first consultation.
+                    You can skip this section for repeat visits.
+                  </p>
+                </div>
+              )}
+            </div>
 
             {/* Nurse Notes */}
             <div>
