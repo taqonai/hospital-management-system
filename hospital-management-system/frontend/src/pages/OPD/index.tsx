@@ -1174,14 +1174,19 @@ function VitalsRecordingModal({ appointment, onClose, onSuccess }: VitalsModalPr
                   {vitals.isPregnant === true && (
                     <div className="mt-3">
                       <label className="block text-xs font-medium text-gray-600 mb-1">
-                        Expected Due Date <span className="text-gray-400">(optional)</span>
+                        Expected Due Date <span className="text-gray-400">(optional, max 42 weeks from today)</span>
                       </label>
                       <input
                         type="date"
                         value={vitals.expectedDueDate}
                         onChange={(e) => setVitals({ ...vitals, expectedDueDate: e.target.value })}
+                        min={new Date().toISOString().split('T')[0]}
+                        max={new Date(Date.now() + 294 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
                         className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500 text-sm"
                       />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Due date must be within 42 weeks (9 months + 2 weeks) from today
+                      </p>
                     </div>
                   )}
                 </div>

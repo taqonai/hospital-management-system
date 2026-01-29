@@ -715,15 +715,18 @@ export default function Appointments() {
               <h1 className="text-3xl font-bold text-gray-900">My Appointments</h1>
               <p className="text-gray-500 mt-1">View, book, and manage your appointments</p>
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowBookingChoice(true)}
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl"
-              >
-                <PlusIcon className="h-5 w-5" />
-                Book Appointment
-              </button>
-            </div>
+            {/* Only show Book Appointment button if user has upcoming appointments */}
+            {!isLoading && paginatedAppointments.length > 0 && (
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowBookingChoice(true)}
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl"
+                >
+                  <PlusIcon className="h-5 w-5" />
+                  Book Appointment
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
