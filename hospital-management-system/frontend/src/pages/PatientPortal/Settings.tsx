@@ -258,6 +258,9 @@ export default function Settings() {
     if (!profileForm.lastName?.trim()) {
       errors.push('Last name is required');
     }
+    if (!profileForm.phone?.trim()) {
+      errors.push('Phone number is required');
+    }
     if (!profileForm.emergencyContact?.trim()) {
       errors.push('Emergency contact name is required');
     }
@@ -485,7 +488,7 @@ export default function Settings() {
                           </div>
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Phone <span className="text-red-500">*</span></label>
                           <div className="relative">
                             <PhoneIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                             <input
