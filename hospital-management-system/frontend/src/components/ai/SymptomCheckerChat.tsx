@@ -586,10 +586,10 @@ export default function SymptomCheckerChat({ onComplete, onBookAppointment, auto
           )}
           {result.urgency === 'emergency' && (
             <a
-              href="tel:911"
+              href="tel:998"
               className="flex-1 px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl font-medium hover:shadow-lg transition-all flex items-center justify-center gap-2 text-sm"
             >
-              <PhoneIcon className="w-4 h-4" />Call 911
+              <PhoneIcon className="w-4 h-4" />Call 998
             </a>
           )}
           <button

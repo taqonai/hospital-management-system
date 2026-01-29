@@ -449,6 +449,6 @@ export function generateMockTriageResult(params: {
     ],
     red_flags_present: urgency === 'emergency',
     red_flag_symptoms: urgency === 'emergency' ? ['Severe symptoms detected'] : [],
-    disclaimer: 'This is a general health guidance tool. Please consult a healthcare professional for proper diagnosis and treatment. If you experience a medical emergency, call 911 or go to the nearest emergency room.',
+    disclaimer: 'This is a general health guidance tool. Please consult a healthcare professional for proper diagnosis and treatment. If you experience a medical emergency, call 998 or go to the nearest emergency room.',
   };
 }
