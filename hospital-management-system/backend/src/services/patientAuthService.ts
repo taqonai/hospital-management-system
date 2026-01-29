@@ -1072,11 +1072,24 @@ export class PatientAuthService {
       }
     }
 
+    // Build clean update data - only include known patient fields
+    const cleanData: any = {};
+    const allowedFields = ['firstName', 'lastName', 'phone', 'email', 'address', 'city', 'state', 'zipCode', 'emergencyContact', 'emergencyPhone', 'occupation', 'nationality', 'photo', 'gender', 'bloodGroup'];
+    for (const field of allowedFields) {
+      if ((data as any)[field] !== undefined) {
+        cleanData[field] = (data as any)[field];
+      }
+    }
+    // Handle dateOfBirth separately - convert string to DateTime
+    if ((data as any).dateOfBirth) {
+      cleanData.dateOfBirth = new Date((data as any).dateOfBirth);
+    }
+
     // Update patient
     const updatedPatient = await prisma.patient.update({
       where: { id: patientId },
       data: {
-        ...data,
+        ...cleanData,
         updatedAt: new Date(),
       },
       select: {
@@ -1096,6 +1109,9 @@ export class PatientAuthService {
         maritalStatus: true,
         nationality: true,
         photo: true,
+        dateOfBirth: true,
+        gender: true,
+        bloodGroup: true,
         hospitalId: true,
         updatedAt: true,
       },

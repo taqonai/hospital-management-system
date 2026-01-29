@@ -71,6 +71,7 @@ interface ProfileFormData {
   phoneCountryCode: string;
   dateOfBirth: string;
   gender: 'MALE' | 'FEMALE' | '';
+  bloodGroup: string;
   address: string;
   city: string;
   state: string;
@@ -144,6 +145,7 @@ const ProfileScreen: React.FC = () => {
     phoneCountryCode: '+1',
     dateOfBirth: '',
     gender: '',
+    bloodGroup: '',
     address: '',
     city: '',
     state: '',
@@ -170,6 +172,7 @@ const ProfileScreen: React.FC = () => {
         phoneCountryCode: phoneData.code,
         dateOfBirth: user.dateOfBirth ? user.dateOfBirth.split('T')[0] : '',
         gender: user.gender || '',
+        bloodGroup: user.bloodGroup || '',
         address: user.address || '',
         city: user.city || '',
         state: user.state || '',
@@ -341,6 +344,9 @@ const ProfileScreen: React.FC = () => {
         emergencyContact: formData.emergencyContactName?.trim() || undefined,
         // Backend expects 'emergencyPhone' not 'emergencyContactPhone'
         emergencyPhone: fullEmergencyPhone,
+        bloodGroup: formData.bloodGroup || undefined,
+        dateOfBirth: formData.dateOfBirth || undefined,
+        gender: formData.gender || undefined,
       };
 
       // Remove undefined values
@@ -871,6 +877,43 @@ const ProfileScreen: React.FC = () => {
             {renderPhoneField('Phone', 'phone', 'phoneCountryCode', 'phone')}
             {renderDateField()}
             {renderGenderSelector()}
+
+            {/* Blood Group */}
+            <View style={styles.fieldContainer}>
+              <Text style={styles.fieldLabel}>Blood Group</Text>
+              {isEditing ? (
+                <View style={styles.genderContainer}>
+                  {['A_POSITIVE', 'A_NEGATIVE', 'B_POSITIVE', 'B_NEGATIVE', 'AB_POSITIVE', 'AB_NEGATIVE', 'O_POSITIVE', 'O_NEGATIVE'].map((option) => (
+                    <TouchableOpacity
+                      key={option}
+                      style={[
+                        styles.genderOption,
+                        { minWidth: 50, paddingHorizontal: 10 },
+                        formData.bloodGroup === option && styles.genderOptionSelected,
+                      ]}
+                      onPress={() => handleChange('bloodGroup', option)}
+                      disabled={isSaving}
+                    >
+                      <Text
+                        style={[
+                          styles.genderOptionText,
+                          { fontSize: 13 },
+                          formData.bloodGroup === option && styles.genderOptionTextSelected,
+                        ]}
+                      >
+                        {option.replace('_POSITIVE', '+').replace('_NEGATIVE', '-')}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.fieldValue}>
+                  {formData.bloodGroup
+                    ? formData.bloodGroup.replace('_POSITIVE', '+').replace('_NEGATIVE', '-')
+                    : '-'}
+                </Text>
+              )}
+            </View>
           </View>
         </View>
 

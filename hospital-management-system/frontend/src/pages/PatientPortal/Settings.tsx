@@ -416,7 +416,7 @@ export default function Settings() {
                         <p className="text-gray-500">{profileForm.email}</p>
                         {profileForm.bloodGroup && (
                           <span className="inline-flex items-center px-2.5 py-1 mt-2 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                            Blood Group: {profileForm.bloodGroup}
+                            Blood Group: {(profileForm.bloodGroup || '').replace('_POSITIVE', '+').replace('_NEGATIVE', '-')}
                           </span>
                         )}
                       </div>
@@ -510,14 +510,14 @@ export default function Settings() {
                             className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-slate-500 focus:border-slate-500 disabled:bg-gray-50 disabled:text-gray-500"
                           >
                             <option value="">Select Blood Group</option>
-                            <option value="A+">A+</option>
-                            <option value="A-">A-</option>
-                            <option value="B+">B+</option>
-                            <option value="B-">B-</option>
-                            <option value="AB+">AB+</option>
-                            <option value="AB-">AB-</option>
-                            <option value="O+">O+</option>
-                            <option value="O-">O-</option>
+                            <option value="A_POSITIVE">A+</option>
+                            <option value="A_NEGATIVE">A-</option>
+                            <option value="B_POSITIVE">B+</option>
+                            <option value="B_NEGATIVE">B-</option>
+                            <option value="AB_POSITIVE">AB+</option>
+                            <option value="AB_NEGATIVE">AB-</option>
+                            <option value="O_POSITIVE">O+</option>
+                            <option value="O_NEGATIVE">O-</option>
                           </select>
                         </div>
                       </div>
