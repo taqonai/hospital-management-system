@@ -501,6 +501,25 @@ export default function Settings() {
                             <option value="FEMALE">Female</option>
                           </select>
                         </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Blood Group</label>
+                          <select
+                            value={profileForm.bloodGroup || ''}
+                            onChange={(e) => setProfileForm({ ...profileForm, bloodGroup: e.target.value })}
+                            disabled={!isEditing}
+                            className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-slate-500 focus:border-slate-500 disabled:bg-gray-50 disabled:text-gray-500"
+                          >
+                            <option value="">Select Blood Group</option>
+                            <option value="A+">A+</option>
+                            <option value="A-">A-</option>
+                            <option value="B+">B+</option>
+                            <option value="B-">B-</option>
+                            <option value="AB+">AB+</option>
+                            <option value="AB-">AB-</option>
+                            <option value="O+">O+</option>
+                            <option value="O-">O-</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
 
