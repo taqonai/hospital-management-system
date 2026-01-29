@@ -289,7 +289,23 @@ export default function LabResults() {
   const handleDownloadResult = async (result: LabResult) => {
     setIsDownloading(result.id);
     try {
-      await patientPortalApi.downloadLabReport(result.id);
+      const response = await patientPortalApi.downloadLabReport(result.id);
+
+      // Create blob URL from response data
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+
+      // Create temporary anchor element and trigger download
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Lab-Report-${result.orderNumber}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+
+      // Cleanup
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
       toast.success('Lab report downloaded successfully');
     } catch (err) {
       console.error('Download failed:', err);
