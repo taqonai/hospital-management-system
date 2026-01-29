@@ -1,7 +1,7 @@
 import prisma from '../config/database';
 import { NotFoundError, AppError } from '../middleware/errorHandler';
 import { LabOrderStatus, AppointmentType } from '@prisma/client';
-import { getTodayDateUAE, getTodayInUAE, getCurrentTimeMinutesUAE } from '../utils/timezone';
+import { getTodayDateUAE, getTodayInUAE, getCurrentTimeMinutesUAE, getCurrentTimeUAE } from '../utils/timezone';
 
 /**
  * Patient Portal Service
