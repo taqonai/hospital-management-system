@@ -70,8 +70,21 @@ export class PatientPortalService {
       }),
     ]);
 
+    // Filter out today's appointments where time has already passed
+    const todayStr = getTodayInUAE();
+    const currentTimeUAE = getCurrentTimeUAE();
+    const filteredUpcoming = upcomingAppointments.filter((apt: any) => {
+      const aptDateStr = apt.appointmentDate instanceof Date
+        ? apt.appointmentDate.toISOString().split('T')[0]
+        : String(apt.appointmentDate).split('T')[0];
+      if (aptDateStr === todayStr && apt.startTime) {
+        return apt.startTime >= currentTimeUAE;
+      }
+      return true;
+    });
+
     // Get next appointment
-    const nextAppointment = upcomingAppointments[0];
+    const nextAppointment = filteredUpcoming[0];
 
     return {
       patient: {
@@ -80,7 +93,7 @@ export class PatientPortalService {
         lastName: patient.lastName,
         mrn: patient.mrn,
       },
-      upcomingAppointments: upcomingAppointments.map((apt: any) => ({
+      upcomingAppointments: filteredUpcoming.map((apt: any) => ({
         id: apt.id,
         date: apt.appointmentDate,
         appointmentDate: apt.appointmentDate,
@@ -97,7 +110,7 @@ export class PatientPortalService {
         } : null,
       })),
       // Include total count for accurate display on dashboard
-      totalUpcomingAppointments,
+      totalUpcomingAppointments: filteredUpcoming.length,
       nextAppointment: nextAppointment ? {
         date: (nextAppointment as any).appointmentDate,
         time: (nextAppointment as any).startTime,
@@ -221,7 +234,10 @@ export class PatientPortalService {
       where.status = filters.status;
     }
 
-    const [appointments, total] = await Promise.all([
+    // For upcoming: fetch extra to account for filtering out past time slots today
+    const fetchLimit = filters.type === 'upcoming' ? limit + 20 : limit;
+
+    const [rawAppointments, rawTotal] = await Promise.all([
       prisma.appointment.findMany({
         where,
         include: {
@@ -237,11 +253,33 @@ export class PatientPortalService {
         orderBy: filters.type === 'upcoming'
           ? [{ appointmentDate: 'asc' }, { startTime: 'asc' }]
           : [{ appointmentDate: 'desc' }, { startTime: 'desc' }],
-        skip,
-        take: limit,
+        skip: filters.type === 'upcoming' ? 0 : skip,
+        take: filters.type === 'upcoming' ? fetchLimit + skip : limit,
       }),
       prisma.appointment.count({ where }),
     ]);
+
+    // For upcoming: filter out today's appointments where time has already passed
+    let appointments = rawAppointments;
+    let total = rawTotal;
+    if (filters.type === 'upcoming') {
+      const todayStr = getTodayInUAE();
+      const currentTimeUAE = getCurrentTimeUAE(); // "HH:MM"
+      appointments = rawAppointments.filter((apt: any) => {
+        const aptDateStr = apt.appointmentDate instanceof Date
+          ? apt.appointmentDate.toISOString().split('T')[0]
+          : String(apt.appointmentDate).split('T')[0];
+        // If appointment is today, check if startTime hasn't passed yet
+        if (aptDateStr === todayStr && apt.startTime) {
+          return apt.startTime >= currentTimeUAE;
+        }
+        // Future dates always included
+        return true;
+      });
+      total = appointments.length;
+      // Apply pagination after filtering
+      appointments = appointments.slice(skip, skip + limit);
+    }
 
     return {
       data: appointments.map(apt => ({

@@ -761,6 +761,7 @@ export class DoctorService {
 
     const [
       todayAppointments,
+      completedToday,
       monthlyAppointments,
       totalPatients,
       pendingConsultations,
@@ -770,6 +771,13 @@ export class DoctorService {
         where: {
           doctorId,
           appointmentDate: { gte: today, lt: tomorrow },
+        },
+      }),
+      prisma.appointment.count({
+        where: {
+          doctorId,
+          appointmentDate: { gte: today, lt: tomorrow },
+          status: 'COMPLETED',
         },
       }),
       prisma.appointment.count({
@@ -805,6 +813,7 @@ export class DoctorService {
 
     return {
       todayAppointments,
+      completedToday,
       monthlyAppointments,
       totalPatients: totalPatients.length,
       pendingConsultations,

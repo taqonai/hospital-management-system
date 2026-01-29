@@ -43,7 +43,7 @@ export default function DoctorDashboard() {
     }
 
     // Count appointments per day
-    weeklyAppointments?.appointments?.forEach((apt: any) => {
+    weeklyAppointments?.forEach((apt: any) => {
       const date = new Date(apt.appointmentDate);
       const dayName = days[date.getDay()];
       if (counts[dayName] !== undefined) {
@@ -54,9 +54,9 @@ export default function DoctorDashboard() {
     return Object.entries(counts).map(([label, value]) => ({ label, value }));
   })();
 
-  // Filter queue to show waiting patients
+  // Filter queue to show waiting patients (checked in and ready for consultation)
   const waitingPatients = currentQueue?.filter((q: any) =>
-    q.status === 'CHECKED_IN' || q.status === 'WAITING'
+    q.status === 'CHECKED_IN'
   ) || [];
 
   const inProgressPatient = currentQueue?.find((q: any) =>
@@ -112,8 +112,8 @@ export default function DoctorDashboard() {
               <div>
                 <p className="font-semibold text-blue-900">Currently Consulting</p>
                 <p className="text-sm text-blue-700">
-                  {inProgressPatient.patient?.firstName} {inProgressPatient.patient?.lastName} -
-                  Token #{inProgressPatient.tokenNumber}
+                  {inProgressPatient.patient?.firstName || 'Unknown'} {inProgressPatient.patient?.lastName || 'Patient'} -
+                  Token #{inProgressPatient.tokenNumber || 'N/A'}
                 </p>
               </div>
             </div>
