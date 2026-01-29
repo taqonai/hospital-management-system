@@ -13,23 +13,67 @@ import {
   ArrowPathIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
+  FunnelIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { patientApi } from '../services/api';
 import { Patient } from '../types';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 
+type SortField = 'firstName' | 'mrn' | 'gender' | 'dateOfBirth' | 'phone' | 'createdAt' | 'isActive';
+type SortOrder = 'asc' | 'desc';
+
 export default function Patients() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<SortField>('createdAt');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterMRN, setFilterMRN] = useState('');
+  const [filterGender, setFilterGender] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterPhone, setFilterPhone] = useState('');
   const limit = 10;
   const queryClient = useQueryClient();
 
+  const hasActiveFilters = filterMRN || filterGender || filterStatus || filterPhone;
+
+  const handleSort = (field: SortField) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+    setPage(1);
+  };
+
+  const clearFilters = () => {
+    setFilterMRN('');
+    setFilterGender('');
+    setFilterStatus('');
+    setFilterPhone('');
+    setPage(1);
+  };
+
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['patients', { page, search }],
+    queryKey: ['patients', { page, search, sortBy, sortOrder, filterMRN, filterGender, filterStatus, filterPhone }],
     queryFn: async () => {
-      const response = await patientApi.getAll({ page, limit, search });
+      const response = await patientApi.getAll({
+        page,
+        limit,
+        search,
+        sortBy,
+        sortOrder,
+        ...(filterMRN && { mrn: filterMRN }),
+        ...(filterGender && { gender: filterGender }),
+        ...(filterStatus && { isActive: filterStatus === 'active' }),
+        ...(filterPhone && { phone: filterPhone }),
+      });
       return response.data;
     },
   });
@@ -94,7 +138,7 @@ export default function Patients() {
       </div>
 
       {/* Search and Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="relative flex-1">
             <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -110,6 +154,22 @@ export default function Patients() {
             />
           </div>
           <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border transition-colors ${
+              hasActiveFilters
+                ? 'border-blue-500 bg-blue-50 text-blue-700'
+                : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <FunnelIcon className="h-5 w-5" />
+            Filters
+            {hasActiveFilters && (
+              <span className="ml-1 px-1.5 py-0.5 text-xs bg-blue-600 text-white rounded-full">
+                {[filterMRN, filterGender, filterStatus, filterPhone].filter(Boolean).length}
+              </span>
+            )}
+          </button>
+          <button
             onClick={() => refetch()}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
           >
@@ -117,6 +177,70 @@ export default function Patients() {
             Refresh
           </button>
         </div>
+
+        {/* Expanded Filters */}
+        {showFilters && (
+          <div className="pt-4 border-t border-gray-200">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-medium text-gray-700">Advanced Filters</h4>
+              {hasActiveFilters && (
+                <button
+                  onClick={clearFilters}
+                  className="inline-flex items-center gap-1 text-sm text-red-600 hover:text-red-700"
+                >
+                  <XMarkIcon className="h-4 w-4" />
+                  Clear all
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Patient ID / MRN</label>
+                <input
+                  type="text"
+                  placeholder="e.g. MRN-00123"
+                  value={filterMRN}
+                  onChange={(e) => { setFilterMRN(e.target.value); setPage(1); }}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Gender</label>
+                <select
+                  value={filterGender}
+                  onChange={(e) => { setFilterGender(e.target.value); setPage(1); }}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">All</option>
+                  <option value="MALE">Male</option>
+                  <option value="FEMALE">Female</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">All</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Phone</label>
+                <input
+                  type="text"
+                  placeholder="e.g. +971..."
+                  value={filterPhone}
+                  onChange={(e) => { setFilterPhone(e.target.value); setPage(1); }}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Table */}
@@ -146,13 +270,29 @@ export default function Patients() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-600 uppercase">Patient</th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-600 uppercase">MRN</th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-600 uppercase">Gender</th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-600 uppercase">Age</th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-600 uppercase">Phone</th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-600 uppercase">Registered</th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-600 uppercase">Status</th>
+                    {([
+                      { field: 'firstName' as SortField, label: 'Patient' },
+                      { field: 'mrn' as SortField, label: 'MRN' },
+                      { field: 'gender' as SortField, label: 'Gender' },
+                      { field: 'dateOfBirth' as SortField, label: 'Age' },
+                      { field: 'phone' as SortField, label: 'Phone' },
+                      { field: 'createdAt' as SortField, label: 'Registered' },
+                      { field: 'isActive' as SortField, label: 'Status' },
+                    ]).map((col) => (
+                      <th
+                        key={col.field}
+                        className="text-left px-6 py-3 text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100 select-none transition-colors"
+                        onClick={() => handleSort(col.field)}
+                      >
+                        <div className="flex items-center gap-1">
+                          {col.label}
+                          <span className="inline-flex flex-col">
+                            <ChevronUpIcon className={`h-3 w-3 -mb-0.5 ${sortBy === col.field && sortOrder === 'asc' ? 'text-blue-600' : 'text-gray-300'}`} />
+                            <ChevronDownIcon className={`h-3 w-3 -mt-0.5 ${sortBy === col.field && sortOrder === 'desc' ? 'text-blue-600' : 'text-gray-300'}`} />
+                          </span>
+                        </div>
+                      </th>
+                    ))}
                     <th className="text-right px-6 py-3 text-xs font-semibold text-gray-600 uppercase">Actions</th>
                   </tr>
                 </thead>

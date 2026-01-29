@@ -14,13 +14,17 @@ router.get(
   authenticate,
   validate(paginationSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const { page, limit, search, sortBy, sortOrder } = req.query;
+    const { page, limit, search, sortBy, sortOrder, mrn, gender, isActive, phone } = req.query;
     const { patients, total } = await patientService.findAll(req.user!.hospitalId, {
       page: Number(page) || 1,
       limit: Number(limit) || 10,
       search: search as string,
       sortBy: sortBy as string,
       sortOrder: sortOrder as 'asc' | 'desc',
+      mrn: mrn as string,
+      gender: gender as string,
+      isActive: isActive !== undefined ? isActive === 'true' : undefined,
+      phone: phone as string,
     });
     const pagination = calculatePagination(Number(page) || 1, Number(limit) || 10, total);
     sendPaginated(res, patients, pagination);

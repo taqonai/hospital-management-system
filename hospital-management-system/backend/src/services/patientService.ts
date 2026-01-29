@@ -70,8 +70,8 @@ export class PatientService {
     return patient;
   }
 
-  async findAll(hospitalId: string, params: SearchParams) {
-    const { page = 1, limit = 10, search, sortBy = 'createdAt', sortOrder = 'desc' } = params;
+  async findAll(hospitalId: string, params: SearchParams & { mrn?: string; gender?: string; isActive?: boolean; phone?: string }) {
+    const { page = 1, limit = 10, search, sortBy = 'createdAt', sortOrder = 'desc', mrn, gender, isActive, phone } = params;
     const skip = (page - 1) * limit;
 
     const where: any = { hospitalId };
@@ -84,6 +84,20 @@ export class PatientService {
         { phone: { contains: search, mode: 'insensitive' } },
         { email: { contains: search, mode: 'insensitive' } },
       ];
+    }
+
+    // Additional filters
+    if (mrn) {
+      where.mrn = { contains: mrn, mode: 'insensitive' };
+    }
+    if (gender) {
+      where.gender = gender;
+    }
+    if (isActive !== undefined) {
+      where.isActive = isActive;
+    }
+    if (phone) {
+      where.phone = { contains: phone, mode: 'insensitive' };
     }
 
     const [patients, total] = await Promise.all([
