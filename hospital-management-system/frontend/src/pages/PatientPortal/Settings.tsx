@@ -166,8 +166,15 @@ export default function Settings() {
   // Update profile mutation
   const updateProfileMutation = useMutation({
     mutationFn: (data: Partial<UserProfile>) => patientPortalApi.updateProfile(data),
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['patient-profile-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['patient-profile'] });
+      queryClient.invalidateQueries({ queryKey: ['patient-portal'] });
+      // Update form with response data immediately
+      const updated = response?.data?.data || response?.data;
+      if (updated) {
+        setProfileForm(updated);
+      }
       toast.success('Profile updated successfully');
       setIsEditing(false);
     },
@@ -237,13 +244,6 @@ export default function Settings() {
     if (!profileForm.lastName?.trim()) {
       errors.push('Last name is required');
     }
-    if (!profileForm.emergencyContact?.trim()) {
-      errors.push('Emergency contact name is required');
-    }
-    if (!profileForm.emergencyPhone?.trim()) {
-      errors.push('Emergency contact phone is required');
-    }
-
     if (errors.length > 0) {
       errors.forEach(err => toast.error(err));
       return;
@@ -253,17 +253,20 @@ export default function Settings() {
     const updateData: Partial<UserProfile> = {
       firstName: profileForm.firstName,
       lastName: profileForm.lastName,
-      phone: profileForm.phone,
+      phone: profileForm.phone || null,
       email: profileForm.email,
-      address: profileForm.address,
-      city: profileForm.city,
-      state: profileForm.state,
-      zipCode: profileForm.zipCode,
-      emergencyContact: profileForm.emergencyContact,
-      emergencyPhone: profileForm.emergencyPhone,
-      occupation: profileForm.occupation,
-      nationality: profileForm.nationality,
-    };
+      dateOfBirth: profileForm.dateOfBirth || null,
+      gender: profileForm.gender || null,
+      bloodGroup: profileForm.bloodGroup || null,
+      address: profileForm.address || null,
+      city: profileForm.city || null,
+      state: profileForm.state || null,
+      zipCode: profileForm.zipCode || null,
+      emergencyContact: profileForm.emergencyContact || null,
+      emergencyPhone: profileForm.emergencyPhone || null,
+      occupation: profileForm.occupation || null,
+      nationality: profileForm.nationality || null,
+    } as any;
 
     updateProfileMutation.mutate(updateData);
   };
@@ -487,10 +490,8 @@ export default function Settings() {
                             className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-slate-500 focus:border-slate-500 disabled:bg-gray-50 disabled:text-gray-500"
                           >
                             <option value="">Select Gender</option>
-                            <option value="Male">Male</option>
-                            <option value="Female">Female</option>
-                            <option value="Other">Other</option>
-                            <option value="Prefer not to say">Prefer not to say</option>
+                            <option value="MALE">Male</option>
+                            <option value="FEMALE">Female</option>
                           </select>
                         </div>
                       </div>
