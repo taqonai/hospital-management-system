@@ -25,6 +25,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { patientPortalApi } from '../../services/api';
 import { CurrencyDisplay } from '../../components/common';
+import PatientNotificationDropdown from '../../components/patient-portal/PatientNotificationDropdown';
 
 // Types
 interface Appointment {
@@ -408,12 +409,7 @@ export default function PatientPortalDashboard() {
           <p className="text-sm text-gray-500 mt-0.5">{today}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => navigate('/patient-portal/messages')}
-            className="relative p-2.5 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 transition-colors"
-          >
-            <BellIcon className="h-5 w-5 text-gray-600" />
-          </button>
+          <PatientNotificationDropdown />
           <a
             href="tel:998"
             className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors text-sm font-medium"

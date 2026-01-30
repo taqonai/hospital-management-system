@@ -2,10 +2,19 @@ import { Router, Request, Response } from 'express';
 import { patientPortalService } from '../services/patientPortalService';
 import { patientAuthenticate, PatientAuthenticatedRequest } from '../middleware/patientAuth';
 import { asyncHandler } from '../middleware/errorHandler';
-import { sendSuccess } from '../utils/response';
+import { sendSuccess, sendNotFound, calculatePagination, sendPaginated } from '../utils/response';
 import prisma from '../config/database';
 
 const router = Router();
+
+// Helper: Resolve Patient → User ID for Notification queries
+async function resolvePatientUserId(patientId: string): Promise<string | null> {
+  const patient = await prisma.patient.findUnique({
+    where: { id: patientId },
+    select: { oderId: true },
+  });
+  return patient?.oderId || null;
+}
 
 // =============================================================================
 // Patient Portal Dashboard Routes (Authenticated with Patient Token)
@@ -1829,6 +1838,125 @@ function getSuggestedActions(query: string): Array<{ label: string; route: strin
 
   return actions;
 }
+
+// =============================================================================
+// Notification Routes (In-App Notifications)
+// =============================================================================
+
+/**
+ * Get patient notifications (paginated)
+ * GET /api/v1/patient-portal/notifications
+ */
+router.get(
+  '/notifications',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const userId = await resolvePatientUserId(patientId);
+    if (!userId) {
+      return sendNotFound(res, 'Patient user account not found');
+    }
+
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const unreadOnly = req.query.unreadOnly === 'true';
+    const type = req.query.type as string | undefined;
+
+    const where: any = { userId };
+    if (unreadOnly) where.isRead = false;
+    if (type) where.type = type;
+
+    const [notifications, total, unreadCount] = await Promise.all([
+      prisma.notification.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.notification.count({ where }),
+      prisma.notification.count({ where: { userId, isRead: false } }),
+    ]);
+
+    const pagination = calculatePagination(page, limit, total);
+    sendSuccess(res, { data: notifications, pagination, unreadCount }, 'Notifications retrieved');
+  })
+);
+
+/**
+ * Get unread notification count (lightweight polling target)
+ * GET /api/v1/patient-portal/notifications/unread-count
+ */
+router.get(
+  '/notifications/unread-count',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const userId = await resolvePatientUserId(patientId);
+    if (!userId) {
+      return sendSuccess(res, { unreadCount: 0 }, 'Unread count retrieved');
+    }
+
+    const unreadCount = await prisma.notification.count({
+      where: { userId, isRead: false },
+    });
+
+    sendSuccess(res, { unreadCount }, 'Unread count retrieved');
+  })
+);
+
+/**
+ * Mark all notifications as read
+ * PUT /api/v1/patient-portal/notifications/read-all
+ */
+router.put(
+  '/notifications/read-all',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const userId = await resolvePatientUserId(patientId);
+    if (!userId) {
+      return sendNotFound(res, 'Patient user account not found');
+    }
+
+    await prisma.notification.updateMany({
+      where: { userId, isRead: false },
+      data: { isRead: true },
+    });
+
+    sendSuccess(res, null, 'All notifications marked as read');
+  })
+);
+
+/**
+ * Mark single notification as read
+ * PUT /api/v1/patient-portal/notifications/:id/read
+ */
+router.put(
+  '/notifications/:id/read',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const userId = await resolvePatientUserId(patientId);
+    if (!userId) {
+      return sendNotFound(res, 'Patient user account not found');
+    }
+
+    const notification = await prisma.notification.findFirst({
+      where: { id: req.params.id, userId },
+    });
+
+    if (!notification) {
+      return sendNotFound(res, 'Notification not found');
+    }
+
+    await prisma.notification.update({
+      where: { id: req.params.id },
+      data: { isRead: true },
+    });
+
+    sendSuccess(res, null, 'Notification marked as read');
+  })
+);
 
 // =============================================================================
 // Settings Routes - Notification and Communication Preferences
