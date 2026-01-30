@@ -1,8 +1,6 @@
-import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect, Fragment } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { Link, useNavigate } from 'react-router-dom';
-import { Fragment } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import {
   CalendarDaysIcon,
@@ -11,10 +9,8 @@ import {
   CreditCardIcon,
   ChatBubbleLeftRightIcon,
   DocumentTextIcon,
-  ArrowDownTrayIcon,
   UserCircleIcon,
   PhoneIcon,
-  HeartIcon,
   ClockIcon,
   CheckCircleIcon,
   ExclamationCircleIcon,
@@ -24,11 +20,6 @@ import {
   BellIcon,
   SparklesIcon,
   PlusIcon,
-  ArrowRightIcon,
-  ShieldCheckIcon,
-  SunIcon,
-  LightBulbIcon,
-  ShieldExclamationIcon,
   XMarkIcon,
   InformationCircleIcon,
 } from '@heroicons/react/24/outline';
@@ -54,8 +45,6 @@ interface Prescription {
   frequency: string;
   status: 'ACTIVE' | 'NEEDS_REFILL' | 'EXPIRED';
   refillsRemaining: number;
-  lastFilledDate?: string;
-  expiryDate?: string;
 }
 
 interface LabResult {
@@ -85,65 +74,49 @@ interface HealthReminder {
   priority: 'high' | 'medium' | 'low';
 }
 
-interface AIHealthInsight {
-  summary: {
-    totalConditions: number;
-    totalAllergies: number;
-    riskLevel: string;
-  };
-  recommendations: Array<{
-    title: string;
-    description: string;
-    priority: string;
-  }>;
-  riskFactors: Array<{
-    factor: string;
-    level: string;
-  }>;
+interface VitalBadge {
+  label: string;
+  value: string;
+  unit: string;
+  status: 'normal' | 'attention' | 'critical';
+}
+
+interface PatientProfile {
+  firstName: string;
+  lastName: string;
+  dateOfBirth?: string;
+  bloodGroup?: string;
+  gender?: string;
+  mrn?: string;
 }
 
 interface DashboardData {
-  patient: {
-    firstName: string;
-    lastName: string;
-    dateOfBirth?: string;
-    bloodGroup?: string;
-  };
+  profile: PatientProfile;
+  healthScore: number;
+  scoreLabel: string;
+  vitals: VitalBadge[];
   upcomingAppointments: Appointment[];
   recentPrescriptions: Prescription[];
   labResults: LabResult[];
   outstandingBills: Bill[];
   totalAmountDue: number;
   healthReminders: HealthReminder[];
-  unreadMessages: number;
-  aiHealthInsights?: AIHealthInsight;
+  metrics: {
+    upcomingAppointments: number;
+    activePrescriptions: number;
+    pendingLabs: number;
+    outstandingBalance: number;
+    remindersCount: number;
+  };
 }
 
-// Health tips array
-const healthTips = [
-  "Stay hydrated! Aim for 8 glasses of water daily for optimal health.",
-  "Regular exercise, even a 30-minute walk, can boost your immune system.",
-  "Getting 7-8 hours of sleep helps your body recover and stay healthy.",
-  "Eating colorful fruits and vegetables provides essential nutrients.",
-  "Take breaks from screens to reduce eye strain and improve focus.",
-  "Practice deep breathing to reduce stress and lower blood pressure.",
-  "Regular health checkups can catch issues before they become serious.",
-  "Wash your hands frequently to prevent the spread of infections.",
-];
-
-// Format date helper
+// Helpers
 const formatDate = (dateString: string): string => {
   if (!dateString) return 'N/A';
   const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 };
 
-// Format time helper
 const formatTime = (timeString: string): string => {
   if (!timeString) return 'N/A';
   try {
@@ -157,8 +130,6 @@ const formatTime = (timeString: string): string => {
   }
 };
 
-
-// Appointment status formatting
 const getAppointmentStatusConfig = (status: string) => {
   const normalized = status?.toUpperCase()?.replace(/[\s-]/g, '_') || '';
   const configs: Record<string, { bg: string; text: string; label: string }> = {
@@ -175,658 +146,514 @@ const getAppointmentStatusConfig = (status: string) => {
   return configs[normalized] || { bg: 'bg-blue-100', text: 'text-blue-700', label: status?.replace(/_/g, ' ') || 'Unknown' };
 };
 
-// Prescription status badge component
-const PrescriptionStatusBadge = ({ status }: { status: Prescription['status'] }) => {
-  const statusConfig = {
-    ACTIVE: {
-      bg: 'bg-green-100',
-      text: 'text-green-700',
-      icon: CheckCircleIcon,
-      label: 'Active',
-    },
-    NEEDS_REFILL: {
-      bg: 'bg-amber-100',
-      text: 'text-amber-700',
-      icon: ExclamationTriangleIcon,
-      label: 'Needs Refill',
-    },
-    EXPIRED: {
-      bg: 'bg-red-100',
-      text: 'text-red-700',
-      icon: ExclamationCircleIcon,
-      label: 'Expired',
-    },
-  };
-
-  const config = statusConfig[status] || statusConfig.ACTIVE;
-  const Icon = config.icon;
-
-  return (
-    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
-      <Icon className="h-3.5 w-3.5" />
-      {config.label}
-    </span>
-  );
+const calculateAge = (dob?: string): string => {
+  if (!dob) return '';
+  const birth = new Date(dob);
+  const now = new Date();
+  const age = Math.floor((now.getTime() - birth.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+  return `${age}y`;
 };
 
-// Lab result status badge component
-const LabStatusBadge = ({ status, hasAbnormal }: { status: LabResult['status']; hasAbnormal?: boolean }) => {
-  const statusConfig = {
-    READY: {
-      bg: 'bg-green-100',
-      text: 'text-green-700',
-      icon: CheckCircleIcon,
-      label: 'Ready',
-    },
-    PENDING: {
-      bg: 'bg-amber-100',
-      text: 'text-amber-700',
-      icon: ClockIcon,
-      label: 'Pending',
-    },
-    REVIEWED: {
-      bg: 'bg-blue-100',
-      text: 'text-blue-700',
-      icon: CheckCircleIcon,
-      label: 'Reviewed',
-    },
-  };
-
-  const config = statusConfig[status] || statusConfig.PENDING;
-  const Icon = config.icon;
-
-  return (
-    <div className="flex items-center gap-2">
-      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
-        <Icon className="h-3.5 w-3.5" />
-        {config.label}
-      </span>
-      {hasAbnormal && (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-          <ExclamationCircleIcon className="h-3 w-3" />
-          Abnormal
-        </span>
-      )}
-    </div>
-  );
+const vitalStatusColor = (status: string) => {
+  switch (status) {
+    case 'normal': return 'bg-green-100 text-green-700 border-green-200';
+    case 'attention': return 'bg-amber-100 text-amber-700 border-amber-200';
+    case 'critical': return 'bg-red-100 text-red-700 border-red-200';
+    default: return 'bg-gray-100 text-gray-700 border-gray-200';
+  }
 };
-
-// Quick action button component
-const QuickActionButton = ({
-  icon: Icon,
-  label,
-  description,
-  onClick,
-  gradient,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  description: string;
-  onClick: () => void;
-  gradient: string;
-}) => (
-  <button
-    onClick={onClick}
-    className="group relative overflow-hidden bg-white/80 backdrop-blur-xl rounded-2xl border border-white/20 shadow-lg p-5 text-left hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
-  >
-    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-      <div className={`absolute inset-0 ${gradient} opacity-5`} />
-    </div>
-    <div className="relative z-10">
-      <div className={`w-12 h-12 rounded-xl ${gradient} flex items-center justify-center mb-3 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
-        <Icon className="h-6 w-6 text-white" />
-      </div>
-      <h3 className="font-semibold text-gray-900 mb-1">{label}</h3>
-      <p className="text-sm text-gray-500">{description}</p>
-    </div>
-    <ChevronRightIcon className="absolute top-5 right-5 h-5 w-5 text-gray-300 group-hover:text-gray-500 group-hover:translate-x-1 transition-all" />
-  </button>
-);
-
-// Glass card component
-const GlassCard = ({
-  children,
-  className = '',
-  padding = 'p-6',
-}: {
-  children: React.ReactNode;
-  className?: string;
-  padding?: string;
-}) => (
-  <div className={`relative overflow-hidden bg-white/80 backdrop-blur-xl rounded-2xl border border-white/20 shadow-lg ${padding} ${className}`}>
-    <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" />
-    {children}
-  </div>
-);
 
 // Main Dashboard Component
 export default function PatientPortalDashboard() {
   const navigate = useNavigate();
   const user = useSelector((state: any) => state.auth.user);
-  const [healthTip, setHealthTip] = useState('');
-  const [isFirstVisit, setIsFirstVisit] = useState(false);
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showBookingChoice, setShowBookingChoice] = useState(false);
 
-  // Check if this is the user's first visit (use patientUser for patient portal)
-  useEffect(() => {
-    const patientData = typeof window !== 'undefined'
-      ? JSON.parse(localStorage.getItem('patientUser') || 'null')
-      : null;
-    const visitorId = patientData?.id || user?.id;
-    if (visitorId) {
-      const visitKey = `user_visited_${visitorId}`;
-      const hasVisited = localStorage.getItem(visitKey);
-      if (!hasVisited) {
-        setIsFirstVisit(true);
-        localStorage.setItem(visitKey, 'true');
-      } else {
-        setIsFirstVisit(false);
-      }
-    }
-  }, [user?.id]);
-
-  // Set random health tip on mount
-  useEffect(() => {
-    const randomTip = healthTips[Math.floor(Math.random() * healthTips.length)];
-    setHealthTip(randomTip);
-  }, []);
-
-  // Get patient user from localStorage (patient portal uses separate auth)
   const patientUser = typeof window !== 'undefined'
     ? JSON.parse(localStorage.getItem('patientUser') || 'null')
     : null;
 
-  // Fetch dashboard data
-  const { data: dashboardData, isLoading, error, refetch } = useQuery<DashboardData>({
-    queryKey: ['patient-portal-dashboard'],
-    queryFn: async () => {
-      try {
-        // Fetch summary from API
-        const summaryResponse = await patientPortalApi.getSummary();
-        const summary = summaryResponse.data?.data || summaryResponse.data || {};
+  useEffect(() => {
+    fetchDashboard();
+  }, []);
 
-        // Fetch appointments
-        const appointmentsResponse = await patientPortalApi.getAppointments({ type: 'upcoming', limit: 3 });
-        const appointmentsRaw = appointmentsResponse.data?.data;
-        const appointments = Array.isArray(appointmentsRaw) ? appointmentsRaw : (appointmentsRaw?.data || []);
+  const fetchDashboard = async () => {
+    setIsLoading(true);
+    setError(null);
 
-        // Fetch prescriptions
-        const prescriptionsResponse = await patientPortalApi.getPrescriptions({ status: 'active', limit: 3 });
-        const prescriptionsRaw = prescriptionsResponse.data?.data;
-        const prescriptions = Array.isArray(prescriptionsRaw) ? prescriptionsRaw : (prescriptionsRaw?.data || []);
+    // Fetch all endpoints in parallel using Promise.allSettled
+    const results = await Promise.allSettled([
+      patientPortalApi.getSummary(),                                    // 0
+      patientPortalApi.getAppointments({ type: 'upcoming', limit: 2 }),  // 1
+      patientPortalApi.getPrescriptions({ status: 'active', limit: 2 }), // 2
+      patientPortalApi.getLabResults({ limit: 2 }),                     // 3
+      patientPortalApi.getBillingSummary(),                             // 4
+      patientPortalApi.getBills({ type: 'pending', limit: 3 }),         // 5
+      patientPortalApi.getHealthInsights(),                            // 6
+      patientPortalApi.getProfile(),                                   // 7
+    ]);
 
-        // Fetch lab results
-        const labsResponse = await patientPortalApi.getLabResults({ limit: 3 });
-        const labsRaw = labsResponse.data?.data;
-        const labs = Array.isArray(labsRaw) ? labsRaw : (labsRaw?.data || []);
+    const extract = (idx: number) => {
+      const r = results[idx];
+      if (r.status === 'fulfilled') return r.value?.data?.data || r.value?.data || {};
+      return null;
+    };
 
-        // Fetch billing summary
-        const billingSummary = await patientPortalApi.getBillingSummary();
-        const billing = billingSummary.data?.data || billingSummary.data || {};
+    const summary = extract(0) || {};
+    const appointmentsRaw = extract(1);
+    const prescriptionsRaw = extract(2);
+    const labsRaw = extract(3);
+    const billing = extract(4) || {};
+    const billsRaw = extract(5);
+    const healthInsights = extract(6) || {};
+    const profileData = extract(7) || {};
 
-        // Fetch pending bills
-        const billsResponse = await patientPortalApi.getBills({ type: 'pending', limit: 3 });
-        const billsRaw = billsResponse.data?.data;
-        const bills = Array.isArray(billsRaw) ? billsRaw : (billsRaw?.data || []);
+    const toArray = (raw: any) => {
+      if (!raw) return [];
+      if (Array.isArray(raw)) return raw;
+      if (raw.data && Array.isArray(raw.data)) return raw.data;
+      return [];
+    };
 
-        // Transform appointments data
-        const upcomingAppointments: Appointment[] = appointments.map((apt: any) => ({
-          id: apt.id,
-          doctorName: apt.doctor?.user
-            ? `Dr. ${apt.doctor.user.firstName} ${apt.doctor.user.lastName}`
-            : apt.doctorName || 'Doctor',
-          specialty: apt.doctor?.specialization || apt.specialty || 'General',
-          department: apt.department?.name || apt.department,
-          date: apt.appointmentDate || apt.scheduledAt || apt.date,
-          time: apt.startTime || apt.time,
-          status: apt.status,
-          type: apt.type,
-        }));
+    const appointments = toArray(appointmentsRaw);
+    const prescriptions = toArray(prescriptionsRaw);
+    const labs = toArray(labsRaw);
+    const bills = toArray(billsRaw);
 
-        // Transform prescriptions data
-        const recentPrescriptions: Prescription[] = prescriptions.map((rx: any) => ({
-          id: rx.id,
-          medicationName: rx.medications?.[0]?.name || rx.medicationName || 'Medication',
-          dosage: rx.medications?.[0]?.dosage || rx.dosage || '',
-          frequency: rx.medications?.[0]?.frequency || rx.frequency || '',
-          status: rx.refillsRemaining === 0 ? 'NEEDS_REFILL' :
-                  rx.status === 'PENDING_REFILL' ? 'NEEDS_REFILL' :
-                  rx.status === 'COMPLETED' ? 'EXPIRED' : 'ACTIVE',
-          refillsRemaining: rx.refillsRemaining || 0,
-          lastFilledDate: rx.lastFilledDate,
-          expiryDate: rx.endDate,
-        }));
+    // Build profile
+    const profile: PatientProfile = {
+      firstName: profileData?.firstName || summary?.patient?.firstName || patientUser?.firstName || user?.firstName || 'Patient',
+      lastName: profileData?.lastName || summary?.patient?.lastName || patientUser?.lastName || user?.lastName || '',
+      dateOfBirth: profileData?.dateOfBirth || summary?.patient?.dateOfBirth,
+      bloodGroup: profileData?.bloodGroup || summary?.patient?.bloodGroup,
+      gender: profileData?.gender || summary?.patient?.gender,
+      mrn: profileData?.mrn || profileData?.patientId,
+    };
 
-        // Transform lab results data
-        const labResults: LabResult[] = labs.map((lab: any) => ({
-          id: lab.id,
-          testName: lab.testName || 'Lab Test',
-          testDate: lab.testDate || lab.reportDate,
-          status: lab.status,
-          hasAbnormalValues: lab.results?.some(
-            (r: any) => r.status === 'HIGH' || r.status === 'LOW' || r.status === 'CRITICAL_HIGH' || r.status === 'CRITICAL_LOW'
-          ),
-          keyValues: lab.results?.slice(0, 2).map((r: any) => ({
-            name: r.testCode || r.testName,
-            value: `${r.value} ${r.unit}`,
-            status: r.status,
-          })),
-        }));
+    // Build vitals from health insights metrics
+    const vitals: VitalBadge[] = [];
+    const metricsArr = healthInsights?.metrics || [];
+    for (const m of metricsArr) {
+      if (m.value === '--') continue;
+      vitals.push({
+        label: m.name,
+        value: String(m.value),
+        unit: m.unit || '',
+        status: m.status || 'normal',
+      });
+    }
 
-        // Transform bills data
-        const outstandingBills: Bill[] = bills.map((bill: any) => ({
-          id: bill.id,
-          invoiceNumber: bill.invoiceNumber,
-          description: bill.description || 'Medical Services',
-          amount: Number(bill.balanceDue || bill.totalAmount || 0),
-          dueDate: bill.dueDate,
-          status: bill.status,
-        }));
+    // Transform appointments
+    const upcomingAppointments: Appointment[] = appointments.map((apt: any) => ({
+      id: apt.id,
+      doctorName: apt.doctor?.user
+        ? `Dr. ${apt.doctor.user.firstName} ${apt.doctor.user.lastName}`
+        : apt.doctorName || 'Doctor',
+      specialty: apt.doctor?.specialization || apt.specialty || 'General',
+      department: apt.department?.name || apt.department,
+      date: apt.appointmentDate || apt.scheduledAt || apt.date,
+      time: apt.startTime || apt.time,
+      status: apt.status,
+      type: apt.type,
+    }));
 
-        // Generate health reminders
-        const healthReminders: HealthReminder[] = [];
+    // Transform prescriptions
+    const recentPrescriptions: Prescription[] = prescriptions.map((rx: any) => ({
+      id: rx.id,
+      medicationName: rx.medications?.[0]?.name || rx.medicationName || 'Medication',
+      dosage: rx.medications?.[0]?.dosage || rx.dosage || '',
+      frequency: rx.medications?.[0]?.frequency || rx.frequency || '',
+      status: rx.refillsRemaining === 0 ? 'NEEDS_REFILL' as const :
+              rx.status === 'PENDING_REFILL' ? 'NEEDS_REFILL' as const :
+              rx.status === 'COMPLETED' ? 'EXPIRED' as const : 'ACTIVE' as const,
+      refillsRemaining: rx.refillsRemaining || 0,
+    }));
 
-        // Add medication reminders
-        recentPrescriptions.forEach((rx) => {
-          if (rx.status === 'NEEDS_REFILL') {
-            healthReminders.push({
-              id: `refill-${rx.id}`,
-              type: 'medication',
-              title: 'Prescription Refill Needed',
-              description: `${rx.medicationName} needs to be refilled`,
-              priority: 'high',
-            });
-          }
+    // Transform lab results
+    const labResults: LabResult[] = labs.map((lab: any) => ({
+      id: lab.id,
+      testName: lab.testName || 'Lab Test',
+      testDate: lab.testDate || lab.reportDate,
+      status: lab.status,
+      hasAbnormalValues: lab.results?.some(
+        (r: any) => r.status === 'HIGH' || r.status === 'LOW' || r.status === 'CRITICAL_HIGH' || r.status === 'CRITICAL_LOW'
+      ),
+      keyValues: lab.results?.slice(0, 2).map((r: any) => ({
+        name: r.testCode || r.testName,
+        value: `${r.value} ${r.unit}`,
+        status: r.status,
+      })),
+    }));
+
+    // Transform bills
+    const outstandingBills: Bill[] = bills.map((bill: any) => ({
+      id: bill.id,
+      invoiceNumber: bill.invoiceNumber,
+      description: bill.description || 'Medical Services',
+      amount: Number(bill.balanceDue || bill.totalAmount || 0),
+      dueDate: bill.dueDate,
+      status: bill.status,
+    }));
+
+    // Generate health reminders
+    const healthReminders: HealthReminder[] = [];
+    recentPrescriptions.forEach((rx) => {
+      if (rx.status === 'NEEDS_REFILL') {
+        healthReminders.push({
+          id: `refill-${rx.id}`,
+          type: 'medication',
+          title: 'Refill Needed',
+          description: rx.medicationName,
+          priority: 'high',
         });
-
-        // Add appointment reminders
-        upcomingAppointments.forEach((apt) => {
-          const aptDate = new Date(apt.date);
-          const today = new Date();
-          const diffDays = Math.ceil((aptDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-          if (diffDays <= 3 && diffDays >= 0) {
-            healthReminders.push({
-              id: `apt-${apt.id}`,
-              type: 'appointment',
-              title: 'Upcoming Appointment',
-              description: `${apt.doctorName} - ${apt.specialty}`,
-              dueDate: apt.date,
-              priority: diffDays === 0 ? 'high' : 'medium',
-            });
-          }
-        });
-
-        // Add lab result reminders
-        labResults.forEach((lab) => {
-          if (lab.status === 'READY' && lab.hasAbnormalValues) {
-            healthReminders.push({
-              id: `lab-${lab.id}`,
-              type: 'checkup',
-              title: 'Review Lab Results',
-              description: `${lab.testName} has abnormal values`,
-              priority: 'high',
-            });
-          }
-        });
-
-        // Fetch AI Health Insights
-        let aiHealthInsights: AIHealthInsight | undefined;
-        try {
-          const aiResponse = await patientPortalApi.analyzeMedicalHistory();
-          const aiData = aiResponse.data?.data || aiResponse.data;
-          if (aiData) {
-            aiHealthInsights = {
-              summary: aiData.summary || { totalConditions: 0, totalAllergies: 0, riskLevel: 'normal' },
-              recommendations: aiData.recommendations || [],
-              riskFactors: aiData.riskFactors || [],
-            };
-          }
-        } catch (aiErr) {
-          console.error('Error fetching AI health insights:', aiErr);
-        }
-
-        return {
-          patient: {
-            firstName: summary?.patient?.firstName || user?.firstName || 'Patient',
-            lastName: summary?.patient?.lastName || user?.lastName || '',
-            dateOfBirth: summary?.patient?.dateOfBirth,
-            bloodGroup: summary?.patient?.bloodGroup,
-          },
-          upcomingAppointments,
-          recentPrescriptions,
-          labResults,
-          outstandingBills,
-          totalAmountDue: Number(billing.totalBalance || 0),
-          healthReminders,
-          unreadMessages: summary?.unreadMessages || 0,
-          aiHealthInsights,
-        };
-      } catch (err) {
-        console.error('Error fetching dashboard data:', err);
-        // Return empty data - no mock/hardcoded data
-        const patientData = typeof window !== 'undefined'
-          ? JSON.parse(localStorage.getItem('patientUser') || 'null')
-          : null;
-        return {
-          patient: {
-            firstName: patientData?.firstName || user?.firstName || 'Patient',
-            lastName: patientData?.lastName || user?.lastName || '',
-          },
-          upcomingAppointments: [],
-          recentPrescriptions: [],
-          labResults: [],
-          outstandingBills: [],
-          totalAmountDue: 0,
-          healthReminders: [],
-          unreadMessages: 0,
-        };
       }
-    },
-  });
+    });
+    upcomingAppointments.forEach((apt) => {
+      const diffDays = Math.ceil((new Date(apt.date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+      if (diffDays <= 3 && diffDays >= 0) {
+        healthReminders.push({
+          id: `apt-${apt.id}`,
+          type: 'appointment',
+          title: 'Upcoming Appointment',
+          description: `${apt.doctorName} - ${apt.specialty}`,
+          dueDate: apt.date,
+          priority: diffDays === 0 ? 'high' : 'medium',
+        });
+      }
+    });
+    labResults.forEach((lab) => {
+      if (lab.status === 'READY' && lab.hasAbnormalValues) {
+        healthReminders.push({
+          id: `lab-${lab.id}`,
+          type: 'checkup',
+          title: 'Review Lab Results',
+          description: `${lab.testName} has abnormal values`,
+          priority: 'high',
+        });
+      }
+    });
 
-  // Booking choice modal state
-  const [showBookingChoice, setShowBookingChoice] = useState(false);
+    // Counts for metrics row
+    const pendingLabCount = labs.filter((l: any) => l.status === 'PENDING').length;
 
-  // Navigation handlers
-  const navigateToAppointments = () => navigate('/patient-portal/appointments');
-  const navigateToPrescriptions = () => navigate('/patient-portal/prescriptions');
-  const navigateToLabResults = () => navigate('/patient-portal/labs');
-  const navigateToBilling = () => navigate('/patient-portal/billing');
-  const navigateToMessages = () => navigate('/patient-portal/messages');
-  const navigateToRecords = () => navigate('/patient-portal/records');
-  const navigateToProfile = () => navigate('/patient-portal/profile');
-  const navigateToSymptomChecker = () => navigate('/patient-portal/symptom-checker');
-  const navigateToMedicalHistory = () => navigate('/patient-portal/medical-history');
+    setDashboardData({
+      profile,
+      healthScore: Number(healthInsights?.overallScore || 75),
+      scoreLabel: healthInsights?.scoreLabel || 'Good',
+      vitals,
+      upcomingAppointments,
+      recentPrescriptions,
+      labResults,
+      outstandingBills,
+      totalAmountDue: Number(billing?.totalBalance || 0),
+      healthReminders,
+      metrics: {
+        upcomingAppointments: upcomingAppointments.length,
+        activePrescriptions: recentPrescriptions.filter(rx => rx.status === 'ACTIVE').length,
+        pendingLabs: pendingLabCount,
+        outstandingBalance: Number(billing?.totalBalance || 0),
+        remindersCount: healthReminders.length,
+      },
+    });
 
-  // Loading state - also show loading when query is disabled (user not loaded yet) or data not available
+    setIsLoading(false);
+  };
+
+  // Loading
   if (isLoading || !dashboardData) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+      <div className="flex items-center justify-center py-20">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent mx-auto" />
-          <p className="mt-4 text-gray-600 font-medium">Loading your dashboard...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto" />
+          <p className="mt-3 text-gray-600 text-sm">Loading your dashboard...</p>
         </div>
       </div>
     );
   }
 
-  // Error state
+  // Error
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
-        <GlassCard className="max-w-md w-full text-center">
-          <ExclamationCircleIcon className="h-16 w-16 text-red-400 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Unable to Load Dashboard</h2>
-          <p className="text-gray-600 mb-6">We encountered an error loading your information. Please try again.</p>
+      <div className="flex items-center justify-center py-20">
+        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md text-center">
+          <ExclamationCircleIcon className="h-12 w-12 text-red-400 mx-auto mb-3" />
+          <h2 className="text-lg font-bold text-gray-900 mb-2">Unable to Load Dashboard</h2>
+          <p className="text-gray-600 text-sm mb-4">{error}</p>
           <button
-            onClick={() => refetch()}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all"
+            onClick={fetchDashboard}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 text-sm"
           >
-            <ArrowPathIcon className="h-5 w-5" />
+            <ArrowPathIcon className="h-4 w-4" />
             Retry
           </button>
-        </GlassCard>
+        </div>
       </div>
     );
   }
 
-  const data = dashboardData!;
+  const data = dashboardData;
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
   return (
-    <div className="space-y-6">
-      {/* Welcome Banner */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 p-8">
-        {/* Background decorations */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full blur-2xl translate-y-1/2 -translate-x-1/4" />
-        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-purple-400/20 rounded-full blur-xl animate-pulse" />
+    <div className="space-y-5">
+      {/* 1. Compact Welcome Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Welcome back, {patientUser?.firstName || data.profile.firstName}
+          </h1>
+          <p className="text-sm text-gray-500 mt-0.5">{today}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate('/patient-portal/messages')}
+            className="relative p-2.5 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 transition-colors"
+          >
+            <BellIcon className="h-5 w-5 text-gray-600" />
+          </button>
+          <a
+            href="tel:998"
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors text-sm font-medium"
+          >
+            <PhoneIcon className="h-4 w-4" />
+            Emergency
+          </a>
+        </div>
+      </div>
 
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-          <div className="flex-1">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full text-white/90 text-sm font-medium mb-4">
-              <SparklesIcon className="h-4 w-4" />
-              Patient Portal
+      {/* 2. Patient Info + Vitals Card */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-5">
+          {/* Left: Patient info */}
+          <div className="flex items-center gap-4 flex-shrink-0">
+            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center shadow-lg">
+              <span className="text-xl font-bold text-white">
+                {(data.profile.firstName?.[0] || '') + (data.profile.lastName?.[0] || '')}
+              </span>
             </div>
-            <h1 className="text-3xl lg:text-4xl font-bold text-white mb-2">
-              {isFirstVisit ? 'Welcome' : 'Welcome back'}, {patientUser?.firstName || data.patient.firstName} {patientUser?.lastName || data.patient.lastName}!
-            </h1>
-            <div className="flex items-start gap-3 bg-white/10 backdrop-blur-sm rounded-xl p-4 mt-4">
-              <SunIcon className="h-6 w-6 text-amber-300 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-white/90 font-medium text-sm">Health Tip of the Day</p>
-                <p className="text-white/80 text-sm mt-1">{healthTip}</p>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">
+                {data.profile.firstName} {data.profile.lastName}
+              </h2>
+              <div className="flex items-center gap-3 text-xs text-gray-500 mt-1 flex-wrap">
+                {data.profile.mrn && <span>MRN: {data.profile.mrn.slice(0, 8)}</span>}
+                {data.profile.dateOfBirth && (
+                  <span>{calculateAge(data.profile.dateOfBirth)} old</span>
+                )}
+                {data.profile.gender && (
+                  <span className="capitalize">{data.profile.gender.toLowerCase()}</span>
+                )}
+                {data.profile.bloodGroup && (
+                  <span className="px-1.5 py-0.5 bg-red-50 text-red-700 rounded font-medium">
+                    {data.profile.bloodGroup}
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3">
-            <button
-              onClick={navigateToMessages}
-              className="relative inline-flex items-center gap-2 px-5 py-3 bg-white/20 backdrop-blur-sm text-white rounded-xl hover:bg-white/30 transition-colors font-medium"
-            >
-              <BellIcon className="h-5 w-5" />
-              Notifications
-              {data.unreadMessages > 0 && (
-                <span className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
-                  {data.unreadMessages}
-                </span>
-              )}
-            </button>
-            <a
-              href="tel:998"
-              className="inline-flex items-center gap-2 px-5 py-3 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors font-medium"
-            >
-              <PhoneIcon className="h-5 w-5" />
-              Emergency
-            </a>
+          {/* Divider */}
+          <div className="hidden lg:block w-px h-12 bg-gray-200" />
+
+          {/* Right: Latest vitals + Health Score */}
+          <div className="flex-1 flex flex-wrap items-center gap-2">
+            {data.vitals.slice(0, 5).map((v, i) => (
+              <span
+                key={i}
+                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border ${vitalStatusColor(v.status)}`}
+              >
+                {v.label}: <span className="font-bold">{v.value}</span> {v.unit}
+              </span>
+            ))}
+            {data.vitals.length === 0 && (
+              <span className="text-xs text-gray-400">No recent vitals recorded</span>
+            )}
+          </div>
+
+          {/* Health Score */}
+          <div className="flex-shrink-0 text-center px-4">
+            <div className={`text-2xl font-bold ${
+              data.healthScore >= 85 ? 'text-green-600' :
+              data.healthScore >= 70 ? 'text-blue-600' :
+              data.healthScore >= 55 ? 'text-amber-600' : 'text-red-600'
+            }`}>
+              {data.healthScore}
+            </div>
+            <div className="text-xs text-gray-500">{data.scoreLabel}</div>
           </div>
         </div>
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column - 2/3 width */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Upcoming Appointments Card */}
-          <GlassCard>
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-blue-100 rounded-xl">
-                  <CalendarDaysIcon className="h-6 w-6 text-blue-600" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Upcoming Appointments</h2>
-                  <p className="text-sm text-gray-500">Your next scheduled visits</p>
-                </div>
-              </div>
-              <button
-                onClick={navigateToAppointments}
-                className="text-blue-600 text-sm font-medium hover:text-blue-700 flex items-center gap-1 group"
-              >
-                View All
-                <ChevronRightIcon className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
-              </button>
-            </div>
+      {/* 3. Metrics Summary Row */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <MetricCard
+          icon={CalendarDaysIcon}
+          value={data.metrics.upcomingAppointments}
+          label="Upcoming Appts"
+          color="blue"
+          onClick={() => navigate('/patient-portal/appointments')}
+        />
+        <MetricCard
+          icon={ClipboardDocumentListIcon}
+          value={data.metrics.activePrescriptions}
+          label="Active Rx"
+          color="emerald"
+          onClick={() => navigate('/patient-portal/prescriptions')}
+        />
+        <MetricCard
+          icon={BeakerIcon}
+          value={data.metrics.pendingLabs}
+          label="Pending Labs"
+          color="purple"
+          onClick={() => navigate('/patient-portal/labs')}
+        />
+        <MetricCard
+          icon={CreditCardIcon}
+          value={data.metrics.outstandingBalance}
+          label="Balance Due"
+          color="amber"
+          isCurrency
+          onClick={() => navigate('/patient-portal/billing')}
+        />
+        <MetricCard
+          icon={BellIcon}
+          value={data.metrics.remindersCount}
+          label="Reminders"
+          color="rose"
+          onClick={() => {}}
+        />
+      </div>
 
+      {/* 4. Main Content Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Left Column (2/3) */}
+        <div className="lg:col-span-2 space-y-5">
+          {/* Upcoming Appointments */}
+          <SectionCard
+            title="Upcoming Appointments"
+            icon={CalendarDaysIcon}
+            iconColor="bg-blue-100 text-blue-600"
+            onViewAll={() => navigate('/patient-portal/appointments')}
+          >
             {data.upcomingAppointments.length > 0 ? (
-              <div className="space-y-3">
-                {data.upcomingAppointments.map((apt, index) => (
-                  <div
-                    key={apt.id}
-                    className="flex items-center gap-4 p-4 bg-gray-50/80 rounded-xl hover:bg-gray-100/80 transition-colors"
-                    style={{
-                      animation: 'fadeIn 0.3s ease-out',
-                      animationDelay: `${index * 0.1}s`,
-                      animationFillMode: 'both',
-                    }}
-                  >
-                    <div className="flex-shrink-0 text-center min-w-[60px] p-3 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
-                      <div className="text-xl font-bold">
-                        {new Date(apt.date).getDate()}
-                      </div>
-                      <div className="text-xs opacity-90">
-                        {new Date(apt.date).toLocaleDateString('en-US', { month: 'short' })}
-                      </div>
+              <div className="space-y-2">
+                {data.upcomingAppointments.map((apt) => (
+                  <div key={apt.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+                    <div className="flex-shrink-0 text-center min-w-[48px] p-2 rounded-lg bg-blue-600 text-white">
+                      <div className="text-lg font-bold leading-none">{new Date(apt.date).getDate()}</div>
+                      <div className="text-[10px] opacity-80">{new Date(apt.date).toLocaleDateString('en-US', { month: 'short' })}</div>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-900 truncate">{apt.doctorName}</h3>
-                      <p className="text-sm text-gray-600">{apt.specialty}</p>
-                      {apt.department && (
-                        <p className="text-xs text-gray-500">{apt.department}</p>
-                      )}
+                      <p className="font-semibold text-gray-900 text-sm truncate">{apt.doctorName}</p>
+                      <p className="text-xs text-gray-500">{apt.specialty}</p>
                     </div>
-                    <div className="text-right">
-                      <p className="font-medium text-gray-900">{formatTime(apt.time)}</p>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-sm font-medium text-gray-900">{formatTime(apt.time)}</p>
                       {(() => {
-                        const statusConfig = getAppointmentStatusConfig(apt.status);
-                        return (
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig.bg} ${statusConfig.text}`}>
-                            <CheckCircleIcon className="h-3 w-3" />
-                            {statusConfig.label}
-                          </span>
-                        );
+                        const sc = getAppointmentStatusConfig(apt.status);
+                        return <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${sc.bg} ${sc.text}`}>{sc.label}</span>;
                       })()}
                     </div>
                   </div>
                 ))}
-
-                {/* Book another appointment button - only shown when appointments exist */}
                 <button
                   onClick={() => setShowBookingChoice(true)}
-                  className="w-full mt-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all flex items-center justify-center gap-2"
+                  className="w-full py-2.5 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-sm mt-2"
                 >
-                  <PlusIcon className="h-5 w-5" />
-                  Book New Appointment
+                  <PlusIcon className="h-4 w-4" />
+                  Book Appointment
                 </button>
               </div>
             ) : (
-              <div className="text-center py-8">
-                <CalendarDaysIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 font-medium">No upcoming appointments</p>
+              <div className="text-center py-6">
+                <CalendarDaysIcon className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+                <p className="text-gray-500 text-sm">No upcoming appointments</p>
                 <button
                   onClick={() => setShowBookingChoice(true)}
-                  className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors"
+                  className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700"
                 >
-                  <PlusIcon className="h-4 w-4" />
-                  Book Your First Appointment
+                  <PlusIcon className="h-3.5 w-3.5" />
+                  Book Now
                 </button>
               </div>
             )}
-          </GlassCard>
+          </SectionCard>
 
-          {/* Recent Prescriptions Card */}
-          <GlassCard>
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-emerald-100 rounded-xl">
-                  <ClipboardDocumentListIcon className="h-6 w-6 text-emerald-600" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Recent Prescriptions</h2>
-                  <p className="text-sm text-gray-500">Your current medications</p>
-                </div>
-              </div>
-              <button
-                onClick={navigateToPrescriptions}
-                className="text-emerald-600 text-sm font-medium hover:text-emerald-700 flex items-center gap-1 group"
-              >
-                View All
-                <ChevronRightIcon className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
-              </button>
-            </div>
-
+          {/* Recent Prescriptions */}
+          <SectionCard
+            title="Prescriptions"
+            icon={ClipboardDocumentListIcon}
+            iconColor="bg-emerald-100 text-emerald-600"
+            onViewAll={() => navigate('/patient-portal/prescriptions')}
+          >
             {data.recentPrescriptions.length > 0 ? (
-              <div className="space-y-3">
-                {data.recentPrescriptions.map((rx, index) => (
-                  <div
-                    key={rx.id}
-                    className="flex items-center justify-between p-4 bg-gray-50/80 rounded-xl hover:bg-gray-100/80 transition-colors"
-                    style={{
-                      animation: 'fadeIn 0.3s ease-out',
-                      animationDelay: `${index * 0.1}s`,
-                      animationFillMode: 'both',
-                    }}
-                  >
+              <div className="space-y-2">
+                {data.recentPrescriptions.map((rx) => (
+                  <div key={rx.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
                     <div className="flex items-center gap-3">
-                      <div className={`p-2.5 rounded-xl ${rx.status === 'NEEDS_REFILL' ? 'bg-amber-100' : 'bg-emerald-100'}`}>
-                        <ClipboardDocumentListIcon
-                          className={`h-5 w-5 ${rx.status === 'NEEDS_REFILL' ? 'text-amber-600' : 'text-emerald-600'}`}
-                        />
+                      <div className={`p-2 rounded-lg ${rx.status === 'NEEDS_REFILL' ? 'bg-amber-100' : 'bg-emerald-100'}`}>
+                        <ClipboardDocumentListIcon className={`h-4 w-4 ${rx.status === 'NEEDS_REFILL' ? 'text-amber-600' : 'text-emerald-600'}`} />
                       </div>
                       <div>
-                        <h3 className="font-semibold text-gray-900">{rx.medicationName}</h3>
-                        <p className="text-sm text-gray-600">
-                          {rx.dosage} - {rx.frequency}
-                        </p>
-                        {rx.refillsRemaining > 0 && (
-                          <p className="text-xs text-gray-500">
-                            {rx.refillsRemaining} refill{rx.refillsRemaining !== 1 ? 's' : ''} remaining
-                          </p>
-                        )}
+                        <p className="font-semibold text-gray-900 text-sm">{rx.medicationName}</p>
+                        <p className="text-xs text-gray-500">{rx.dosage} - {rx.frequency}</p>
                       </div>
                     </div>
-                    <PrescriptionStatusBadge status={rx.status} />
+                    <span className={`text-[10px] font-medium px-2 py-1 rounded-full ${
+                      rx.status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
+                      rx.status === 'NEEDS_REFILL' ? 'bg-amber-100 text-amber-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {rx.status === 'NEEDS_REFILL' ? 'Refill Needed' : rx.status === 'EXPIRED' ? 'Expired' : 'Active'}
+                    </span>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8">
-                <ClipboardDocumentListIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 font-medium">No active prescriptions</p>
+              <div className="text-center py-6">
+                <ClipboardDocumentListIcon className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+                <p className="text-gray-500 text-sm">No active prescriptions</p>
               </div>
             )}
-          </GlassCard>
+          </SectionCard>
 
-          {/* Lab Results Card */}
-          <GlassCard>
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-purple-100 rounded-xl">
-                  <BeakerIcon className="h-6 w-6 text-purple-600" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Lab Results</h2>
-                  <p className="text-sm text-gray-500">Your recent test results</p>
-                </div>
-              </div>
-              <button
-                onClick={navigateToLabResults}
-                className="text-purple-600 text-sm font-medium hover:text-purple-700 flex items-center gap-1 group"
-              >
-                View All
-                <ChevronRightIcon className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
-              </button>
-            </div>
-
+          {/* Lab Results */}
+          <SectionCard
+            title="Lab Results"
+            icon={BeakerIcon}
+            iconColor="bg-purple-100 text-purple-600"
+            onViewAll={() => navigate('/patient-portal/labs')}
+          >
             {data.labResults.length > 0 ? (
-              <div className="space-y-3">
-                {data.labResults.map((lab, index) => (
-                  <div
-                    key={lab.id}
-                    className="p-4 bg-gray-50/80 rounded-xl hover:bg-gray-100/80 transition-colors"
-                    style={{
-                      animation: 'fadeIn 0.3s ease-out',
-                      animationDelay: `${index * 0.1}s`,
-                      animationFillMode: 'both',
-                    }}
-                  >
-                    <div className="flex items-start justify-between mb-2">
+              <div className="space-y-2">
+                {data.labResults.map((lab) => (
+                  <div key={lab.id} className="p-3 bg-gray-50 rounded-xl">
+                    <div className="flex items-start justify-between">
                       <div>
-                        <h3 className="font-semibold text-gray-900">{lab.testName}</h3>
-                        <p className="text-sm text-gray-500">{formatDate(lab.testDate)}</p>
+                        <p className="font-semibold text-gray-900 text-sm">{lab.testName}</p>
+                        <p className="text-xs text-gray-500">{formatDate(lab.testDate)}</p>
                       </div>
-                      <LabStatusBadge status={lab.status} hasAbnormal={lab.hasAbnormalValues} />
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                          lab.status === 'READY' ? 'bg-green-100 text-green-700' :
+                          lab.status === 'PENDING' ? 'bg-amber-100 text-amber-700' :
+                          'bg-blue-100 text-blue-700'
+                        }`}>{lab.status === 'READY' ? 'Ready' : lab.status === 'PENDING' ? 'Pending' : 'Reviewed'}</span>
+                        {lab.hasAbnormalValues && (
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">Abnormal</span>
+                        )}
+                      </div>
                     </div>
                     {lab.keyValues && lab.keyValues.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-3">
+                      <div className="flex gap-2 mt-2">
                         {lab.keyValues.map((kv, i) => (
-                          <span
-                            key={i}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-medium ${
-                              kv.status === 'NORMAL' ? 'bg-green-100 text-green-700' :
-                              kv.status === 'HIGH' || kv.status === 'LOW' ? 'bg-red-100 text-red-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}
-                          >
+                          <span key={i} className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                            kv.status === 'NORMAL' ? 'bg-green-50 text-green-700' :
+                            'bg-red-50 text-red-700'
+                          }`}>
                             {kv.name}: {kv.value}
                           </span>
                         ))}
@@ -836,313 +663,101 @@ export default function PatientPortalDashboard() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8">
-                <BeakerIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 font-medium">No recent lab results</p>
+              <div className="text-center py-6">
+                <BeakerIcon className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+                <p className="text-gray-500 text-sm">No recent lab results</p>
               </div>
             )}
-          </GlassCard>
+          </SectionCard>
         </div>
 
-        {/* Right Column - 1/3 width */}
-        <div className="space-y-6">
-          {/* Outstanding Bills Card */}
-          <GlassCard>
-            <div className="flex items-center gap-3 mb-5">
-              <div className="p-2.5 bg-amber-100 rounded-xl">
-                <CreditCardIcon className="h-6 w-6 text-amber-600" />
+        {/* Right Column (1/3) */}
+        <div className="space-y-5">
+          {/* Outstanding Bills */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="p-2 bg-amber-100 rounded-lg">
+                <CreditCardIcon className="h-4 w-4 text-amber-600" />
               </div>
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">Outstanding Bills</h2>
-                <p className="text-sm text-gray-500">Payment summary</p>
-              </div>
+              <h3 className="font-semibold text-gray-900 text-sm">Outstanding Bills</h3>
             </div>
-
-            {/* Total Due */}
-            <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl mb-4">
-              <p className="text-sm text-amber-700 font-medium">Total Amount Due</p>
-              <p className="text-3xl font-bold text-amber-800"><CurrencyDisplay amount={data.totalAmountDue} /></p>
+            <div className="p-3 bg-amber-50 rounded-xl mb-3">
+              <p className="text-xs text-amber-700">Total Due</p>
+              <p className="text-xl font-bold text-amber-800"><CurrencyDisplay amount={data.totalAmountDue} /></p>
             </div>
-
-            {/* Bill List */}
             {data.outstandingBills.length > 0 ? (
-              <div className="space-y-3">
-                {data.outstandingBills.map((bill) => (
-                  <div
-                    key={bill.id}
-                    className={`p-3 rounded-xl border ${
-                      bill.status === 'OVERDUE' ? 'border-red-200 bg-red-50/50' : 'border-gray-200 bg-gray-50/50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium text-gray-900 truncate flex-1">
-                        {bill.description}
-                      </span>
-                      <span className="text-sm font-bold text-gray-900"><CurrencyDisplay amount={bill.amount} /></span>
+              <div className="space-y-2">
+                {data.outstandingBills.slice(0, 2).map((bill) => (
+                  <div key={bill.id} className={`p-2.5 rounded-lg border text-xs ${
+                    bill.status === 'OVERDUE' ? 'border-red-200 bg-red-50/50' : 'border-gray-200 bg-gray-50/50'
+                  }`}>
+                    <div className="flex justify-between">
+                      <span className="text-gray-900 font-medium truncate">{bill.description}</span>
+                      <span className="font-bold text-gray-900 whitespace-nowrap ml-2"><CurrencyDisplay amount={bill.amount} /></span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-500">Due: {formatDate(bill.dueDate)}</span>
-                      {bill.status === 'OVERDUE' && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                          <ExclamationCircleIcon className="h-3 w-3" />
-                          Overdue
-                        </span>
-                      )}
+                    <div className="flex justify-between mt-1">
+                      <span className="text-gray-500">{formatDate(bill.dueDate)}</span>
+                      {bill.status === 'OVERDUE' && <span className="text-red-600 font-medium">Overdue</span>}
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-4">
-                <CheckCircleIcon className="h-10 w-10 text-green-400 mx-auto mb-2" />
-                <p className="text-gray-500 text-sm">No outstanding bills</p>
+              <div className="text-center py-3">
+                <CheckCircleIcon className="h-8 w-8 text-green-400 mx-auto mb-1" />
+                <p className="text-gray-500 text-xs">No outstanding bills</p>
               </div>
             )}
+            <button
+              onClick={() => navigate('/patient-portal/billing')}
+              className="w-full mt-3 py-2 bg-amber-600 text-white font-medium rounded-lg hover:bg-amber-700 transition-colors text-xs"
+            >
+              View All Bills
+            </button>
+          </div>
 
-            <div className="flex gap-3 mt-4">
-              <button
-                onClick={navigateToBilling}
-                className="flex-1 py-2.5 bg-amber-600 text-white font-medium rounded-xl hover:bg-amber-700 transition-colors text-sm"
-              >
-                Pay Now
-              </button>
-              <button
-                onClick={navigateToBilling}
-                className="flex-1 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors text-sm"
-              >
-                History
-              </button>
+          {/* Health Reminders */}
+          <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl shadow-sm p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <BellIcon className="h-4 w-4 text-white" />
+              <h3 className="font-semibold text-white text-sm">Health Reminders</h3>
             </div>
-          </GlassCard>
-
-          {/* AI Health Insights Card */}
-          {data.aiHealthInsights && (
-            <GlassCard>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-xl">
-                    <SparklesIcon className="h-6 w-6 text-emerald-600" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900">AI Health Insights</h2>
-                    <p className="text-xs text-gray-500">Personalized for you</p>
-                  </div>
-                </div>
-                <button
-                  onClick={navigateToMedicalHistory}
-                  className="text-emerald-600 text-sm font-medium hover:text-emerald-700 flex items-center gap-1 group"
-                >
-                  View All
-                  <ChevronRightIcon className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
-                </button>
-              </div>
-
-              {/* Summary Stats */}
-              <div className="grid grid-cols-3 gap-2 mb-4">
-                <div className="p-3 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl text-center">
-                  <p className="text-2xl font-bold text-blue-600">{data.aiHealthInsights.summary.totalConditions}</p>
-                  <p className="text-xs text-gray-600">Conditions</p>
-                </div>
-                <div className="p-3 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl text-center">
-                  <p className="text-2xl font-bold text-amber-600">{data.aiHealthInsights.summary.totalAllergies}</p>
-                  <p className="text-xs text-gray-600">Allergies</p>
-                </div>
-                <div className={`p-3 rounded-xl text-center ${
-                  data.aiHealthInsights.summary.riskLevel === 'high' ? 'bg-gradient-to-br from-red-50 to-rose-50' :
-                  data.aiHealthInsights.summary.riskLevel === 'moderate' ? 'bg-gradient-to-br from-amber-50 to-yellow-50' :
-                  'bg-gradient-to-br from-green-50 to-emerald-50'
-                }`}>
-                  <p className={`text-lg font-bold capitalize ${
-                    data.aiHealthInsights.summary.riskLevel === 'high' ? 'text-red-600' :
-                    data.aiHealthInsights.summary.riskLevel === 'moderate' ? 'text-amber-600' :
-                    'text-green-600'
-                  }`}>{data.aiHealthInsights.summary.riskLevel}</p>
-                  <p className="text-xs text-gray-600">Risk Level</p>
-                </div>
-              </div>
-
-              {/* Recommendations */}
-              {data.aiHealthInsights.recommendations.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Recommendations</p>
-                  {data.aiHealthInsights.recommendations.slice(0, 2).map((rec, index) => (
-                    <div
-                      key={index}
-                      className={`p-3 rounded-xl flex items-start gap-3 ${
-                        rec.priority === 'high' ? 'bg-red-50 border border-red-100' :
-                        rec.priority === 'medium' ? 'bg-amber-50 border border-amber-100' :
-                        'bg-blue-50 border border-blue-100'
-                      }`}
-                    >
-                      <LightBulbIcon className={`h-5 w-5 flex-shrink-0 mt-0.5 ${
-                        rec.priority === 'high' ? 'text-red-500' :
-                        rec.priority === 'medium' ? 'text-amber-500' :
-                        'text-blue-500'
-                      }`} />
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{rec.title}</p>
-                        <p className="text-xs text-gray-600 mt-0.5">{rec.description}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Risk Factors */}
-              {data.aiHealthInsights.riskFactors.length > 0 && (
-                <div className="mt-4 pt-4 border-t border-gray-100">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Risk Factors</p>
-                  <div className="flex flex-wrap gap-2">
-                    {data.aiHealthInsights.riskFactors.slice(0, 3).map((rf, index) => (
-                      <span
-                        key={index}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${
-                          rf.level === 'high' ? 'bg-red-100 text-red-700' :
-                          rf.level === 'moderate' ? 'bg-amber-100 text-amber-700' :
-                          'bg-blue-100 text-blue-700'
-                        }`}
-                      >
-                        <ShieldExclamationIcon className="h-3.5 w-3.5" />
-                        {rf.factor}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <button
-                onClick={navigateToMedicalHistory}
-                className="w-full mt-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-medium rounded-xl hover:from-emerald-700 hover:to-teal-700 transition-all text-sm flex items-center justify-center gap-2"
-              >
-                <ClipboardDocumentListIcon className="h-4 w-4" />
-                Manage Medical History
-              </button>
-            </GlassCard>
-          )}
-
-          {/* Health Reminders Card */}
-          <GlassCard className="bg-gradient-to-br from-blue-600 to-indigo-700" padding="p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <BellIcon className="h-5 w-5 text-white" />
-              <h2 className="text-lg font-semibold text-white">Health Reminders</h2>
-            </div>
-
             {data.healthReminders.length > 0 ? (
-              <div className="space-y-3">
-                {data.healthReminders.slice(0, 4).map((reminder) => (
-                  <div
-                    key={reminder.id}
-                    className={`p-3 rounded-xl backdrop-blur-sm ${
-                      reminder.priority === 'high' ? 'bg-red-400/20' :
-                      reminder.priority === 'medium' ? 'bg-amber-400/20' : 'bg-white/10'
-                    }`}
-                  >
-                    <div className="flex items-start gap-2">
-                      <span className={`w-2 h-2 mt-1.5 rounded-full flex-shrink-0 ${
-                        reminder.priority === 'high' ? 'bg-red-400' :
-                        reminder.priority === 'medium' ? 'bg-amber-400' : 'bg-white/60'
-                      }`} />
-                      <div>
-                        <p className="text-white text-sm font-medium">{reminder.title}</p>
-                        <p className="text-white/70 text-xs">{reminder.description}</p>
-                        {reminder.dueDate && (
-                          <p className="text-white/50 text-xs mt-1">{formatDate(reminder.dueDate)}</p>
-                        )}
-                      </div>
-                    </div>
+              <div className="space-y-2">
+                {data.healthReminders.slice(0, 4).map((r) => (
+                  <div key={r.id} className={`p-2.5 rounded-lg ${
+                    r.priority === 'high' ? 'bg-red-400/20' :
+                    r.priority === 'medium' ? 'bg-amber-400/20' : 'bg-white/10'
+                  }`}>
+                    <p className="text-white text-xs font-medium">{r.title}</p>
+                    <p className="text-white/70 text-[10px]">{r.description}</p>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-4">
-                <CheckCircleIcon className="h-10 w-10 text-white/60 mx-auto mb-2" />
-                <p className="text-white/70 text-sm">All caught up!</p>
+              <div className="text-center py-3">
+                <CheckCircleIcon className="h-8 w-8 text-white/50 mx-auto mb-1" />
+                <p className="text-white/70 text-xs">All caught up!</p>
               </div>
             )}
-          </GlassCard>
+          </div>
+
+          {/* Quick Actions */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <h3 className="font-semibold text-gray-900 text-sm mb-3">Quick Actions</h3>
+            <div className="grid grid-cols-2 gap-2">
+              <QuickAction icon={CalendarDaysIcon} label="Book Appt" onClick={() => setShowBookingChoice(true)} />
+              <QuickAction icon={SparklesIcon} label="Symptom Check" onClick={() => navigate('/patient-portal/symptom-checker')} />
+              <QuickAction icon={DocumentTextIcon} label="Records" onClick={() => navigate('/patient-portal/records')} />
+              <QuickAction icon={ChatBubbleLeftRightIcon} label="Messages" onClick={() => navigate('/patient-portal/messages')} />
+              <QuickAction icon={UserCircleIcon} label="Profile" onClick={() => navigate('/patient-portal/settings')} />
+              <QuickAction icon={ClockIcon} label="History" onClick={() => navigate('/patient-portal/history')} />
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Quick Actions Grid */}
-      <GlassCard padding="p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-5">Quick Actions</h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <QuickActionButton
-            icon={CalendarDaysIcon}
-            label="Book Appointment"
-            description="Schedule a visit"
-            onClick={() => setShowBookingChoice(true)}
-            gradient="bg-gradient-to-br from-blue-500 to-blue-600"
-          />
-          <QuickActionButton
-            icon={ArrowPathIcon}
-            label="Request Refill"
-            description="Renew medications"
-            onClick={navigateToPrescriptions}
-            gradient="bg-gradient-to-br from-emerald-500 to-emerald-600"
-          />
-          <QuickActionButton
-            icon={DocumentTextIcon}
-            label="Medical Records"
-            description="View your history"
-            onClick={navigateToRecords}
-            gradient="bg-gradient-to-br from-purple-500 to-purple-600"
-          />
-          <QuickActionButton
-            icon={ChatBubbleLeftRightIcon}
-            label="Message Doctor"
-            description="Secure messaging"
-            onClick={navigateToMessages}
-            gradient="bg-gradient-to-br from-pink-500 to-pink-600"
-          />
-          <QuickActionButton
-            icon={ArrowDownTrayIcon}
-            label="Health Summary"
-            description="Download report"
-            onClick={navigateToRecords}
-            gradient="bg-gradient-to-br from-amber-500 to-amber-600"
-          />
-          <QuickActionButton
-            icon={UserCircleIcon}
-            label="Update Profile"
-            description="Edit your info"
-            onClick={navigateToProfile}
-            gradient="bg-gradient-to-br from-indigo-500 to-indigo-600"
-          />
-        </div>
-      </GlassCard>
-
-      {/* Symptom Checker Promo */}
-      <GlassCard className="overflow-hidden" padding="p-0">
-        <div className="flex flex-col md:flex-row items-center">
-          <div className="flex-1 p-6">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-100 rounded-full text-emerald-700 text-sm font-medium mb-3">
-              <ShieldCheckIcon className="h-4 w-4" />
-              AI-Powered
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Symptom Checker</h2>
-            <p className="text-gray-600 mb-4">
-              Not feeling well? Use our AI-powered symptom checker to understand your symptoms and get guidance on next steps.
-            </p>
-            <button
-              onClick={navigateToSymptomChecker}
-              className="inline-flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-medium rounded-xl hover:from-emerald-700 hover:to-teal-700 transition-all shadow-lg shadow-emerald-500/25"
-            >
-              Check Symptoms
-              <ArrowRightIcon className="h-5 w-5" />
-            </button>
-          </div>
-          <div className="hidden md:block w-64 h-48 bg-gradient-to-br from-emerald-400 to-teal-500 relative">
-            <div className="absolute inset-0 flex items-center justify-center">
-              <HeartIcon className="h-24 w-24 text-white/30" />
-            </div>
-            <div className="absolute top-4 left-4 w-8 h-8 bg-white/20 rounded-full animate-pulse" />
-            <div className="absolute bottom-6 right-6 w-12 h-12 bg-white/20 rounded-full animate-pulse" style={{ animationDelay: '0.5s' }} />
-          </div>
-        </div>
-      </GlassCard>
-
-      {/* Booking Choice Modal */}
+      {/* Booking Choice Modal (unchanged) */}
       <Transition appear show={showBookingChoice} as={Fragment}>
         <Dialog as="div" className="relative z-50" onClose={() => setShowBookingChoice(false)}>
           <Transition.Child
@@ -1183,13 +798,9 @@ export default function PatientPortalDashboard() {
                   </Dialog.Title>
 
                   <div className="space-y-3">
-                    {/* Emergency Booking */}
                     <button
-                      onClick={() => {
-                        setShowBookingChoice(false);
-                        navigate('/patient-portal/appointments?booking=emergency');
-                      }}
-                      className="w-full p-5 rounded-2xl border-2 border-red-300 bg-gradient-to-br from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 hover:shadow-xl transition-all text-left group"
+                      onClick={() => { setShowBookingChoice(false); navigate('/patient-portal/appointments?booking=emergency'); }}
+                      className="w-full p-5 rounded-2xl border-2 border-red-300 bg-gradient-to-br from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 hover:shadow-xl transition-all text-left"
                     >
                       <div className="flex items-center gap-4">
                         <div className="p-3 bg-white/20 backdrop-blur rounded-xl text-white">
@@ -1206,13 +817,9 @@ export default function PatientPortalDashboard() {
                       </div>
                     </button>
 
-                    {/* Quick Booking */}
                     <button
-                      onClick={() => {
-                        setShowBookingChoice(false);
-                        navigate('/patient-portal/appointments?booking=quick');
-                      }}
-                      className="w-full p-5 rounded-2xl border-2 border-blue-300 bg-gradient-to-br from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 hover:shadow-xl transition-all text-left group"
+                      onClick={() => { setShowBookingChoice(false); navigate('/patient-portal/appointments?booking=quick'); }}
+                      className="w-full p-5 rounded-2xl border-2 border-blue-300 bg-gradient-to-br from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 hover:shadow-xl transition-all text-left"
                     >
                       <div className="flex items-center gap-4">
                         <div className="p-3 bg-white/20 backdrop-blur rounded-xl text-white">
@@ -1223,18 +830,14 @@ export default function PatientPortalDashboard() {
                             <h4 className="font-bold text-white text-lg">Quick Book</h4>
                             <span className="px-2 py-0.5 text-xs font-bold bg-white text-blue-600 rounded-full">2 STEPS</span>
                           </div>
-                          <p className="text-sm text-blue-100 mt-1">Select department → Pick doctor & time</p>
+                          <p className="text-sm text-blue-100 mt-1">Select department &rarr; Pick doctor &amp; time</p>
                         </div>
                         <ChevronRightIcon className="h-6 w-6 text-white/80" />
                       </div>
                     </button>
 
-                    {/* AI-Guided */}
                     <button
-                      onClick={() => {
-                        setShowBookingChoice(false);
-                        navigate('/patient-portal/symptom-checker?autoStart=true');
-                      }}
+                      onClick={() => { setShowBookingChoice(false); navigate('/patient-portal/symptom-checker?autoStart=true'); }}
                       className="w-full p-4 rounded-2xl border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50 hover:border-purple-400 hover:shadow-lg transition-all text-left group"
                     >
                       <div className="flex items-center gap-4">
@@ -1252,12 +855,8 @@ export default function PatientPortalDashboard() {
                       </div>
                     </button>
 
-                    {/* Standard Booking */}
                     <button
-                      onClick={() => {
-                        setShowBookingChoice(false);
-                        navigate('/patient-portal/appointments?booking=standard');
-                      }}
+                      onClick={() => { setShowBookingChoice(false); navigate('/patient-portal/appointments?booking=standard'); }}
                       className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-all text-left"
                     >
                       <div className="flex items-center justify-center gap-2 text-gray-600">
@@ -1282,21 +881,106 @@ export default function PatientPortalDashboard() {
           </div>
         </Dialog>
       </Transition>
-
-      {/* CSS Animations */}
-      <style>{`
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-      `}</style>
     </div>
+  );
+}
+
+// Sub-components
+
+function MetricCard({
+  icon: Icon,
+  value,
+  label,
+  color,
+  isCurrency,
+  onClick,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  value: number;
+  label: string;
+  color: string;
+  isCurrency?: boolean;
+  onClick: () => void;
+}) {
+  const colorMap: Record<string, { bg: string; icon: string; text: string }> = {
+    blue: { bg: 'bg-blue-50', icon: 'text-blue-600', text: 'text-blue-700' },
+    emerald: { bg: 'bg-emerald-50', icon: 'text-emerald-600', text: 'text-emerald-700' },
+    purple: { bg: 'bg-purple-50', icon: 'text-purple-600', text: 'text-purple-700' },
+    amber: { bg: 'bg-amber-50', icon: 'text-amber-600', text: 'text-amber-700' },
+    rose: { bg: 'bg-rose-50', icon: 'text-rose-600', text: 'text-rose-700' },
+  };
+  const c = colorMap[color] || colorMap.blue;
+
+  return (
+    <button
+      onClick={onClick}
+      className="bg-white rounded-xl border border-gray-100 p-3 hover:shadow-md transition-all text-left group"
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <div className={`p-1.5 rounded-lg ${c.bg}`}>
+          <Icon className={`h-4 w-4 ${c.icon}`} />
+        </div>
+      </div>
+      <p className={`text-xl font-bold ${c.text}`}>
+        {isCurrency ? <CurrencyDisplay amount={value} /> : value}
+      </p>
+      <p className="text-xs text-gray-500 mt-0.5">{label}</p>
+    </button>
+  );
+}
+
+function SectionCard({
+  title,
+  icon: Icon,
+  iconColor,
+  onViewAll,
+  children,
+}: {
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  iconColor: string;
+  onViewAll: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div className={`p-2 rounded-lg ${iconColor}`}>
+            <Icon className="h-4 w-4" />
+          </div>
+          <h3 className="font-semibold text-gray-900 text-sm">{title}</h3>
+        </div>
+        <button
+          onClick={onViewAll}
+          className="text-blue-600 text-xs font-medium hover:text-blue-700 flex items-center gap-0.5 group"
+        >
+          View All
+          <ChevronRightIcon className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
+        </button>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function QuickAction({
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors"
+    >
+      <Icon className="h-5 w-5 text-gray-600" />
+      <span className="text-[11px] font-medium text-gray-700">{label}</span>
+    </button>
   );
 }
 

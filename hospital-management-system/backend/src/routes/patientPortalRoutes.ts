@@ -499,6 +499,60 @@ router.get(
 );
 
 // =============================================================================
+// Patient Vitals History
+// =============================================================================
+
+/**
+ * Get patient vitals history
+ * GET /api/v1/patient-portal/vitals?limit=10
+ */
+router.get(
+  '/vitals',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
+
+    const [vitals, total] = await Promise.all([
+      prisma.vital.findMany({
+        where: { patientId },
+        orderBy: { recordedAt: 'desc' },
+        take: limit,
+        select: {
+          id: true,
+          bloodPressureSys: true,
+          bloodPressureDia: true,
+          heartRate: true,
+          respiratoryRate: true,
+          oxygenSaturation: true,
+          temperature: true,
+          weight: true,
+          height: true,
+          bmi: true,
+          bloodSugar: true,
+          painLevel: true,
+          recordedAt: true,
+        },
+      }),
+      prisma.vital.count({ where: { patientId } }),
+    ]);
+
+    // Convert Decimal fields to numbers to avoid string serialization issues
+    const serializedVitals = vitals.map((v) => ({
+      ...v,
+      oxygenSaturation: v.oxygenSaturation ? Number(v.oxygenSaturation) : null,
+      temperature: v.temperature ? Number(v.temperature) : null,
+      weight: v.weight ? Number(v.weight) : null,
+      height: v.height ? Number(v.height) : null,
+      bmi: v.bmi ? Number(v.bmi) : null,
+      bloodSugar: v.bloodSugar ? Number(v.bloodSugar) : null,
+    }));
+
+    sendSuccess(res, { vitals: serializedVitals, total }, 'Vitals retrieved');
+  })
+);
+
+// =============================================================================
 // AI Health Assistant Routes
 // =============================================================================
 

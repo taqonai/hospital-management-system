@@ -1627,6 +1627,10 @@ export const patientPortalApi = {
     foods?: string[];
   }) => api.post('/patient-portal/allergies/ai-suggest', data),
 
+  // Vitals
+  getVitals: (params?: { limit?: number }) =>
+    api.get('/patient-portal/vitals', { params }),
+
   // AI Health Insights
   getHealthInsights: () => api.get('/patient-portal/health-insights'),
   aiChat: (data: { message: string; context?: string; history?: any[] }) =>
