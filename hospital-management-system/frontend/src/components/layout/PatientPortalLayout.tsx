@@ -11,7 +11,6 @@ import {
   Cog6ToothIcon,
   Bars3Icon,
   XMarkIcon,
-  BellIcon,
   ChevronRightIcon,
   ArrowRightOnRectangleIcon,
   UserCircleIcon,
@@ -29,6 +28,7 @@ import {
   TrophyIcon,
 } from '@heroicons/react/24/outline';
 import { HeartIcon } from '@heroicons/react/24/solid';
+import PatientNotificationDropdown from '../patient-portal/PatientNotificationDropdown';
 
 // Interface for decoded JWT payload
 interface PatientTokenPayload {
@@ -193,7 +193,6 @@ const navigationItems: NavItem[] = [
 export default function PatientPortalLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [patientInfo, setPatientInfo] = useState<PatientInfo | null>(null);
-  const [notifications, setNotifications] = useState<number>(3); // Mock notification count
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -524,18 +523,8 @@ export default function PatientPortalLayout() {
 
             {/* Right side actions */}
             <div className="flex items-center gap-3">
-              {/* Notification bell */}
-              <button className="relative p-2.5 rounded-xl text-gray-500 hover:bg-gray-100 transition-colors">
-                <BellIcon className="h-5 w-5" />
-                {notifications > 0 && (
-                  <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
-                    <span className="relative inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-                      {notifications > 9 ? '9+' : notifications}
-                    </span>
-                  </span>
-                )}
-              </button>
+              {/* Notification dropdown */}
+              <PatientNotificationDropdown />
 
               <div className="hidden sm:block h-6 w-px bg-gray-200" />
 

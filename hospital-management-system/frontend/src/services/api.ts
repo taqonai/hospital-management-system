@@ -1635,6 +1635,16 @@ export const patientPortalApi = {
   getHealthInsights: () => api.get('/patient-portal/health-insights'),
   aiChat: (data: { message: string; context?: string; history?: any[] }) =>
     api.post('/patient-portal/ai-chat', data),
+
+  // In-App Notifications
+  getNotifications: (params?: { page?: number; limit?: number; unreadOnly?: boolean; type?: string }) =>
+    api.get('/patient-portal/notifications', { params }),
+  getUnreadNotificationCount: () =>
+    api.get('/patient-portal/notifications/unread-count'),
+  markNotificationRead: (id: string) =>
+    api.put(`/patient-portal/notifications/${id}/read`),
+  markAllNotificationsRead: () =>
+    api.put('/patient-portal/notifications/read-all'),
 };
 
 // Symptom Checker APIs
