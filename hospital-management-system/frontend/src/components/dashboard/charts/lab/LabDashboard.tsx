@@ -1,12 +1,9 @@
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  ClockIcon,
-  ExclamationTriangleIcon,
-  CheckCircleIcon,
   ArrowRightIcon,
   DocumentTextIcon,
 } from '@heroicons/react/24/outline';
-import { SyringeIcon, DNAAIIcon } from '../../../icons/HMSIcons';
+import { SyringeIcon, DNAAIIcon, MedicalShieldIcon, NotificationBellIcon } from '../../../icons/HMSIcons';
 import { Doughnut } from 'react-chartjs-2';
 import { useLabDashboard } from '../../../../hooks/useLabDashboard';
 import KPICard from '../shared/KPICard';
@@ -65,7 +62,7 @@ export default function LabDashboard() {
         <KPICard
           title="Pending"
           value={labStats?.pendingOrders || pendingOrders?.length || 0}
-          icon={ClockIcon}
+          icon={SyringeIcon}
           color="amber"
           subtitle="Awaiting processing"
           isLoading={isLoading}
@@ -74,7 +71,7 @@ export default function LabDashboard() {
         <KPICard
           title="Completed"
           value={labStats?.completedToday || 0}
-          icon={CheckCircleIcon}
+          icon={MedicalShieldIcon}
           color="emerald"
           subtitle="Today"
           isLoading={isLoading}
@@ -83,7 +80,7 @@ export default function LabDashboard() {
         <KPICard
           title="Critical Results"
           value={labStats?.criticalResults || criticalResults?.length || 0}
-          icon={ExclamationTriangleIcon}
+          icon={NotificationBellIcon}
           color="red"
           subtitle="Need attention"
           isLoading={isLoading}
@@ -97,7 +94,7 @@ export default function LabDashboard() {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-xl bg-red-500">
-                <ExclamationTriangleIcon className="h-5 w-5 text-white" />
+                <NotificationBellIcon className="h-5 w-5 text-white" />
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-red-900">Critical Results</h3>
@@ -192,7 +189,7 @@ export default function LabDashboard() {
 
             {(!pendingOrders || pendingOrders.length === 0) && (
               <div className="text-center py-6">
-                <CheckCircleIcon className="h-10 w-10 text-emerald-400 mx-auto mb-2" />
+                <MedicalShieldIcon className="h-10 w-10 text-emerald-400 mx-auto mb-2" />
                 <p className="text-sm text-gray-500">No pending orders</p>
               </div>
             )}
@@ -231,7 +228,7 @@ export default function LabDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-amber-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-amber-500 group-hover:scale-110 transition-transform">
-            <ClockIcon className="h-5 w-5 text-white" />
+            <DNAAIIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">Lab Orders</p>
@@ -243,7 +240,7 @@ export default function LabDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-red-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-red-500 group-hover:scale-110 transition-transform">
-            <ExclamationTriangleIcon className="h-5 w-5 text-white" />
+            <NotificationBellIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">Critical Values</p>

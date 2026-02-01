@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ExclamationTriangleIcon,
-  ClockIcon,
   HeartIcon,
   ArrowRightIcon,
   ArrowTrendingUpIcon,
@@ -16,6 +14,8 @@ import {
   ECGMonitorAIIcon,
   HospitalBedIcon,
   NotificationBellIcon,
+  MedicalCrossHeartbeatIcon,
+  IVDripIcon,
 } from '../../../icons/HMSIcons';
 import { Bar } from 'react-chartjs-2';
 import { useNurseDashboard } from '../../../../hooks/useNurseDashboard';
@@ -114,7 +114,7 @@ export default function NurseDashboard() {
         <KPICard
           title="IPD High Risk"
           value={deteriorationDashboard?.summary?.highRisk || 0}
-          icon={ExclamationTriangleIcon}
+          icon={MedicalCrossHeartbeatIcon}
           color="red"
           subtitle="NEWS2 score > 6"
           isLoading={isLoading}
@@ -122,7 +122,7 @@ export default function NurseDashboard() {
         <KPICard
           title="Vitals Overdue"
           value={deteriorationDashboard?.summary?.vitalsOverdue || 0}
-          icon={ClockIcon}
+          icon={IVDripIcon}
           color="amber"
           subtitle="Need monitoring"
           isLoading={isLoading}
@@ -419,7 +419,7 @@ export default function NurseDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-red-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-red-500 group-hover:scale-110 transition-transform">
-            <ExclamationTriangleIcon className="h-5 w-5 text-white" />
+            <MedicalCrossHeartbeatIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">Early Warning</p>

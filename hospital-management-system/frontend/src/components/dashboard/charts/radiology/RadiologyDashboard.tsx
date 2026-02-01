@@ -1,11 +1,9 @@
 import { Link } from 'react-router-dom';
 import {
-  ClockIcon,
   CheckCircleIcon,
   ArrowRightIcon,
-  SparklesIcon,
 } from '@heroicons/react/24/outline';
-import { XRayIcon, MedicalReportAIIcon } from '../../../icons/HMSIcons';
+import { XRayIcon, MedicalReportAIIcon, HeartbeatIcon, DoctorAIIcon } from '../../../icons/HMSIcons';
 import { Doughnut } from 'react-chartjs-2';
 import { useRadiologyDashboard } from '../../../../hooks/useRadiologyDashboard';
 import KPICard from '../shared/KPICard';
@@ -55,7 +53,7 @@ export default function RadiologyDashboard() {
         <KPICard
           title="Pending Studies"
           value={radiologyStats?.pendingOrders || worklist?.length || 0}
-          icon={ClockIcon}
+          icon={HeartbeatIcon}
           color="amber"
           subtitle="Awaiting imaging"
           isLoading={isLoading}
@@ -71,7 +69,7 @@ export default function RadiologyDashboard() {
         <KPICard
           title="AI Analyzed"
           value={radiologyStats?.aiAnalyzed || 0}
-          icon={SparklesIcon}
+          icon={DoctorAIIcon}
           color="emerald"
           subtitle="AI-assisted readings"
           isLoading={isLoading}
@@ -237,7 +235,7 @@ export default function RadiologyDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-purple-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 group-hover:scale-110 transition-transform">
-            <SparklesIcon className="h-5 w-5 text-white" />
+            <DoctorAIIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">AI Analysis</p>
@@ -249,7 +247,7 @@ export default function RadiologyDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-amber-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-amber-500 group-hover:scale-110 transition-transform">
-            <ClockIcon className="h-5 w-5 text-white" />
+            <HeartbeatIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">Orders</p>

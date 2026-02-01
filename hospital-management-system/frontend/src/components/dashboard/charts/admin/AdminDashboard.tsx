@@ -1,7 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  CheckCircleIcon,
-  ClockIcon,
   ChartPieIcon,
   SparklesIcon,
   BeakerIcon,
@@ -18,6 +16,8 @@ import {
   NotificationBellIcon,
   HospitalBedIcon,
   HospitalAIIcon,
+  MedicalShieldIcon,
+  HeartbeatIcon,
 } from '../../../icons/HMSIcons';
 import { Bar, Pie } from 'react-chartjs-2';
 import { useAdminDashboard } from '../../../../hooks/useAdminDashboard';
@@ -268,7 +268,7 @@ export default function AdminDashboard() {
         <KPICard
           title="Completed Visits"
           value={todayStats?.today?.completed || 0}
-          icon={CheckCircleIcon}
+          icon={MedicalShieldIcon}
           trend={todayStats?.today?.completed > 0 ? { value: 8, isPositive: true } : undefined}
           color="emerald"
           subtitle={`${todayStats?.today?.total > 0 ? Math.round((todayStats.today.completed / todayStats.today.total) * 100) : 0}% completion rate`}
@@ -277,7 +277,7 @@ export default function AdminDashboard() {
         <KPICard
           title="Pending Patients"
           value={todayStats?.today?.pending || 0}
-          icon={ClockIcon}
+          icon={HeartbeatIcon}
           color="amber"
           subtitle="Waiting for consultation"
           isLoading={isLoading}
@@ -418,7 +418,7 @@ export default function AdminDashboard() {
             {isAppointmentsLoading && (
               <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
             )}
-            <ClockIcon className="h-5 w-5 text-gray-400" />
+            <HeartbeatIcon className="h-5 w-5 text-gray-400" />
           </div>
         </div>
 

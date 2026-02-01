@@ -1,15 +1,12 @@
 import { Link } from 'react-router-dom';
 import {
-  ClockIcon,
-  CheckCircleIcon,
-  XCircleIcon,
   ArrowRightIcon,
   MegaphoneIcon,
   UserPlusIcon,
   PhoneIcon,
   CalendarDaysIcon,
 } from '@heroicons/react/24/outline';
-import { PatientIcon, CalendarBillingIcon } from '../../../icons/HMSIcons';
+import { PatientIcon, CalendarBillingIcon, HeartbeatIcon, MedicalShieldIcon, NotificationBellIcon } from '../../../icons/HMSIcons';
 import { Doughnut, Bar } from 'react-chartjs-2';
 import { useReceptionistDashboard } from '../../../../hooks/useReceptionistDashboard';
 import KPICard from '../shared/KPICard';
@@ -90,7 +87,7 @@ export default function ReceptionistDashboard() {
         <KPICard
           title="Waiting"
           value={waiting}
-          icon={ClockIcon}
+          icon={HeartbeatIcon}
           color="amber"
           subtitle="In queue"
           isLoading={isLoading}
@@ -106,7 +103,7 @@ export default function ReceptionistDashboard() {
         <KPICard
           title="Completed"
           value={completed}
-          icon={CheckCircleIcon}
+          icon={MedicalShieldIcon}
           color="emerald"
           subtitle="Today's visits"
           isLoading={isLoading}
@@ -114,7 +111,7 @@ export default function ReceptionistDashboard() {
         <KPICard
           title="No-Show Rate"
           value={`${noShowRate}%`}
-          icon={XCircleIcon}
+          icon={NotificationBellIcon}
           color="red"
           subtitle={`${noShow} patients`}
           isLoading={isLoading}
@@ -229,7 +226,7 @@ export default function ReceptionistDashboard() {
 
             {nextInQueue.length === 0 && (
               <div className="text-center py-8">
-                <CheckCircleIcon className="h-12 w-12 text-emerald-400 mx-auto mb-3" />
+                <MedicalShieldIcon className="h-12 w-12 text-emerald-400 mx-auto mb-3" />
                 <p className="text-gray-500">No patients waiting in queue</p>
               </div>
             )}
@@ -299,7 +296,7 @@ export default function ReceptionistDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-emerald-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-emerald-500 group-hover:scale-110 transition-transform">
-            <CheckCircleIcon className="h-5 w-5 text-white" />
+            <MedicalShieldIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">Check In Patient</p>

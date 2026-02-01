@@ -1,12 +1,9 @@
 import { Link } from 'react-router-dom';
 import {
-  ExclamationTriangleIcon,
-  ClockIcon,
-  CheckCircleIcon,
   ArrowRightIcon,
   BeakerIcon,
 } from '@heroicons/react/24/outline';
-import { PrescriptionIcon } from '../../../icons/HMSIcons';
+import { PrescriptionIcon, MedicalShieldIcon, NotificationBellIcon, IVDripIcon } from '../../../icons/HMSIcons';
 import { usePharmacyDashboard } from '../../../../hooks/usePharmacyDashboard';
 import KPICard from '../shared/KPICard';
 import OccupancyGauge from '../shared/OccupancyGauge';
@@ -39,7 +36,7 @@ export default function PharmacyDashboard() {
         <KPICard
           title="Dispensed Today"
           value={pharmacyStats?.dispensedToday || 0}
-          icon={CheckCircleIcon}
+          icon={MedicalShieldIcon}
           color="emerald"
           subtitle="Completed"
           isLoading={isLoading}
@@ -47,7 +44,7 @@ export default function PharmacyDashboard() {
         <KPICard
           title="Low Stock"
           value={pharmacyStats?.lowStockCount || lowStock?.length || 0}
-          icon={ExclamationTriangleIcon}
+          icon={NotificationBellIcon}
           color="red"
           subtitle="Items below threshold"
           isLoading={isLoading}
@@ -55,7 +52,7 @@ export default function PharmacyDashboard() {
         <KPICard
           title="Expiring Soon"
           value={pharmacyStats?.expiringCount || expiring?.length || 0}
-          icon={ClockIcon}
+          icon={IVDripIcon}
           color="orange"
           subtitle="Within 30 days"
           isLoading={isLoading}
@@ -71,7 +68,7 @@ export default function PharmacyDashboard() {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-xl bg-red-500">
-                    <ExclamationTriangleIcon className="h-5 w-5 text-white" />
+                    <NotificationBellIcon className="h-5 w-5 text-white" />
                   </div>
                   <div>
                     <h3 className="font-semibold text-red-900">Low Stock Alert</h3>
@@ -106,7 +103,7 @@ export default function PharmacyDashboard() {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-xl bg-amber-500">
-                    <ClockIcon className="h-5 w-5 text-white" />
+                    <IVDripIcon className="h-5 w-5 text-white" />
                   </div>
                   <div>
                     <h3 className="font-semibold text-amber-900">Expiring Soon</h3>
@@ -201,7 +198,7 @@ export default function PharmacyDashboard() {
 
             {(!pendingPrescriptions || pendingPrescriptions.length === 0) && (
               <div className="text-center py-8">
-                <CheckCircleIcon className="h-12 w-12 text-emerald-400 mx-auto mb-3" />
+                <MedicalShieldIcon className="h-12 w-12 text-emerald-400 mx-auto mb-3" />
                 <p className="text-gray-500">No pending prescriptions</p>
               </div>
             )}
@@ -240,7 +237,7 @@ export default function PharmacyDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-amber-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-amber-500 group-hover:scale-110 transition-transform">
-            <ExclamationTriangleIcon className="h-5 w-5 text-white" />
+            <NotificationBellIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">Inventory</p>
@@ -252,7 +249,7 @@ export default function PharmacyDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-emerald-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-emerald-500 group-hover:scale-110 transition-transform">
-            <CheckCircleIcon className="h-5 w-5 text-white" />
+            <MedicalShieldIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">Place Order</p>

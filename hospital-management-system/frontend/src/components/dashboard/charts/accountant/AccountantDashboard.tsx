@@ -1,14 +1,10 @@
 import { Link } from 'react-router-dom';
 import {
-  ClockIcon,
-  DocumentTextIcon,
-  CheckCircleIcon,
   ArrowRightIcon,
   ExclamationTriangleIcon,
-  BanknotesIcon,
   CurrencyDollarIcon,
 } from '@heroicons/react/24/outline';
-import { CalendarBillingIcon } from '../../../icons/HMSIcons';
+import { CalendarBillingIcon, MedicalRecordsIcon, HeartbeatIcon, MedicalReportAIIcon, MedicalShieldIcon } from '../../../icons/HMSIcons';
 import { Line, Doughnut } from 'react-chartjs-2';
 import { useAccountantDashboard } from '../../../../hooks/useAccountantDashboard';
 import KPICard from '../shared/KPICard';
@@ -99,7 +95,7 @@ export default function AccountantDashboard() {
         <KPICard
           title="Today's Revenue"
           value={formatCurrency(billingStats?.todayRevenue || 0)}
-          icon={BanknotesIcon}
+          icon={MedicalRecordsIcon}
           color="blue"
           subtitle="Collected today"
           isLoading={isLoading}
@@ -107,7 +103,7 @@ export default function AccountantDashboard() {
         <KPICard
           title="Pending Payments"
           value={formatCurrency(billingStats?.pendingPayments || 0)}
-          icon={ClockIcon}
+          icon={HeartbeatIcon}
           color="amber"
           subtitle="Outstanding"
           isLoading={isLoading}
@@ -115,7 +111,7 @@ export default function AccountantDashboard() {
         <KPICard
           title="Claims Submitted"
           value={billingStats?.claimsSubmitted || 0}
-          icon={DocumentTextIcon}
+          icon={MedicalReportAIIcon}
           color="purple"
           subtitle={`${billingStats?.claimsDenied || 0} denied`}
           isLoading={isLoading}
@@ -175,7 +171,7 @@ export default function AccountantDashboard() {
           <div className="space-y-4">
             <div className="flex items-center justify-between p-3 rounded-lg bg-amber-50">
               <div className="flex items-center gap-2">
-                <ClockIcon className="h-5 w-5 text-amber-600" />
+                <HeartbeatIcon className="h-5 w-5 text-amber-600" />
                 <span className="text-sm font-medium text-amber-700">Pending (0-30 days)</span>
               </div>
               <span className="font-bold text-amber-700">
@@ -264,7 +260,7 @@ export default function AccountantDashboard() {
 
           {(!outstanding?.invoices || outstanding.invoices.length === 0) && (
             <div className="text-center py-8">
-              <CheckCircleIcon className="h-12 w-12 text-emerald-400 mx-auto mb-3" />
+              <MedicalShieldIcon className="h-12 w-12 text-emerald-400 mx-auto mb-3" />
               <p className="text-gray-500">No outstanding invoices</p>
             </div>
           )}
@@ -278,7 +274,7 @@ export default function AccountantDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-blue-500 group-hover:scale-110 transition-transform">
-            <DocumentTextIcon className="h-5 w-5 text-white" />
+            <MedicalReportAIIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">Create Invoice</p>
@@ -290,7 +286,7 @@ export default function AccountantDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-emerald-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-emerald-500 group-hover:scale-110 transition-transform">
-            <BanknotesIcon className="h-5 w-5 text-white" />
+            <MedicalRecordsIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">Record Payment</p>
@@ -302,7 +298,7 @@ export default function AccountantDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-purple-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-purple-500 group-hover:scale-110 transition-transform">
-            <DocumentTextIcon className="h-5 w-5 text-white" />
+            <MedicalReportAIIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">Submit Claim</p>

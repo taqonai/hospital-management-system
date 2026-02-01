@@ -1,14 +1,11 @@
 import { Link } from 'react-router-dom';
 import {
-  CheckCircleIcon,
-  XCircleIcon,
-  ClockIcon,
   ArrowRightIcon,
   BanknotesIcon,
   UserGroupIcon,
   CalendarDaysIcon,
 } from '@heroicons/react/24/outline';
-import { PatientIcon, CalendarBillingIcon } from '../../../icons/HMSIcons';
+import { PatientIcon, MedicalShieldIcon, NotificationBellIcon, HeartbeatIcon } from '../../../icons/HMSIcons';
 import { Doughnut, Bar } from 'react-chartjs-2';
 import { useHRDashboard } from '../../../../hooks/useHRDashboard';
 import KPICard from '../shared/KPICard';
@@ -80,7 +77,7 @@ export default function HRDashboard() {
         <KPICard
           title="Present Today"
           value={dashboardStats?.todayPresent || 0}
-          icon={CheckCircleIcon}
+          icon={MedicalShieldIcon}
           color="emerald"
           subtitle={`${dashboardStats?.attendanceRate?.toFixed(0) || 0}% attendance`}
           isLoading={isLoading}
@@ -88,7 +85,7 @@ export default function HRDashboard() {
         <KPICard
           title="Absent Today"
           value={dashboardStats?.todayAbsent || 0}
-          icon={XCircleIcon}
+          icon={NotificationBellIcon}
           color="red"
           subtitle="Not checked in"
           isLoading={isLoading}
@@ -96,7 +93,7 @@ export default function HRDashboard() {
         <KPICard
           title="Pending Leaves"
           value={dashboardStats?.pendingLeaves || pendingLeaves?.total || 0}
-          icon={ClockIcon}
+          icon={HeartbeatIcon}
           color="amber"
           subtitle="Awaiting approval"
           isLoading={isLoading}
@@ -199,7 +196,7 @@ export default function HRDashboard() {
 
             {(!pendingLeaves?.leaves || pendingLeaves.leaves.length === 0) && (
               <div className="text-center py-8">
-                <CheckCircleIcon className="h-12 w-12 text-emerald-400 mx-auto mb-3" />
+                <MedicalShieldIcon className="h-12 w-12 text-emerald-400 mx-auto mb-3" />
                 <p className="text-gray-500">No pending leave requests</p>
               </div>
             )}
@@ -226,7 +223,7 @@ export default function HRDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-amber-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-amber-500 group-hover:scale-110 transition-transform">
-            <ClockIcon className="h-5 w-5 text-white" />
+            <HeartbeatIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">Approve Leave</p>

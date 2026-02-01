@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
 import {
-  ClockIcon,
   PlayIcon,
   ArrowRightIcon,
   SparklesIcon,
@@ -14,6 +13,7 @@ import {
   CalendarBillingIcon,
   PatientIcon,
   StethoscopeAIIcon,
+  HeartbeatIcon,
 } from '../../../icons/HMSIcons';
 import { useDoctorDashboard } from '../../../../hooks/useDoctorDashboard';
 import { useAuth } from '../../../../hooks/useAuth';
@@ -83,7 +83,7 @@ export default function DoctorDashboard() {
         <KPICard
           title="Pending Consultations"
           value={stats?.pendingConsultations || waitingPatients.length}
-          icon={ClockIcon}
+          icon={HeartbeatIcon}
           color="amber"
           subtitle="Waiting in queue"
           isLoading={isLoading}

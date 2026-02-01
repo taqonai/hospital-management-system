@@ -129,7 +129,11 @@ docker-compose restart [service]              # Restart service
 
 ## Architecture
 
-**Note:** Subdirectories contain `AGENT.md` files with detailed patterns and guidance specific to that area (e.g., `backend/src/routes/AGENT.md`, `ai-services/AGENT.md`). Consult these for implementation details when working in a specific module.
+**Note:** Subdirectories contain `AGENT.md` files with detailed patterns and guidance specific to that area. Consult these for implementation details when working in a specific module:
+- Backend: `backend/src/routes/AGENT.md`, `backend/src/services/AGENT.md`, `backend/src/middleware/AGENT.md`, `backend/src/config/AGENT.md`, `backend/src/types/AGENT.md`
+- Frontend: `frontend/src/components/AGENT.md`, `frontend/src/pages/AGENT.md`, `frontend/src/services/AGENT.md`, `frontend/src/hooks/AGENT.md`
+- AI Services: `ai-services/AGENT.md`
+- Mobile: `mobile/src/screens/AGENT.md`, `mobile/src/services/AGENT.md`, `mobile/src/hooks/AGENT.md`, `mobile/src/navigation/AGENT.md`
 
 ### Three-Tier Service Architecture
 
@@ -211,7 +215,7 @@ OpenAI models require `OPENAI_API_KEY`. SentenceTransformers and rule-based serv
 
 ### Multi-Tenant Data Model
 
-All entities include `hospitalId` for tenant isolation. Prisma schema (`backend/prisma/schema.prisma`, ~5900 lines) covers 80+ models.
+All entities include `hospitalId` for tenant isolation. Prisma schema (`backend/prisma/schema.prisma`, ~7800 lines) covers 190+ models.
 
 ### User Roles (UserRole enum)
 SUPER_ADMIN, HOSPITAL_ADMIN, DOCTOR, NURSE, RECEPTIONIST, LAB_TECHNICIAN, PHARMACIST, RADIOLOGIST, ACCOUNTANT, PATIENT, HR_MANAGER, HR_STAFF, HOUSEKEEPING_MANAGER, HOUSEKEEPING_STAFF, MAINTENANCE_STAFF, SECURITY_STAFF, DIETARY_STAFF, MARKETING
@@ -220,6 +224,18 @@ SUPER_ADMIN, HOSPITAL_ADMIN, DOCTOR, NURSE, RECEPTIONIST, LAB_TECHNICIAN, PHARMA
 Routes in `backend/src/routes/`, services in `backend/src/services/`. Each module follows:
 - `{module}Routes.ts` - Express router with endpoints
 - `{module}Service.ts` - Business logic with Prisma queries
+
+**Standardized API responses** (`backend/src/utils/response.ts`): All endpoints must use the response helpers for consistent JSON format:
+- `sendSuccess(res, data, message)` - 200 with `{ success: true, data, message }`
+- `sendCreated(res, data, message)` - 201
+- `sendPaginated(res, data, pagination, message)` - 200 with pagination info
+- `sendError(res, message, statusCode)` / `sendNotFound` / `sendUnauthorized` / `sendForbidden`
+- `calculatePagination(page, limit, total)` - Helper for paginated queries
+
+### Background Jobs
+Cron jobs in `backend/src/jobs/`, initialized on server start from `app.ts`:
+- `noShowCron.ts` - Marks missed appointments as NO_SHOW
+- `autoReorderCron.ts` - Pharmacy auto-reorder for low stock items
 
 Key routes (`/api/v1/`):
 - `/auth` - Login, register, refresh, profile

@@ -1,15 +1,11 @@
 import { Link } from 'react-router-dom';
 import {
-  ChartBarIcon,
-  MegaphoneIcon,
   PhoneIcon,
   ArrowRightIcon,
   CheckCircleIcon,
   XCircleIcon,
-  ClockIcon,
-  UserGroupIcon,
 } from '@heroicons/react/24/outline';
-import { PatientIcon } from '../../../icons/HMSIcons';
+import { PatientIcon, DoctorAIIcon, MedicalReportAIIcon, NotificationBellIcon } from '../../../icons/HMSIcons';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import { useMarketingDashboard } from '../../../../hooks/useMarketingDashboard';
 import KPICard from '../shared/KPICard';
@@ -84,7 +80,7 @@ export default function MarketingDashboard() {
         <KPICard
           title="New Today"
           value={crmDashboard?.newLeadsToday || 0}
-          icon={UserGroupIcon}
+          icon={DoctorAIIcon}
           color="cyan"
           subtitle="Fresh leads"
           isLoading={isLoading}
@@ -92,7 +88,7 @@ export default function MarketingDashboard() {
         <KPICard
           title="Conversion Rate"
           value={`${(leadStats?.conversionRate || 0).toFixed(1)}%`}
-          icon={ChartBarIcon}
+          icon={MedicalReportAIIcon}
           color="emerald"
           subtitle="Lead to patient"
           isLoading={isLoading}
@@ -100,7 +96,7 @@ export default function MarketingDashboard() {
         <KPICard
           title="Active Campaigns"
           value={campaigns?.campaigns?.length || 0}
-          icon={MegaphoneIcon}
+          icon={NotificationBellIcon}
           color="purple"
           subtitle="Running"
           isLoading={isLoading}
@@ -163,7 +159,7 @@ export default function MarketingDashboard() {
 
             {(!recentLeads?.leads || recentLeads.leads.length === 0) && (
               <div className="text-center py-8">
-                <UserGroupIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                <DoctorAIIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
                 <p className="text-gray-500">No recent leads</p>
               </div>
             )}
@@ -201,7 +197,7 @@ export default function MarketingDashboard() {
 
             {(!campaigns?.campaigns || campaigns.campaigns.length === 0) && (
               <div className="text-center py-8">
-                <MegaphoneIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                <NotificationBellIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
                 <p className="text-gray-500">No active campaigns</p>
               </div>
             )}
@@ -215,7 +211,7 @@ export default function MarketingDashboard() {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-xl bg-red-500">
-                <ClockIcon className="h-5 w-5 text-white" />
+                <NotificationBellIcon className="h-5 w-5 text-white" />
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-red-900">Overdue Tasks</h3>
@@ -253,7 +249,7 @@ export default function MarketingDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-blue-500 group-hover:scale-110 transition-transform">
-            <UserGroupIcon className="h-5 w-5 text-white" />
+            <DoctorAIIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">Add Lead</p>
@@ -265,7 +261,7 @@ export default function MarketingDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-purple-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-purple-500 group-hover:scale-110 transition-transform">
-            <MegaphoneIcon className="h-5 w-5 text-white" />
+            <NotificationBellIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">New Campaign</p>
@@ -277,7 +273,7 @@ export default function MarketingDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-amber-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-amber-500 group-hover:scale-110 transition-transform">
-            <ClockIcon className="h-5 w-5 text-white" />
+            <NotificationBellIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">Tasks</p>
@@ -289,7 +285,7 @@ export default function MarketingDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-emerald-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-emerald-500 group-hover:scale-110 transition-transform">
-            <ChartBarIcon className="h-5 w-5 text-white" />
+            <MedicalReportAIIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">Reports</p>
