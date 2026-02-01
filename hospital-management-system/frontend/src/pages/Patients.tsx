@@ -17,6 +17,10 @@ import {
   ChevronDownIcon,
   FunnelIcon,
   XMarkIcon,
+  PhoneIcon,
+  EnvelopeIcon,
+  MapPinIcon,
+  UserCircleIcon,
 } from '@heroicons/react/24/outline';
 import { patientApi } from '../services/api';
 import { Patient } from '../types';
@@ -37,7 +41,7 @@ export default function Patients() {
   const [filterGender, setFilterGender] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterPhone, setFilterPhone] = useState('');
-  const limit = 10;
+  const limit = 12;
   const queryClient = useQueryClient();
 
   const hasActiveFilters = filterMRN || filterGender || filterStatus || filterPhone;
@@ -243,178 +247,163 @@ export default function Patients() {
         )}
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
-          </div>
-        ) : patients.length === 0 ? (
-          <div className="text-center py-16">
-            <UsersIcon className="h-12 w-12 mx-auto text-gray-300 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No patients found</h3>
-            <p className="text-gray-500 mb-6">
-              {search ? `No results for "${search}"` : 'Get started by adding your first patient.'}
-            </p>
-            <Link
-              to="/patients/new"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-            >
-              <PlusIcon className="h-5 w-5" />
-              Add Patient
-            </Link>
-          </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    {([
-                      { field: 'firstName' as SortField, label: 'Patient' },
-                      { field: 'mrn' as SortField, label: 'MRN' },
-                      { field: 'gender' as SortField, label: 'Gender' },
-                      { field: 'dateOfBirth' as SortField, label: 'Age' },
-                      { field: 'phone' as SortField, label: 'Phone' },
-                      { field: 'createdAt' as SortField, label: 'Registered' },
-                      { field: 'isActive' as SortField, label: 'Status' },
-                    ]).map((col) => (
-                      <th
-                        key={col.field}
-                        className="text-left px-6 py-3 text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100 select-none transition-colors"
-                        onClick={() => handleSort(col.field)}
-                      >
-                        <div className="flex items-center gap-1">
-                          {col.label}
-                          <span className="inline-flex flex-col">
-                            <ChevronUpIcon className={`h-3 w-3 -mb-0.5 ${sortBy === col.field && sortOrder === 'asc' ? 'text-blue-600' : 'text-gray-300'}`} />
-                            <ChevronDownIcon className={`h-3 w-3 -mt-0.5 ${sortBy === col.field && sortOrder === 'desc' ? 'text-blue-600' : 'text-gray-300'}`} />
-                          </span>
-                        </div>
-                      </th>
-                    ))}
-                    <th className="text-right px-6 py-3 text-xs font-semibold text-gray-600 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {patients.map((patient: Patient) => (
-                    <tr key={patient.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-medium">
-                            {patient.firstName[0]}{patient.lastName[0]}
-                          </div>
-                          <div>
-                            <p className="font-medium text-gray-900">
-                              {patient.firstName} {patient.lastName}
-                            </p>
-                            <p className="text-sm text-gray-500">{patient.email || 'No email'}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="font-mono text-sm px-2 py-1 rounded bg-gray-100 text-gray-700">
-                          {patient.mrn}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center gap-1.5 text-sm ${
-                          patient.gender === 'MALE' ? 'text-blue-600' : 'text-pink-600'
-                        }`}>
-                          <span className={`w-2 h-2 rounded-full ${
-                            patient.gender === 'MALE' ? 'bg-blue-500' : 'bg-pink-500'
-                          }`} />
-                          {patient.gender.charAt(0) + patient.gender.slice(1).toLowerCase()}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-gray-700">
-                        {Math.floor(
-                          (new Date().getTime() - new Date(patient.dateOfBirth).getTime()) /
-                          (365.25 * 24 * 60 * 60 * 1000)
-                        )} yrs
-                      </td>
-                      <td className="px-6 py-4 text-gray-700">{patient.phone}</td>
-                      <td className="px-6 py-4 text-gray-500">
-                        {format(new Date(patient.createdAt), 'MMM d, yyyy')}
-                      </td>
-                      <td className="px-6 py-4">
-                        {patient.isActive ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                            Active
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
-                            Inactive
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-end gap-1">
+      {/* Patient Cards */}
+      {isLoading ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
+        </div>
+      ) : patients.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
+          <UsersIcon className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No patients found</h3>
+          <p className="text-gray-500 mb-6">
+            {search ? `No results for "${search}"` : 'Get started by adding your first patient.'}
+          </p>
+          <Link
+            to="/patients/new"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+          >
+            <PlusIcon className="h-5 w-5" />
+            Add Patient
+          </Link>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {patients.map((patient: Patient) => {
+              const age = Math.floor(
+                (new Date().getTime() - new Date(patient.dateOfBirth).getTime()) /
+                (365.25 * 24 * 60 * 60 * 1000)
+              );
+              return (
+                <div
+                  key={patient.id}
+                  className="bg-white rounded-xl border border-gray-200 hover:shadow-md transition-shadow overflow-hidden"
+                >
+                  {/* Card Header - Avatar, Name, Status */}
+                  <div className="p-5 pb-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0 h-12 w-12 rounded-full bg-blue-50 border-2 border-blue-100 flex items-center justify-center">
+                        <UserCircleIcon className="h-8 w-8 text-blue-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
                           <Link
                             to={`/patients/${patient.id}`}
-                            className="p-2 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50"
-                            title="View"
+                            className="text-lg font-semibold text-gray-900 hover:text-blue-600 truncate"
                           >
-                            <EyeIcon className="h-5 w-5" />
+                            {patient.firstName} {patient.lastName}
                           </Link>
-                          <Link
-                            to={`/patients/${patient.id}/edit`}
-                            className="p-2 rounded-lg text-gray-500 hover:text-purple-600 hover:bg-purple-50"
-                            title="Edit"
-                          >
-                            <PencilIcon className="h-5 w-5" />
-                          </Link>
-                          <button
-                            onClick={() => setDeleteConfirm(patient.id)}
-                            className="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50"
-                            title="Delete"
-                          >
-                            <TrashIcon className="h-5 w-5" />
-                          </button>
+                          {patient.isActive ? (
+                            <span className="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                              Active
+                            </span>
+                          ) : (
+                            <span className="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                              Inactive
+                            </span>
+                          )}
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        <p className="text-sm text-gray-500 mt-0.5">
+                          {age} years • {patient.gender.charAt(0) + patient.gender.slice(1).toLowerCase()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
 
-            {/* Pagination */}
-            {pagination && pagination.totalPages > 1 && (
-              <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
-                <p className="text-sm text-gray-500">
-                  Showing {(pagination.page - 1) * pagination.limit + 1} to{' '}
-                  {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
-                  {pagination.total} patients
-                </p>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setPage(page - 1)}
-                    disabled={!pagination.hasPrev}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <ChevronLeftIcon className="h-4 w-4" />
-                    Previous
-                  </button>
-                  <span className="px-3 py-1.5 text-sm text-gray-700">
-                    Page {page} of {pagination.totalPages}
-                  </span>
-                  <button
-                    onClick={() => setPage(page + 1)}
-                    disabled={!pagination.hasNext}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Next
-                    <ChevronRightIcon className="h-4 w-4" />
-                  </button>
+                  {/* Contact Info */}
+                  <div className="px-5 pb-4 space-y-2.5">
+                    <div className="flex items-center gap-2.5 text-sm text-gray-600">
+                      <PhoneIcon className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                      <span className="truncate">{patient.phone}</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 text-sm text-gray-600">
+                      <EnvelopeIcon className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                      <span className="truncate">{patient.email || 'No email'}</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 text-sm text-gray-600">
+                      <MapPinIcon className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                      <span className="truncate">{patient.address ? `${patient.address}, ${patient.city}` : 'No address'}</span>
+                    </div>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="mx-5 border-t border-gray-100" />
+
+                  {/* Footer - Blood Group, Last Visit, Actions */}
+                  <div className="px-5 py-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <p className="text-xs text-gray-400 uppercase font-medium">Blood Group</p>
+                        <p className="text-sm font-semibold text-gray-900">{patient.bloodGroup || '—'}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-gray-400 uppercase font-medium">Registered</p>
+                        <p className="text-sm font-semibold text-gray-900">{format(new Date(patient.createdAt), 'yyyy-MM-dd')}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        to={`/patients/${patient.id}/edit`}
+                        className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-blue-50 text-blue-600 text-sm font-medium hover:bg-blue-100 transition-colors"
+                      >
+                        <PencilIcon className="h-4 w-4" />
+                        Edit
+                      </Link>
+                      <Link
+                        to={`/patients/${patient.id}`}
+                        className="inline-flex items-center justify-center p-2 rounded-lg bg-gray-50 text-gray-600 hover:bg-gray-100 transition-colors"
+                        title="View"
+                      >
+                        <EyeIcon className="h-4 w-4" />
+                      </Link>
+                      <button
+                        onClick={() => setDeleteConfirm(patient.id)}
+                        className="inline-flex items-center justify-center p-2 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
+                        title="Delete"
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
+              );
+            })}
+          </div>
+
+          {/* Pagination */}
+          {pagination && pagination.totalPages > 1 && (
+            <div className="flex items-center justify-between px-6 py-4 bg-white rounded-xl border border-gray-200">
+              <p className="text-sm text-gray-500">
+                Showing {(pagination.page - 1) * pagination.limit + 1} to{' '}
+                {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
+                {pagination.total} patients
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage(page - 1)}
+                  disabled={!pagination.hasPrev}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeftIcon className="h-4 w-4" />
+                  Previous
+                </button>
+                <span className="px-3 py-1.5 text-sm text-gray-700">
+                  Page {page} of {pagination.totalPages}
+                </span>
+                <button
+                  onClick={() => setPage(page + 1)}
+                  disabled={!pagination.hasNext}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                  <ChevronRightIcon className="h-4 w-4" />
+                </button>
               </div>
-            )}
-          </>
-        )}
-      </div>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
