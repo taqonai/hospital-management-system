@@ -55,6 +55,7 @@ export interface Patient {
   zipCode: string;
   emergencyContact?: string;
   emergencyPhone?: string;
+  photo?: string;
   isActive: boolean;
   createdAt: string;
 }

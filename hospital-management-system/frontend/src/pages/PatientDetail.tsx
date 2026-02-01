@@ -84,12 +84,16 @@ export default function PatientDetail() {
       <div className="card p-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="h-16 w-16 rounded-full bg-primary-100 flex items-center justify-center">
-              <span className="text-2xl font-bold text-primary-700">
-                {patient.firstName[0]}
-                {patient.lastName[0]}
-              </span>
-            </div>
+            {patient.photo ? (
+              <img src={patient.photo} alt={`${patient.firstName} ${patient.lastName}`} className="h-16 w-16 rounded-full object-cover border-2 border-primary-200" />
+            ) : (
+              <div className="h-16 w-16 rounded-full bg-primary-100 flex items-center justify-center">
+                <span className="text-2xl font-bold text-primary-700">
+                  {patient.firstName[0]}
+                  {patient.lastName[0]}
+                </span>
+              </div>
+            )}
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
                 {patient.firstName} {patient.lastName}

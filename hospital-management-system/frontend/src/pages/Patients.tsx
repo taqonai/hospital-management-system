@@ -290,9 +290,13 @@ export default function Patients() {
                   {/* Card Header - Avatar, Name, Status */}
                   <div className="p-5 pb-4">
                     <div className="flex items-start gap-3">
-                      <div className="flex-shrink-0 h-12 w-12 rounded-full bg-blue-50 border-2 border-blue-100 flex items-center justify-center">
-                        <UserCircleIcon className="h-8 w-8 text-blue-500" />
-                      </div>
+                      {patient.photo ? (
+                        <img src={patient.photo} alt={`${patient.firstName} ${patient.lastName}`} className="flex-shrink-0 h-12 w-12 rounded-full object-cover border-2 border-blue-100" />
+                      ) : (
+                        <div className="flex-shrink-0 h-12 w-12 rounded-full bg-blue-50 border-2 border-blue-100 flex items-center justify-center">
+                          <span className="text-sm font-bold text-blue-600">{patient.firstName[0]}{patient.lastName[0]}</span>
+                        </div>
+                      )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <Link
