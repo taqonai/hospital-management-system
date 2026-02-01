@@ -11,7 +11,7 @@ import {
 } from '@heroicons/react/24/outline';
 import {
   PatientIcon,
-  ECGMonitorAIIcon,
+  VitalsClipboardAIIcon,
   HospitalBedIcon,
   NotificationBellIcon,
   MedicalCrossHeartbeatIcon,
@@ -106,7 +106,7 @@ export default function NurseDashboard() {
         <KPICard
           title="Vitals Done Today"
           value={opdStats?.vitalsDone || vitalsRecorded.length}
-          icon={ECGMonitorAIIcon}
+          icon={VitalsClipboardAIIcon}
           color="emerald"
           subtitle={`of ${opdStats?.totalAppointments || opdQueue?.length || 0} patients`}
           isLoading={isLoading}
@@ -383,7 +383,7 @@ export default function NurseDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-blue-500 group-hover:scale-110 transition-transform">
-            <ECGMonitorAIIcon className="h-5 w-5 text-white" />
+            <VitalsClipboardAIIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">Record OPD Vitals</p>

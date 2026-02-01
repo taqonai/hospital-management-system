@@ -357,6 +357,26 @@ export const MedicalShieldIcon: React.FC<IconProps> = ({ className = 'h-6 w-6' }
   </svg>
 );
 
+// Medical Clipboard with AI Chip (Vitals)
+export const VitalsClipboardAIIcon: React.FC<IconProps> = ({ className = 'h-6 w-6' }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    {/* Clipboard clip at top */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 3.5h6a1 1 0 011 1v.5H8v-.5a1 1 0 011-1z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M11 2.5h2a.5.5 0 01.5.5v.5h-3V3a.5.5 0 01.5-.5z" />
+    {/* Clipboard body */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7 5h10a1.5 1.5 0 011.5 1.5v13a1.5 1.5 0 01-1.5 1.5H7a1.5 1.5 0 01-1.5-1.5v-13A1.5 1.5 0 017 5z" />
+    {/* Medical cross */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 9v3M9 10.5h3" />
+    {/* Document lines */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 14.5h4M9 16.5h3" />
+    {/* AI chip bottom-right */}
+    <rect x="14.5" y="15" width="4" height="4" rx="0.5" strokeLinecap="round" strokeLinejoin="round" />
+    <text x="15.3" y="18.2" fill="currentColor" stroke="none" fontSize="3" fontWeight="bold" fontFamily="sans-serif">AI</text>
+    {/* AI chip pins */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.5 15v-.7M17.5 15v-.7M19.5 16.5h-.7M19.5 17.5h-.7" />
+  </svg>
+);
+
 // Export all icons as a collection
 export const HMSIcons = {
   HospitalAI: HospitalAIIcon,
@@ -381,6 +401,7 @@ export const HMSIcons = {
   MedicalCrossHeartbeat: MedicalCrossHeartbeatIcon,
   Heartbeat: HeartbeatIcon,
   MedicalShield: MedicalShieldIcon,
+  VitalsClipboardAI: VitalsClipboardAIIcon,
 };
 
 export default HMSIcons;
