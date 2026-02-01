@@ -96,6 +96,33 @@ export const createPatientSchema = z.object({
   }),
 });
 
+export const updatePatientSchema = z.object({
+  body: z.object({
+    firstName: z.string().min(1, 'First name is required').optional(),
+    lastName: z.string().min(1, 'Last name is required').optional(),
+    dateOfBirth: z.string().datetime().or(z.date()).optional(),
+    gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional(),
+    bloodGroup: z.enum([
+      'A_POSITIVE', 'A_NEGATIVE', 'B_POSITIVE', 'B_NEGATIVE',
+      'AB_POSITIVE', 'AB_NEGATIVE', 'O_POSITIVE', 'O_NEGATIVE'
+    ]).optional(),
+    phone: z.string().min(1, 'Phone number is required').optional(),
+    email: z.string().email('Invalid email format').optional().or(z.literal('')),
+    address: z.string().optional().or(z.literal('')),
+    city: z.string().optional().or(z.literal('')),
+    state: z.string().optional().or(z.literal('')),
+    zipCode: z.string().optional().or(z.literal('')),
+    emergencyContact: z.string().optional(),
+    emergencyPhone: z.string().optional(),
+    occupation: z.string().optional(),
+    maritalStatus: z.enum(['SINGLE', 'MARRIED', 'DIVORCED', 'WIDOWED']).optional(),
+    nationality: z.string().optional(),
+  }).strict(),
+  params: z.object({
+    id: z.string().uuid('Invalid patient ID'),
+  }),
+});
+
 // Appointment schemas
 export const createAppointmentSchema = z.object({
   body: z.object({

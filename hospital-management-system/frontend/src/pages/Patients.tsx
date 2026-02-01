@@ -27,6 +27,13 @@ import { Patient } from '../types';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 
+const bloodGroupDisplay: Record<string, string> = {
+  A_POSITIVE: 'A+', A_NEGATIVE: 'A-',
+  B_POSITIVE: 'B+', B_NEGATIVE: 'B-',
+  AB_POSITIVE: 'AB+', AB_NEGATIVE: 'AB-',
+  O_POSITIVE: 'O+', O_NEGATIVE: 'O-',
+};
+
 type SortField = 'firstName' | 'mrn' | 'gender' | 'dateOfBirth' | 'phone' | 'createdAt' | 'isActive';
 type SortOrder = 'asc' | 'desc';
 
@@ -335,7 +342,7 @@ export default function Patients() {
                     <div className="flex items-center justify-between mb-3">
                       <div>
                         <p className="text-xs text-gray-400 uppercase font-medium">Blood Group</p>
-                        <p className="text-sm font-semibold text-gray-900">{patient.bloodGroup || '—'}</p>
+                        <p className="text-sm font-semibold text-gray-900">{patient.bloodGroup ? (bloodGroupDisplay[patient.bloodGroup] || patient.bloodGroup) : '—'}</p>
                       </div>
                       <div className="text-right">
                         <p className="text-xs text-gray-400 uppercase font-medium">Registered</p>

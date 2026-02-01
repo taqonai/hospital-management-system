@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { patientService } from '../services/patientService';
 import { authenticate, authorize, authorizeWithPermission, authorizeHospital } from '../middleware/auth';
-import { validate, createPatientSchema, uuidParamSchema, paginationSchema } from '../middleware/validation';
+import { validate, createPatientSchema, updatePatientSchema, uuidParamSchema, paginationSchema } from '../middleware/validation';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -69,7 +69,7 @@ router.put(
   '/:id',
   authenticate,
   authorizeWithPermission('patients:write', ['HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST']),
-  validate(uuidParamSchema),
+  validate(updatePatientSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const patient = await patientService.update(req.params.id, req.user!.hospitalId, req.body);
     sendSuccess(res, patient, 'Patient updated successfully');

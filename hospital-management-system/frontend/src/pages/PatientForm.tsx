@@ -47,7 +47,24 @@ const initialFormData: PatientFormData = {
   emergencyPhone: '',
 };
 
-const bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+const bloodGroups = [
+  { label: 'A+', value: 'A_POSITIVE' },
+  { label: 'A-', value: 'A_NEGATIVE' },
+  { label: 'B+', value: 'B_POSITIVE' },
+  { label: 'B-', value: 'B_NEGATIVE' },
+  { label: 'AB+', value: 'AB_POSITIVE' },
+  { label: 'AB-', value: 'AB_NEGATIVE' },
+  { label: 'O+', value: 'O_POSITIVE' },
+  { label: 'O-', value: 'O_NEGATIVE' },
+];
+
+// Map backend enum values to display labels
+const bloodGroupDisplayMap: Record<string, string> = {
+  A_POSITIVE: 'A+', A_NEGATIVE: 'A-',
+  B_POSITIVE: 'B+', B_NEGATIVE: 'B-',
+  AB_POSITIVE: 'AB+', AB_NEGATIVE: 'AB-',
+  O_POSITIVE: 'O+', O_NEGATIVE: 'O-',
+};
 
 export default function PatientForm() {
   const navigate = useNavigate();
@@ -56,7 +73,7 @@ export default function PatientForm() {
   const isEditMode = Boolean(id);
 
   const [formData, setFormData] = useState<PatientFormData>(initialFormData);
-  const [errors, setErrors] = useState<Partial<PatientFormData>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Fetch patient data if editing
   const { data: patientData, isLoading: loadingPatient } = useQuery({
@@ -76,7 +93,7 @@ export default function PatientForm() {
         firstName: patientData.firstName || '',
         lastName: patientData.lastName || '',
         dateOfBirth: patientData.dateOfBirth ? patientData.dateOfBirth.split('T')[0] : '',
-        gender: patientData.gender || 'MALE',
+        gender: (patientData.gender as 'MALE' | 'FEMALE') || 'MALE',
         email: patientData.email || '',
         phone: patientData.phone || '',
         address: patientData.address || '',
@@ -99,9 +116,19 @@ export default function PatientForm() {
       navigate('/patients');
     },
     onError: (error: any) => {
-      const msg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to create patient';
-      toast.error(msg, { duration: 5000 });
-      console.error('Patient create error:', error.response?.data || error);
+      const data = error.response?.data;
+      if (data?.errors && Array.isArray(data.errors)) {
+        const backendErrors: Record<string, string> = {};
+        data.errors.forEach((err: { field: string; message: string }) => {
+          const fieldName = err.field.replace('body.', '') as keyof PatientFormData;
+          backendErrors[fieldName] = err.message;
+          toast.error(`${fieldName}: ${err.message}`, { duration: 5000 });
+        });
+        setErrors(prev => ({ ...prev, ...backendErrors }));
+      } else {
+        toast.error(data?.message || error.message || 'Failed to create patient', { duration: 5000 });
+      }
+      console.error('Patient create error:', data || error);
     },
   });
 
@@ -115,9 +142,20 @@ export default function PatientForm() {
       navigate(`/patients/${id}`);
     },
     onError: (error: any) => {
-      const msg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to update patient';
-      toast.error(msg, { duration: 5000 });
-      console.error('Patient update error:', error.response?.data || error);
+      const data = error.response?.data;
+      if (data?.errors && Array.isArray(data.errors)) {
+        // Show each validation error from the backend
+        const backendErrors: Record<string, string> = {};
+        data.errors.forEach((err: { field: string; message: string }) => {
+          const fieldName = err.field.replace('body.', '') as keyof PatientFormData;
+          backendErrors[fieldName] = err.message;
+          toast.error(`${fieldName}: ${err.message}`, { duration: 5000 });
+        });
+        setErrors(prev => ({ ...prev, ...backendErrors }));
+      } else {
+        toast.error(data?.message || error.message || 'Failed to update patient', { duration: 5000 });
+      }
+      console.error('Patient update error:', data || error);
     },
   });
 
@@ -130,7 +168,7 @@ export default function PatientForm() {
   };
 
   const validate = (): boolean => {
-    const newErrors: Partial<PatientFormData> = {};
+    const newErrors: Record<string, string> = {};
 
     if (!formData.firstName.trim()) newErrors.firstName = 'First name is required';
     if (formData.firstName.trim() && formData.firstName.trim().length < 2) newErrors.firstName = 'First name must be at least 2 characters';
@@ -173,11 +211,23 @@ export default function PatientForm() {
     e.preventDefault();
     if (!validate()) return;
 
-    // Transform date to ISO 8601 format for backend validation
-    const submitData = {
-      ...formData,
+    // Transform data for backend
+    const submitData: any = {
+      firstName: formData.firstName.trim(),
+      lastName: formData.lastName.trim(),
       dateOfBirth: formData.dateOfBirth ? new Date(formData.dateOfBirth).toISOString() : '',
+      gender: formData.gender,
+      phone: formData.phone.trim(),
+      address: formData.address.trim(),
+      city: formData.city.trim(),
+      state: formData.state.trim(),
+      zipCode: formData.zipCode.trim(),
     };
+    // Only include optional fields if they have values
+    if (formData.email.trim()) submitData.email = formData.email.trim();
+    if (formData.bloodGroup) submitData.bloodGroup = formData.bloodGroup;
+    if (formData.emergencyContact.trim()) submitData.emergencyContact = formData.emergencyContact.trim();
+    if (formData.emergencyPhone.trim()) submitData.emergencyPhone = formData.emergencyPhone.trim();
 
     if (isEditMode) {
       updateMutation.mutate(submitData);
@@ -304,7 +354,7 @@ export default function PatientForm() {
                 >
                   <option value="">Select blood group</option>
                   {bloodGroups.map(bg => (
-                    <option key={bg} value={bg}>{bg}</option>
+                    <option key={bg.value} value={bg.value}>{bg.label}</option>
                   ))}
                 </select>
               </div>
