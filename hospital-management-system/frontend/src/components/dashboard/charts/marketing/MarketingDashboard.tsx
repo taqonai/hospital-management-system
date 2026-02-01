@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
 import {
-  UserGroupIcon,
   ChartBarIcon,
   MegaphoneIcon,
   PhoneIcon,
@@ -8,7 +7,9 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   ClockIcon,
+  UserGroupIcon,
 } from '@heroicons/react/24/outline';
+import { PatientIcon } from '../../../icons/HMSIcons';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import { useMarketingDashboard } from '../../../../hooks/useMarketingDashboard';
 import KPICard from '../shared/KPICard';
@@ -75,7 +76,7 @@ export default function MarketingDashboard() {
         <KPICard
           title="Total Leads"
           value={leadStats?.totalLeads || crmDashboard?.totalLeads || 0}
-          icon={UserGroupIcon}
+          icon={PatientIcon}
           color="blue"
           subtitle="All time"
           isLoading={isLoading}

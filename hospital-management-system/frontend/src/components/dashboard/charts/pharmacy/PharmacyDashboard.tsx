@@ -1,12 +1,12 @@
 import { Link } from 'react-router-dom';
 import {
-  ClipboardDocumentListIcon,
   ExclamationTriangleIcon,
   ClockIcon,
   CheckCircleIcon,
   ArrowRightIcon,
   BeakerIcon,
 } from '@heroicons/react/24/outline';
+import { PrescriptionIcon } from '../../../icons/HMSIcons';
 import { usePharmacyDashboard } from '../../../../hooks/usePharmacyDashboard';
 import KPICard from '../shared/KPICard';
 import OccupancyGauge from '../shared/OccupancyGauge';
@@ -31,7 +31,7 @@ export default function PharmacyDashboard() {
         <KPICard
           title="Pending Rx"
           value={pharmacyStats?.pendingPrescriptions || pendingPrescriptions?.length || 0}
-          icon={ClipboardDocumentListIcon}
+          icon={PrescriptionIcon}
           color="amber"
           subtitle="Awaiting dispensing"
           isLoading={isLoading}
@@ -216,7 +216,7 @@ export default function PharmacyDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-blue-500 group-hover:scale-110 transition-transform">
-            <ClipboardDocumentListIcon className="h-5 w-5 text-white" />
+            <PrescriptionIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">Dispense Rx</p>

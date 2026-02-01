@@ -1,12 +1,11 @@
 import { Link } from 'react-router-dom';
 import {
-  PhotoIcon,
   ClockIcon,
-  DocumentTextIcon,
   CheckCircleIcon,
   ArrowRightIcon,
   SparklesIcon,
 } from '@heroicons/react/24/outline';
+import { XRayIcon, MedicalReportAIIcon } from '../../../icons/HMSIcons';
 import { Doughnut } from 'react-chartjs-2';
 import { useRadiologyDashboard } from '../../../../hooks/useRadiologyDashboard';
 import KPICard from '../shared/KPICard';
@@ -48,7 +47,7 @@ export default function RadiologyDashboard() {
         <KPICard
           title="Total Orders"
           value={radiologyStats?.totalOrders || 0}
-          icon={PhotoIcon}
+          icon={XRayIcon}
           color="blue"
           subtitle="Today"
           isLoading={isLoading}
@@ -64,7 +63,7 @@ export default function RadiologyDashboard() {
         <KPICard
           title="Pending Reports"
           value={radiologyStats?.pendingReports || pendingReports?.length || 0}
-          icon={DocumentTextIcon}
+          icon={MedicalReportAIIcon}
           color="purple"
           subtitle="Need reporting"
           isLoading={isLoading}
@@ -92,7 +91,7 @@ export default function RadiologyDashboard() {
             <Doughnut data={modalityData} options={doughnutChartOptions} />
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-gray-400">
-              <PhotoIcon className="h-12 w-12 mb-2" />
+              <XRayIcon className="h-12 w-12 mb-2" />
               <p className="text-sm">No modality data available</p>
             </div>
           )}
@@ -214,7 +213,7 @@ export default function RadiologyDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-blue-500 group-hover:scale-110 transition-transform">
-            <PhotoIcon className="h-5 w-5 text-white" />
+            <XRayIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">Worklist</p>
@@ -226,7 +225,7 @@ export default function RadiologyDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-emerald-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-emerald-500 group-hover:scale-110 transition-transform">
-            <DocumentTextIcon className="h-5 w-5 text-white" />
+            <MedicalReportAIIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">Write Report</p>

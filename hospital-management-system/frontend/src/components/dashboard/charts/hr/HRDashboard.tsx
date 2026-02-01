@@ -1,13 +1,14 @@
 import { Link } from 'react-router-dom';
 import {
-  UserGroupIcon,
   CheckCircleIcon,
   XCircleIcon,
   ClockIcon,
-  CalendarDaysIcon,
   ArrowRightIcon,
   BanknotesIcon,
+  UserGroupIcon,
+  CalendarDaysIcon,
 } from '@heroicons/react/24/outline';
+import { PatientIcon, CalendarBillingIcon } from '../../../icons/HMSIcons';
 import { Doughnut, Bar } from 'react-chartjs-2';
 import { useHRDashboard } from '../../../../hooks/useHRDashboard';
 import KPICard from '../shared/KPICard';
@@ -71,7 +72,7 @@ export default function HRDashboard() {
         <KPICard
           title="Total Employees"
           value={dashboardStats?.totalEmployees || employees?.total || 0}
-          icon={UserGroupIcon}
+          icon={PatientIcon}
           color="blue"
           subtitle={`${dashboardStats?.activeEmployees || 0} active`}
           isLoading={isLoading}

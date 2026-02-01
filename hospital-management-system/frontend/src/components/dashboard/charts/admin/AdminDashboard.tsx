@@ -1,10 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  CalendarDaysIcon,
   CheckCircleIcon,
   ClockIcon,
-  BellAlertIcon,
-  BuildingOffice2Icon,
   ChartPieIcon,
   SparklesIcon,
   BeakerIcon,
@@ -16,6 +13,12 @@ import {
   BoltIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
+import {
+  CalendarBillingIcon,
+  NotificationBellIcon,
+  HospitalBedIcon,
+  HospitalAIIcon,
+} from '../../../icons/HMSIcons';
 import { Bar, Pie } from 'react-chartjs-2';
 import { useAdminDashboard } from '../../../../hooks/useAdminDashboard';
 import KPICard from '../shared/KPICard';
@@ -256,7 +259,7 @@ export default function AdminDashboard() {
         <KPICard
           title="Today's Appointments"
           value={todayStats?.today?.total || 0}
-          icon={CalendarDaysIcon}
+          icon={CalendarBillingIcon}
           trend={todayStats?.today?.total > 0 ? { value: 12, isPositive: true } : undefined}
           color="blue"
           subtitle={`${todayStats?.today?.completed || 0} completed`}
@@ -282,7 +285,7 @@ export default function AdminDashboard() {
         <KPICard
           title="No Shows"
           value={todayStats?.today?.noShow || 0}
-          icon={BellAlertIcon}
+          icon={NotificationBellIcon}
           trend={todayStats?.today?.noShow > 0 ? { value: 3, isPositive: false } : undefined}
           color="red"
           subtitle="Missed appointments"
@@ -294,7 +297,7 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl border border-gray-100 p-4 flex items-center gap-4 shadow-sm">
           <div className="p-3 rounded-xl bg-indigo-500">
-            <BuildingOffice2Icon className="h-5 w-5 text-white" />
+            <HospitalBedIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="text-2xl font-bold text-gray-900">{bedOccupancy?.occupiedBeds || 0}</p>
@@ -312,7 +315,7 @@ export default function AdminDashboard() {
         </div>
         <div className="bg-white rounded-xl border border-gray-100 p-4 flex items-center gap-4 shadow-sm">
           <div className="p-3 rounded-xl bg-blue-500">
-            <CalendarDaysIcon className="h-5 w-5 text-white" />
+            <CalendarBillingIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="text-2xl font-bold text-gray-900">{todayStats?.weeklyTotal || 0}</p>
@@ -321,7 +324,7 @@ export default function AdminDashboard() {
         </div>
         <div className="bg-white rounded-xl border border-gray-100 p-4 flex items-center gap-4 shadow-sm">
           <div className="p-3 rounded-xl bg-purple-500">
-            <BuildingOffice2Icon className="h-5 w-5 text-white" />
+            <HospitalAIIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="text-2xl font-bold text-gray-900">{bedOccupancy?.totalBeds || 0}</p>

@@ -1,13 +1,14 @@
 import { Link } from 'react-router-dom';
 import {
-  CurrencyDollarIcon,
   ClockIcon,
   DocumentTextIcon,
   CheckCircleIcon,
   ArrowRightIcon,
   ExclamationTriangleIcon,
   BanknotesIcon,
+  CurrencyDollarIcon,
 } from '@heroicons/react/24/outline';
+import { CalendarBillingIcon } from '../../../icons/HMSIcons';
 import { Line, Doughnut } from 'react-chartjs-2';
 import { useAccountantDashboard } from '../../../../hooks/useAccountantDashboard';
 import KPICard from '../shared/KPICard';
@@ -90,7 +91,7 @@ export default function AccountantDashboard() {
         <KPICard
           title="Total Revenue"
           value={formatCurrency(billingStats?.totalRevenue || 0)}
-          icon={CurrencyDollarIcon}
+          icon={CalendarBillingIcon}
           color="emerald"
           subtitle="This month"
           isLoading={isLoading}

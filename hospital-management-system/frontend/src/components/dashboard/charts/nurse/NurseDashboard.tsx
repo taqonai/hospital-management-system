@@ -1,18 +1,22 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ClipboardDocumentCheckIcon,
   ExclamationTriangleIcon,
-  UserGroupIcon,
   ClockIcon,
   HeartIcon,
-  BuildingOffice2Icon,
   ArrowRightIcon,
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon,
   MinusIcon,
+  ClipboardDocumentCheckIcon,
   BellAlertIcon,
 } from '@heroicons/react/24/outline';
+import {
+  PatientIcon,
+  ECGMonitorAIIcon,
+  HospitalBedIcon,
+  NotificationBellIcon,
+} from '../../../icons/HMSIcons';
 import { Bar } from 'react-chartjs-2';
 import { useNurseDashboard } from '../../../../hooks/useNurseDashboard';
 import KPICard from '../shared/KPICard';
@@ -94,7 +98,7 @@ export default function NurseDashboard() {
         <KPICard
           title="OPD Waiting"
           value={vitalsNeeded.length}
-          icon={UserGroupIcon}
+          icon={PatientIcon}
           color="blue"
           subtitle="Need vitals recorded"
           isLoading={isLoading}
@@ -102,7 +106,7 @@ export default function NurseDashboard() {
         <KPICard
           title="Vitals Done Today"
           value={opdStats?.vitalsDone || vitalsRecorded.length}
-          icon={ClipboardDocumentCheckIcon}
+          icon={ECGMonitorAIIcon}
           color="emerald"
           subtitle={`of ${opdStats?.totalAppointments || opdQueue?.length || 0} patients`}
           isLoading={isLoading}
@@ -130,7 +134,7 @@ export default function NurseDashboard() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-blue-500">
-              <UserGroupIcon className="h-5 w-5 text-white" />
+              <PatientIcon className="h-5 w-5 text-white" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-gray-900">OPD - Vitals Queue</h2>
@@ -379,7 +383,7 @@ export default function NurseDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-blue-500 group-hover:scale-110 transition-transform">
-            <ClipboardDocumentCheckIcon className="h-5 w-5 text-white" />
+            <ECGMonitorAIIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">Record OPD Vitals</p>
@@ -391,7 +395,7 @@ export default function NurseDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-indigo-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-indigo-500 group-hover:scale-110 transition-transform">
-            <BuildingOffice2Icon className="h-5 w-5 text-white" />
+            <HospitalBedIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">IPD Admissions</p>

@@ -1,12 +1,12 @@
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  BeakerIcon,
   ClockIcon,
   ExclamationTriangleIcon,
   CheckCircleIcon,
   ArrowRightIcon,
   DocumentTextIcon,
 } from '@heroicons/react/24/outline';
+import { SyringeIcon, DNAAIIcon } from '../../../icons/HMSIcons';
 import { Doughnut } from 'react-chartjs-2';
 import { useLabDashboard } from '../../../../hooks/useLabDashboard';
 import KPICard from '../shared/KPICard';
@@ -56,7 +56,7 @@ export default function LabDashboard() {
         <KPICard
           title="Total Orders"
           value={labStats?.totalOrders || 0}
-          icon={BeakerIcon}
+          icon={DNAAIIcon}
           color="blue"
           subtitle="Today"
           isLoading={isLoading}
@@ -207,7 +207,7 @@ export default function LabDashboard() {
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-blue-500 group-hover:scale-110 transition-transform">
-            <BeakerIcon className="h-5 w-5 text-white" />
+            <SyringeIcon className="h-5 w-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-gray-900">Sample Tracking</p>

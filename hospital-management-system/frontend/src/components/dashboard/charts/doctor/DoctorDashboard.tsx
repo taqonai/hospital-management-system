@@ -1,15 +1,20 @@
 import { Link } from 'react-router-dom';
 import {
-  CalendarDaysIcon,
   ClockIcon,
-  UserGroupIcon,
-  ClipboardDocumentListIcon,
   PlayIcon,
   ArrowRightIcon,
   SparklesIcon,
   CheckCircleIcon,
   ExclamationCircleIcon,
+  CalendarDaysIcon,
+  UserGroupIcon,
+  ClipboardDocumentListIcon,
 } from '@heroicons/react/24/outline';
+import {
+  CalendarBillingIcon,
+  PatientIcon,
+  StethoscopeAIIcon,
+} from '../../../icons/HMSIcons';
 import { useDoctorDashboard } from '../../../../hooks/useDoctorDashboard';
 import { useAuth } from '../../../../hooks/useAuth';
 import KPICard from '../shared/KPICard';
@@ -70,7 +75,7 @@ export default function DoctorDashboard() {
         <KPICard
           title="Today's Appointments"
           value={stats?.todayAppointments || todayAppointments?.appointments?.length || 0}
-          icon={CalendarDaysIcon}
+          icon={CalendarBillingIcon}
           color="blue"
           subtitle={`${stats?.completedToday || 0} completed`}
           isLoading={isLoading}
@@ -86,7 +91,7 @@ export default function DoctorDashboard() {
         <KPICard
           title="Monthly Consultations"
           value={stats?.monthlyAppointments || 0}
-          icon={ClipboardDocumentListIcon}
+          icon={StethoscopeAIIcon}
           color="purple"
           subtitle="This month"
           isLoading={isLoading}
@@ -94,7 +99,7 @@ export default function DoctorDashboard() {
         <KPICard
           title="Total Patients"
           value={stats?.totalPatients || 0}
-          icon={UserGroupIcon}
+          icon={PatientIcon}
           color="emerald"
           subtitle="All time"
           isLoading={isLoading}

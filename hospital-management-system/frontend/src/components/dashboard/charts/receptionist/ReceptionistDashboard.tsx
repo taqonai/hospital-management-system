@@ -1,15 +1,15 @@
 import { Link } from 'react-router-dom';
 import {
-  UserGroupIcon,
   ClockIcon,
   CheckCircleIcon,
   XCircleIcon,
-  CalendarDaysIcon,
   ArrowRightIcon,
   MegaphoneIcon,
   UserPlusIcon,
   PhoneIcon,
+  CalendarDaysIcon,
 } from '@heroicons/react/24/outline';
+import { PatientIcon, CalendarBillingIcon } from '../../../icons/HMSIcons';
 import { Doughnut, Bar } from 'react-chartjs-2';
 import { useReceptionistDashboard } from '../../../../hooks/useReceptionistDashboard';
 import KPICard from '../shared/KPICard';
@@ -98,7 +98,7 @@ export default function ReceptionistDashboard() {
         <KPICard
           title="In Progress"
           value={inProgress}
-          icon={UserGroupIcon}
+          icon={PatientIcon}
           color="blue"
           subtitle="Being served"
           isLoading={isLoading}
