@@ -27,9 +27,8 @@ interface PatientFormData {
   state: string;
   zipCode: string;
   bloodGroup: string;
-  emergencyContactName: string;
-  emergencyContactPhone: string;
-  emergencyContactRelation: string;
+  emergencyContact: string;
+  emergencyPhone: string;
 }
 
 const initialFormData: PatientFormData = {
@@ -44,9 +43,8 @@ const initialFormData: PatientFormData = {
   state: '',
   zipCode: '',
   bloodGroup: '',
-  emergencyContactName: '',
-  emergencyContactPhone: '',
-  emergencyContactRelation: '',
+  emergencyContact: '',
+  emergencyPhone: '',
 };
 
 const bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
@@ -86,9 +84,8 @@ export default function PatientForm() {
         state: patientData.state || '',
         zipCode: patientData.zipCode || '',
         bloodGroup: patientData.bloodGroup || '',
-        emergencyContactName: patientData.emergencyContactName || '',
-        emergencyContactPhone: patientData.emergencyContactPhone || '',
-        emergencyContactRelation: patientData.emergencyContactRelation || '',
+        emergencyContact: patientData.emergencyContact || '',
+        emergencyPhone: patientData.emergencyPhone || '',
       });
     }
   }, [patientData]);
@@ -102,7 +99,9 @@ export default function PatientForm() {
       navigate('/patients');
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to create patient');
+      const msg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to create patient';
+      toast.error(msg, { duration: 5000 });
+      console.error('Patient create error:', error.response?.data || error);
     },
   });
 
@@ -116,7 +115,9 @@ export default function PatientForm() {
       navigate(`/patients/${id}`);
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to update patient');
+      const msg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to update patient';
+      toast.error(msg, { duration: 5000 });
+      console.error('Patient update error:', error.response?.data || error);
     },
   });
 
@@ -132,14 +133,39 @@ export default function PatientForm() {
     const newErrors: Partial<PatientFormData> = {};
 
     if (!formData.firstName.trim()) newErrors.firstName = 'First name is required';
+    if (formData.firstName.trim() && formData.firstName.trim().length < 2) newErrors.firstName = 'First name must be at least 2 characters';
     if (!formData.lastName.trim()) newErrors.lastName = 'Last name is required';
-    if (!formData.dateOfBirth) newErrors.dateOfBirth = 'Date of birth is required';
-    if (!formData.phone.trim()) newErrors.phone = 'Phone number is required';
+    if (formData.lastName.trim() && formData.lastName.trim().length < 2) newErrors.lastName = 'Last name must be at least 2 characters';
+    if (!formData.dateOfBirth) {
+      newErrors.dateOfBirth = 'Date of birth is required';
+    } else {
+      const dob = new Date(formData.dateOfBirth);
+      if (dob > new Date()) newErrors.dateOfBirth = 'Date of birth cannot be in the future';
+    }
+    if (!formData.phone.trim()) {
+      newErrors.phone = 'Phone number is required';
+    } else if (!/^[\d\s+\-()]{7,20}$/.test(formData.phone.trim())) {
+      newErrors.phone = 'Please enter a valid phone number';
+    }
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Invalid email format';
+      newErrors.email = 'Please enter a valid email address (e.g. name@example.com)';
+    }
+    if (!formData.address.trim()) newErrors.address = 'Street address is required';
+    if (!formData.city.trim()) newErrors.city = 'City is required';
+    if (!formData.state.trim()) newErrors.state = 'State is required';
+    if (formData.emergencyPhone && !/^[\d\s+\-()]{7,20}$/.test(formData.emergencyPhone.trim())) {
+      newErrors.emergencyPhone = 'Please enter a valid emergency phone number';
     }
 
     setErrors(newErrors);
+
+    if (Object.keys(newErrors).length > 0) {
+      // Scroll to first error
+      const firstErrorField = document.querySelector('[data-error="true"]');
+      firstErrorField?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      toast.error(`Please fix ${Object.keys(newErrors).length} validation error${Object.keys(newErrors).length > 1 ? 's' : ''} before submitting`);
+    }
+
     return Object.keys(newErrors).length === 0;
   };
 
@@ -242,6 +268,7 @@ export default function PatientForm() {
                   name="dateOfBirth"
                   value={formData.dateOfBirth}
                   onChange={handleChange}
+                  data-error={!!errors.dateOfBirth}
                   className={`w-full pl-10 pr-4 py-3 rounded-lg border ${errors.dateOfBirth ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
                 />
               </div>
@@ -345,44 +372,50 @@ export default function PatientForm() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="lg:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Street Address
+                Street Address <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 name="address"
                 value={formData.address}
                 onChange={handleChange}
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                data-error={!!errors.address}
+                className={`w-full px-4 py-3 rounded-lg border ${errors.address ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
                 placeholder="123 Main Street"
               />
+              {errors.address && <p className="mt-1 text-sm text-red-500">{errors.address}</p>}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                City
+                City <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 name="city"
                 value={formData.city}
                 onChange={handleChange}
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                data-error={!!errors.city}
+                className={`w-full px-4 py-3 rounded-lg border ${errors.city ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
                 placeholder="City"
               />
+              {errors.city && <p className="mt-1 text-sm text-red-500">{errors.city}</p>}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                State
+                State <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 name="state"
                 value={formData.state}
                 onChange={handleChange}
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                data-error={!!errors.state}
+                className={`w-full px-4 py-3 rounded-lg border ${errors.state ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
                 placeholder="State"
               />
+              {errors.state && <p className="mt-1 text-sm text-red-500">{errors.state}</p>}
             </div>
 
             <div>
@@ -410,15 +443,15 @@ export default function PatientForm() {
             <h2 className="text-lg font-semibold text-gray-900">Emergency Contact</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Contact Name
               </label>
               <input
                 type="text"
-                name="emergencyContactName"
-                value={formData.emergencyContactName}
+                name="emergencyContact"
+                value={formData.emergencyContact}
                 onChange={handleChange}
                 className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Emergency contact name"
@@ -431,32 +464,14 @@ export default function PatientForm() {
               </label>
               <input
                 type="tel"
-                name="emergencyContactPhone"
-                value={formData.emergencyContactPhone}
+                name="emergencyPhone"
+                value={formData.emergencyPhone}
                 onChange={handleChange}
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                data-error={!!errors.emergencyPhone}
+                className={`w-full px-4 py-3 rounded-lg border ${errors.emergencyPhone ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
                 placeholder="+1 (555) 000-0000"
               />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Relationship
-              </label>
-              <select
-                name="emergencyContactRelation"
-                value={formData.emergencyContactRelation}
-                onChange={handleChange}
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">Select relationship</option>
-                <option value="spouse">Spouse</option>
-                <option value="parent">Parent</option>
-                <option value="child">Child</option>
-                <option value="sibling">Sibling</option>
-                <option value="friend">Friend</option>
-                <option value="other">Other</option>
-              </select>
+              {errors.emergencyPhone && <p className="mt-1 text-sm text-red-500">{errors.emergencyPhone}</p>}
             </div>
           </div>
         </div>
