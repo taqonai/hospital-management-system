@@ -197,9 +197,13 @@ export const reportsService = {
   },
 
   // Get patient visit trends
-  async getPatientVisitTrends(hospitalId: string, period: 'daily' | 'weekly' | 'monthly', months: number = 6) {
+  async getPatientVisitTrends(hospitalId: string, period: 'daily' | 'weekly' | 'monthly', months: number = 6, days?: number) {
     const startDate = new Date();
-    startDate.setMonth(startDate.getMonth() - months);
+    if (days) {
+      startDate.setDate(startDate.getDate() - days);
+    } else {
+      startDate.setMonth(startDate.getMonth() - months);
+    }
 
     const appointments = await prisma.appointment.findMany({
       where: {

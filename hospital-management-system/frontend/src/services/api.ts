@@ -1407,8 +1407,8 @@ export const reportsApi = {
     api.get('/reports/comprehensive', { params }),
   // Patient Analytics
   getPatientDemographics: () => api.get('/reports/patients/demographics'),
-  getPatientTrends: (period?: string, months?: number) =>
-    api.get('/reports/patients/trends', { params: { period, months } }),
+  getPatientTrends: (period?: string, months?: number, days?: number) =>
+    api.get('/reports/patients/trends', { params: { period, months, days } }),
   // Financial Analytics
   getRevenueAnalysis: (params?: any) =>
     api.get('/reports/financial/revenue', { params }),

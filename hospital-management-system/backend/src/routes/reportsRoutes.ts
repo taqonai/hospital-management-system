@@ -59,7 +59,8 @@ router.get(
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const period = (req.query.period as 'daily' | 'weekly' | 'monthly') || 'monthly';
     const months = parseInt(req.query.months as string) || 6;
-    const trends = await reportsService.getPatientVisitTrends(req.user!.hospitalId, period, months);
+    const days = req.query.days ? parseInt(req.query.days as string) : undefined;
+    const trends = await reportsService.getPatientVisitTrends(req.user!.hospitalId, period, months, days);
     // Wrap response for frontend compatibility
     sendSuccess(res, { trends });
   })

@@ -17,7 +17,7 @@ export function useAdminDashboard() {
   const weeklyActivity = useQuery({
     queryKey: ['admin', 'weeklyActivity'],
     queryFn: async () => {
-      const response = await reportsApi.getPatientTrends('daily', 1);
+      const response = await reportsApi.getPatientTrends('daily', 0, 7);
       return response.data.data;
     },
     staleTime: 60000,
