@@ -51,6 +51,10 @@ import {
   NEWS2RiskLevel,
 } from '../../utils/news2';
 
+const AiDocIcon = ({ className = 'h-6 w-6' }: { className?: string }) => (
+  <img src="/ai-doc.png" alt="AI" className={`${className} inline-block`} />
+);
+
 // =============== Type Definitions ===============
 interface Patient {
   id: string;
@@ -1502,7 +1506,7 @@ export default function Consultation() {
       {patientContext && isAIOnline && (
         <div className="bg-purple-50 border border-purple-200 rounded-2xl p-6">
           <h3 className="text-lg font-semibold text-purple-800 mb-4 flex items-center gap-2">
-            <SparklesIcon className="h-5 w-5" />
+            <AiDocIcon className="h-6 w-6" />
             AI Patient Context Summary
           </h3>
           <div className="grid md:grid-cols-2 gap-4 text-sm">
@@ -2238,7 +2242,7 @@ export default function Consultation() {
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold flex items-center gap-2">
-              <SparklesIcon className="h-5 w-5" />
+              <AiDocIcon className="h-6 w-6" />
               AI-Assisted Diagnosis
             </h3>
             <p className="text-purple-100 text-sm mt-1">
@@ -2268,7 +2272,7 @@ export default function Consultation() {
       {/* Diagnosis Results */}
       {diagnosisMutation.data && (
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-purple-200">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><SparklesIcon className="h-5 w-5 text-purple-600" />Differential Diagnoses</h3>
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><AiDocIcon className="h-6 w-6" />Differential Diagnoses</h3>
           <div className="space-y-3">
             {(diagnosisMutation.data.diagnoses || []).map((diagnosis: Diagnosis) => (
               <div
@@ -2555,7 +2559,7 @@ export default function Consultation() {
       {selectedDiagnoses.length > 0 && (
         <div className="bg-purple-50 border border-purple-200 rounded-2xl p-6">
           <h3 className="text-lg font-semibold text-purple-800 mb-4 flex items-center gap-2">
-            <SparklesIcon className="h-5 w-5" />
+            <AiDocIcon className="h-6 w-6" />
             Selected AI Diagnoses
             <span className="text-sm font-normal text-purple-600">(from AI analysis)</span>
           </h3>
@@ -3446,7 +3450,7 @@ export default function Consultation() {
       <div className="bg-purple-50 border border-purple-200 rounded-2xl p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-purple-800 flex items-center gap-2">
-            <SparklesIcon className="h-5 w-5" />
+            <AiDocIcon className="h-6 w-6" />
             AI-Generated SOAP Notes
           </h3>
           <button
@@ -3461,7 +3465,7 @@ export default function Consultation() {
               </>
             ) : (
               <>
-                <SparklesIcon className="h-4 w-4" />
+                <AiDocIcon className="h-5 w-5" />
                 Generate SOAP
               </>
             )}
@@ -3679,7 +3683,7 @@ export default function Consultation() {
       {aiInsights.length > 0 && (
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200">
           <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
-            <LightBulbIcon className="h-5 w-5 text-purple-500" />
+            <AiDocIcon className="h-6 w-6" />
             AI Suggestions
           </h4>
           <div className="space-y-3">
@@ -4002,7 +4006,7 @@ export default function Consultation() {
           <div className="sticky top-6">
             <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-4 mb-6 text-white">
               <div className="flex items-center gap-2">
-                <SparklesIcon className="h-5 w-5" />
+                <AiDocIcon className="h-6 w-6" />
                 <h3 className="font-semibold">AI Insights Panel</h3>
               </div>
               <p className="text-sm text-indigo-100 mt-1">
