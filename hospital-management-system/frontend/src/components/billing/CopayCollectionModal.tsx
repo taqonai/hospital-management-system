@@ -26,9 +26,20 @@ interface CopayCollectionModalProps {
 
 interface CopayInfo {
   hasCopay: boolean;
+  consultationFee: number;
+  coveragePercentage: number;
+  copayPercentage: number;
   copayAmount: number;
+  copayCapPerVisit: number;
+  insuranceAmount: number;
+  patientAmount: number;
   insuranceProvider: string | null;
   policyNumber: string | null;
+  planType: string;
+  networkStatus: string;
+  deductible: { total: number; used: number; remaining: number };
+  annualCopay: { total: number; used: number; remaining: number };
+  visitType: string;
   paymentRequired: boolean;
 }
 
@@ -69,7 +80,8 @@ export default function CopayCollectionModal({
   const fetchCopayInfo = async () => {
     setLoading(true);
     try {
-      const response = await billingApi.calculateCopay(patient.id);
+      // Pass appointmentId as query parameter if available
+      const response = await billingApi.calculateCopay(patient.id, appointmentId);
       setCopayInfo(response.data.data);
     } catch (error) {
       console.error('Failed to calculate copay:', error);
@@ -93,7 +105,7 @@ export default function CopayCollectionModal({
     if (!copayInfo) return;
 
     if (paymentMethod === 'DEPOSIT') {
-      if (!depositBalance || depositBalance.availableBalance < copayInfo.copayAmount) {
+      if (!depositBalance || depositBalance.availableBalance < copayInfo.patientAmount) {
         toast.error('Insufficient deposit balance');
         return;
       }
@@ -104,7 +116,7 @@ export default function CopayCollectionModal({
       await billingApi.collectCopay({
         patientId: patient.id,
         appointmentId,
-        amount: copayInfo.copayAmount,
+        amount: copayInfo.patientAmount,
         paymentMethod,
         useDeposit: paymentMethod === 'DEPOSIT',
         notes: notes || undefined,
@@ -197,21 +209,109 @@ export default function CopayCollectionModal({
                     <h3 className="text-sm font-medium text-gray-700 mb-2">Insurance Details</h3>
                     <div className="space-y-1">
                       <p className="text-base font-semibold text-gray-900">
-                        {copayInfo.insuranceProvider}
+                        {copayInfo.insuranceProvider} ({copayInfo.planType})
                       </p>
                       <p className="text-sm text-gray-600">
                         Policy #: {copayInfo.policyNumber || 'N/A'}
+                      </p>
+                      <p className="text-sm text-gray-600 flex items-center gap-1">
+                        Network: {copayInfo.networkStatus === 'IN_NETWORK' ? (
+                          <><span className="text-green-600 font-medium">In-Network</span> ✅</>
+                        ) : (
+                          <><span className="text-orange-600 font-medium">Out-of-Network</span> ⚠️</>
+                        )}
                       </p>
                     </div>
                   </div>
                 )}
 
-                {/* Copay Amount */}
-                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 border-2 border-green-200 text-center">
-                  <p className="text-sm font-medium text-gray-700 mb-2">Copay Amount</p>
-                  <p className="text-4xl font-bold text-green-700">
-                    AED {copayInfo.copayAmount.toFixed(2)}
-                  </p>
+                {/* Fee Breakdown */}
+                <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-4 border border-blue-100">
+                  <h3 className="text-sm font-medium text-gray-700 mb-3">Fee Breakdown</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Consultation Fee:</span>
+                      <span className="font-semibold text-gray-900">
+                        AED {copayInfo.consultationFee.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-green-700">
+                      <span>Insurance Covers ({copayInfo.coveragePercentage}%):</span>
+                      <span className="font-semibold">
+                        -AED {copayInfo.insuranceAmount.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-blue-700 border-t pt-2">
+                      <span>Patient Copay ({copayInfo.copayPercentage}%):</span>
+                      <span className="font-bold">
+                        AED {copayInfo.patientAmount.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Deductible & Annual Copay Tracking */}
+                {(copayInfo.deductible.total > 0 || copayInfo.annualCopay.total > 0) && (
+                  <div className="bg-gradient-to-br from-gray-50 to-slate-50 rounded-xl p-4 border border-gray-200">
+                    <h3 className="text-sm font-medium text-gray-700 mb-3">Annual Limits</h3>
+                    <div className="space-y-3">
+                      {copayInfo.deductible.total > 0 && (
+                        <div>
+                          <div className="flex justify-between text-sm mb-1">
+                            <span className="text-gray-600">Annual Deductible:</span>
+                            <span className="font-medium text-gray-900">
+                              AED {copayInfo.deductible.used.toFixed(0)} / AED {copayInfo.deductible.total.toFixed(0)}
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                              className="bg-blue-500 h-2 rounded-full transition-all"
+                              style={{
+                                width: `${Math.min(100, (copayInfo.deductible.used / copayInfo.deductible.total) * 100)}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                      {copayInfo.annualCopay.total > 0 && (
+                        <div>
+                          <div className="flex justify-between text-sm mb-1">
+                            <span className="text-gray-600">Annual Copay Used:</span>
+                            <span className="font-medium text-gray-900">
+                              AED {copayInfo.annualCopay.used.toFixed(0)} / AED {copayInfo.annualCopay.total.toFixed(0)}
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full transition-all ${
+                                copayInfo.annualCopay.used >= copayInfo.annualCopay.total
+                                  ? 'bg-green-500'
+                                  : 'bg-orange-500'
+                              }`}
+                              style={{
+                                width: `${Math.min(100, (copayInfo.annualCopay.used / copayInfo.annualCopay.total) * 100)}%`,
+                              }}
+                            />
+                          </div>
+                          {copayInfo.annualCopay.used >= copayInfo.annualCopay.total && (
+                            <p className="text-xs text-green-600 mt-1 font-medium">
+                              ✅ Annual copay cap reached - no copay required!
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Amount Due Now */}
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 border-2 border-green-200">
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-gray-700 mb-2">Amount Due Now</p>
+                    <p className="text-4xl font-bold text-green-700">
+                      AED {copayInfo.patientAmount.toFixed(2)}
+                    </p>
+                  </div>
                 </div>
 
                 {/* Payment Method Selection */}
@@ -307,7 +407,7 @@ export default function CopayCollectionModal({
                 <div className="flex flex-col gap-3 pt-4 border-t border-gray-200">
                   <button
                     onClick={handleCollectPayment}
-                    disabled={processing || (paymentMethod === 'DEPOSIT' && depositBalance && depositBalance.availableBalance < copayInfo.copayAmount)}
+                    disabled={processing || (paymentMethod === 'DEPOSIT' && depositBalance && depositBalance.availableBalance < copayInfo.patientAmount)}
                     className="w-full px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold rounded-xl hover:from-blue-600 hover:to-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl disabled:hover:shadow-lg"
                   >
                     {processing ? (
@@ -316,7 +416,7 @@ export default function CopayCollectionModal({
                         Processing...
                       </span>
                     ) : (
-                      `Collect Payment - AED ${copayInfo.copayAmount.toFixed(2)}`
+                      `Collect Payment - AED ${copayInfo.patientAmount.toFixed(2)}`
                     )}
                   </button>
                   

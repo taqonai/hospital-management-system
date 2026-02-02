@@ -84,9 +84,11 @@ router.get(
   '/calculate-copay/:patientId',
   authenticate,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { appointmentId } = req.query;
     const copayInfo = await billingService.calculateCopay(
       req.params.patientId,
-      req.user!.hospitalId
+      req.user!.hospitalId,
+      appointmentId as string | undefined
     );
     sendSuccess(res, copayInfo);
   })

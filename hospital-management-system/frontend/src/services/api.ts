@@ -1018,7 +1018,8 @@ export const billingApi = {
   getStats: () => api.get('/billing/stats'),
   getOutstanding: () => api.get('/billing/outstanding'),
   // Copay
-  calculateCopay: (patientId: string) => api.get(`/billing/calculate-copay/${patientId}`),
+  calculateCopay: (patientId: string, appointmentId?: string) => 
+    api.get(`/billing/calculate-copay/${patientId}${appointmentId ? `?appointmentId=${appointmentId}` : ''}`),
   collectCopay: (data: {
     patientId: string;
     appointmentId: string;

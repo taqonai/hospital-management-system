@@ -1715,14 +1715,46 @@ export class BillingService {
 
   /**
    * Calculate copay amount for a patient based on their insurance and payer rules
+   * Enhanced with full fee breakdown, visit type pricing, deductible tracking
    */
-  async calculateCopay(patientId: string, hospitalId: string): Promise<{
+  async calculateCopay(patientId: string, hospitalId: string, appointmentId?: string): Promise<{
     hasCopay: boolean;
+    consultationFee: number;
+    coveragePercentage: number;
+    copayPercentage: number;
     copayAmount: number;
+    copayCapPerVisit: number;
+    insuranceAmount: number;
+    patientAmount: number;
     insuranceProvider: string | null;
     policyNumber: string | null;
+    planType: string;
+    networkStatus: string;
+    deductible: { total: number; used: number; remaining: number };
+    annualCopay: { total: number; used: number; remaining: number };
+    visitType: string;
     paymentRequired: boolean;
   }> {
+    // Default values for no-insurance scenario
+    const defaultResponse = {
+      hasCopay: false,
+      consultationFee: 0,
+      coveragePercentage: 0,
+      copayPercentage: 100,
+      copayAmount: 0,
+      copayCapPerVisit: 0,
+      insuranceAmount: 0,
+      patientAmount: 0,
+      insuranceProvider: null,
+      policyNumber: null,
+      planType: 'SELF_PAY',
+      networkStatus: 'NONE',
+      deductible: { total: 0, used: 0, remaining: 0 },
+      annualCopay: { total: 0, used: 0, remaining: 0 },
+      visitType: 'NEW',
+      paymentRequired: false,
+    };
+
     // Look up patient's active primary insurance
     const patientInsurance = await prisma.patientInsurance.findFirst({
       where: {
@@ -1733,78 +1765,186 @@ export class BillingService {
     });
 
     if (!patientInsurance) {
-      return {
-        hasCopay: false,
-        copayAmount: 0,
-        insuranceProvider: null,
-        policyNumber: null,
-        paymentRequired: false,
-      };
+      return defaultResponse;
     }
 
-    // Default copay from insurance record
-    let copayAmount = Number(patientInsurance.copay || 0);
+    // 1. Determine visit type from appointment (if provided)
+    let visitType = 'NEW'; // Default
+    if (appointmentId) {
+      const appointment = await prisma.appointment.findUnique({
+        where: { id: appointmentId },
+        select: { type: true },
+      });
+      if (appointment) {
+        // Map AppointmentType to visit type
+        const typeMap: Record<string, string> = {
+          CONSULTATION: 'NEW',
+          FOLLOW_UP: 'FOLLOW_UP',
+          EMERGENCY: 'EMERGENCY',
+          TELEMEDICINE: 'NEW',
+          PROCEDURE: 'NEW',
+        };
+        visitType = typeMap[appointment.type] || 'NEW';
+      }
+    }
 
-    // If patient insurance has no copay set, check payer rules
-    if (copayAmount === 0) {
-      try {
-        // First, find the insurance payer by matching provider name
-        const insurancePayer = await prisma.insurancePayer.findFirst({
+    // 2. Look up consultation fee from ChargeMaster based on visit type
+    const chargeCodeMap: Record<string, string> = {
+      NEW: 'initial_consultation',
+      FOLLOW_UP: 'follow_up',
+      EMERGENCY: 'emergency_consult',
+    };
+    const chargeCode = chargeCodeMap[visitType] || 'initial_consultation';
+
+    let consultationFee = 200; // Default fallback
+    try {
+      const priceResult = await chargeManagementService.lookupPrice(hospitalId, chargeCode);
+      if (priceResult) {
+        consultationFee = priceResult.finalPrice;
+      }
+    } catch (err) {
+      console.warn(`[COPAY] ChargeMaster lookup failed for ${chargeCode}, using default`);
+    }
+
+    // 3. Get network tier
+    const networkStatus = patientInsurance.networkTier || 'IN_NETWORK';
+
+    // 4. Find payer rule to determine coverage percentage
+    let coveragePercentage = 80; // Default: insurance covers 80%
+    let copayPercentage = 20; // Default: patient pays 20%
+    let copayCapPerVisit = 0; // No cap by default
+
+    try {
+      // Find the insurance payer
+      const insurancePayer = await prisma.insurancePayer.findFirst({
+        where: {
+          hospitalId,
+          OR: [
+            { name: { contains: patientInsurance.providerName, mode: 'insensitive' } },
+            { code: { contains: patientInsurance.providerName, mode: 'insensitive' } },
+          ],
+          isActive: true,
+        },
+      });
+
+      if (insurancePayer) {
+        // Look for ICD-10 payer rules for consultation
+        const consultationICD = await prisma.iCD10Code.findFirst({
           where: {
             hospitalId,
-            OR: [
-              { name: { contains: patientInsurance.providerName, mode: 'insensitive' } },
-              { code: { contains: patientInsurance.providerName, mode: 'insensitive' } },
-            ],
+            code: { startsWith: 'Z00' },
             isActive: true,
           },
         });
 
-        if (insurancePayer) {
-          // Look for ICD-10 payer rules for consultation codes (Z00.*)
-          const consultationICD = await prisma.iCD10Code.findFirst({
+        if (consultationICD) {
+          const icdPayerRule = await prisma.iCD10PayerRule.findFirst({
             where: {
-              hospitalId,
-              code: { startsWith: 'Z00' }, // General medical examination
+              payerId: insurancePayer.id,
+              icd10CodeId: consultationICD.id,
               isActive: true,
+              isCovered: true,
             },
           });
 
-          if (consultationICD) {
-            const icdPayerRule = await prisma.iCD10PayerRule.findFirst({
-              where: {
-                payerId: insurancePayer.id,
-                icd10CodeId: consultationICD.id,
-                isActive: true,
-                isCovered: true,
-              },
-            });
-
-            if (icdPayerRule && icdPayerRule.copayAmount) {
-              copayAmount = Number(icdPayerRule.copayAmount);
-              console.log(`[COPAY] Using ICD-10 payer rule copay: ${copayAmount} AED`);
+          if (icdPayerRule) {
+            if (icdPayerRule.copayPercentage) {
+              copayPercentage = Number(icdPayerRule.copayPercentage);
+              coveragePercentage = 100 - copayPercentage;
+            }
+            if (icdPayerRule.copayAmount) {
+              copayCapPerVisit = Number(icdPayerRule.copayAmount);
             }
           }
         }
+      }
+    } catch (error) {
+      console.error('[COPAY] Error looking up payer rules:', error);
+    }
 
-        // If still no copay found, use default for UAE
-        if (copayAmount === 0) {
-          copayAmount = 20; // Default UAE consultation copay
-          console.log(`[COPAY] Using default UAE copay: ${copayAmount} AED`);
-        }
-      } catch (error) {
-        console.error('[COPAY CALC] Error looking up payer rules:', error);
-        // Use default copay for UAE
-        copayAmount = 20;
+    // Apply out-of-network penalty (patient pays more)
+    if (networkStatus === 'OUT_OF_NETWORK') {
+      copayPercentage = Math.min(40, copayPercentage * 2); // Double copay or 40%, whichever is less
+      coveragePercentage = 100 - copayPercentage;
+    }
+
+    // 5. Calculate amounts
+    let patientAmount = (consultationFee * copayPercentage) / 100;
+    let insuranceAmount = consultationFee - patientAmount;
+
+    // Apply per-visit cap if configured
+    if (copayCapPerVisit > 0 && patientAmount > copayCapPerVisit) {
+      patientAmount = copayCapPerVisit;
+      insuranceAmount = consultationFee - patientAmount;
+    }
+
+    // 6. Calculate deductible (query past CopayPayments for this patient in current year)
+    const currentYear = new Date().getFullYear();
+    const yearStart = new Date(currentYear, 0, 1);
+    const yearEnd = new Date(currentYear, 11, 31, 23, 59, 59);
+
+    const copayPayments = await prisma.copayPayment.findMany({
+      where: {
+        patientId,
+        paymentDate: {
+          gte: yearStart,
+          lte: yearEnd,
+        },
+      },
+      select: {
+        amount: true,
+      },
+    });
+
+    const annualCopayUsed = copayPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+    const annualDeductible = Number(patientInsurance.annualDeductible || 0);
+    const annualCopayMax = Number(patientInsurance.annualCopayMax || 0);
+
+    const deductibleRemaining = Math.max(0, annualDeductible - annualCopayUsed);
+    const annualCopayRemaining = annualCopayMax > 0 ? Math.max(0, annualCopayMax - annualCopayUsed) : Number.MAX_SAFE_INTEGER;
+
+    // 7. Check annual copay cap
+    if (annualCopayMax > 0) {
+      if (annualCopayUsed >= annualCopayMax) {
+        // Cap reached — patient pays AED 0
+        patientAmount = 0;
+        insuranceAmount = consultationFee;
+      } else if (annualCopayUsed + patientAmount > annualCopayMax) {
+        // Partial — only charge up to the remaining cap
+        patientAmount = annualCopayMax - annualCopayUsed;
+        insuranceAmount = consultationFee - patientAmount;
       }
     }
 
+    // 8. Check deductible
+    // If deductible not met, patient typically pays full amount until deductible is met
+    // (For simplicity, we're treating copay as part of deductible here)
+
     return {
-      hasCopay: copayAmount > 0,
-      copayAmount,
+      hasCopay: patientAmount > 0,
+      consultationFee,
+      coveragePercentage,
+      copayPercentage,
+      copayAmount: patientAmount,
+      copayCapPerVisit,
+      insuranceAmount,
+      patientAmount,
       insuranceProvider: patientInsurance.providerName,
       policyNumber: patientInsurance.policyNumber,
-      paymentRequired: copayAmount > 0,
+      planType: patientInsurance.coverageType,
+      networkStatus,
+      deductible: {
+        total: annualDeductible,
+        used: Math.min(annualCopayUsed, annualDeductible),
+        remaining: deductibleRemaining,
+      },
+      annualCopay: {
+        total: annualCopayMax,
+        used: annualCopayUsed,
+        remaining: annualCopayRemaining === Number.MAX_SAFE_INTEGER ? annualCopayMax : annualCopayRemaining,
+      },
+      visitType,
+      paymentRequired: patientAmount > 0,
     };
   }
 
@@ -1827,7 +1967,7 @@ export class BillingService {
     message: string;
   }> {
     // Validate insurance and copay amount
-    const copayInfo = await this.calculateCopay(params.patientId, params.hospitalId);
+    const copayInfo = await this.calculateCopay(params.patientId, params.hospitalId, params.appointmentId);
 
     if (!copayInfo.hasCopay) {
       return {
@@ -1836,8 +1976,8 @@ export class BillingService {
       };
     }
 
-    if (params.amount !== copayInfo.copayAmount) {
-      console.warn(`[COPAY COLLECT] Amount mismatch: provided ${params.amount}, expected ${copayInfo.copayAmount}`);
+    if (params.amount !== copayInfo.patientAmount) {
+      console.warn(`[COPAY COLLECT] Amount mismatch: provided ${params.amount}, expected ${copayInfo.patientAmount}`);
       // Allow collection anyway (manual override)
     }
 

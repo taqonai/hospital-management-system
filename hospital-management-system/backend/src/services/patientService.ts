@@ -186,6 +186,26 @@ export class PatientService {
     return patient;
   }
 
+  async findByEmiratesId(emiratesId: string, hospitalId: string) {
+    const patient = await prisma.patient.findFirst({
+      where: { emiratesId, hospitalId },
+      include: {
+        medicalHistory: true,
+        allergies: true,
+        insurances: {
+          where: { isActive: true },
+          orderBy: { isPrimary: 'desc' },
+        },
+      },
+    });
+
+    if (!patient) {
+      throw new NotFoundError('Patient not found with this Emirates ID');
+    }
+
+    return patient;
+  }
+
   async update(id: string, hospitalId: string, data: Partial<CreatePatientDto>) {
     const patient = await prisma.patient.findFirst({
       where: { id, hospitalId },

@@ -763,6 +763,7 @@ model Patient {
   bloodGroup       BloodGroup?
   phone            String
   email            String?
+  emiratesId       String?        // UAE Emirates ID for DHA integration
   address          String
   city             String
   state            String
@@ -857,6 +858,7 @@ model Patient {
 
   @@unique([hospitalId, mrn])
   @@unique([hospitalId, phone])
+  @@index([emiratesId])
   @@map("patients")
 }
 
@@ -1037,15 +1039,18 @@ model PatientInsurance {
   subscriberName String
   subscriberId   String
   relationship   String
-  effectiveDate  DateTime
-  expiryDate     DateTime?
-  coverageType   String
-  copay          Decimal?  @db.Decimal(10, 2)
-  deductible     Decimal?  @db.Decimal(10, 2)
-  isPrimary      Boolean   @default(true)
-  isActive       Boolean   @default(true)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  effectiveDate     DateTime
+  expiryDate        DateTime?
+  coverageType      String
+  copay             Decimal?  @db.Decimal(10, 2)
+  deductible        Decimal?  @db.Decimal(10, 2)
+  networkTier       String?   @default("IN_NETWORK") // IN_NETWORK / OUT_OF_NETWORK
+  annualDeductible  Decimal?  @db.Decimal(10, 2) // Total annual deductible
+  annualCopayMax    Decimal?  @db.Decimal(10, 2) // Max annual copay cap (e.g., AED 1000)
+  isPrimary         Boolean   @default(true)
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   patient         Patient          @relation(fields: [patientId], references: [id])
   preAuthRequests PreAuthRequest[]

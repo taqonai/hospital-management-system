@@ -64,6 +64,16 @@ router.get(
   })
 );
 
+// Get patient by Emirates ID
+router.get(
+  '/search/eid/:emiratesId',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const patient = await patientService.findByEmiratesId(req.params.emiratesId, req.user!.hospitalId);
+    sendSuccess(res, patient);
+  })
+);
+
 // Update patient
 router.put(
   '/:id',
