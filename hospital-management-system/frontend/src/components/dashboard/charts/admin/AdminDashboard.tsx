@@ -162,10 +162,21 @@ export default function AdminDashboard() {
 
       // Handle array format: [{ name, total, ... }]
       if (Array.isArray(perfData) && perfData.length > 0) {
-        const departments = perfData.slice(0, 5).map((d: any) => ({
+        const allDepts = perfData.map((d: any) => ({
           name: d.name || d.department || 'Unknown',
           count: d.total || d.appointmentsTotal || 0,
-        }));
+        })).filter((d: any) => d.count > 0);
+
+        // Show top 7 individually, group the rest into "Other"
+        const MAX_SLICES = 7;
+        let departments: { name: string; count: number }[];
+        if (allDepts.length > MAX_SLICES) {
+          const top = allDepts.slice(0, MAX_SLICES);
+          const otherCount = allDepts.slice(MAX_SLICES).reduce((sum: number, d: any) => sum + d.count, 0);
+          departments = [...top, { name: 'Other', count: otherCount }];
+        } else {
+          departments = allDepts;
+        }
 
         const total = departments.reduce((sum, d) => sum + d.count, 0);
 
@@ -186,10 +197,21 @@ export default function AdminDashboard() {
       // Handle object format: { "Cardiology": { total, ... } }
       const entries = Object.entries(perfData);
       if (entries.length > 0 && typeof entries[0][1] === 'object') {
-        const departments = entries.slice(0, 5).map(([name, data]: [string, any]) => ({
+        const allDepts = entries.map(([name, data]: [string, any]) => ({
           name,
           count: data.total || 0,
-        }));
+        })).filter((d: any) => d.count > 0);
+
+        // Show top 7 individually, group the rest into "Other"
+        const MAX_SLICES = 7;
+        let departments: { name: string; count: number }[];
+        if (allDepts.length > MAX_SLICES) {
+          const top = allDepts.slice(0, MAX_SLICES);
+          const otherCount = allDepts.slice(MAX_SLICES).reduce((sum: number, d: any) => sum + d.count, 0);
+          departments = [...top, { name: 'Other', count: otherCount }];
+        } else {
+          departments = allDepts;
+        }
 
         const total = departments.reduce((sum, d) => sum + d.count, 0);
 

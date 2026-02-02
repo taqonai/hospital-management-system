@@ -366,7 +366,10 @@ export const reportsService = {
       },
       include: {
         doctor: {
-          select: { specialization: true },
+          select: {
+            specialization: true,
+            department: { select: { name: true } },
+          },
         },
       },
     });
@@ -379,7 +382,7 @@ export const reportsService = {
     }> = {};
 
     appointments.forEach(apt => {
-      const dept = apt.doctor?.specialization || 'General';
+      const dept = apt.doctor?.department?.name || apt.doctor?.specialization || 'General';
       if (!departmentStats[dept]) {
         departmentStats[dept] = { total: 0, completed: 0, cancelled: 0, noShow: 0 };
       }
