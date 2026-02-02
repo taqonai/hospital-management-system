@@ -12,19 +12,45 @@ export const reportsService = {
   async getExecutiveSummary(hospitalId: string, dateRange: { from: Date; to: Date }) {
     const { from, to } = dateRange;
 
+    // Calculate previous period for trend comparison
+    const periodMs = to.getTime() - from.getTime();
+    const prevFrom = new Date(from.getTime() - periodMs);
+    const prevTo = new Date(from);
+
+    // Today boundaries for appointment trends
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const sevenDaysAgo = new Date(today);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    // Boundaries for admission-based bed trend
+    const fourteenDaysAgo = new Date(today);
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+
     const [
       totalPatients,
       newPatients,
+      prevPeriodNewPatients,
       totalAppointments,
       completedAppointments,
       totalRevenue,
       totalDoctors,
       activeDoctors,
       bedOccupancy,
+      todayAppointmentCount,
+      last7DaysAppointmentCount,
+      prevMonthDoctors,
+      thisWeekAdmissions,
+      lastWeekAdmissions,
     ] = await Promise.all([
       prisma.patient.count({ where: { hospitalId } }),
       prisma.patient.count({
         where: { hospitalId, createdAt: { gte: from, lte: to } },
+      }),
+      prisma.patient.count({
+        where: { hospitalId, createdAt: { gte: prevFrom, lt: prevTo } },
       }),
       prisma.appointment.count({
         where: { hospitalId, appointmentDate: { gte: from, lte: to } },
@@ -47,13 +73,45 @@ export const reportsService = {
       prisma.doctor.count({ where: { user: { hospitalId } } }),
       prisma.doctor.count({ where: { user: { hospitalId }, isAvailable: true } }),
       this.calculateBedOccupancy(hospitalId),
+      prisma.appointment.count({
+        where: { hospitalId, appointmentDate: { gte: today, lt: tomorrow } },
+      }),
+      prisma.appointment.count({
+        where: { hospitalId, appointmentDate: { gte: sevenDaysAgo, lt: today } },
+      }),
+      prisma.doctor.count({
+        where: { user: { hospitalId }, isAvailable: true, createdAt: { lt: prevTo } },
+      }),
+      prisma.admission.count({
+        where: { hospitalId, admissionDate: { gte: sevenDaysAgo, lt: tomorrow }, status: 'ADMITTED' },
+      }),
+      prisma.admission.count({
+        where: { hospitalId, admissionDate: { gte: fourteenDaysAgo, lt: sevenDaysAgo }, status: 'ADMITTED' },
+      }),
     ]);
+
+    // Calculate trend percentages
+    const calcTrend = (current: number, previous: number) => {
+      if (previous === 0) return current > 0 ? 100 : 0;
+      return Math.round(((current - previous) / previous) * 100);
+    };
+
+    const dailyAvg7d = last7DaysAppointmentCount > 0 ? last7DaysAppointmentCount / 7 : 0;
+    const appointmentsTrend = dailyAvg7d > 0
+      ? Math.round(((todayAppointmentCount - dailyAvg7d) / dailyAvg7d) * 100)
+      : todayAppointmentCount > 0 ? 100 : 0;
+
+    // Bed trend: more admissions this week vs last = fewer available beds = negative
+    const bedTrend = lastWeekAdmissions > 0
+      ? -calcTrend(thisWeekAdmissions, lastWeekAdmissions)
+      : thisWeekAdmissions > 0 ? -100 : 0;
 
     return {
       patients: {
         total: totalPatients,
         new: newPatients,
         growth: totalPatients > 0 ? Math.round((newPatients / totalPatients) * 100) : 0,
+        trend: calcTrend(newPatients, prevPeriodNewPatients),
       },
       appointments: {
         total: totalAppointments,
@@ -61,6 +119,8 @@ export const reportsService = {
         completionRate: totalAppointments > 0
           ? Math.round((completedAppointments / totalAppointments) * 100)
           : 0,
+        todayTotal: todayAppointmentCount,
+        trend: appointmentsTrend,
       },
       revenue: {
         total: totalRevenue._sum.paidAmount || 0,
@@ -68,8 +128,12 @@ export const reportsService = {
       staff: {
         totalDoctors,
         activeDoctors,
+        trend: calcTrend(activeDoctors, prevMonthDoctors),
       },
-      bedOccupancy,
+      bedOccupancy: {
+        ...bedOccupancy,
+        trend: bedTrend,
+      },
     };
   },
 

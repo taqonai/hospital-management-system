@@ -249,6 +249,7 @@ Key routes (`/api/v1/`):
 - `/medical-records`, `/dietary`, `/assets`, `/ambulance` - Ancillary services
 - `/cssd`, `/mortuary`, `/housekeeping`, `/quality`, `/reports` - Operations
 - `/early-warning`, `/med-safety`, `/smart-orders` - Clinical safety AI
+- `/procurement` - Purchase orders, vendors, goods receipt
 - `/crm` - Marketing campaigns, surveys, leads
 - `/genomic`, `/health-platform`, `/wellness`, `/nutrition` - A'mad precision health platform
 - `/insurance-coding` - ICD-10/CPT code integration
@@ -271,9 +272,9 @@ Key routes (`/api/v1/`):
 - Middleware: `rbac.ts` for permission checking
 
 ### Notification System
-- Multi-channel: Email (SendGrid primary, SES fallback), SMS (Twilio), Push (Expo)
+- Multi-channel: Email (SendGrid → SES → SMTP), SMS (Twilio per-hospital + AWS SNS), WhatsApp (Twilio), Push (Expo)
 - Email templates for: appointment reminders, password reset, OTP verification, lab results
-- SMS integration via Twilio for appointment reminders and alerts
+- Twilio config is per-hospital (stored in DB `HospitalSettings`), not just env vars
 - Push notifications for mobile app (managed via `/api/v1/notifications`)
 - Service location: `backend/src/services/notificationService.ts`, `backend/src/services/emailService.ts`, `backend/src/services/twilioService.ts`
 
@@ -325,14 +326,19 @@ See `mobile/src/*/AGENT.md` files for detailed implementation patterns.
 ## Configuration
 
 ### Environment Variables
-**Backend** (`backend/.env`):
+**Backend** (`backend/.env`, see `backend/.env.example` for all options):
 - `DATABASE_URL` - PostgreSQL connection
 - `JWT_SECRET`, `JWT_REFRESH_SECRET`
 - `AI_SERVICE_URL` (default: http://localhost:8000)
 - `REDIS_HOST`, `REDIS_PORT`
-- `SENDGRID_API_KEY` - Primary email provider (SendGrid)
+- `ENCRYPTION_KEY` - Required for data encryption (32+ chars)
+- `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX` - API rate limiting
+- `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL` - Primary email provider
 - `AWS_SES_REGION`, `AWS_SES_FROM_EMAIL`, `AWS_SES_ACCESS_KEY_ID`, `AWS_SES_SECRET_ACCESS_KEY` - Fallback email (SES)
-- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` - SMS notifications
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` - Last-resort email (SMTP)
+- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_NUMBER` - WhatsApp (per-hospital Twilio config for SMS/WhatsApp stored in DB)
+- `AWS_SNS_REGION`, `AWS_SNS_SENDER_ID` - SMS via AWS SNS
+- `NOTIFICATIONS_EMAIL_ENABLED`, `NOTIFICATIONS_SMS_ENABLED`, `NOTIFICATIONS_WHATSAPP_ENABLED` - Toggle notification channels
 - `FRONTEND_URL` - Frontend URL for email links
 
 **Frontend** (`frontend/.env`):
@@ -350,10 +356,11 @@ See `mobile/src/*/AGENT.md` files for detailed implementation patterns.
 - `MINIO_ENDPOINT` - For local MinIO (default: http://minio:9000)
 - S3 is prioritized over MinIO when AWS credentials are configured
 
-**Email Service**:
-- Primary: SendGrid (requires `SENDGRID_API_KEY`)
-- Fallback: AWS SES (requires AWS SES credentials)
-- Email service automatically falls back to SES if SendGrid fails
+**Email Service** (priority chain in `backend/src/services/emailService.ts`):
+1. SendGrid (if `SENDGRID_API_KEY` set)
+2. AWS SES (if SES credentials set and SendGrid not configured)
+3. SMTP (if `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS` set and above not configured)
+- Falls through automatically on failure
 
 ### Default Dev Credentials
 | Role | Email | Password |
@@ -391,10 +398,14 @@ terraform apply
 Architecture: ALB → EC2 (t3.xlarge) running Docker Compose with all services.
 
 Key files:
-- `terraform/` - Terraform IaC (VPC, EC2, ALB, S3)
+- `terraform/` - Terraform IaC (VPC, EC2, ALB, S3, Lambda, monitoring)
+- `terraform/lambda/` - Lambda functions for automated operations
+- `terraform/monitoring.tf` - CloudWatch monitoring and alerting
 - `scripts/user-data.sh` - EC2 bootstrap script
 - `docker/docker-compose.prod.yml` - Production compose
 - `nginx/nginx.conf` - Reverse proxy config
+
+No CI/CD pipeline is configured; deployments are manual via Terraform + Docker Compose on EC2.
 
 Maintenance commands (on EC2):
 ```bash

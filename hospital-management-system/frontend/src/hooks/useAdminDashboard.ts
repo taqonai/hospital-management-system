@@ -2,14 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { reportsApi, appointmentApi } from '../services/api';
 
 export function useAdminDashboard() {
-  // Executive summary
+  // Executive summary (includes KPI trends)
   const executiveSummary = useQuery({
     queryKey: ['admin', 'executiveSummary'],
     queryFn: async () => {
       const response = await reportsApi.getExecutiveSummary();
       return response.data.data;
     },
-    staleTime: 60000, // 1 minute
+    staleTime: 60000,
     refetchInterval: 60000,
   });
 
@@ -17,7 +17,7 @@ export function useAdminDashboard() {
   const weeklyActivity = useQuery({
     queryKey: ['admin', 'weeklyActivity'],
     queryFn: async () => {
-      const response = await reportsApi.getPatientTrends('daily', 1); // Last 7 days
+      const response = await reportsApi.getPatientTrends('daily', 1);
       return response.data.data;
     },
     staleTime: 60000,
@@ -36,37 +36,18 @@ export function useAdminDashboard() {
     refetchInterval: 30000,
   });
 
-  // Patient trends (6 months)
-  const patientTrends = useQuery({
-    queryKey: ['admin', 'patientTrends'],
+  // Today's stats
+  const todayStats = useQuery({
+    queryKey: ['admin', 'todayStats'],
     queryFn: async () => {
-      const response = await reportsApi.getPatientTrends('monthly', 6);
+      const response = await appointmentApi.getDashboardStats();
       return response.data.data;
     },
-    staleTime: 300000, // 5 minutes
+    staleTime: 30000,
+    refetchInterval: 30000,
   });
 
-  // Revenue trends (12 months)
-  const revenueTrends = useQuery({
-    queryKey: ['admin', 'revenueTrends'],
-    queryFn: async () => {
-      const response = await reportsApi.getRevenueTrends(12);
-      return response.data.data;
-    },
-    staleTime: 300000,
-  });
-
-  // Revenue by category
-  const revenueByCategory = useQuery({
-    queryKey: ['admin', 'revenueByCategory'],
-    queryFn: async () => {
-      const response = await reportsApi.getRevenueAnalysis();
-      return response.data.data;
-    },
-    staleTime: 300000,
-  });
-
-  // Department performance
+  // Department performance (for pie chart)
   const departmentPerformance = useQuery({
     queryKey: ['admin', 'departmentPerformance'],
     queryFn: async () => {
@@ -74,16 +55,6 @@ export function useAdminDashboard() {
       return response.data.data;
     },
     staleTime: 300000,
-  });
-
-  // Patient demographics
-  const patientDemographics = useQuery({
-    queryKey: ['admin', 'patientDemographics'],
-    queryFn: async () => {
-      const response = await reportsApi.getPatientDemographics();
-      return response.data.data;
-    },
-    staleTime: 600000, // 10 minutes
   });
 
   // Bed occupancy
@@ -97,32 +68,14 @@ export function useAdminDashboard() {
     refetchInterval: 60000,
   });
 
-  // Today's stats (from existing API)
-  const todayStats = useQuery({
-    queryKey: ['admin', 'todayStats'],
-    queryFn: async () => {
-      const response = await appointmentApi.getDashboardStats();
-      return response.data.data;
-    },
-    staleTime: 30000,
-    refetchInterval: 30000,
-  });
-
   const isLoading =
     executiveSummary.isLoading ||
-    patientTrends.isLoading ||
-    revenueTrends.isLoading ||
-    departmentPerformance.isLoading ||
     todayStats.isLoading ||
     weeklyActivity.isLoading;
 
   const refetchAll = () => {
     executiveSummary.refetch();
-    patientTrends.refetch();
-    revenueTrends.refetch();
-    revenueByCategory.refetch();
     departmentPerformance.refetch();
-    patientDemographics.refetch();
     bedOccupancy.refetch();
     todayStats.refetch();
     weeklyActivity.refetch();
@@ -131,11 +84,7 @@ export function useAdminDashboard() {
 
   return {
     executiveSummary: executiveSummary.data,
-    patientTrends: patientTrends.data,
-    revenueTrends: revenueTrends.data,
-    revenueByCategory: revenueByCategory.data,
     departmentPerformance: departmentPerformance.data,
-    patientDemographics: patientDemographics.data,
     bedOccupancy: bedOccupancy.data,
     todayStats: todayStats.data,
     weeklyActivity: weeklyActivity.data,
@@ -143,11 +92,7 @@ export function useAdminDashboard() {
     isLoading,
     errors: {
       executiveSummary: executiveSummary.error,
-      patientTrends: patientTrends.error,
-      revenueTrends: revenueTrends.error,
-      revenueByCategory: revenueByCategory.error,
       departmentPerformance: departmentPerformance.error,
-      patientDemographics: patientDemographics.error,
       bedOccupancy: bedOccupancy.error,
       todayStats: todayStats.error,
       weeklyActivity: weeklyActivity.error,
