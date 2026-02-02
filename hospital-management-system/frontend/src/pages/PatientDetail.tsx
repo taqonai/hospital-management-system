@@ -10,10 +10,12 @@ import {
   CpuChipIcon,
   BeakerIcon,
   DocumentTextIcon,
+  ShieldCheckIcon,
 } from '@heroicons/react/24/outline';
 import { patientApi } from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import PatientAIInsights from '../components/ai/PatientAIInsights';
+import PatientInsuranceForm from '../components/patients/PatientInsuranceForm';
 import { format } from 'date-fns';
 import clsx from 'clsx';
 
@@ -64,6 +66,7 @@ export default function PatientDetail() {
   const tabs = [
     { name: 'Overview', icon: DocumentTextIcon },
     { name: 'Medical History', icon: DocumentTextIcon },
+    { name: 'Insurance', icon: ShieldCheckIcon },
     { name: 'Appointments', icon: CalendarIcon },
     { name: 'Lab Results', icon: BeakerIcon },
     { name: 'AI Insights', icon: CpuChipIcon },
@@ -293,6 +296,11 @@ export default function PatientDetail() {
                 )}
               </div>
             </div>
+          </Tab.Panel>
+
+          {/* Insurance Tab */}
+          <Tab.Panel>
+            <PatientInsuranceForm patientId={id!} />
           </Tab.Panel>
 
           {/* Appointments Tab */}

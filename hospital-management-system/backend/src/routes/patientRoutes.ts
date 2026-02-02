@@ -174,6 +174,20 @@ router.get(
   })
 );
 
+// Get patient insurances
+router.get(
+  '/:id/insurance',
+  authenticate,
+  validate(uuidParamSchema),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const insurances = await patientService.getInsurances(
+      req.params.id,
+      req.user!.hospitalId
+    );
+    sendSuccess(res, insurances);
+  })
+);
+
 // Add insurance
 router.post(
   '/:id/insurance',
@@ -187,6 +201,21 @@ router.post(
       req.body
     );
     sendCreated(res, insurance, 'Insurance added');
+  })
+);
+
+// Delete insurance
+router.delete(
+  '/:id/insurance/:insuranceId',
+  authenticate,
+  authorizeWithPermission('patients:write', ['HOSPITAL_ADMIN', 'RECEPTIONIST']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    await patientService.deleteInsurance(
+      req.params.id,
+      req.params.insuranceId,
+      req.user!.hospitalId
+    );
+    sendSuccess(res, null, 'Insurance deleted');
   })
 );
 

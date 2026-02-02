@@ -372,6 +372,51 @@ export class PatientService {
     return insurance;
   }
 
+  async getInsurances(patientId: string, hospitalId: string) {
+    const patient = await prisma.patient.findFirst({
+      where: { id: patientId, hospitalId },
+    });
+
+    if (!patient) {
+      throw new NotFoundError('Patient not found');
+    }
+
+    const insurances = await prisma.patientInsurance.findMany({
+      where: { patientId },
+      orderBy: [
+        { isPrimary: 'desc' },
+        { isActive: 'desc' },
+        { createdAt: 'desc' },
+      ],
+    });
+
+    return insurances;
+  }
+
+  async deleteInsurance(patientId: string, insuranceId: string, hospitalId: string) {
+    const patient = await prisma.patient.findFirst({
+      where: { id: patientId, hospitalId },
+    });
+
+    if (!patient) {
+      throw new NotFoundError('Patient not found');
+    }
+
+    const insurance = await prisma.patientInsurance.findFirst({
+      where: { id: insuranceId, patientId },
+    });
+
+    if (!insurance) {
+      throw new NotFoundError('Insurance not found');
+    }
+
+    await prisma.patientInsurance.delete({
+      where: { id: insuranceId },
+    });
+
+    return true;
+  }
+
   async getPatientTimeline(patientId: string, hospitalId: string) {
     const patient = await prisma.patient.findFirst({
       where: { id: patientId, hospitalId },

@@ -1745,35 +1745,58 @@ export class BillingService {
     // Default copay from insurance record
     let copayAmount = Number(patientInsurance.copay || 0);
 
-    // Try to find payer-specific consultation copay rule
-    try {
-      // Look for a general consultation CPT code payer rule
-      const consultationCpt = await prisma.cPTCode.findFirst({
-        where: {
-          hospitalId,
-          code: { in: ['99213', '99214', '99203', '99204'] }, // Common consultation codes
-          isActive: true,
-        },
-      });
-
-      if (consultationCpt) {
-        // Note: CPTPayerRule doesn't have copayAmount field
-        // Just checking if the service is covered by the payer
-        const payerRule = await prisma.cPTPayerRule.findFirst({
+    // If patient insurance has no copay set, check payer rules
+    if (copayAmount === 0) {
+      try {
+        // First, find the insurance payer by matching provider name
+        const insurancePayer = await prisma.insurancePayer.findFirst({
           where: {
-            payerId: patientInsurance.id,
-            cptCodeId: consultationCpt.id,
+            hospitalId,
+            OR: [
+              { name: { contains: patientInsurance.providerName, mode: 'insensitive' } },
+              { code: { contains: patientInsurance.providerName, mode: 'insensitive' } },
+            ],
             isActive: true,
-            isCovered: true,
           },
         });
 
-        // If found and covered, use default insurance copay
-        // Copay amount will come from patientInsurance.copay (already set above)
+        if (insurancePayer) {
+          // Look for ICD-10 payer rules for consultation codes (Z00.*)
+          const consultationICD = await prisma.iCD10Code.findFirst({
+            where: {
+              hospitalId,
+              code: { startsWith: 'Z00' }, // General medical examination
+              isActive: true,
+            },
+          });
+
+          if (consultationICD) {
+            const icdPayerRule = await prisma.iCD10PayerRule.findFirst({
+              where: {
+                payerId: insurancePayer.id,
+                icd10CodeId: consultationICD.id,
+                isActive: true,
+                isCovered: true,
+              },
+            });
+
+            if (icdPayerRule && icdPayerRule.copayAmount) {
+              copayAmount = Number(icdPayerRule.copayAmount);
+              console.log(`[COPAY] Using ICD-10 payer rule copay: ${copayAmount} AED`);
+            }
+          }
+        }
+
+        // If still no copay found, use default for UAE
+        if (copayAmount === 0) {
+          copayAmount = 20; // Default UAE consultation copay
+          console.log(`[COPAY] Using default UAE copay: ${copayAmount} AED`);
+        }
+      } catch (error) {
+        console.error('[COPAY CALC] Error looking up payer rules:', error);
+        // Use default copay for UAE
+        copayAmount = 20;
       }
-    } catch (error) {
-      console.error('[COPAY CALC] Error looking up payer rule:', error);
-      // Continue with default copay
     }
 
     return {
