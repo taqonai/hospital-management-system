@@ -3,7 +3,7 @@ import { body, param } from 'express-validator';
 import { authenticate, AuthenticatedRequest } from '../middleware/auth';
 import { validate } from '../middleware/validation';
 import { paymentGatewayService } from '../services/paymentGatewayService';
-import { checkPermission } from '../middleware/rbac';
+import { requirePermission } from '../middleware/rbac';
 
 const router = Router();
 
@@ -131,7 +131,7 @@ router.get(
 router.post(
   '/:id/refund',
   authenticate,
-  checkPermission('billing:refund'),
+  requirePermission('billing:refund'),
   validate([
     param('id').isString().notEmpty(),
     body('amount').optional().isFloat({ min: 0.01 }),
