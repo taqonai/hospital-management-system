@@ -90,6 +90,8 @@ router.get(
       startDate: startDate as string,
       endDate: endDate as string,
       search: search as string,
+      userId: req.user!.userId,
+      userRole: req.user!.role,
     });
     const pagination = calculatePagination(result.page, result.limit, result.total);
     sendPaginated(res, result.orders, pagination);
@@ -203,7 +205,11 @@ router.get(
   '/critical',
   authenticate,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const results = await laboratoryService.getCriticalResults(req.user!.hospitalId);
+    const results = await laboratoryService.getCriticalResults(
+      req.user!.hospitalId,
+      req.user!.userId,
+      req.user!.role
+    );
     sendSuccess(res, results);
   })
 );
@@ -224,7 +230,11 @@ router.get(
   '/pending',
   authenticate,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const orders = await laboratoryService.getPendingOrders(req.user!.hospitalId);
+    const orders = await laboratoryService.getPendingOrders(
+      req.user!.hospitalId,
+      req.user!.userId,
+      req.user!.role
+    );
     sendSuccess(res, orders);
   })
 );
@@ -234,7 +244,11 @@ router.get(
   '/stats',
   authenticate,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const stats = await laboratoryService.getLabStats(req.user!.hospitalId);
+    const stats = await laboratoryService.getLabStats(
+      req.user!.hospitalId,
+      req.user!.userId,
+      req.user!.role
+    );
     sendSuccess(res, stats);
   })
 );

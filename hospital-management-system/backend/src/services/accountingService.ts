@@ -62,8 +62,9 @@ interface TrialBalanceResult {
 // Default healthcare Chart of Accounts
 const DEFAULT_COA: Array<{ code: string; name: string; type: AccountType; description: string }> = [
   { code: '1000', name: 'Cash/Bank', type: 'ASSET', description: 'Cash and bank accounts' },
-  { code: '1100', name: 'Accounts Receivable', type: 'ASSET', description: 'Patient and insurance receivables' },
-  { code: '1200', name: 'Deposits Held', type: 'ASSET', description: 'Patient deposits held' },
+  { code: '1100', name: 'Patient Receivable', type: 'ASSET', description: 'Patient receivables' },
+  { code: '1200', name: 'Insurance Receivable', type: 'ASSET', description: 'Insurance receivables' },
+  { code: '1300', name: 'Deposits Held', type: 'ASSET', description: 'Patient deposits held' },
   { code: '2000', name: 'Accounts Payable', type: 'LIABILITY', description: 'Vendor payables' },
   { code: '2100', name: 'Patient Deposits', type: 'LIABILITY', description: 'Patient deposit liabilities' },
   { code: '2200', name: 'Unearned Revenue', type: 'LIABILITY', description: 'Revenue not yet earned' },
@@ -610,6 +611,201 @@ class AccountingService {
       where: { id },
       data: { isClosed: true, closedBy, closedAt: new Date() },
     });
+  }
+
+  /**
+   * Record invoice with insurance split in General Ledger
+   * DR: Insurance Receivable (1200) for insurer portion
+   * DR: Patient Receivable (1100) for patient portion
+   * CR: Revenue (4000)
+   */
+  async recordInsuranceInvoiceGL(params: {
+    hospitalId: string;
+    invoiceId: string;
+    totalAmount: number;
+    insuranceAmount: number;
+    patientAmount: number;
+    description: string;
+    createdBy: string;
+  }) {
+    try {
+      // Find accounts
+      const insuranceAR = await prisma.gLAccount.findFirst({
+        where: { hospitalId: params.hospitalId, accountCode: '1200' },
+      });
+
+      const patientAR = await prisma.gLAccount.findFirst({
+        where: { hospitalId: params.hospitalId, accountCode: '1100' },
+      });
+
+      const revenueAccount = await prisma.gLAccount.findFirst({
+        where: { hospitalId: params.hospitalId, accountCode: '4000' },
+      });
+
+      if (!insuranceAR || !patientAR || !revenueAccount) {
+        console.warn('[GL] Chart of accounts not set up for insurance split recording');
+        // Fall back to single AR entry
+        const arAccount = patientAR || insuranceAR;
+        if (arAccount && revenueAccount) {
+          await prisma.gLEntry.create({
+            data: {
+              hospitalId: params.hospitalId,
+              transactionDate: new Date(),
+              glAccountId: arAccount.id,
+              debitAmount: params.totalAmount,
+              creditAmount: 0,
+              description: params.description,
+              referenceType: 'INVOICE',
+              referenceId: params.invoiceId,
+              createdBy: params.createdBy,
+            },
+          });
+
+          await prisma.gLEntry.create({
+            data: {
+              hospitalId: params.hospitalId,
+              transactionDate: new Date(),
+              glAccountId: revenueAccount.id,
+              debitAmount: 0,
+              creditAmount: params.totalAmount,
+              description: params.description,
+              referenceType: 'INVOICE',
+              referenceId: params.invoiceId,
+              createdBy: params.createdBy,
+            },
+          });
+        }
+        return;
+      }
+
+      // Create split entries
+      // DR: Insurance Receivable
+      if (params.insuranceAmount > 0) {
+        await prisma.gLEntry.create({
+          data: {
+            hospitalId: params.hospitalId,
+            transactionDate: new Date(),
+            glAccountId: insuranceAR.id,
+            debitAmount: params.insuranceAmount,
+            creditAmount: 0,
+            description: `${params.description} - Insurance portion`,
+            referenceType: 'INVOICE',
+            referenceId: params.invoiceId,
+            createdBy: params.createdBy,
+          },
+        });
+      }
+
+      // DR: Patient Receivable
+      if (params.patientAmount > 0) {
+        await prisma.gLEntry.create({
+          data: {
+            hospitalId: params.hospitalId,
+            transactionDate: new Date(),
+            glAccountId: patientAR.id,
+            debitAmount: params.patientAmount,
+            creditAmount: 0,
+            description: `${params.description} - Patient portion`,
+            referenceType: 'INVOICE',
+            referenceId: params.invoiceId,
+            createdBy: params.createdBy,
+          },
+        });
+      }
+
+      // CR: Revenue
+      await prisma.gLEntry.create({
+        data: {
+          hospitalId: params.hospitalId,
+          transactionDate: new Date(),
+          glAccountId: revenueAccount.id,
+          debitAmount: 0,
+          creditAmount: params.totalAmount,
+          description: params.description,
+          referenceType: 'INVOICE',
+          referenceId: params.invoiceId,
+          createdBy: params.createdBy,
+        },
+      });
+
+      console.log('[GL] Insurance split invoice entry recorded:', {
+        totalAmount: params.totalAmount,
+        insuranceAmount: params.insuranceAmount,
+        patientAmount: params.patientAmount,
+      });
+    } catch (error) {
+      console.error('[GL] Failed to record insurance split invoice entry:', error);
+      // Don't throw - GL recording is non-critical
+    }
+  }
+
+  /**
+   * Record copay collection in General Ledger
+   * DR: Cash/Card account (or Patient AR if not immediately paid)
+   * CR: Revenue - Copay
+   */
+  async recordCopayGL(params: {
+    hospitalId: string;
+    paymentId: string;
+    amount: number;
+    paymentMethod: string;
+    description: string;
+    createdBy: string;
+  }) {
+    try {
+      // Find appropriate accounts in the chart of accounts
+      const cashAccount = await prisma.gLAccount.findFirst({
+        where: { hospitalId: params.hospitalId, accountCode: '1000' },
+      });
+
+      const revenueAccount = await prisma.gLAccount.findFirst({
+        where: { hospitalId: params.hospitalId, accountCode: '4000' },
+      });
+
+      if (!cashAccount || !revenueAccount) {
+        console.warn('[GL] Chart of accounts not set up for copay recording');
+        return;
+      }
+
+      // Create debit entry (Cash/Bank)
+      await prisma.gLEntry.create({
+        data: {
+          hospitalId: params.hospitalId,
+          transactionDate: new Date(),
+          glAccountId: cashAccount.id,
+          debitAmount: params.amount,
+          creditAmount: 0,
+          description: params.description,
+          referenceType: 'COPAY',
+          referenceId: params.paymentId,
+          createdBy: params.createdBy,
+        },
+      });
+
+      // Create credit entry (Revenue)
+      await prisma.gLEntry.create({
+        data: {
+          hospitalId: params.hospitalId,
+          transactionDate: new Date(),
+          glAccountId: revenueAccount.id,
+          debitAmount: 0,
+          creditAmount: params.amount,
+          description: params.description,
+          referenceType: 'COPAY',
+          referenceId: params.paymentId,
+          createdBy: params.createdBy,
+        },
+      });
+
+      console.log('[GL] Copay entry recorded:', {
+        amount: params.amount,
+        debit: cashAccount.id,
+        credit: revenueAccount.id,
+      });
+    } catch (error) {
+      console.error('[GL] Failed to record copay entry:', error);
+      // Don't throw - GL recording is non-critical
+    }
   }
 }
 

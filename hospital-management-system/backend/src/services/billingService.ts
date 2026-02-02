@@ -632,10 +632,15 @@ export class BillingService {
     quantity: number;
     unitPrice: number;
     discount?: number;
+    cptCodeId?: string;
+    icd10CodeId?: string;
   }, createdBy: string) {
     const invoice = await prisma.invoice.findFirst({
       where: { id: invoiceId, hospitalId },
-      include: { items: true },
+      include: { 
+        items: true,
+        patient: true,
+      },
     });
 
     if (!invoice) throw new NotFoundError('Invoice not found');
@@ -647,8 +652,94 @@ export class BillingService {
     const itemDiscount = item.discount || 0;
     const totalPrice = (item.unitPrice * item.quantity) - itemDiscount;
 
+    // Calculate insurance split
+    let insuranceCoverage: number | null = null;
+    let insuranceAmount: number | null = null;
+    let patientAmount: number | null = null;
+    let payerRuleId: string | null = null;
+
+    try {
+      // Look up patient's active primary insurance
+      const patientInsurance = await prisma.patientInsurance.findFirst({
+        where: {
+          patientId: invoice.patientId,
+          isActive: true,
+          isPrimary: true,
+        },
+      });
+
+      if (patientInsurance) {
+        // Try to find applicable payer rule based on CPT or ICD-10 code
+        let payerRule: any = null;
+
+        if (item.cptCodeId) {
+          payerRule = await prisma.cPTPayerRule.findFirst({
+            where: {
+              payerId: patientInsurance.id,
+              cptCodeId: item.cptCodeId,
+              isActive: true,
+              isCovered: true,
+            },
+          });
+        } else if (item.icd10CodeId) {
+          payerRule = await prisma.iCD10PayerRule.findFirst({
+            where: {
+              payerId: patientInsurance.id,
+              icd10CodeId: item.icd10CodeId,
+              isActive: true,
+              isCovered: true,
+            },
+          });
+        }
+
+        // Calculate insurance vs patient split
+        if (payerRule) {
+          payerRuleId = payerRule.id;
+
+          // ICD10PayerRule has copayAmount and copayPercentage
+          // CPTPayerRule does not - use default coverage for CPT rules
+          if (item.icd10CodeId && payerRule.copayPercentage) {
+            insuranceCoverage = Number(payerRule.copayPercentage);
+            const coverageDecimal = insuranceCoverage / 100;
+            patientAmount = totalPrice * coverageDecimal;
+            insuranceAmount = totalPrice - patientAmount;
+          } else if (item.icd10CodeId && payerRule.copayAmount) {
+            patientAmount = Number(payerRule.copayAmount);
+            insuranceAmount = totalPrice - patientAmount;
+            if (totalPrice > 0) {
+              insuranceCoverage = (insuranceAmount / totalPrice) * 100;
+            }
+          } else {
+            // CPT rule or no copay specified, insurance covers 80%
+            insuranceCoverage = 80;
+            insuranceAmount = totalPrice * 0.8;
+            patientAmount = totalPrice * 0.2;
+          }
+        } else if (patientInsurance.copay) {
+          // Use patient's default copay from insurance record
+          patientAmount = Number(patientInsurance.copay);
+          insuranceAmount = totalPrice - patientAmount;
+          if (totalPrice > 0) {
+            insuranceCoverage = (insuranceAmount / totalPrice) * 100;
+          }
+        } else {
+          // Default: 80/20 split (insurance covers 80%, patient pays 20%)
+          insuranceCoverage = 80;
+          insuranceAmount = totalPrice * 0.8;
+          patientAmount = totalPrice * 0.2;
+        }
+
+        // Ensure amounts don't go negative
+        if (insuranceAmount < 0) insuranceAmount = 0;
+        if (patientAmount < 0) patientAmount = 0;
+      }
+    } catch (error) {
+      console.error('[INSURANCE SPLIT] Error calculating insurance split:', error);
+      // Continue without insurance split
+    }
+
     const result = await prisma.$transaction(async (tx) => {
-      // Create the invoice item
+      // Create the invoice item with insurance split
       const newItem = await tx.invoiceItem.create({
         data: {
           invoiceId,
@@ -658,6 +749,10 @@ export class BillingService {
           unitPrice: item.unitPrice,
           discount: itemDiscount,
           totalPrice,
+          insuranceCoverage,
+          insuranceAmount,
+          patientAmount,
+          payerRuleId,
         },
       });
 
@@ -1614,6 +1709,216 @@ export class BillingService {
     }
 
     return history;
+  }
+
+  // ==================== COPAY COLLECTION AT CHECK-IN ====================
+
+  /**
+   * Calculate copay amount for a patient based on their insurance and payer rules
+   */
+  async calculateCopay(patientId: string, hospitalId: string): Promise<{
+    hasCopay: boolean;
+    copayAmount: number;
+    insuranceProvider: string | null;
+    policyNumber: string | null;
+    paymentRequired: boolean;
+  }> {
+    // Look up patient's active primary insurance
+    const patientInsurance = await prisma.patientInsurance.findFirst({
+      where: {
+        patientId,
+        isActive: true,
+        isPrimary: true,
+      },
+    });
+
+    if (!patientInsurance) {
+      return {
+        hasCopay: false,
+        copayAmount: 0,
+        insuranceProvider: null,
+        policyNumber: null,
+        paymentRequired: false,
+      };
+    }
+
+    // Default copay from insurance record
+    let copayAmount = Number(patientInsurance.copay || 0);
+
+    // Try to find payer-specific consultation copay rule
+    try {
+      // Look for a general consultation CPT code payer rule
+      const consultationCpt = await prisma.cPTCode.findFirst({
+        where: {
+          hospitalId,
+          code: { in: ['99213', '99214', '99203', '99204'] }, // Common consultation codes
+          isActive: true,
+        },
+      });
+
+      if (consultationCpt) {
+        // Note: CPTPayerRule doesn't have copayAmount field
+        // Just checking if the service is covered by the payer
+        const payerRule = await prisma.cPTPayerRule.findFirst({
+          where: {
+            payerId: patientInsurance.id,
+            cptCodeId: consultationCpt.id,
+            isActive: true,
+            isCovered: true,
+          },
+        });
+
+        // If found and covered, use default insurance copay
+        // Copay amount will come from patientInsurance.copay (already set above)
+      }
+    } catch (error) {
+      console.error('[COPAY CALC] Error looking up payer rule:', error);
+      // Continue with default copay
+    }
+
+    return {
+      hasCopay: copayAmount > 0,
+      copayAmount,
+      insuranceProvider: patientInsurance.providerName,
+      policyNumber: patientInsurance.policyNumber,
+      paymentRequired: copayAmount > 0,
+    };
+  }
+
+  /**
+   * Collect copay payment at check-in
+   */
+  async collectCopay(params: {
+    patientId: string;
+    appointmentId: string;
+    amount: number;
+    paymentMethod: 'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'UPI' | 'DEPOSIT';
+    useDeposit?: boolean;
+    hospitalId: string;
+    collectedBy: string;
+    notes?: string;
+  }): Promise<{
+    success: boolean;
+    payment?: any;
+    depositUtilization?: any;
+    message: string;
+  }> {
+    // Validate insurance and copay amount
+    const copayInfo = await this.calculateCopay(params.patientId, params.hospitalId);
+
+    if (!copayInfo.hasCopay) {
+      return {
+        success: false,
+        message: 'Patient does not have a copay requirement',
+      };
+    }
+
+    if (params.amount !== copayInfo.copayAmount) {
+      console.warn(`[COPAY COLLECT] Amount mismatch: provided ${params.amount}, expected ${copayInfo.copayAmount}`);
+      // Allow collection anyway (manual override)
+    }
+
+    // Handle deposit payment method
+    if (params.useDeposit && params.paymentMethod === 'DEPOSIT') {
+      try {
+        const { depositService } = require('./depositService');
+        
+        // Check available deposit balance
+        const balance = await depositService.getPatientDepositBalance(params.patientId, params.hospitalId);
+        
+        if (balance.availableBalance < params.amount) {
+          return {
+            success: false,
+            message: `Insufficient deposit balance. Available: ${balance.availableBalance}, Required: ${params.amount}`,
+          };
+        }
+
+        // Utilize deposit for copay
+        const utilization = await depositService.utilizeDeposit({
+          patientId: params.patientId,
+          hospitalId: params.hospitalId,
+          amount: params.amount,
+          purpose: 'COPAY',
+          referenceType: 'APPOINTMENT',
+          referenceId: params.appointmentId,
+          notes: `Copay for appointment ${params.appointmentId}`,
+          processedBy: params.collectedBy,
+        });
+
+        // Update appointment with copay collected flag
+        await prisma.appointment.update({
+          where: { id: params.appointmentId },
+          data: {
+            copayCollected: true,
+            copayAmount: params.amount,
+          },
+        });
+
+        return {
+          success: true,
+          depositUtilization: utilization,
+          message: 'Copay collected from deposit successfully',
+        };
+      } catch (error) {
+        console.error('[COPAY COLLECT] Deposit utilization failed:', error);
+        return {
+          success: false,
+          message: `Deposit utilization failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        };
+      }
+    }
+
+    // Handle direct payment methods (Cash/Card)
+    try {
+      // Create a copay payment record
+      const payment = await prisma.copayPayment.create({
+        data: {
+          patientId: params.patientId,
+          appointmentId: params.appointmentId,
+          amount: params.amount,
+          paymentMethod: params.paymentMethod,
+          insuranceProvider: copayInfo.insuranceProvider || '',
+          policyNumber: copayInfo.policyNumber || '',
+          notes: params.notes,
+          collectedBy: params.collectedBy,
+        },
+      });
+
+      // Update appointment with copay collected flag
+      await prisma.appointment.update({
+        where: { id: params.appointmentId },
+        data: {
+          copayCollected: true,
+          copayAmount: params.amount,
+        },
+      });
+
+      // Post to GL (Cash/AR account depending on payment method)
+      try {
+        await accountingService.recordCopayGL({
+          hospitalId: params.hospitalId,
+          paymentId: payment.id,
+          amount: params.amount,
+          paymentMethod: params.paymentMethod,
+          description: `Copay for appointment ${params.appointmentId}`,
+          createdBy: params.collectedBy,
+        });
+      } catch (glError) {
+        console.error('[GL] Failed to post copay GL entry:', glError);
+      }
+
+      return {
+        success: true,
+        payment,
+        message: 'Copay collected successfully',
+      };
+    } catch (error) {
+      console.error('[COPAY COLLECT] Payment recording failed:', error);
+      return {
+        success: false,
+        message: `Payment recording failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
   }
 }
 

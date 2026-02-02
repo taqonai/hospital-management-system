@@ -852,6 +852,9 @@ model Patient {
   // Deductible Tracking
   deductibleLedgers DeductibleLedger[]
 
+  // Copay Payments
+  copayPayments CopayPayment[]
+
   @@unique([hospitalId, mrn])
   @@unique([hospitalId, phone])
   @@map("patients")
@@ -1046,6 +1049,7 @@ model PatientInsurance {
 
   patient         Patient          @relation(fields: [patientId], references: [id])
   preAuthRequests PreAuthRequest[]
+  invoices        Invoice[]
 
   @@map("patient_insurances")
 }
@@ -1069,6 +1073,11 @@ model Appointment {
   tokenNumber         Int?
   checkedInAt         DateTime?
   vitalsRecordedAt    DateTime? // Timestamp when pre-consultation vitals were recorded
+  
+  // Copay fields
+  copayCollected      Boolean           @default(false)
+  copayAmount         Decimal?          @db.Decimal(10, 2)
+  
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 
@@ -1084,6 +1093,7 @@ model Appointment {
   stageAlerts         StageAlert[]
   sourceReferrals     ConsultantReferral[] @relation("SourceAppointment")
   referralAppointment ConsultantReferral?  @relation("ReferralAppointment")
+  copayPayments       CopayPayment[]
 
   @@map("appointments")
 }
@@ -1932,28 +1942,36 @@ model InventoryItem {
 // ==================== BILLING ====================
 
 model Invoice {
-  id            String        @id @default(uuid())
-  hospitalId    String
-  patientId     String
-  invoiceNumber String        @unique
-  invoiceDate   DateTime      @default(now())
-  dueDate       DateTime?
-  status        InvoiceStatus @default(PENDING)
-  subtotal      Decimal       @db.Decimal(10, 2)
-  discount      Decimal       @default(0) @db.Decimal(10, 2)
-  tax           Decimal       @default(0) @db.Decimal(10, 2)
-  totalAmount   Decimal       @db.Decimal(10, 2)
-  paidAmount    Decimal       @default(0) @db.Decimal(10, 2)
-  balanceAmount Decimal       @db.Decimal(10, 2)
-  notes         String?
-  createdBy     String?
-  updatedBy     String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id                   String        @id @default(uuid())
+  hospitalId           String
+  patientId            String
+  invoiceNumber        String        @unique
+  invoiceDate          DateTime      @default(now())
+  dueDate              DateTime?
+  status               InvoiceStatus @default(PENDING)
+  subtotal             Decimal       @db.Decimal(10, 2)
+  discount             Decimal       @default(0) @db.Decimal(10, 2)
+  tax                  Decimal       @default(0) @db.Decimal(10, 2)
+  totalAmount          Decimal       @db.Decimal(10, 2)
+  paidAmount           Decimal       @default(0) @db.Decimal(10, 2)
+  balanceAmount        Decimal       @db.Decimal(10, 2)
+  
+  // Insurance split fields
+  insuranceTotal       Decimal?      @db.Decimal(10, 2) // Total insurer portion
+  patientTotal         Decimal?      @db.Decimal(10, 2) // Total patient portion
+  copayCollected       Decimal       @default(0) @db.Decimal(10, 2) // Copay already paid
+  primaryInsuranceId   String?                          // FK to PatientInsurance
+  
+  notes                String?
+  createdBy            String?
+  updatedBy            String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 
   // Relations
   hospital            Hospital             @relation(fields: [hospitalId], references: [id])
   patient             Patient              @relation(fields: [patientId], references: [id])
+  primaryInsurance    PatientInsurance?    @relation(fields: [primaryInsuranceId], references: [id])
   items               InvoiceItem[]
   payments            Payment[]
   claims              InsuranceClaim[]
@@ -1975,15 +1993,22 @@ enum InvoiceStatus {
 }
 
 model InvoiceItem {
-  id          String   @id @default(uuid())
-  invoiceId   String
-  description String
-  category    String
-  quantity    Int      @default(1)
-  unitPrice   Decimal  @db.Decimal(10, 2)
-  discount    Decimal  @default(0) @db.Decimal(10, 2)
-  totalPrice  Decimal  @db.Decimal(10, 2)
-  createdAt   DateTime @default(now())
+  id                String   @id @default(uuid())
+  invoiceId         String
+  description       String
+  category          String
+  quantity          Int      @default(1)
+  unitPrice         Decimal  @db.Decimal(10, 2)
+  discount          Decimal  @default(0) @db.Decimal(10, 2)
+  totalPrice        Decimal  @db.Decimal(10, 2)
+  
+  // Insurance split fields
+  insuranceCoverage Decimal? @db.Decimal(5, 2)  // Coverage percentage
+  insuranceAmount   Decimal? @db.Decimal(10, 2) // Insurer pays
+  patientAmount     Decimal? @db.Decimal(10, 2) // Patient pays
+  payerRuleId       String?                      // Reference to the payer rule used
+  
+  createdAt         DateTime @default(now())
 
   invoice Invoice @relation(fields: [invoiceId], references: [id])
 
@@ -2017,6 +2042,26 @@ enum PaymentMethod {
   NET_BANKING
   INSURANCE
   CHEQUE
+  DEPOSIT
+}
+
+model CopayPayment {
+  id                 String        @id @default(uuid())
+  patientId          String
+  appointmentId      String
+  amount             Decimal       @db.Decimal(10, 2)
+  paymentMethod      PaymentMethod
+  insuranceProvider  String
+  policyNumber       String
+  notes              String?
+  collectedBy        String
+  paymentDate        DateTime      @default(now())
+  createdAt          DateTime      @default(now())
+
+  patient     Patient     @relation(fields: [patientId], references: [id])
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+
+  @@map("copay_payments")
 }
 
 model PaymentTransaction {
@@ -8200,6 +8245,7 @@ enum GLReferenceType {
   DEPOSIT
   REVERSAL
   MANUAL
+  COPAY
 }
 
 model GLAccount {

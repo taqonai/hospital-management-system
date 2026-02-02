@@ -122,11 +122,12 @@ export class LaboratoryService {
       // Don't fail the lab order creation if notification fails
     }
 
-    // Auto-add lab charges to patient invoice
+    // Auto-billing: Add lab charges to invoice
     try {
       await billingService.addLabCharges(order.id, hospitalId, data.orderedBy);
     } catch (error) {
       console.error('[AUTO-BILLING] Failed to add lab charges for order:', order.id, error);
+      // Don't fail the lab order creation if billing fails
     }
 
     return order;
@@ -141,8 +142,10 @@ export class LaboratoryService {
     startDate?: string;
     endDate?: string;
     search?: string;
+    userId?: string;
+    userRole?: string;
   }) {
-    const { page = 1, limit = 20, status, priority, patientId, startDate, endDate, search } = params;
+    const { page = 1, limit = 20, status, priority, patientId, startDate, endDate, search, userId, userRole } = params;
     const skip = (page - 1) * limit;
 
     const where: any = { hospitalId };
@@ -153,6 +156,34 @@ export class LaboratoryService {
       where.orderedAt = {};
       if (startDate) where.orderedAt.gte = new Date(startDate);
       if (endDate) where.orderedAt.lte = new Date(endDate);
+    }
+
+    // Role-based filtering: Doctors should only see orders from their patients or department
+    if (userRole === 'DOCTOR' && userId) {
+      const doctor = await prisma.doctor.findUnique({
+        where: { id: userId },
+        select: { departmentId: true },
+      });
+
+      if (doctor?.departmentId) {
+        // Filter to show orders for patients in the doctor's department
+        // Get all appointments for this doctor's department
+        where.consultation = {
+          appointment: {
+            OR: [
+              { doctorId: userId }, // Orders for doctor's own patients
+              { doctor: { departmentId: doctor.departmentId } }, // Orders for patients in same department
+            ],
+          },
+        };
+      } else {
+        // If doctor has no department, show only their own patients' orders
+        where.consultation = {
+          appointment: {
+            doctorId: userId,
+          },
+        };
+      }
     }
 
     // Search by order number, patient name, or patient MRN
@@ -715,11 +746,40 @@ export class LaboratoryService {
     }
   }
 
-  async getCriticalResults(hospitalId: string) {
+  async getCriticalResults(hospitalId: string, userId?: string, userRole?: string) {
+    // Build base where clause for doctor filtering
+    let consultationFilter: any = undefined;
+    if (userRole === 'DOCTOR' && userId) {
+      const doctor = await prisma.doctor.findUnique({
+        where: { id: userId },
+        select: { departmentId: true },
+      });
+
+      if (doctor?.departmentId) {
+        consultationFilter = {
+          appointment: {
+            OR: [
+              { doctorId: userId },
+              { doctor: { departmentId: doctor.departmentId } },
+            ],
+          },
+        };
+      } else {
+        consultationFilter = {
+          appointment: {
+            doctorId: userId,
+          },
+        };
+      }
+    }
+
     const results = await prisma.labOrderTest.findMany({
       where: {
         isCritical: true,
-        labOrder: { hospitalId },
+        labOrder: {
+          hospitalId,
+          ...(consultationFilter ? { consultation: consultationFilter } : {}),
+        },
         verifiedAt: null,
       },
       include: {
@@ -749,12 +809,39 @@ export class LaboratoryService {
     }));
   }
 
-  async getPendingOrders(hospitalId: string) {
+  async getPendingOrders(hospitalId: string, userId?: string, userRole?: string) {
+    const where: any = {
+      hospitalId,
+      status: { in: ['ORDERED', 'SAMPLE_COLLECTED', 'RECEIVED', 'IN_PROGRESS'] },
+    };
+
+    // Role-based filtering: Doctors should only see orders from their patients or department
+    if (userRole === 'DOCTOR' && userId) {
+      const doctor = await prisma.doctor.findUnique({
+        where: { id: userId },
+        select: { departmentId: true },
+      });
+
+      if (doctor?.departmentId) {
+        where.consultation = {
+          appointment: {
+            OR: [
+              { doctorId: userId },
+              { doctor: { departmentId: doctor.departmentId } },
+            ],
+          },
+        };
+      } else {
+        where.consultation = {
+          appointment: {
+            doctorId: userId,
+          },
+        };
+      }
+    }
+
     const orders = await prisma.labOrder.findMany({
-      where: {
-        hospitalId,
-        status: { in: ['ORDERED', 'SAMPLE_COLLECTED', 'RECEIVED', 'IN_PROGRESS'] },
-      },
+      where,
       include: {
         patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
         tests: { include: { labTest: true } },
@@ -783,56 +870,71 @@ export class LaboratoryService {
     }));
   }
 
-  async getLabStats(hospitalId: string) {
+  async getLabStats(hospitalId: string, userId?: string, userRole?: string) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const [
-      pendingOrders,
-      collected,
-      processing,
-      completedToday,
-      totalOrders,
-      criticalResults
-    ] = await Promise.all([
-      // Orders awaiting sample collection
+    // Build base where clause for doctor filtering
+    let consultationFilter: any = undefined;
+    if (userRole === 'DOCTOR' && userId) {
+      const doctor = await prisma.doctor.findUnique({
+        where: { id: userId },
+        select: { departmentId: true },
+      });
+
+      if (doctor?.departmentId) {
+        consultationFilter = {
+          appointment: {
+            OR: [
+              { doctorId: userId },
+              { doctor: { departmentId: doctor.departmentId } },
+            ],
+          },
+        };
+      } else {
+        consultationFilter = {
+          appointment: {
+            doctorId: userId,
+          },
+        };
+      }
+    }
+
+    const [pendingOrders, inProgressOrders, completedToday, criticalResults] = await Promise.all([
       prisma.labOrder.count({
-        where: { hospitalId, status: 'ORDERED' },
+        where: {
+          hospitalId,
+          status: { in: ['ORDERED'] },
+          ...(consultationFilter ? { consultation: consultationFilter } : {}),
+        },
       }),
-      // Samples collected but not yet processing
       prisma.labOrder.count({
-        where: { hospitalId, status: { in: ['SAMPLE_COLLECTED', 'RECEIVED'] } },
+        where: {
+          hospitalId,
+          status: { in: ['SAMPLE_COLLECTED', 'RECEIVED', 'IN_PROGRESS'] },
+          ...(consultationFilter ? { consultation: consultationFilter } : {}),
+        },
       }),
-      // Orders currently being processed
       prisma.labOrder.count({
-        where: { hospitalId, status: 'IN_PROGRESS' },
+        where: {
+          hospitalId,
+          completedAt: { gte: today },
+          ...(consultationFilter ? { consultation: consultationFilter } : {}),
+        },
       }),
-      // Orders completed today
-      prisma.labOrder.count({
-        where: { hospitalId, completedAt: { gte: today } },
-      }),
-      // Total orders created today (for completion rate calculation)
-      prisma.labOrder.count({
-        where: { hospitalId, createdAt: { gte: today } },
-      }),
-      // Critical results needing verification
       prisma.labOrderTest.count({
-        where: { isCritical: true, labOrder: { hospitalId }, verifiedAt: null },
+        where: {
+          isCritical: true,
+          labOrder: {
+            hospitalId,
+            ...(consultationFilter ? { consultation: consultationFilter } : {}),
+          },
+          verifiedAt: null,
+        },
       }),
     ]);
 
-    // Calculate in-progress orders (collected + processing) for backward compatibility
-    const inProgressOrders = collected + processing;
-
-    return {
-      pendingOrders,
-      collected,
-      processing,
-      inProgressOrders,
-      completedToday,
-      totalOrders,
-      criticalResults,
-    };
+    return { pendingOrders, inProgressOrders, completedToday, criticalResults };
   }
 
   // ==================== AI SMART LAB ORDERING ====================

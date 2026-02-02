@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import logger from '../utils/logger';
+import axios, { AxiosInstance } from 'axios';
 
 /**
  * eClaimLink Preparation Service
@@ -59,6 +60,159 @@ interface ValidationResult {
 }
 
 export class EClaimLinkService {
+  private apiClient: AxiosInstance;
+  private readonly mode: 'sandbox' | 'production';
+  private readonly baseURL: string;
+  private readonly username: string;
+  private readonly password: string;
+  private readonly facilityCode: string;
+
+  constructor() {
+    // Configuration from environment variables
+    this.mode = (process.env.DHA_ECLAIM_MODE as 'sandbox' | 'production') || 'sandbox';
+    
+    if (this.mode === 'sandbox') {
+      this.baseURL = process.env.DHA_ECLAIM_SANDBOX_URL || 'https://sandbox.eclaimlink.ae/api/v1';
+    } else {
+      this.baseURL = process.env.DHA_ECLAIM_API_URL || 'https://eclaimlink.ae/api/v1';
+    }
+
+    this.username = process.env.DHA_ECLAIM_USERNAME || '';
+    this.password = process.env.DHA_ECLAIM_PASSWORD || '';
+    this.facilityCode = process.env.DHA_ECLAIM_FACILITY_CODE || '';
+
+    // Initialize axios client
+    this.apiClient = axios.create({
+      baseURL: this.baseURL,
+      timeout: parseInt(process.env.DHA_ECLAIM_TIMEOUT_MS || '30000'),
+      headers: {
+        'Content-Type': 'application/xml',
+        'Accept': 'application/json',
+      },
+    });
+
+    // Add request interceptor for authentication
+    this.apiClient.interceptors.request.use((config) => {
+      // TODO: Implement actual DHA authentication mechanism
+      // This might be Basic Auth, API key, or OAuth depending on DHA requirements
+      if (this.username && this.password) {
+        const authToken = Buffer.from(`${this.username}:${this.password}`).toString('base64');
+        config.headers.Authorization = `Basic ${authToken}`;
+      }
+      return config;
+    });
+
+    // Add response interceptor for logging
+    this.apiClient.interceptors.response.use(
+      (response) => {
+        logger.info('[DHA eClaimLink] API Response:', {
+          status: response.status,
+          data: response.data,
+        });
+        return response;
+      },
+      (error) => {
+        logger.error('[DHA eClaimLink] API Error:', {
+          status: error.response?.status,
+          data: error.response?.data,
+          message: error.message,
+        });
+        return Promise.reject(error);
+      }
+    );
+
+    logger.info(`[DHA eClaimLink] Initialized in ${this.mode} mode`, {
+      baseURL: this.baseURL,
+    });
+  }
+
+  /**
+   * Submit claim to DHA eClaimLink API
+   * TODO: Update endpoint path and request format based on actual DHA API documentation
+   */
+  private async submitClaimToAPI(claimXML: string, claimNumber: string): Promise<{
+    success: boolean;
+    claimId?: string;
+    response?: any;
+    error?: string;
+  }> {
+    if (this.mode === 'sandbox') {
+      // Mock response for sandbox mode
+      logger.info('[DHA eClaimLink SANDBOX] Mock submission:', { claimNumber });
+      return {
+        success: true,
+        claimId: `MOCK-${claimNumber}-${Date.now()}`,
+        response: {
+          status: 'ACCEPTED',
+          message: 'Claim accepted (sandbox mode)',
+          timestamp: new Date().toISOString(),
+        },
+      };
+    }
+
+    try {
+      // TODO: Update endpoint path when actual DHA documentation is available
+      // Example endpoint: '/claims/submit' or '/v1/submit-claim'
+      const response = await this.apiClient.post('/claims/submit', claimXML);
+
+      return {
+        success: response.data.success || response.status === 200,
+        claimId: response.data.claimId || response.data.transactionId,
+        response: response.data,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message,
+        response: error.response?.data,
+      };
+    }
+  }
+
+  /**
+   * Check claim status from DHA eClaimLink API
+   * TODO: Update endpoint path and response format based on actual DHA API documentation
+   */
+  private async checkClaimStatusFromAPI(dhaClaimId: string): Promise<{
+    status: string;
+    approvedAmount?: number;
+    rejectionReason?: string;
+    response?: any;
+  }> {
+    if (this.mode === 'sandbox') {
+      // Mock response for sandbox mode
+      logger.info('[DHA eClaimLink SANDBOX] Mock status check:', { dhaClaimId });
+      return {
+        status: 'APPROVED',
+        approvedAmount: 1000.00,
+        response: {
+          status: 'APPROVED',
+          message: 'Claim approved (sandbox mode)',
+          timestamp: new Date().toISOString(),
+        },
+      };
+    }
+
+    try {
+      // TODO: Update endpoint path when actual DHA documentation is available
+      // Example endpoint: '/claims/status/{claimId}' or '/v1/check-status'
+      const response = await this.apiClient.get(`/claims/status/${dhaClaimId}`);
+
+      return {
+        status: response.data.status || 'UNKNOWN',
+        approvedAmount: response.data.approvedAmount,
+        rejectionReason: response.data.rejectionReason,
+        response: response.data,
+      };
+    } catch (error: any) {
+      logger.error('[DHA eClaimLink] Status check failed:', error);
+      return {
+        status: 'ERROR',
+        response: error.response?.data,
+      };
+    }
+  }
+
   /**
    * Generate eClaimLink-compatible XML for a consultation (OPD)
    */
@@ -752,77 +906,45 @@ export class EClaimLinkService {
     }
 
     try {
-      // Generate eClaimLink XML (reuse existing method if applicable)
-      // For now, we'll create a simple XML structure
+      // Generate eClaimLink XML
       const xmlPayload = await this.buildClaimXML(claim);
 
-      // Call DHA eClaimLink API
-      const apiUrl = process.env.DHA_ECLAIM_API_URL || 'https://eclaimlink.dha.gov.ae/api/v1/claims/submit';
-      const apiKey = process.env.DHA_ECLAIM_API_KEY || '';
+      // Submit to DHA eClaimLink API
+      const apiResult = await this.submitClaimToAPI(xmlPayload, claim.claimNumber);
 
-      if (!apiKey) {
-        throw new Error('DHA eClaimLink API key not configured');
-      }
-
-      const axios = require('axios');
-      const response = await axios.post(
-        apiUrl,
-        xmlPayload,
-        {
-          headers: {
-            'Content-Type': 'application/xml',
-            'Authorization': `Bearer ${apiKey}`,
-            'X-Hospital-ID': hospitalId,
-          },
-          timeout: 30000, // 30 seconds
-        }
-      );
-
-      const responseData = response.data;
-
-      // Parse response
-      let dhaClaimId: string | undefined;
-      let success = false;
-      let errorMessage: string | undefined;
-
-      if (response.status === 200 || response.status === 201) {
-        // Success
-        dhaClaimId = responseData.claimId || responseData.id || responseData.referenceNumber;
-        success = true;
-
-        // Update claim with DHA response
-        await prisma.insuranceClaim.update({
-          where: { id: claimId },
-          data: {
-            eclaimLinkId: dhaClaimId,
-            eclaimLinkStatus: 'SUBMITTED',
-            eclaimLinkResponse: responseData,
-            status: 'SUBMITTED',
-            submittedAt: new Date(),
-          },
-        });
-
-        logger.info(`Claim ${claim.claimNumber} submitted to DHA eClaimLink: ${dhaClaimId}`);
-      } else {
-        // Failure
-        errorMessage = responseData.error || responseData.message || 'Unknown error';
-
+      if (!apiResult.success) {
         await prisma.insuranceClaim.update({
           where: { id: claimId },
           data: {
             eclaimLinkStatus: 'REJECTED',
-            eclaimLinkResponse: responseData,
+            eclaimLinkResponse: apiResult.response || { error: apiResult.error },
           },
         });
 
-        logger.error(`Claim ${claim.claimNumber} submission failed: ${errorMessage}`);
+        logger.error(`Claim ${claim.claimNumber} submission failed: ${apiResult.error}`);
+        return {
+          success: false,
+          errorMessage: apiResult.error,
+        };
       }
 
+      // Success - update claim with DHA claim ID
+      const dhaClaimId = apiResult.claimId!;
+      await prisma.insuranceClaim.update({
+        where: { id: claimId },
+        data: {
+          eclaimLinkId: dhaClaimId,
+          eclaimLinkStatus: 'SUBMITTED',
+          eclaimLinkResponse: apiResult.response,
+          submittedAt: new Date(),
+        },
+      });
+
+      logger.info(`Claim ${claim.claimNumber} submitted successfully to DHA eClaimLink: ${dhaClaimId}`);
       return {
-        success,
+        success: true,
         dhaClaimId,
-        submittedAt: success ? new Date() : undefined,
-        errorMessage,
+        submittedAt: new Date(),
       };
     } catch (error: any) {
       logger.error(`Error submitting claim to DHA eClaimLink: ${error.message}`, {
@@ -858,10 +980,12 @@ export class EClaimLinkService {
     const patient = claim.invoice.patient;
     const insurance = patient.insurances?.[0];
 
+    // TODO: Update XML structure based on actual DHA eClaimLink schema
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <Claim xmlns="http://eclaimlink.ae/schema/v1">
   <ClaimHeader>
     <ClaimNumber>${claim.claimNumber}</ClaimNumber>
+    <FacilityCode>${this.facilityCode}</FacilityCode>
     <PayerCode>${claim.insurancePayer?.code || 'UNKNOWN'}</PayerCode>
     <MemberID>${insurance?.subscriberId || ''}</MemberID>
     <PolicyNumber>${claim.policyNumber}</PolicyNumber>
@@ -872,12 +996,63 @@ export class EClaimLinkService {
   <PatientInfo>
     <FirstName>${patient.firstName}</FirstName>
     <LastName>${patient.lastName}</LastName>
-    <DateOfBirth>${patient.dateOfBirth.toISOString().split('T')[0]}</DateOfBirth>
-    <Gender>${patient.gender}</Gender>
+    <DateOfBirth>${patient.dateOfBirth ? patient.dateOfBirth.toISOString().split('T')[0] : ''}</DateOfBirth>
+    <Gender>${patient.gender || ''}</Gender>
   </PatientInfo>
 </Claim>`;
 
     return xml;
+  }
+
+  /**
+   * Refresh claim status from DHA eClaimLink
+   */
+  async refreshClaimStatus(claimId: string): Promise<{
+    updated: boolean;
+    status?: string;
+    errorMessage?: string;
+  }> {
+    const claim = await prisma.insuranceClaim.findUnique({
+      where: { id: claimId },
+      select: { eclaimLinkId: true, eclaimLinkStatus: true },
+    });
+
+    if (!claim || !claim.eclaimLinkId) {
+      return {
+        updated: false,
+        errorMessage: 'Claim not found or not submitted to eClaimLink',
+      };
+    }
+
+    try {
+      const statusResult = await this.checkClaimStatusFromAPI(claim.eclaimLinkId);
+
+      // Update claim based on status
+      await prisma.insuranceClaim.update({
+        where: { id: claimId },
+        data: {
+          eclaimLinkStatus: statusResult.status,
+          eclaimLinkResponse: statusResult.response,
+          ...(statusResult.approvedAmount && { approvedAmount: statusResult.approvedAmount }),
+          ...(statusResult.rejectionReason && { denialReasonCode: statusResult.rejectionReason }),
+        },
+      });
+
+      return {
+        updated: true,
+        status: statusResult.status,
+      };
+    } catch (error: any) {
+      logger.error('[DHA eClaimLink] Failed to refresh claim status:', error);
+      return {
+        updated: false,
+        errorMessage: error.message,
+      };
+    }
+  }
+
+  /**
+   * DEPRECATED: Legacy implementation - use submitClaimToAPI instead
   }
 
   /**

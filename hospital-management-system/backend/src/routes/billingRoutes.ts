@@ -79,6 +79,21 @@ router.post(
   })
 );
 
+// Collect copay at check-in
+router.post(
+  '/copay-collect',
+  authenticate,
+  authorizeWithPermission('billing:write', ['RECEPTIONIST', 'NURSE', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const result = await billingService.collectCopay({
+      ...req.body,
+      hospitalId: req.user!.hospitalId,
+      collectedBy: req.user!.userId,
+    });
+    sendCreated(res, result, 'Copay collected successfully');
+  })
+);
+
 // ==================== Insurance Claims ====================
 
 // Get all claims

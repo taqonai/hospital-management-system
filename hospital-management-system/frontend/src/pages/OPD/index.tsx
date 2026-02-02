@@ -484,6 +484,18 @@ export default function OPD() {
   // Handle patient check-in (Front Desk / Receptionist only)
   const handleCheckIn = async (appointmentId: string) => {
     try {
+      // TODO P0-4: Add copay collection modal here
+      // 1. Find the appointment and patient from queue/appointments
+      // 2. Call billing API to calculate copay
+      // 3. Show modal with:
+      //    - Insurance info
+      //    - Copay amount
+      //    - Payment method selector (Cash/Card/Deposit)
+      //    - Collect / Waive / Defer buttons
+      // 4. If collect selected, call POST /api/v1/billing/copay-collect
+      // 5. Then proceed with check-in
+      
+      // For now, proceeding with direct check-in (no copay collection)
       await opdApi.checkIn(appointmentId);
       toast.success('Patient checked in successfully');
       // Refresh queue
