@@ -59,6 +59,10 @@ model Hospital {
   stageAlerts      StageAlert[]
   holidays         HospitalHoliday[]
 
+  // Charge Master & Fee Schedules
+  chargeMaster     ChargeMaster[]
+  feeSchedules     FeeSchedule[]
+
   // Insurance Coding
   icd10Codes       ICD10Code[]
   cptCodes         CPTCode[]
@@ -2014,6 +2018,56 @@ enum ClaimStatus {
   PARTIALLY_APPROVED
   REJECTED
   PAID
+}
+
+// ==================== CHARGE MASTER & FEE SCHEDULES ====================
+
+model ChargeMaster {
+  id            String    @id @default(uuid())
+  hospitalId    String
+  code          String    // Unique code for the charge (e.g., "99201", "ROOM-ICU")
+  description   String
+  category      String    // CONSULTATION, LAB, IMAGING, PROCEDURE, MEDICATION, ACCOMMODATION, SURGERY, etc.
+  defaultPrice  Decimal   @db.Decimal(10, 2)
+  currency      String    @default("AED")
+  unit          String?   // per day, per test, per procedure, etc.
+  isActive      Boolean   @default(true)
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  createdBy     String
+
+  // Relations
+  hospital     Hospital      @relation(fields: [hospitalId], references: [id])
+  feeSchedules FeeSchedule[]
+
+  @@unique([hospitalId, code])
+  @@index([hospitalId, category, isActive])
+  @@map("charge_master")
+}
+
+model FeeSchedule {
+  id            String    @id @default(uuid())
+  hospitalId    String
+  chargeId      String    // FK to ChargeMaster
+  payerId       String?   // Optional - specific to an insurance payer
+  price         Decimal   @db.Decimal(10, 2)
+  discount      Decimal?  @db.Decimal(5, 2) // Percentage discount (0-100)
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  createdBy     String
+
+  // Relations
+  hospital      Hospital        @relation(fields: [hospitalId], references: [id])
+  charge        ChargeMaster    @relation(fields: [chargeId], references: [id])
+  insurancePayer InsurancePayer? @relation(fields: [payerId], references: [id])
+
+  @@unique([hospitalId, chargeId, payerId])
+  @@index([hospitalId, chargeId, effectiveFrom, effectiveTo])
+  @@map("fee_schedules")
 }
 
 // ==================== AI MODULES ====================
@@ -5771,6 +5825,7 @@ model InsurancePayer {
   icdRules ICD10PayerRule[]
   cptRules CPTPayerRule[]
   claims   InsuranceClaim[]
+  feeSchedules FeeSchedule[]
 
   @@unique([hospitalId, code])
   @@index([hospitalId, isActive])

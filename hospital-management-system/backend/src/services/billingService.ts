@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { NotFoundError } from '../middleware/errorHandler';
 import { Decimal } from '@prisma/client/runtime/library';
 import { notificationService } from './notificationService';
+import { chargeManagementService } from './chargeManagementService';
 
 export class BillingService {
   private generateInvoiceNumber(): string {
@@ -513,7 +514,55 @@ export class BillingService {
 
   // ==================== AI AUTO CHARGE CAPTURE ====================
 
-  // Standard price database (in currency units)
+  // Load charges from ChargeMaster or fall back to hardcoded
+  private async loadChargeDatabase(hospitalId: string): Promise<Record<string, {
+    code: string;
+    description: string;
+    category: string;
+    price: number;
+    keywords: string[];
+  }>> {
+    try {
+      // Try to load from ChargeMaster
+      const charges = await prisma.chargeMaster.findMany({
+        where: {
+          hospitalId,
+          isActive: true,
+        },
+      });
+
+      if (charges.length > 0) {
+        // Build charge database from ChargeMaster
+        const chargeDb: Record<string, any> = {};
+        
+        for (const charge of charges) {
+          // Generate keywords from description
+          const keywords = [
+            charge.code.toLowerCase(),
+            charge.description.toLowerCase(),
+            ...charge.description.toLowerCase().split(/\s+/)
+          ].filter(k => k.length > 2); // Filter out short words
+
+          chargeDb[charge.code.toLowerCase()] = {
+            code: charge.code,
+            description: charge.description,
+            category: charge.category,
+            price: Number(charge.defaultPrice),
+            keywords,
+          };
+        }
+
+        return chargeDb;
+      }
+    } catch (error) {
+      console.error('[BILLING] Failed to load charges from ChargeMaster:', error);
+    }
+
+    // Fall back to hardcoded data
+    return this.chargeDatabase;
+  }
+
+  // Standard price database (in currency units) - FALLBACK ONLY
   private readonly chargeDatabase: Record<string, {
     code: string;
     description: string;
@@ -566,8 +615,50 @@ export class BillingService {
     'anesthesia_general': { code: '00100', description: 'General Anesthesia', category: 'ANESTHESIA', price: 800, keywords: ['general anesthesia', 'ga'] },
   };
 
-  // Extract charges from clinical notes
+  // Extract charges from clinical notes (async version with ChargeMaster support)
+  async extractChargesFromNotesAsync(notes: string, hospitalId: string): Promise<{
+    capturedCharges: {
+      code: string;
+      description: string;
+      category: string;
+      price: number;
+      matchedKeyword: string;
+      confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+    }[];
+    subtotal: number;
+    suggestions: string[];
+  }> {
+    const chargeDb = await this.loadChargeDatabase(hospitalId);
+    return this.extractChargesFromNotesSync(notes, chargeDb);
+  }
+
+  // Extract charges from clinical notes (synchronous - for backward compatibility)
   extractChargesFromNotes(notes: string): {
+    capturedCharges: {
+      code: string;
+      description: string;
+      category: string;
+      price: number;
+      matchedKeyword: string;
+      confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+    }[];
+    subtotal: number;
+    suggestions: string[];
+  } {
+    return this.extractChargesFromNotesSync(notes, this.chargeDatabase);
+  }
+
+  // Internal sync method used by both versions
+  private extractChargesFromNotesSync(
+    notes: string,
+    chargeDb: Record<string, {
+      code: string;
+      description: string;
+      category: string;
+      price: number;
+      keywords: string[];
+    }>
+  ): {
     capturedCharges: {
       code: string;
       description: string;
@@ -592,7 +683,7 @@ export class BillingService {
     const notesLower = notes.toLowerCase();
 
     // Search for matching charges
-    for (const [key, charge] of Object.entries(this.chargeDatabase)) {
+    for (const [key, charge] of Object.entries(chargeDb)) {
       for (const keyword of charge.keywords) {
         if (notesLower.includes(keyword)) {
           // Check if this charge is already captured
