@@ -34,7 +34,10 @@ router.post(
   authenticate,
   authorizeWithPermission('billing:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN', 'RECEPTIONIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const invoice = await billingService.createInvoice(req.user!.hospitalId, req.body);
+    const invoice = await billingService.createInvoice(req.user!.hospitalId, {
+      ...req.body,
+      createdBy: req.user!.userId,
+    });
     sendCreated(res, invoice, 'Invoice created');
   })
 );
@@ -70,7 +73,7 @@ router.post(
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const payment = await billingService.addPayment(req.params.invoiceId, {
       ...req.body,
-      receivedBy: req.user!.userId,
+      createdBy: req.user!.userId,
     });
     sendCreated(res, payment, 'Payment recorded');
   })
@@ -100,7 +103,11 @@ router.post(
   authenticate,
   authorizeWithPermission('billing:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const claim = await billingService.submitInsuranceClaim(req.params.invoiceId, req.body);
+    const claim = await billingService.submitInsuranceClaim(req.params.invoiceId, {
+      ...req.body,
+      createdBy: req.user!.userId,
+      submittedBy: req.user!.userId,
+    });
     sendCreated(res, claim, 'Insurance claim submitted');
   })
 );
@@ -114,7 +121,9 @@ router.patch(
     const claim = await billingService.updateClaimStatus(
       req.params.claimId,
       req.body.status,
-      req.body.approvedAmount
+      req.body.approvedAmount,
+      req.user!.userId,
+      req.body.denialReasonCode
     );
     sendSuccess(res, claim, 'Claim status updated');
   })
@@ -161,6 +170,7 @@ router.get(
 router.post(
   '/extract-charges',
   authenticate,
+  authorizeWithPermission('billing:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN', 'DOCTOR', 'RECEPTIONIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { notes } = req.body;
     const result = billingService.extractChargesFromNotes(notes);
@@ -172,6 +182,7 @@ router.post(
 router.post(
   '/suggest-codes',
   authenticate,
+  authorizeWithPermission('billing:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN', 'DOCTOR', 'RECEPTIONIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = billingService.suggestBillingCodes(req.body);
     sendSuccess(res, result);
@@ -182,6 +193,7 @@ router.post(
 router.post(
   '/estimate-cost',
   authenticate,
+  authorizeWithPermission('billing:read', ['ACCOUNTANT', 'HOSPITAL_ADMIN', 'DOCTOR', 'RECEPTIONIST', 'PATIENT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const result = billingService.estimateCost(req.body);
     sendSuccess(res, result);

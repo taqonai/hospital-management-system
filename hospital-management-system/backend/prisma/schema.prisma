@@ -1910,6 +1910,8 @@ model Invoice {
   paidAmount    Decimal       @default(0) @db.Decimal(10, 2)
   balanceAmount Decimal       @db.Decimal(10, 2)
   notes         String?
+  createdBy     String        @db.Uuid
+  updatedBy     String?       @db.Uuid
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
@@ -1955,11 +1957,12 @@ model Payment {
   paymentMethod   PaymentMethod
   referenceNumber String?
   notes           String?
-  receivedBy      String
+  createdBy       String        @db.Uuid
   createdAt       DateTime      @default(now())
 
   invoice Invoice @relation(fields: [invoiceId], references: [id])
 
+  @@index([referenceNumber])
   @@map("payments")
 }
 
@@ -1974,21 +1977,31 @@ enum PaymentMethod {
 }
 
 model InsuranceClaim {
-  id                String      @id @default(uuid())
-  invoiceId         String
-  claimNumber       String      @unique
-  insuranceProvider String
-  policyNumber      String
-  claimAmount       Decimal     @db.Decimal(10, 2)
-  approvedAmount    Decimal?    @db.Decimal(10, 2)
-  status            ClaimStatus @default(SUBMITTED)
-  submittedAt       DateTime    @default(now())
-  processedAt       DateTime?
-  notes             String?
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  id                 String      @id @default(uuid())
+  invoiceId          String
+  claimNumber        String      @unique
+  insuranceProvider  String
+  insurancePayerId   String?     @db.Uuid
+  policyNumber       String
+  claimAmount        Decimal     @db.Decimal(10, 2)
+  approvedAmount     Decimal?    @db.Decimal(10, 2)
+  status             ClaimStatus @default(SUBMITTED)
+  submittedAt        DateTime    @default(now())
+  processedAt        DateTime?
+  denialReasonCode   String?
+  appealNotes        String?
+  appealDate         DateTime?
+  appealStatus       String?
+  notes              String?
+  createdBy          String      @db.Uuid
+  updatedBy          String?     @db.Uuid
+  submittedBy        String?     @db.Uuid
+  processedBy        String?     @db.Uuid
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
 
-  invoice Invoice @relation(fields: [invoiceId], references: [id])
+  invoice          Invoice          @relation(fields: [invoiceId], references: [id])
+  insurancePayer   InsurancePayer?  @relation(fields: [insurancePayerId], references: [id])
 
   @@map("insurance_claims")
 }
@@ -5754,9 +5767,10 @@ model InsurancePayer {
   createdBy               String?
 
   // Relations
-  hospital Hospital         @relation(fields: [hospitalId], references: [id])
+  hospital Hospital          @relation(fields: [hospitalId], references: [id])
   icdRules ICD10PayerRule[]
   cptRules CPTPayerRule[]
+  claims   InsuranceClaim[]
 
   @@unique([hospitalId, code])
   @@index([hospitalId, isActive])

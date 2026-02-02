@@ -29,6 +29,7 @@ export class BillingService {
     tax?: number;
     dueDate?: Date;
     notes?: string;
+    createdBy: string;
   }) {
     const invoiceNumber = this.generateInvoiceNumber();
 
@@ -57,6 +58,7 @@ export class BillingService {
         totalAmount,
         balanceAmount: totalAmount,
         notes: data.notes,
+        createdBy: data.createdBy,
         items: {
           create: itemsWithTotal,
         },
@@ -145,7 +147,7 @@ export class BillingService {
     paymentMethod: 'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'UPI' | 'NET_BANKING' | 'INSURANCE' | 'CHEQUE';
     referenceNumber?: string;
     notes?: string;
-    receivedBy: string;
+    createdBy: string;
   }) {
     const invoice = await prisma.invoice.findUnique({
       where: { id: invoiceId },
@@ -155,28 +157,51 @@ export class BillingService {
     });
     if (!invoice) throw new NotFoundError('Invoice not found');
 
-    const payment = await prisma.payment.create({
-      data: { invoiceId, ...data },
-    });
-
-    // Update invoice balance
-    const newPaidAmount = Number(invoice.paidAmount) + data.amount;
-    const newBalance = Number(invoice.totalAmount) - newPaidAmount;
-
-    let newStatus = invoice.status;
-    if (newBalance <= 0) {
-      newStatus = 'PAID';
-    } else if (newPaidAmount > 0) {
-      newStatus = 'PARTIALLY_PAID';
+    // Validate payment amount
+    const currentBalance = Number(invoice.balanceAmount);
+    if (data.amount > currentBalance) {
+      throw new Error(
+        `Payment amount (${data.amount}) exceeds remaining balance (${currentBalance})`
+      );
     }
 
-    await prisma.invoice.update({
-      where: { id: invoiceId },
-      data: {
-        paidAmount: newPaidAmount,
-        balanceAmount: newBalance > 0 ? newBalance : 0,
-        status: newStatus,
-      },
+    // Wrap payment creation + invoice update in atomic transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create payment record
+      const payment = await tx.payment.create({
+        data: {
+          invoiceId,
+          amount: data.amount,
+          paymentMethod: data.paymentMethod,
+          referenceNumber: data.referenceNumber,
+          notes: data.notes,
+          createdBy: data.createdBy,
+        },
+      });
+
+      // Calculate new amounts
+      const newPaidAmount = Number(invoice.paidAmount) + data.amount;
+      const newBalance = Number(invoice.totalAmount) - newPaidAmount;
+
+      let newStatus = invoice.status;
+      if (newBalance <= 0) {
+        newStatus = 'PAID';
+      } else if (newPaidAmount > 0) {
+        newStatus = 'PARTIALLY_PAID';
+      }
+
+      // Update invoice
+      const updatedInvoice = await tx.invoice.update({
+        where: { id: invoiceId },
+        data: {
+          paidAmount: newPaidAmount,
+          balanceAmount: newBalance > 0 ? newBalance : 0,
+          status: newStatus,
+          updatedBy: data.createdBy,
+        },
+      });
+
+      return { payment, invoice: updatedInvoice };
     });
 
     // Send payment confirmation notification
@@ -195,14 +220,17 @@ export class BillingService {
       // Don't fail the billing operation if notification fails
     }
 
-    return payment;
+    return result.payment;
   }
 
   async submitInsuranceClaim(invoiceId: string, data: {
     insuranceProvider: string;
+    insurancePayerId?: string;
     policyNumber: string;
     claimAmount: number;
     notes?: string;
+    createdBy: string;
+    submittedBy?: string;
   }) {
     const claimNumber = this.generateClaimNumber();
 
@@ -210,36 +238,90 @@ export class BillingService {
       data: {
         invoiceId,
         claimNumber,
-        ...data,
+        insuranceProvider: data.insuranceProvider,
+        insurancePayerId: data.insurancePayerId,
+        policyNumber: data.policyNumber,
+        claimAmount: data.claimAmount,
+        notes: data.notes,
+        createdBy: data.createdBy,
+        submittedBy: data.submittedBy || data.createdBy,
       },
       include: { invoice: true },
     });
   }
 
-  async updateClaimStatus(claimId: string, status: string, approvedAmount?: number) {
-    const updateData: any = { status, processedAt: new Date() };
+  async updateClaimStatus(
+    claimId: string,
+    status: string,
+    approvedAmount?: number,
+    processedBy?: string,
+    denialReasonCode?: string
+  ) {
+    const updateData: any = {
+      status,
+      processedAt: new Date(),
+      updatedBy: processedBy,
+      processedBy,
+    };
     if (approvedAmount !== undefined) {
       updateData.approvedAmount = approvedAmount;
     }
-
-    const claim = await prisma.insuranceClaim.update({
-      where: { id: claimId },
-      data: updateData,
-      include: { invoice: true },
-    });
-
-    // If claim approved, add as payment
-    if (status === 'APPROVED' || status === 'PAID') {
-      await this.addPayment(claim.invoiceId, {
-        amount: approvedAmount || Number(claim.claimAmount),
-        paymentMethod: 'INSURANCE',
-        referenceNumber: claim.claimNumber,
-        notes: `Insurance claim ${claim.claimNumber}`,
-        receivedBy: 'SYSTEM',
-      });
+    if (denialReasonCode) {
+      updateData.denialReasonCode = denialReasonCode;
     }
 
-    return claim;
+    // Wrap claim update + auto-payment in atomic transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Update claim
+      const claim = await tx.insuranceClaim.update({
+        where: { id: claimId },
+        data: updateData,
+        include: { invoice: true },
+      });
+
+      // If claim approved/paid, create auto-payment
+      if ((status === 'APPROVED' || status === 'PAID') && processedBy) {
+        const paymentAmount = approvedAmount || Number(claim.claimAmount);
+
+        // Create payment record
+        const payment = await tx.payment.create({
+          data: {
+            invoiceId: claim.invoiceId,
+            amount: paymentAmount,
+            paymentMethod: 'INSURANCE',
+            referenceNumber: claim.claimNumber,
+            notes: `Insurance claim ${claim.claimNumber}`,
+            createdBy: processedBy,
+          },
+        });
+
+        // Update invoice
+        const invoice = claim.invoice;
+        const newPaidAmount = Number(invoice.paidAmount) + paymentAmount;
+        const newBalance = Number(invoice.totalAmount) - newPaidAmount;
+
+        let newStatus = invoice.status;
+        if (newBalance <= 0) {
+          newStatus = 'PAID';
+        } else if (newPaidAmount > 0) {
+          newStatus = 'PARTIALLY_PAID';
+        }
+
+        await tx.invoice.update({
+          where: { id: claim.invoiceId },
+          data: {
+            paidAmount: newPaidAmount,
+            balanceAmount: newBalance > 0 ? newBalance : 0,
+            status: newStatus,
+            updatedBy: processedBy,
+          },
+        });
+      }
+
+      return claim;
+    });
+
+    return result;
   }
 
   async getClaims(hospitalId: string, params: {
