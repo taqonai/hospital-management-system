@@ -439,6 +439,64 @@ export class NoShowService {
   }
 
   /**
+   * Auto-complete past-date CHECKED_IN and IN_PROGRESS appointments.
+   * These patients showed up but the workflow was never closed.
+   * Appends a system note for audit trail.
+   */
+  async processAutoComplete(): Promise<{ appointmentId: string; patientName: string; previousStatus: string }[]> {
+    const results: { appointmentId: string; patientName: string; previousStatus: string }[] = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const staleAppointments = await prisma.appointment.findMany({
+      where: {
+        appointmentDate: {
+          lt: today,
+        },
+        status: {
+          in: ['CHECKED_IN', 'IN_PROGRESS'],
+        },
+      },
+      include: {
+        patient: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+    });
+
+    for (const appointment of staleAppointments) {
+      try {
+        const systemNote = `[System: Auto-completed — appointment date passed without status update. Previous status: ${appointment.status}]`;
+        const existingNotes = appointment.notes ? `${appointment.notes}\n` : '';
+
+        await prisma.appointment.update({
+          where: { id: appointment.id },
+          data: {
+            status: 'COMPLETED',
+            notes: `${existingNotes}${systemNote}`,
+          },
+        });
+
+        const patientName = `${appointment.patient.firstName} ${appointment.patient.lastName}`;
+        results.push({
+          appointmentId: appointment.id,
+          patientName,
+          previousStatus: appointment.status,
+        });
+
+        console.log(`[AUTO_COMPLETE] ${patientName} - was ${appointment.status}, date ${appointment.appointmentDate.toISOString().split('T')[0]}`);
+      } catch (error) {
+        console.error(`Failed to auto-complete appointment ${appointment.id}:`, error);
+      }
+    }
+
+    return results;
+  }
+
+  /**
    * Manually mark an appointment as NO_SHOW
    */
   async manualNoShow(

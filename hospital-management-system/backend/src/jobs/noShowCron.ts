@@ -68,6 +68,15 @@ const processNoShows = async (source: 'cron' | 'manual' | 'external' = 'cron') =
       });
     }
 
+    // Auto-complete past-date CHECKED_IN / IN_PROGRESS appointments
+    const autoCompleteResults = await noShowService.processAutoComplete();
+    if (autoCompleteResults.length > 0) {
+      console.log(`[CRON] Auto-completed ${autoCompleteResults.length} stale appointments`);
+      autoCompleteResults.forEach(result => {
+        console.log(`  - ${result.patientName} (was ${result.previousStatus})`);
+      });
+    }
+
     // Process stage alerts
     const alertResults = await noShowService.processStageAlerts();
     if (alertResults.length > 0) {
@@ -87,10 +96,11 @@ const processNoShows = async (source: 'cron' | 'manual' | 'external' = 'cron') =
         status: 'COMPLETED',
         completedAt: new Date(),
         durationMs: duration,
-        itemsProcessed: noShowResults.length + alertResults.length,
+        itemsProcessed: noShowResults.length + autoCompleteResults.length + alertResults.length,
         metadata: {
           source,
           noShowsProcessed: noShowResults.length,
+          autoCompleted: autoCompleteResults.length,
           alertsCreated: alertResults.length,
         },
       },
