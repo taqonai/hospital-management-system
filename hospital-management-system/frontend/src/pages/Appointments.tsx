@@ -10,6 +10,7 @@ import {
   ChevronUpDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 import { appointmentApi } from '../services/api';
 import { Appointment } from '../types';
@@ -60,7 +61,8 @@ export default function Appointments() {
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState('appointmentDate');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const limit = 10;
+  const [search, setSearch] = useState('');
+  const [limit, setLimit] = useState(10);
   const queryClient = useQueryClient();
   const { isDoctor, hasRole } = useAuth();
 
@@ -69,10 +71,11 @@ export default function Appointments() {
   const { data: bookingData, isLoading: bookingLoading, refetch: refetchBooking } = useBookingData(selectedBookingId);
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['appointments', { status: statusFilter, page, sortBy, sortOrder }],
+    queryKey: ['appointments', { status: statusFilter, page, sortBy, sortOrder, search, limit }],
     queryFn: async () => {
       const response = await appointmentApi.getAll({
         status: statusFilter || undefined,
+        search: search || undefined,
         page,
         limit,
         sortBy,
@@ -145,6 +148,36 @@ export default function Appointments() {
           <PlusIcon className="h-5 w-5" />
           New Appointment
         </Link>
+      </div>
+
+      {/* Search + Filters Row */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+        {/* Search */}
+        <div className="relative flex-1 max-w-md">
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search by patient, doctor, department, MRN..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          />
+        </div>
+
+        {/* Items per page */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-500 whitespace-nowrap">Show</label>
+          <select
+            value={limit}
+            onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+            className="rounded-lg border border-gray-300 text-sm py-2 px-2 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          >
+            {[10, 25, 50, 100].map(n => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+          <span className="text-sm text-gray-500">per page</span>
+        </div>
       </div>
 
       {/* Filter Tabs */}

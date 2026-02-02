@@ -336,6 +336,7 @@ export class AppointmentService {
       limit = 10,
       sortBy = 'appointmentDate',
       sortOrder = 'desc',
+      search,
       doctorId,
       patientId,
       status,
@@ -347,6 +348,17 @@ export class AppointmentService {
     const skip = (page - 1) * limit;
 
     const where: any = { hospitalId };
+
+    if (search) {
+      where.OR = [
+        { patient: { firstName: { contains: search, mode: 'insensitive' } } },
+        { patient: { lastName: { contains: search, mode: 'insensitive' } } },
+        { patient: { mrn: { contains: search, mode: 'insensitive' } } },
+        { doctor: { user: { firstName: { contains: search, mode: 'insensitive' } } } },
+        { doctor: { user: { lastName: { contains: search, mode: 'insensitive' } } } },
+        { doctor: { department: { name: { contains: search, mode: 'insensitive' } } } },
+      ];
+    }
 
     if (doctorId) where.doctorId = doctorId;
     if (patientId) where.patientId = patientId;

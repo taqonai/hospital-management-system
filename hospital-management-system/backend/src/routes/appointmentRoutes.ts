@@ -26,7 +26,7 @@ router.get(
   authenticate,
   validate(paginationSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const { page, limit, sortBy, sortOrder, doctorId, patientId, status, date, startDate, endDate } = req.query;
+    const { page, limit, sortBy, sortOrder, doctorId, patientId, status, date, startDate, endDate, search } = req.query;
 
     // For DOCTOR role, auto-filter to their own appointments
     let effectiveDoctorId = doctorId as string;
@@ -42,6 +42,7 @@ router.get(
       limit: Number(limit) || 10,
       sortBy: sortBy as string,
       sortOrder: sortOrder as 'asc' | 'desc',
+      search: search as string,
       doctorId: effectiveDoctorId,
       patientId: patientId as string,
       status: status as any,
