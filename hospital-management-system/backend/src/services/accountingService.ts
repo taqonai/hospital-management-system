@@ -540,6 +540,22 @@ class AccountingService {
   }
 
   // --------------------------------------------------------------------------
+  // Revenue Recognition
+  // --------------------------------------------------------------------------
+
+  /**
+   * Get the revenue recognition mode for a hospital.
+   * Currently defaults to ON_SERVICE (revenue posted on invoice creation).
+   * In the future, this could be a configurable hospital setting.
+   */
+  async getRevenueRecognitionMode(hospitalId: string): Promise<'ON_SERVICE' | 'ON_PAYMENT'> {
+    // Foundation: hardcoded to ON_SERVICE since current GL hooks
+    // post revenue at invoice creation time.
+    // TODO: Make this a hospital setting in the future
+    return 'ON_SERVICE';
+  }
+
+  // --------------------------------------------------------------------------
   // Fiscal Periods
   // --------------------------------------------------------------------------
 

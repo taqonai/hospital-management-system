@@ -188,7 +188,7 @@ export default function FinancialReports() {
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'ar-aging' | 'revenue' | 'collection' | 'writeoffs'
+    'overview' | 'ar-aging' | 'revenue' | 'collection' | 'writeoffs' | 'income-statement' | 'balance-sheet'
   >('overview');
 
   // Data states
@@ -201,6 +201,9 @@ export default function FinancialReports() {
   const [writeOffSummary, setWriteOffSummary] = useState<any>(null);
   const [writeOffs, setWriteOffs] = useState<any[]>([]);
   const [showWriteOffModal, setShowWriteOffModal] = useState(false);
+  const [incomeStatement, setIncomeStatement] = useState<any>(null);
+  const [balanceSheet, setBalanceSheet] = useState<any>(null);
+  const [bsAsOfDate, setBsAsOfDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Colors for charts
   const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6'];
@@ -244,6 +247,33 @@ export default function FinancialReports() {
       setLoading(false);
     }
   };
+
+  const loadIncomeStatement = async () => {
+    try {
+      const data = await financialReportsApi.getIncomeStatement(startDate, endDate);
+      setIncomeStatement(data);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load income statement');
+    }
+  };
+
+  const loadBalanceSheet = async (date?: string) => {
+    try {
+      const data = await financialReportsApi.getBalanceSheet(date || bsAsOfDate);
+      setBalanceSheet(data);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load balance sheet');
+    }
+  };
+
+  // Load income statement/balance sheet when their tabs are selected
+  useEffect(() => {
+    if (activeTab === 'income-statement') loadIncomeStatement();
+  }, [activeTab, startDate, endDate]);
+
+  useEffect(() => {
+    if (activeTab === 'balance-sheet') loadBalanceSheet();
+  }, [activeTab, bsAsOfDate]);
 
   const loadWriteOffs = async () => {
     try {
@@ -326,6 +356,8 @@ export default function FinancialReports() {
             { id: 'revenue', label: 'Revenue Analysis', icon: ChartBarIcon },
             { id: 'collection', label: 'Collection Rate', icon: ArrowTrendingUpIcon },
             { id: 'writeoffs', label: 'Write-Offs', icon: ReceiptPercentIcon },
+            { id: 'income-statement', label: 'Income Statement', icon: BanknotesIcon },
+            { id: 'balance-sheet', label: 'Balance Sheet', icon: ChartPieIcon },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -798,6 +830,304 @@ export default function FinancialReports() {
                     </table>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Income Statement Tab */}
+          {activeTab === 'income-statement' && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-semibold">Income Statement</h3>
+                  <button
+                    onClick={() => financialReportsApi.exportXLSX('income-statement', { startDate, endDate })}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    <ArrowDownTrayIcon className="h-5 w-5" />
+                    Export XLSX
+                  </button>
+                </div>
+
+                {incomeStatement ? (
+                  <div className="space-y-8">
+                    {/* Revenue vs Expenses Chart */}
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart
+                        data={[
+                          { name: 'Revenue', amount: incomeStatement.totalRevenue },
+                          { name: 'Expenses', amount: incomeStatement.totalExpenses },
+                          { name: 'Net Income', amount: incomeStatement.netIncome },
+                        ]}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip />
+                        <Bar dataKey="amount" name="Amount (AED)">
+                          <Cell fill="#10B981" />
+                          <Cell fill="#EF4444" />
+                          <Cell fill={incomeStatement.netIncome >= 0 ? '#3B82F6' : '#F59E0B'} />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+
+                    {/* Revenue Section */}
+                    <div>
+                      <h4 className="text-md font-semibold text-green-700 mb-3">Revenue</h4>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-green-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount (AED)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {incomeStatement.revenue.map((item: any, idx: number) => (
+                              <tr key={idx}>
+                                <td className="px-6 py-3 text-sm text-gray-500">{item.accountCode}</td>
+                                <td className="px-6 py-3 text-sm text-gray-900">{item.accountName}</td>
+                                <td className="px-6 py-3 text-sm text-right text-green-700 font-medium">
+                                  {item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            ))}
+                            <tr className="bg-green-50 font-bold">
+                              <td className="px-6 py-3" colSpan={2}>Total Revenue</td>
+                              <td className="px-6 py-3 text-right text-green-700">
+                                {incomeStatement.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Expenses Section */}
+                    <div>
+                      <h4 className="text-md font-semibold text-red-700 mb-3">Expenses</h4>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-red-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount (AED)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {incomeStatement.expenses.map((item: any, idx: number) => (
+                              <tr key={idx}>
+                                <td className="px-6 py-3 text-sm text-gray-500">{item.accountCode}</td>
+                                <td className="px-6 py-3 text-sm text-gray-900">{item.accountName}</td>
+                                <td className="px-6 py-3 text-sm text-right text-red-700 font-medium">
+                                  {item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            ))}
+                            <tr className="bg-red-50 font-bold">
+                              <td className="px-6 py-3" colSpan={2}>Total Expenses</td>
+                              <td className="px-6 py-3 text-right text-red-700">
+                                {incomeStatement.totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Net Income */}
+                    <div className={clsx(
+                      'p-6 rounded-lg text-center',
+                      incomeStatement.netIncome >= 0 ? 'bg-blue-50' : 'bg-yellow-50'
+                    )}>
+                      <p className="text-sm text-gray-600 mb-1">Net Income</p>
+                      <p className={clsx(
+                        'text-3xl font-bold',
+                        incomeStatement.netIncome >= 0 ? 'text-blue-700' : 'text-yellow-700'
+                      )}>
+                        AED {incomeStatement.netIncome.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-center py-8">No data available for the selected period.</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Balance Sheet Tab */}
+          {activeTab === 'balance-sheet' && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-4">
+                    <h3 className="text-lg font-semibold">Balance Sheet</h3>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">As of Date</label>
+                      <input
+                        type="date"
+                        value={bsAsOfDate}
+                        onChange={(e) => setBsAsOfDate(e.target.value)}
+                        className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => financialReportsApi.exportXLSX('balance-sheet', { asOfDate: bsAsOfDate })}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    <ArrowDownTrayIcon className="h-5 w-5" />
+                    Export XLSX
+                  </button>
+                </div>
+
+                {balanceSheet ? (
+                  <div className="space-y-8">
+                    {/* Balanced Indicator */}
+                    <div className={clsx(
+                      'flex items-center gap-2 p-3 rounded-lg',
+                      balanceSheet.isBalanced ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                    )}>
+                      {balanceSheet.isBalanced ? (
+                        <CheckCircleIcon className="h-5 w-5" />
+                      ) : (
+                        <XCircleIcon className="h-5 w-5" />
+                      )}
+                      <span className="font-medium">
+                        {balanceSheet.isBalanced
+                          ? 'Balanced — Assets = Liabilities + Equity'
+                          : 'Not Balanced — Assets ≠ Liabilities + Equity'}
+                      </span>
+                    </div>
+
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div className="text-center p-4 bg-blue-50 rounded-lg">
+                        <p className="text-sm text-gray-600 mb-2">Total Assets</p>
+                        <p className="text-2xl font-bold text-blue-700">
+                          AED {balanceSheet.totalAssets.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                      <div className="text-center p-4 bg-orange-50 rounded-lg">
+                        <p className="text-sm text-gray-600 mb-2">Total Liabilities</p>
+                        <p className="text-2xl font-bold text-orange-700">
+                          AED {balanceSheet.totalLiabilities.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                      <div className="text-center p-4 bg-purple-50 rounded-lg">
+                        <p className="text-sm text-gray-600 mb-2">Total Equity</p>
+                        <p className="text-2xl font-bold text-purple-700">
+                          AED {balanceSheet.totalEquity.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Assets Section */}
+                    <div>
+                      <h4 className="text-md font-semibold text-blue-700 mb-3">Assets</h4>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-blue-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Balance (AED)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {balanceSheet.assets.map((item: any, idx: number) => (
+                              <tr key={idx}>
+                                <td className="px-6 py-3 text-sm text-gray-500">{item.accountCode}</td>
+                                <td className="px-6 py-3 text-sm text-gray-900">{item.accountName}</td>
+                                <td className="px-6 py-3 text-sm text-right font-medium">
+                                  {item.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            ))}
+                            <tr className="bg-blue-50 font-bold">
+                              <td className="px-6 py-3" colSpan={2}>Total Assets</td>
+                              <td className="px-6 py-3 text-right text-blue-700">
+                                {balanceSheet.totalAssets.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Liabilities Section */}
+                    <div>
+                      <h4 className="text-md font-semibold text-orange-700 mb-3">Liabilities</h4>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-orange-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Balance (AED)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {balanceSheet.liabilities.map((item: any, idx: number) => (
+                              <tr key={idx}>
+                                <td className="px-6 py-3 text-sm text-gray-500">{item.accountCode}</td>
+                                <td className="px-6 py-3 text-sm text-gray-900">{item.accountName}</td>
+                                <td className="px-6 py-3 text-sm text-right font-medium">
+                                  {item.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            ))}
+                            <tr className="bg-orange-50 font-bold">
+                              <td className="px-6 py-3" colSpan={2}>Total Liabilities</td>
+                              <td className="px-6 py-3 text-right text-orange-700">
+                                {balanceSheet.totalLiabilities.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Equity Section */}
+                    <div>
+                      <h4 className="text-md font-semibold text-purple-700 mb-3">Equity</h4>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-purple-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Balance (AED)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {balanceSheet.equity.map((item: any, idx: number) => (
+                              <tr key={idx}>
+                                <td className="px-6 py-3 text-sm text-gray-500">{item.accountCode}</td>
+                                <td className="px-6 py-3 text-sm text-gray-900">{item.accountName}</td>
+                                <td className="px-6 py-3 text-sm text-right font-medium">
+                                  {item.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            ))}
+                            <tr className="bg-purple-50 font-bold">
+                              <td className="px-6 py-3" colSpan={2}>Total Equity</td>
+                              <td className="px-6 py-3 text-right text-purple-700">
+                                {balanceSheet.totalEquity.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-center py-8">No data available.</p>
+                )}
               </div>
             </div>
           )}

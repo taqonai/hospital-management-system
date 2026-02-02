@@ -2661,6 +2661,30 @@ export const financialReportsApi = {
   rejectWriteOff: (id: string, notes?: string) =>
     api.patch(`/financial-reports/write-offs/${id}/reject`, { notes }).then((res) => res.data.data),
 
+  // Income Statement
+  getIncomeStatement: (startDate: string, endDate: string) =>
+    api.get('/financial-reports/income-statement', { params: { startDate, endDate } }).then((res) => res.data.data),
+
+  // Balance Sheet
+  getBalanceSheet: (asOfDate?: string) =>
+    api.get('/financial-reports/balance-sheet', { params: { asOfDate } }).then((res) => res.data.data),
+
+  // XLSX Export
+  exportXLSX: async (report: string, params: Record<string, string>) => {
+    const response = await api.get(`/financial-reports/${report}`, {
+      params: { ...params, format: 'xlsx' },
+      responseType: 'blob',
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${report}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
   // Export Reports
   exportReport: async (reportType: string, startDate: string, endDate: string) => {
     const response = await api.get('/financial-reports/export', {

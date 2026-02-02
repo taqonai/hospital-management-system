@@ -4,6 +4,7 @@ import { authenticate, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated } from '../utils/response';
 import { financialReportingService } from '../services/financialReportingService';
+import { generateXLSX, generateMultiSheetXLSX } from '../utils/excelExport';
 import { UserRole } from '@prisma/client';
 
 const router = Router();
@@ -362,8 +363,95 @@ router.patch(
 );
 
 /**
+ * @route   GET /api/v1/financial-reports/income-statement
+ * @desc    Get Income Statement (Revenue vs Expenses from GL)
+ * @access  ACCOUNTANT, HOSPITAL_ADMIN
+ */
+router.get(
+  '/income-statement',
+  authenticate,
+  authorizeWithPermission('financial-reports:read', [
+    UserRole.ACCOUNTANT,
+    UserRole.HOSPITAL_ADMIN,
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { startDate, endDate, format } = req.query;
+    const hospitalId = req.user!.hospitalId;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'startDate and endDate are required',
+      });
+    }
+
+    const report = await financialReportingService.getIncomeStatement(
+      hospitalId,
+      new Date(startDate as string),
+      new Date(endDate as string)
+    );
+
+    if (format === 'xlsx') {
+      const xlsxData = [
+        ...report.revenue.map((r) => ({ Section: 'Revenue', Account: r.accountCode, Name: r.accountName, Amount: r.amount })),
+        { Section: '', Account: '', Name: 'Total Revenue', Amount: report.totalRevenue },
+        ...report.expenses.map((e) => ({ Section: 'Expenses', Account: e.accountCode, Name: e.accountName, Amount: e.amount })),
+        { Section: '', Account: '', Name: 'Total Expenses', Amount: report.totalExpenses },
+        { Section: '', Account: '', Name: 'Net Income', Amount: report.netIncome },
+      ];
+      const buffer = generateXLSX(xlsxData, 'Income Statement');
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="income-statement_${startDate}_${endDate}.xlsx"`);
+      return res.send(buffer);
+    }
+
+    sendSuccess(res, report, 'Income Statement generated successfully');
+  })
+);
+
+/**
+ * @route   GET /api/v1/financial-reports/balance-sheet
+ * @desc    Get Balance Sheet (Assets = Liabilities + Equity from GL)
+ * @access  ACCOUNTANT, HOSPITAL_ADMIN
+ */
+router.get(
+  '/balance-sheet',
+  authenticate,
+  authorizeWithPermission('financial-reports:read', [
+    UserRole.ACCOUNTANT,
+    UserRole.HOSPITAL_ADMIN,
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { asOfDate, format } = req.query;
+    const hospitalId = req.user!.hospitalId;
+
+    const date = asOfDate ? new Date(asOfDate as string) : new Date();
+
+    const report = await financialReportingService.getBalanceSheet(hospitalId, date);
+
+    if (format === 'xlsx') {
+      const xlsxData = [
+        ...report.assets.map((a) => ({ Section: 'Assets', Account: a.accountCode, Name: a.accountName, Balance: a.balance })),
+        { Section: '', Account: '', Name: 'Total Assets', Balance: report.totalAssets },
+        ...report.liabilities.map((l) => ({ Section: 'Liabilities', Account: l.accountCode, Name: l.accountName, Balance: l.balance })),
+        { Section: '', Account: '', Name: 'Total Liabilities', Balance: report.totalLiabilities },
+        ...report.equity.map((e) => ({ Section: 'Equity', Account: e.accountCode, Name: e.accountName, Balance: e.balance })),
+        { Section: '', Account: '', Name: 'Total Equity', Balance: report.totalEquity },
+        { Section: '', Account: '', Name: 'Balanced', Balance: report.isBalanced ? 'YES' : 'NO' },
+      ];
+      const buffer = generateXLSX(xlsxData, 'Balance Sheet');
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="balance-sheet_${date.toISOString().split('T')[0]}.xlsx"`);
+      return res.send(buffer);
+    }
+
+    sendSuccess(res, report, 'Balance Sheet generated successfully');
+  })
+);
+
+/**
  * @route   GET /api/v1/financial-reports/export
- * @desc    Export report data to CSV
+ * @desc    Export report data to CSV or XLSX
  * @access  ACCOUNTANT, HOSPITAL_ADMIN
  */
 router.get(
@@ -425,8 +513,16 @@ router.get(
         });
     }
 
-    const csv = financialReportingService.exportToCSV(data, filename);
+    const format = (req.query.format as string) || 'csv';
 
+    if (format === 'xlsx') {
+      const buffer = generateXLSX(data, filename);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}.xlsx"`);
+      return res.send(buffer);
+    }
+
+    const csv = financialReportingService.exportToCSV(data, filename);
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}.csv"`);
     res.send(csv);

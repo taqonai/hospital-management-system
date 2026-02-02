@@ -675,6 +675,138 @@ export class FinancialReportingService {
   }
 
   /**
+   * Generate Income Statement from GL entries
+   * Revenue = sum credits - sum debits for REVENUE accounts
+   * Expenses = sum debits - sum credits for EXPENSE accounts
+   */
+  async getIncomeStatement(hospitalId: string, startDate: Date, endDate: Date) {
+    const rows = await prisma.$queryRaw<
+      Array<{
+        accountCode: string;
+        accountName: string;
+        accountType: string;
+        totalDebits: Prisma.Decimal;
+        totalCredits: Prisma.Decimal;
+      }>
+    >`
+      SELECT 
+        ga.account_code as "accountCode",
+        ga.account_name as "accountName",
+        ga.account_type as "accountType",
+        COALESCE(SUM(ge.debit_amount), 0) as "totalDebits",
+        COALESCE(SUM(ge.credit_amount), 0) as "totalCredits"
+      FROM gl_entries ge
+      INNER JOIN gl_accounts ga ON ge.gl_account_id = ga.id
+      WHERE ge.hospital_id = ${hospitalId}::uuid
+        AND ge.transaction_date >= ${startDate}
+        AND ge.transaction_date <= ${endDate}
+        AND ga.account_type IN ('REVENUE', 'EXPENSE')
+      GROUP BY ga.id, ga.account_code, ga.account_name, ga.account_type
+      ORDER BY ga.account_code ASC
+    `;
+
+    const revenue: Array<{ accountCode: string; accountName: string; amount: number }> = [];
+    const expenses: Array<{ accountCode: string; accountName: string; amount: number }> = [];
+
+    for (const row of rows) {
+      const debits = Number(row.totalDebits);
+      const credits = Number(row.totalCredits);
+
+      if (row.accountType === 'REVENUE') {
+        const amount = credits - debits; // net credit = revenue
+        if (amount !== 0) {
+          revenue.push({ accountCode: row.accountCode, accountName: row.accountName, amount });
+        }
+      } else if (row.accountType === 'EXPENSE') {
+        const amount = debits - credits; // net debit = expense
+        if (amount !== 0) {
+          expenses.push({ accountCode: row.accountCode, accountName: row.accountName, amount });
+        }
+      }
+    }
+
+    const totalRevenue = revenue.reduce((sum, r) => sum + r.amount, 0);
+    const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+    const netIncome = totalRevenue - totalExpenses;
+
+    return { revenue, expenses, totalRevenue, totalExpenses, netIncome, startDate, endDate };
+  }
+
+  /**
+   * Generate Balance Sheet from GL entries (all entries up to asOfDate)
+   * Assets = sum debits - sum credits (net debit balance)
+   * Liabilities = sum credits - sum debits (net credit balance)
+   * Equity = sum credits - sum debits (net credit balance)
+   */
+  async getBalanceSheet(hospitalId: string, asOfDate: Date) {
+    const rows = await prisma.$queryRaw<
+      Array<{
+        accountCode: string;
+        accountName: string;
+        accountType: string;
+        totalDebits: Prisma.Decimal;
+        totalCredits: Prisma.Decimal;
+      }>
+    >`
+      SELECT 
+        ga.account_code as "accountCode",
+        ga.account_name as "accountName",
+        ga.account_type as "accountType",
+        COALESCE(SUM(ge.debit_amount), 0) as "totalDebits",
+        COALESCE(SUM(ge.credit_amount), 0) as "totalCredits"
+      FROM gl_entries ge
+      INNER JOIN gl_accounts ga ON ge.gl_account_id = ga.id
+      WHERE ge.hospital_id = ${hospitalId}::uuid
+        AND ge.transaction_date <= ${asOfDate}
+        AND ga.account_type IN ('ASSET', 'LIABILITY', 'EQUITY')
+      GROUP BY ga.id, ga.account_code, ga.account_name, ga.account_type
+      ORDER BY ga.account_code ASC
+    `;
+
+    const assets: Array<{ accountCode: string; accountName: string; balance: number }> = [];
+    const liabilities: Array<{ accountCode: string; accountName: string; balance: number }> = [];
+    const equity: Array<{ accountCode: string; accountName: string; balance: number }> = [];
+
+    for (const row of rows) {
+      const debits = Number(row.totalDebits);
+      const credits = Number(row.totalCredits);
+
+      if (row.accountType === 'ASSET') {
+        const balance = debits - credits;
+        if (balance !== 0) {
+          assets.push({ accountCode: row.accountCode, accountName: row.accountName, balance });
+        }
+      } else if (row.accountType === 'LIABILITY') {
+        const balance = credits - debits;
+        if (balance !== 0) {
+          liabilities.push({ accountCode: row.accountCode, accountName: row.accountName, balance });
+        }
+      } else if (row.accountType === 'EQUITY') {
+        const balance = credits - debits;
+        if (balance !== 0) {
+          equity.push({ accountCode: row.accountCode, accountName: row.accountName, balance });
+        }
+      }
+    }
+
+    const totalAssets = assets.reduce((sum, a) => sum + a.balance, 0);
+    const totalLiabilities = liabilities.reduce((sum, l) => sum + l.balance, 0);
+    const totalEquity = equity.reduce((sum, e) => sum + e.balance, 0);
+    const isBalanced = Math.abs(totalAssets - (totalLiabilities + totalEquity)) < 0.01;
+
+    return {
+      assets,
+      liabilities,
+      equity,
+      totalAssets,
+      totalLiabilities,
+      totalEquity,
+      isBalanced,
+      asOfDate,
+    };
+  }
+
+  /**
    * Export report data to CSV format
    */
   exportToCSV(data: any[], filename: string): string {
