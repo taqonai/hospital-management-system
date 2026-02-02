@@ -5,6 +5,11 @@ import {
   PlusIcon,
   FunnelIcon,
   CalendarIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
+  ChevronUpDownIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from '@heroicons/react/24/outline';
 import { appointmentApi } from '../services/api';
 import { Appointment } from '../types';
@@ -52,6 +57,10 @@ export default function Appointments() {
   const [statusFilter, setStatusFilter] = useState('');
   const [cancelConfirm, setCancelConfirm] = useState<string | null>(null);
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState('appointmentDate');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const limit = 10;
   const queryClient = useQueryClient();
   const { isDoctor, hasRole } = useAuth();
 
@@ -60,11 +69,14 @@ export default function Appointments() {
   const { data: bookingData, isLoading: bookingLoading, refetch: refetchBooking } = useBookingData(selectedBookingId);
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['appointments', { status: statusFilter }],
+    queryKey: ['appointments', { status: statusFilter, page, sortBy, sortOrder }],
     queryFn: async () => {
       const response = await appointmentApi.getAll({
         status: statusFilter || undefined,
-        limit: 50,
+        page,
+        limit,
+        sortBy,
+        sortOrder,
       });
       return response.data;
     },
@@ -84,6 +96,17 @@ export default function Appointments() {
   });
 
   const appointments = data?.data || [];
+  const pagination = data?.pagination;
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+    setPage(1);
+  };
 
   const handleCancel = (id: string) => {
     updateStatusMutation.mutate({ id, status: 'CANCELLED' });
@@ -130,7 +153,7 @@ export default function Appointments() {
         {filterTabs.map((tab) => (
           <button
             key={tab.value}
-            onClick={() => setStatusFilter(tab.value)}
+            onClick={() => { setStatusFilter(tab.value); setPage(1); }}
             className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
               statusFilter === tab.value
                 ? 'bg-blue-600 text-white border-blue-600'
@@ -171,10 +194,27 @@ export default function Appointments() {
                   <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3">Patient</th>
                   <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3">Doctor</th>
                   <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3">Department</th>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3">Date</th>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3">Time</th>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3">Type</th>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3">Status</th>
+                  {[
+                    { label: 'Date', field: 'appointmentDate' },
+                    { label: 'Time', field: 'startTime' },
+                    { label: 'Type', field: 'type' },
+                    { label: 'Status', field: 'status' },
+                  ].map(col => (
+                    <th
+                      key={col.field}
+                      onClick={() => handleSort(col.field)}
+                      className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3 cursor-pointer hover:bg-gray-100 select-none"
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        {col.label}
+                        {sortBy === col.field ? (
+                          sortOrder === 'asc' ? <ChevronUpIcon className="h-3.5 w-3.5" /> : <ChevronDownIcon className="h-3.5 w-3.5" />
+                        ) : (
+                          <ChevronUpDownIcon className="h-3.5 w-3.5 text-gray-300" />
+                        )}
+                      </span>
+                    </th>
+                  ))}
                   <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3">Actions</th>
                 </tr>
               </thead>
@@ -239,6 +279,38 @@ export default function Appointments() {
           </div>
         )}
       </div>
+
+      {/* Pagination */}
+      {pagination && pagination.totalPages > 1 && (
+        <div className="flex items-center justify-between px-6 py-4 bg-white rounded-xl border border-gray-200">
+          <p className="text-sm text-gray-500">
+            Showing {(pagination.page - 1) * pagination.limit + 1} to{' '}
+            {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
+            {pagination.total} appointments
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(page - 1)}
+              disabled={!pagination.hasPrev}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronLeftIcon className="h-4 w-4" />
+              Previous
+            </button>
+            <span className="px-3 py-1.5 text-sm text-gray-700">
+              Page {page} of {pagination.totalPages}
+            </span>
+            <button
+              onClick={() => setPage(page + 1)}
+              disabled={!pagination.hasNext}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+              <ChevronRightIcon className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Cancel Confirmation Modal */}
       {cancelConfirm && (
