@@ -38,6 +38,8 @@ import {
   CakeIcon,
   ReceiptPercentIcon,
   ShoppingCartIcon,
+  BanknotesIcon,
+  DocumentChartBarIcon,
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../../hooks/useAuth';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -163,6 +165,12 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
       { name: 'Billing', href: '/billing', icon: CreditCardIcon, color: 'from-green-500 to-green-600',
         permission: 'billing:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT', 'RECEPTIONIST'] },
+      { name: 'Accounting', href: '/accounting', icon: BanknotesIcon, color: 'from-emerald-500 to-green-600',
+        permission: 'billing:reports',
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT'] },
+      { name: 'Financial Reports', href: '/financial-reports', icon: DocumentChartBarIcon, color: 'from-green-500 to-teal-600',
+        permission: 'reports:financial',
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT'] },
       { name: 'Insurance Coding', href: '/insurance-coding', icon: ReceiptPercentIcon, color: 'from-teal-500 to-cyan-600',
         permission: 'insurance_coding:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT'] },
