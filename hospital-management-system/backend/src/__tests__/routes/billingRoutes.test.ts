@@ -3,6 +3,7 @@ import express, { Express } from 'express';
 import billingRoutes from '../../routes/billingRoutes';
 import { prismaMock } from '../prismaMock';
 import { createMockInvoice, createMockPayment, createMockPatient, createMockInsuranceClaim } from '../factories';
+import { Decimal } from '@prisma/client/runtime/library';
 
 // Mock middleware
 jest.mock('../../middleware/auth', () => ({
@@ -57,11 +58,11 @@ describe('Billing Routes Integration Tests', () => {
         hospitalId: 'hosp-123',
         patientId: 'patient-123',
         createdBy: 'user-123',
-        subtotal: 1000,
-        discount: 0,
-        tax: 0,
-        totalAmount: 1000,
-        balanceAmount: 1000,
+        subtotal: new Decimal(1000),
+        discount: new Decimal(0),
+        tax: new Decimal(0),
+        totalAmount: new Decimal(1000),
+        balanceAmount: new Decimal(1000),
       });
 
       prismaMock.invoice.create.mockResolvedValue({
@@ -105,14 +106,14 @@ describe('Billing Routes Integration Tests', () => {
       const invoiceId = 'inv-123';
       const mockInvoice = createMockInvoice({
         id: invoiceId,
-        totalAmount: 1000,
-        balanceAmount: 1000,
-        paidAmount: 0,
+        totalAmount: new Decimal(1000),
+        balanceAmount: new Decimal(1000),
+        paidAmount: new Decimal(0),
       });
       const mockPatient = createMockPatient();
       const mockPayment = createMockPayment({
         invoiceId,
-        amount: 500,
+        amount: new Decimal(500),
         createdBy: 'user-123',
       });
 
@@ -129,8 +130,8 @@ describe('Billing Routes Integration Tests', () => {
           invoice: {
             update: jest.fn().mockResolvedValue({
               ...mockInvoice,
-              paidAmount: 500,
-              balanceAmount: 500,
+              paidAmount: new Decimal(500),
+              balanceAmount: new Decimal(500),
               status: 'PARTIALLY_PAID',
             }),
           },
@@ -146,16 +147,16 @@ describe('Billing Routes Integration Tests', () => {
 
       expect(response.status).toBe(201);
       expect(response.body.success).toBe(true);
-      expect(response.body.data.amount).toBe(500);
+      expect(Number(response.body.data.amount)).toBe(500);
     });
 
     it('should return 400 if payment exceeds balance', async () => {
       const invoiceId = 'inv-123';
       const mockInvoice = createMockInvoice({
         id: invoiceId,
-        totalAmount: 1000,
-        balanceAmount: 500,
-        paidAmount: 500,
+        totalAmount: new Decimal(1000),
+        balanceAmount: new Decimal(500),
+        paidAmount: new Decimal(500),
       });
       const mockPatient = createMockPatient();
 
@@ -185,11 +186,12 @@ describe('Billing Routes Integration Tests', () => {
       });
       const mockPatient = createMockPatient();
 
-      prismaMock.invoice.findUnique.mockResolvedValue({
+      prismaMock.invoice.findFirst.mockResolvedValue({
         ...mockInvoice,
         patient: mockPatient,
         items: [],
         payments: [],
+        claims: [],
       } as any);
 
       const response = await request(app)
@@ -201,7 +203,7 @@ describe('Billing Routes Integration Tests', () => {
     });
 
     it('should return 404 if invoice not found', async () => {
-      prismaMock.invoice.findUnique.mockResolvedValue(null);
+      prismaMock.invoice.findFirst.mockResolvedValue(null);
 
       const response = await request(app)
         .get('/api/v1/billing/invoices/non-existent-id');
@@ -218,13 +220,13 @@ describe('Billing Routes Integration Tests', () => {
       const mockClaim = createMockInsuranceClaim({
         id: claimId,
         invoiceId,
-        claimAmount: 1000,
+        claimAmount: new Decimal(1000),
         status: 'SUBMITTED',
       });
       const mockInvoice = createMockInvoice({ 
         id: invoiceId,
-        totalAmount: 1000,
-        balanceAmount: 1000,
+        totalAmount: new Decimal(1000),
+        balanceAmount: new Decimal(1000),
       });
 
       prismaMock.$transaction.mockImplementation(async (callback: any) => {
@@ -233,22 +235,22 @@ describe('Billing Routes Integration Tests', () => {
             update: jest.fn().mockResolvedValue({
               ...mockClaim,
               status: 'APPROVED',
-              approvedAmount: 800,
+              approvedAmount: new Decimal(800),
               invoice: mockInvoice,
             }),
           },
           payment: {
             create: jest.fn().mockResolvedValue(createMockPayment({
               invoiceId,
-              amount: 800,
+              amount: new Decimal(800),
               paymentMethod: 'INSURANCE',
             })),
           },
           invoice: {
             update: jest.fn().mockResolvedValue({
               ...mockInvoice,
-              paidAmount: 800,
-              balanceAmount: 200,
+              paidAmount: new Decimal(800),
+              balanceAmount: new Decimal(200),
               status: 'PARTIALLY_PAID',
             }),
           },

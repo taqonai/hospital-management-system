@@ -24,6 +24,8 @@ import {
 } from '@heroicons/react/24/outline';
 import { qualityApi } from '../../services/api';
 import AuditTracker from './components/AuditTracker';
+import QualityIndicatorsComponent from './components/QualityIndicators';
+import IncidentReportingComponent from './components/IncidentReporting';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -53,22 +55,9 @@ ChartJS.register(
   Filler
 );
 
-// Placeholder components - will be imported from separate files
-const QualityIndicators = ({ onViewDetails }: { onViewDetails?: (id: string) => void }) => (
-  <div className="text-center py-16 text-gray-500">
-    <ClipboardDocumentCheckIcon className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-    <p className="font-medium">Quality Indicators Management</p>
-    <p className="text-sm mt-2">Component will be loaded here</p>
-  </div>
-);
-
-const IncidentReporting = ({ onViewDetails }: { onViewDetails?: (id: string) => void }) => (
-  <div className="text-center py-16 text-gray-500">
-    <ExclamationTriangleIcon className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-    <p className="font-medium">Incident Reporting & Tracking</p>
-    <p className="text-sm mt-2">Component will be loaded here</p>
-  </div>
-);
+// Wire actual sub-components (imported above)
+const QualityIndicators = QualityIndicatorsComponent;
+const IncidentReporting = IncidentReportingComponent;
 
 // Types
 type TabType = 'dashboard' | 'indicators' | 'incidents' | 'audits';
@@ -801,7 +790,7 @@ export default function QualityManagement() {
 
           {/* Indicators Tab */}
           {activeTab === 'indicators' && (
-            <QualityIndicators />
+            <QualityIndicators indicators={indicators} onRefresh={refetchIndicators} />
           )}
 
           {/* Incidents Tab */}

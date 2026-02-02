@@ -519,3 +519,47 @@ Add to `InsuranceClaim`: `denialReasonCode`, `appealNotes`, `appealDate`, `appea
 | Data precision | Decimal(10,2) for all monetary amounts |
 | Currency support | Single currency initially, multi-currency architecture ready |
 | Export formats | CSV, Excel (XLSX) |
+
+---
+
+## 8. Implementation Status
+
+**Overall Completion: ~91%** (as of Sprint 7)
+
+### Module Breakdown
+
+| Module | Status | Completion | Notes |
+|--------|--------|-----------|-------|
+| Invoice Management | ✅ Complete | 100% | CRUD, auto-numbering, line items, status lifecycle |
+| Payment Recording | ✅ Complete | 100% | 7 payment methods, atomic transactions, auto-status updates |
+| Insurance Claims | ✅ Complete | 100% | Full lifecycle, auto-payment on approval, appeal workflow |
+| Insurance Coding (ICD-10/CPT) | ✅ Complete | 100% | CSV import, payer rules, medical necessity, AI suggestions |
+| eClaimLink (DHA) | ✅ Complete | 100% | XML generation, submission, remittance processing |
+| ChargeMaster | ✅ Complete | 100% | Fee schedules, payer-specific pricing, charge lookup |
+| Auto-Billing | ✅ Complete | 100% | Appointments, Lab, Radiology, Pharmacy, IPD triggers |
+| GL/Accounting Foundation | ✅ Complete | 100% | CoA seeding, journal entries, trial balance, reversals |
+| Financial Statements | ✅ Complete | 100% | Income statement, balance sheet, cash flow, XLSX export |
+| Billing Cron Jobs | ✅ Complete | 100% | Overdue reminders, aging reports, auto-claim submission |
+| Insurance Deductible Tracking | ✅ Complete | 100% | Accumulator, annual reset, co-pay/co-insurance |
+| PDF Receipts | ✅ Complete | 100% | Payment receipts with hospital branding |
+| Pre-Authorization | ✅ Complete | 100% | Request, review, approve/deny workflow |
+| Deposit/Refund Management | 🔲 Not Started | 0% | Requires Payment Gateway integration |
+| Payment Gateway (Stripe) | 🔲 Not Started | 0% | Online payments, Patient Portal integration |
+| Multi-Currency Support | 🔲 Not Started | 0% | Architecture ready, implementation pending |
+
+### Sprint History
+
+| Sprint | Focus | Status |
+|--------|-------|--------|
+| Sprint 1 | Wire GL hooks into all financial services | ✅ Complete |
+| Sprint 2 | Auto-billing from clinical events | ✅ Complete |
+| Sprint 3 | Remove hardcoded charges, enforce ChargeMaster | ✅ Complete |
+| Sprint 4 | Billing cron jobs (overdue, aging, auto-claim) | ✅ Complete |
+| Sprint 5 | GL-based financial statements + XLSX export | ✅ Complete |
+| Sprint 6 | Insurance deductible tracking + PDF receipts | ✅ Complete |
+| Sprint 7 | Tests, Quality module wiring, documentation | ✅ Complete |
+
+### Remaining Work (~9%)
+1. **Payment Gateway Integration** — Stripe/payment processor for online payments
+2. **Deposit/Refund Module** — Patient deposits for IPD, refund workflows
+3. **Multi-Currency** — Exchange rates, multi-currency invoicing

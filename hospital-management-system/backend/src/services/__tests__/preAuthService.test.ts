@@ -55,7 +55,7 @@ describe('PreAuthService', () => {
         id: 'cpt-123',
         code: '99213',
         requiresPreAuth: true,
-        defaultPrice: 150,
+        basePrice: 150,
       };
 
       const mockICDCode = {
@@ -161,7 +161,7 @@ describe('PreAuthService', () => {
         id: 'insurance-123',
         isPrimary: true,
         isActive: true,
-        expiryDate: new Date('2025-12-31'),
+        expiryDate: new Date('2027-12-31'),
         copay: 50,
         deductible: 500,
       };
@@ -169,7 +169,7 @@ describe('PreAuthService', () => {
       const mockCPTCode = {
         code: '99213',
         requiresPreAuth: false,
-        defaultPrice: 150,
+        basePrice: 150,
       };
 
       (prisma.patientInsurance.findFirst as jest.Mock).mockResolvedValue(

@@ -19,6 +19,13 @@ const config: Config = {
   coverageReporters: ['text', 'lcov', 'html'],
   verbose: true,
   testTimeout: 10000,
+  transformIgnorePatterns: [
+    'node_modules/(?!(@faker-js/faker)/)',
+  ],
+  transform: {
+    '^.+\\.tsx?$': 'ts-jest',
+    '^.+\\.js$': ['ts-jest', { useESM: false }],
+  },
 };
 
 export default config;

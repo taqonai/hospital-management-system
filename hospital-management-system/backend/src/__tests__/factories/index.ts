@@ -97,14 +97,15 @@ export const createMockPayment = (overrides?: Partial<Payment>): Payment => {
     notes: null,
     createdBy: faker.string.uuid(),
     createdAt: faker.date.past(),
+    transactionId: null,
     ...overrides,
   };
 };
 
 export const createMockInvoiceItem = (overrides?: Partial<any>) => {
-  const unitPrice = faker.number.float({ min: 10, max: 1000, precision: 0.01 });
+  const unitPrice = faker.number.float({ min: 10, max: 1000, fractionDigits: 2 });
   const quantity = faker.number.int({ min: 1, max: 10 });
-  const discount = faker.number.float({ min: 0, max: unitPrice * quantity * 0.1, precision: 0.01 });
+  const discount = faker.number.float({ min: 0, max: unitPrice * quantity * 0.1, fractionDigits: 2 });
   const totalPrice = (unitPrice * quantity) - discount;
 
   return {

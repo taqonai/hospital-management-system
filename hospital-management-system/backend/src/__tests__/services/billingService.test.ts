@@ -2,6 +2,7 @@ import { BillingService } from '../../services/billingService';
 import { prismaMock } from '../prismaMock';
 import { createMockInvoice, createMockPayment, createMockPatient, createMockUser, createMockInsuranceClaim } from '../factories';
 import { NotFoundError } from '../../middleware/errorHandler';
+import { Decimal } from '@prisma/client/runtime/library';
 
 // Mock the notification service
 jest.mock('../../services/notificationService', () => ({
@@ -74,11 +75,11 @@ describe('BillingService', () => {
       const mockInvoice = createMockInvoice({
         hospitalId,
         patientId,
-        subtotal: 1000,
-        discount: 100,
-        tax: 90,
-        totalAmount: 990,
-        balanceAmount: 990,
+        subtotal: new Decimal(1000),
+        discount: new Decimal(100),
+        tax: new Decimal(90),
+        totalAmount: new Decimal(990),
+        balanceAmount: new Decimal(990),
       });
 
       prismaMock.invoice.create.mockResolvedValue({
@@ -121,9 +122,9 @@ describe('BillingService', () => {
       const invoiceId = 'inv-123';
       const mockInvoice = createMockInvoice({
         id: invoiceId,
-        totalAmount: 1000,
-        balanceAmount: 500,
-        paidAmount: 500,
+        totalAmount: new Decimal(1000),
+        balanceAmount: new Decimal(500),
+        paidAmount: new Decimal(500),
       });
       const mockPatient = createMockPatient();
 
@@ -148,15 +149,15 @@ describe('BillingService', () => {
       const invoiceId = 'inv-123';
       const mockInvoice = createMockInvoice({
         id: invoiceId,
-        totalAmount: 1000,
-        balanceAmount: 500,
-        paidAmount: 500,
+        totalAmount: new Decimal(1000),
+        balanceAmount: new Decimal(500),
+        paidAmount: new Decimal(500),
         status: 'PARTIALLY_PAID',
       });
       const mockPatient = createMockPatient();
       const mockPayment = createMockPayment({
         invoiceId,
-        amount: 500,
+        amount: new Decimal(500),
       });
 
       prismaMock.invoice.findUnique.mockResolvedValue({
@@ -172,8 +173,8 @@ describe('BillingService', () => {
           invoice: {
             update: jest.fn().mockResolvedValue({
               ...mockInvoice,
-              paidAmount: 1000,
-              balanceAmount: 0,
+              paidAmount: new Decimal(1000),
+              balanceAmount: new Decimal(0),
               status: 'PAID',
             }),
           },
@@ -194,9 +195,9 @@ describe('BillingService', () => {
       const invoiceId = 'inv-123';
       const mockInvoice = createMockInvoice({
         id: invoiceId,
-        totalAmount: 1000,
-        balanceAmount: 1000,
-        paidAmount: 0,
+        totalAmount: new Decimal(1000),
+        balanceAmount: new Decimal(1000),
+        paidAmount: new Decimal(0),
         status: 'PENDING',
       });
       const mockPatient = createMockPatient();
@@ -214,7 +215,7 @@ describe('BillingService', () => {
           payment: {
             create: jest.fn().mockImplementation(() => {
               paymentCreated = true;
-              return Promise.resolve(createMockPayment({ invoiceId, amount: 500 }));
+              return Promise.resolve(createMockPayment({ invoiceId, amount: new Decimal(500) }));
             }),
           },
           invoice: {
@@ -225,8 +226,8 @@ describe('BillingService', () => {
               }
               return Promise.resolve({
                 ...mockInvoice,
-                paidAmount: 500,
-                balanceAmount: 500,
+                paidAmount: new Decimal(500),
+                balanceAmount: new Decimal(500),
                 status: 'PARTIALLY_PAID',
               });
             }),
@@ -250,15 +251,15 @@ describe('BillingService', () => {
       const invoiceId = 'inv-123';
       const mockInvoice = createMockInvoice({
         id: invoiceId,
-        totalAmount: 1000,
-        balanceAmount: 300,
-        paidAmount: 700,
+        totalAmount: new Decimal(1000),
+        balanceAmount: new Decimal(300),
+        paidAmount: new Decimal(700),
         status: 'PARTIALLY_PAID',
       });
       const mockPatient = createMockPatient();
       const mockPayment = createMockPayment({
         invoiceId,
-        amount: 300,
+        amount: new Decimal(300),
       });
 
       prismaMock.invoice.findUnique.mockResolvedValue({
@@ -278,8 +279,8 @@ describe('BillingService', () => {
               finalStatus = args.data.status;
               return Promise.resolve({
                 ...mockInvoice,
-                paidAmount: 1000,
-                balanceAmount: 0,
+                paidAmount: new Decimal(1000),
+                balanceAmount: new Decimal(0),
                 status: args.data.status,
               });
             }),
@@ -316,7 +317,7 @@ describe('BillingService', () => {
       const mockClaim = createMockInsuranceClaim({
         id: claimId,
         invoiceId,
-        claimAmount: 1000,
+        claimAmount: new Decimal(1000),
         status: 'SUBMITTED',
       });
       const mockInvoice = createMockInvoice({ id: invoiceId });
@@ -345,7 +346,7 @@ describe('BillingService', () => {
               }
               return Promise.resolve(createMockPayment({
                 invoiceId,
-                amount: 800,
+                amount: new Decimal(800),
                 paymentMethod: 'INSURANCE',
               }));
             }),
@@ -353,8 +354,8 @@ describe('BillingService', () => {
           invoice: {
             update: jest.fn().mockResolvedValue({
               ...mockInvoice,
-              paidAmount: 800,
-              balanceAmount: 200,
+              paidAmount: new Decimal(800),
+              balanceAmount: new Decimal(200),
               status: 'PARTIALLY_PAID',
             }),
           },
@@ -375,14 +376,14 @@ describe('BillingService', () => {
       const mockClaim = createMockInsuranceClaim({
         id: claimId,
         invoiceId,
-        claimAmount: 1000,
+        claimAmount: new Decimal(1000),
         status: 'SUBMITTED',
       });
       const mockInvoice = createMockInvoice({
         id: invoiceId,
-        totalAmount: 1000,
-        balanceAmount: 1000,
-        paidAmount: 0,
+        totalAmount: new Decimal(1000),
+        balanceAmount: new Decimal(1000),
+        paidAmount: new Decimal(0),
       });
 
       let paymentData: any = null;
@@ -408,8 +409,8 @@ describe('BillingService', () => {
           invoice: {
             update: jest.fn().mockResolvedValue({
               ...mockInvoice,
-              paidAmount: 800,
-              balanceAmount: 200,
+              paidAmount: new Decimal(800),
+              balanceAmount: new Decimal(200),
               status: 'PARTIALLY_PAID',
             }),
           },
@@ -430,7 +431,7 @@ describe('BillingService', () => {
       const mockClaim = createMockInsuranceClaim({
         id: claimId,
         invoiceId,
-        claimAmount: 1000,
+        claimAmount: new Decimal(1000),
         status: 'SUBMITTED',
       });
       const mockInvoice = createMockInvoice({ id: invoiceId });
@@ -462,9 +463,17 @@ describe('BillingService', () => {
   });
 
   describe('extractChargesFromNotes', () => {
-    it('should extract charges from clinical notes', () => {
+    it('should extract charges from clinical notes', async () => {
+      const hospitalId = 'hosp-123';
       const notes = 'Patient underwent ECG and blood draw. Initial consultation completed.';
-      const result = billingService.extractChargesFromNotes(notes);
+
+      prismaMock.chargeMaster.findMany.mockResolvedValue([
+        { id: '1', hospitalId, code: '93000', description: 'ECG', category: 'DIAGNOSTIC', defaultPrice: 150, currency: 'AED', unit: null, isActive: true, effectiveFrom: new Date(), effectiveTo: null, createdAt: new Date(), updatedAt: new Date(), createdBy: 'sys' },
+        { id: '2', hospitalId, code: '36415', description: 'Blood draw venipuncture', category: 'LAB', defaultPrice: 50, currency: 'AED', unit: null, isActive: true, effectiveFrom: new Date(), effectiveTo: null, createdAt: new Date(), updatedAt: new Date(), createdBy: 'sys' },
+        { id: '3', hospitalId, code: '99213', description: 'Office consultation', category: 'CONSULTATION', defaultPrice: 200, currency: 'AED', unit: null, isActive: true, effectiveFrom: new Date(), effectiveTo: null, createdAt: new Date(), updatedAt: new Date(), createdBy: 'sys' },
+      ] as any);
+
+      const result = await billingService.extractChargesFromNotes(notes, hospitalId);
 
       expect(result.capturedCharges.length).toBeGreaterThan(0);
       expect(result.capturedCharges.some(c => c.code === '93000')).toBe(true); // ECG
@@ -472,9 +481,15 @@ describe('BillingService', () => {
       expect(result.subtotal).toBeGreaterThan(0);
     });
 
-    it('should not capture duplicate charges', () => {
+    it('should not capture duplicate charges', async () => {
+      const hospitalId = 'hosp-123';
       const notes = 'ECG performed. Another ECG reading taken. ECG completed.';
-      const result = billingService.extractChargesFromNotes(notes);
+
+      prismaMock.chargeMaster.findMany.mockResolvedValue([
+        { id: '1', hospitalId, code: '93000', description: 'ECG', category: 'DIAGNOSTIC', defaultPrice: 150, currency: 'AED', unit: null, isActive: true, effectiveFrom: new Date(), effectiveTo: null, createdAt: new Date(), updatedAt: new Date(), createdBy: 'sys' },
+      ] as any);
+
+      const result = await billingService.extractChargesFromNotes(notes, hospitalId);
 
       const ecgCharges = result.capturedCharges.filter(c => c.code === '93000');
       expect(ecgCharges.length).toBe(1); // Should only capture once

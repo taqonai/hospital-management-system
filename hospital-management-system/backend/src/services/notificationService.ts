@@ -89,7 +89,7 @@ const smsService = {
 };
 
 const whatsappService = {
-  async send(phoneNumber: string, message: string, templateId?: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  async send(phoneNumber: string, message: string, templateId?: string, hospitalId?: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
     console.log(`[WHATSAPP] Sending to ${phoneNumber}: ${message.substring(0, 50)}...`);
     // Simulated success - replace with actual WhatsApp service implementation
     return { success: true, messageId: `wa-${Date.now()}` };
@@ -336,7 +336,8 @@ export class NotificationService {
   private async sendSMS(
     phoneNumber: string,
     message: string,
-    notificationId?: string
+    notificationId?: string,
+    hospitalId?: string
   ): Promise<{ success: boolean; logId: string }> {
     const log = this.logDelivery('sms', phoneNumber, 'pending', notificationId);
 

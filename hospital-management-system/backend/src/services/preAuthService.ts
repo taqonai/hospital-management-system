@@ -357,7 +357,7 @@ export class PreAuthService {
     const coveragePercentage = 80;
 
     // Estimate patient responsibility (this is a simplified calculation)
-    const estimatedProcedureCost = Number(cptCode?.defaultPrice || 0);
+    const estimatedProcedureCost = Number(cptCode?.basePrice || 0);
     const copayApplied = copayAmount || 0;
     const coinsurance = (estimatedProcedureCost - copayApplied) * (1 - coveragePercentage / 100);
     const estimatedPatientResponsibility = copayApplied + coinsurance;
