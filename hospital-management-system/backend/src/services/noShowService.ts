@@ -80,12 +80,11 @@ export class NoShowService {
 
     const currentMinutes = this.getCurrentTimeMinutes();
 
-    // Find appointments that are SCHEDULED or CONFIRMED for today
+    // Find appointments that are SCHEDULED or CONFIRMED for today or earlier
     // and haven't been checked in yet
     const appointments = await prisma.appointment.findMany({
       where: {
         appointmentDate: {
-          gte: today,
           lt: tomorrow,
         },
         status: {
@@ -125,12 +124,16 @@ export class NoShowService {
     });
 
     for (const appointment of appointments) {
+      const appointmentDay = new Date(appointment.appointmentDate);
+      appointmentDay.setHours(0, 0, 0, 0);
+      const isPastDate = appointmentDay.getTime() < today.getTime();
+
       const slotStartMinutes = this.parseTime(appointment.startTime);
       const timeoutMinutes = appointment.doctor.slotDuration;
       const noShowThreshold = slotStartMinutes + timeoutMinutes;
 
-      // Check if current time has exceeded the no-show threshold
-      if (currentMinutes >= noShowThreshold) {
+      // Past-date appointments are always overdue; today's check the time threshold
+      if (isPastDate || currentMinutes >= noShowThreshold) {
         try {
           // Mark appointment as NO_SHOW
           await prisma.appointment.update({
