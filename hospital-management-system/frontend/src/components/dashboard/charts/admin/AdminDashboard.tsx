@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { ClockIcon, ArrowRightIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { ClockIcon, ArrowRightIcon, ExclamationTriangleIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
 import {
   CalendarBillingIcon,
   HospitalBedIcon,
@@ -42,6 +42,7 @@ export default function AdminDashboard() {
       value: totalPatients.toLocaleString(),
       subtitle: newThisPeriod > 0 ? `+${newThisPeriod} new this month` : 'No new this month',
       subtitleColor: newThisPeriod > 0 ? 'text-emerald-600' : 'text-gray-400',
+      description: 'Total registered patients in the hospital. The subtitle shows how many new patients were registered in the current month.',
       icon: PatientIcon,
       iconBg: 'bg-blue-500',
     },
@@ -50,6 +51,7 @@ export default function AdminDashboard() {
       value: appointmentsToday.toLocaleString(),
       subtitle: `Avg ${dailyAvg7d}/day this week`,
       subtitleColor: 'text-gray-500',
+      description: 'Number of appointments scheduled for today. The subtitle shows the average daily appointments over the past 7 days for comparison.',
       icon: CalendarBillingIcon,
       iconBg: 'bg-emerald-500',
     },
@@ -58,6 +60,7 @@ export default function AdminDashboard() {
       value: `${availableBeds} / ${totalBeds}`,
       subtitle: `${occupancyRate}% occupied`,
       subtitleColor: occupancyRate >= 90 ? 'text-red-500' : occupancyRate >= 70 ? 'text-amber-500' : 'text-emerald-600',
+      description: 'Available beds out of total beds in the hospital. The subtitle shows the current occupancy rate — green means low occupancy, amber means moderate, and red means the hospital is near full capacity.',
       icon: HospitalBedIcon,
       iconBg: 'bg-purple-500',
     },
@@ -66,6 +69,7 @@ export default function AdminDashboard() {
       value: activeDoctors.toLocaleString(),
       subtitle: `${totalDoctors} total on staff`,
       subtitleColor: 'text-gray-500',
+      description: 'Number of doctors currently marked as available. The subtitle shows the total number of doctors registered in the hospital.',
       icon: HeartbeatIcon,
       iconBg: 'bg-orange-500',
     },
@@ -344,6 +348,10 @@ export default function AdminDashboard() {
                   <div className={`p-3 rounded-xl ${card.iconBg}`}>
                     <card.icon className="h-6 w-6 text-white" />
                   </div>
+                  <InformationCircleIcon
+                    className="h-5 w-5 text-gray-300 hover:text-gray-500 cursor-help flex-shrink-0"
+                    title={card.description}
+                  />
                 </div>
                 <div className="mt-4">
                   <p className="text-sm font-medium text-gray-500">{card.title}</p>
@@ -360,12 +368,13 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Weekly Activity Bar Chart */}
         <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-1">
             <h3 className="text-lg font-bold text-gray-900">Weekly Activity</h3>
             {isWeeklyLoading && (
               <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
             )}
           </div>
+          <p className="text-xs text-gray-400 mb-5">Daily appointment count for the last 7 days — total scheduled vs completed</p>
           {isWeeklyLoading ? (
             <ChartSkeleton type="bar" height="h-64" />
           ) : errors.weeklyActivity ? (
@@ -385,12 +394,13 @@ export default function AdminDashboard() {
 
         {/* Patient Distribution by Department Doughnut Chart */}
         <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-1">
             <h3 className="text-lg font-bold text-gray-900">Patient Distribution by Department</h3>
             {isDeptLoading && (
               <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
             )}
           </div>
+          <p className="text-xs text-gray-400 mb-5">Proportion of appointments handled by each department this month</p>
           {isDeptLoading ? (
             <ChartSkeleton type="pie" height="h-56" />
           ) : errors.departmentPerformance ? (
