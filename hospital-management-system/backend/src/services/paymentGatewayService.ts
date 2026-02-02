@@ -3,6 +3,7 @@ import prisma from '../config/database';
 import { NotFoundError } from '../middleware/errorHandler';
 import PDFDocument from 'pdfkit';
 import { Readable } from 'stream';
+import { accountingService } from './accountingService';
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder';
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_placeholder';
@@ -323,7 +324,7 @@ export class PaymentGatewayService {
 
     // Process payment
     try {
-      await prisma.$transaction(async (tx) => {
+      const result = await prisma.$transaction(async (tx) => {
         // Update transaction
         const charge = (paymentIntent as any).charges?.data?.[0];
         await tx.paymentTransaction.update({
@@ -376,7 +377,22 @@ export class PaymentGatewayService {
             updatedBy: 'system',
           },
         });
+
+        return { paymentId: payment.id };
       });
+
+      // Post Stripe payment to GL
+      try {
+        await accountingService.recordPaymentGL({
+          hospitalId: transaction.hospitalId,
+          paymentId: result.paymentId,
+          amount: Number(paymentIntent.amount_received) / 100,
+          description: `Stripe payment ${paymentIntent.id}`,
+          createdBy: 'stripe-webhook',
+        });
+      } catch (glError) {
+        console.error('[GL] Failed to post Stripe payment GL entry:', glError);
+      }
 
       console.log(`[PaymentGateway] Payment intent ${paymentIntent.id} processed successfully`);
     } catch (error) {
@@ -422,6 +438,19 @@ export class PaymentGatewayService {
         },
       },
     });
+
+    // Post Stripe refund to GL
+    try {
+      await accountingService.recordRefundGL({
+        hospitalId: transaction.hospitalId,
+        refundId: charge.refunds?.data[0]?.id || charge.id,
+        amount: Number(charge.amount_refunded) / 100,
+        description: `Stripe refund for charge ${charge.id}`,
+        createdBy: 'stripe-webhook',
+      });
+    } catch (glError) {
+      console.error('[GL] Failed to post Stripe refund GL entry:', glError);
+    }
 
     console.log(`[PaymentGateway] Charge ${charge.id} refunded`);
   }

@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { NotFoundError, BadRequestError } from '../middleware/errorHandler';
 import { Decimal } from '@prisma/client/runtime/library';
+import { accountingService } from './accountingService';
 
 export class DepositService {
   /**
@@ -83,6 +84,19 @@ export class DepositService {
 
       return newDeposit;
     });
+
+    // Post deposit to GL
+    try {
+      await accountingService.recordDepositGL({
+        hospitalId,
+        amount: data.amount,
+        depositId: deposit.id,
+        description: `Patient deposit - ${data.reason || 'Advance payment'}`,
+        createdBy,
+      });
+    } catch (glError) {
+      console.error('[GL] Failed to post deposit GL entry:', glError);
+    }
 
     return deposit;
   }
@@ -753,9 +767,9 @@ export class DepositService {
       throw new BadRequestError(`Cannot process refund with status: ${refund.status}`);
     }
 
-    return await prisma.$transaction(async (tx) => {
+    const updatedRefund = await prisma.$transaction(async (tx) => {
       // Update refund status
-      const updatedRefund = await tx.refund.update({
+      const result = await tx.refund.update({
         where: { id: refundId },
         data: {
           status: 'PROCESSED',
@@ -787,8 +801,23 @@ export class DepositService {
         });
       }
 
-      return updatedRefund;
+      return result;
     });
+
+    // Post refund to GL
+    try {
+      await accountingService.recordRefundGL({
+        hospitalId: refund.hospitalId,
+        refundId: refund.id,
+        amount: Number(refund.amount),
+        description: `Refund processed - ${refund.requestReason || 'Patient refund'}`,
+        createdBy: processedBy,
+      });
+    } catch (glError) {
+      console.error('[GL] Failed to post refund GL entry:', glError);
+    }
+
+    return updatedRefund;
   }
 
   /**

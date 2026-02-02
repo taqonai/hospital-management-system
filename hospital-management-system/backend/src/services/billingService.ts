@@ -3,6 +3,7 @@ import { NotFoundError } from '../middleware/errorHandler';
 import { Decimal } from '@prisma/client/runtime/library';
 import { notificationService } from './notificationService';
 import { chargeManagementService } from './chargeManagementService';
+import { accountingService } from './accountingService';
 
 export class BillingService {
   private generateInvoiceNumber(): string {
@@ -69,6 +70,20 @@ export class BillingService {
         items: true,
       },
     });
+
+    // Post to General Ledger
+    try {
+      await accountingService.recordInvoiceGL({
+        hospitalId,
+        invoiceId: invoice.id,
+        amount: Number(invoice.totalAmount),
+        description: `Invoice ${invoice.invoiceNumber}`,
+        createdBy: data.createdBy || 'system',
+      });
+    } catch (glError) {
+      console.error('[GL] Failed to post invoice GL entry:', glError);
+      // Don't fail the invoice creation if GL posting fails
+    }
 
     // Send invoice notification to patient
     try {
@@ -205,6 +220,19 @@ export class BillingService {
       return { payment, invoice: updatedInvoice };
     });
 
+    // Post payment to GL (after successful transaction)
+    try {
+      await accountingService.recordPaymentGL({
+        hospitalId: invoice.hospitalId,
+        paymentId: result.payment.id,
+        amount: Number(data.amount),
+        description: `Payment for ${invoice.invoiceNumber} via ${data.paymentMethod}`,
+        createdBy: data.createdBy || 'system',
+      });
+    } catch (glError) {
+      console.error('[GL] Failed to post payment GL entry:', glError);
+    }
+
     // Send payment confirmation notification
     try {
       await notificationService.sendBillingNotification({
@@ -280,12 +308,14 @@ export class BillingService {
         include: { invoice: true },
       });
 
+      let autoPayment: { id: string } | null = null;
+
       // If claim approved/paid, create auto-payment
       if ((status === 'APPROVED' || status === 'PAID') && processedBy) {
         const paymentAmount = approvedAmount || Number(claim.claimAmount);
 
         // Create payment record
-        const payment = await tx.payment.create({
+        autoPayment = await tx.payment.create({
           data: {
             invoiceId: claim.invoiceId,
             amount: paymentAmount,
@@ -319,10 +349,25 @@ export class BillingService {
         });
       }
 
-      return claim;
+      return { claim, autoPayment };
     });
 
-    return result;
+    // Post insurance payment to GL
+    if (result.autoPayment) {
+      try {
+        await accountingService.recordPaymentGL({
+          hospitalId: result.claim.invoice.hospitalId,
+          paymentId: result.autoPayment.id,
+          amount: Number(approvedAmount || result.claim.claimAmount),
+          description: `Insurance payment - Claim ${result.claim.claimNumber}`,
+          createdBy: processedBy || 'system',
+        });
+      } catch (glError) {
+        console.error('[GL] Failed to post insurance payment GL entry:', glError);
+      }
+    }
+
+    return result.claim;
   }
 
   async getClaims(hospitalId: string, params: {

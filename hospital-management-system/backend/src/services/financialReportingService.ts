@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { NotFoundError, AppError } from '../middleware/errorHandler';
 import { Prisma } from '@prisma/client';
+import { accountingService } from './accountingService';
 
 interface ARAgingBucket {
   current: number;
@@ -561,9 +562,9 @@ export class FinancialReportingService {
 
     // If approving, update invoice balance
     if (status === 'APPROVED') {
-      return prisma.$transaction(async (tx) => {
+      const updatedWriteOff = await prisma.$transaction(async (tx) => {
         // Update write-off status
-        const updatedWriteOff = await tx.writeOff.update({
+        const result = await tx.writeOff.update({
           where: { id },
           data: {
             status,
@@ -583,8 +584,23 @@ export class FinancialReportingService {
           },
         });
 
-        return updatedWriteOff;
+        return result;
       });
+
+      // Post write-off to GL
+      try {
+        await accountingService.recordWriteOffGL({
+          hospitalId,
+          writeOffId: updatedWriteOff.id,
+          amount: Number(writeOff.amount),
+          description: `Write-off: ${writeOff.category} - ${writeOff.reason || ''}`,
+          createdBy: approvedBy,
+        });
+      } catch (glError) {
+        console.error('[GL] Failed to post write-off GL entry:', glError);
+      }
+
+      return updatedWriteOff;
     } else {
       // Just update status for rejection
       return prisma.writeOff.update({
