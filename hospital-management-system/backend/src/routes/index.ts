@@ -173,4 +173,8 @@ router.use('/nursing', nurseRoutes);
 // Financial Reporting
 router.use('/financial-reports', financialReportingRoutes);
 
+// Accounting (GL / CoA)
+import accountingRoutes from './accountingRoutes';
+router.use('/accounting', accountingRoutes);
+
 export default router;

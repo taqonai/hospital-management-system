@@ -2680,4 +2680,63 @@ export const financialReportsApi = {
   },
 };
 
+// Accounting API (GL / CoA)
+// =============================================================================
+
+export const accountingApi = {
+  // Chart of Accounts
+  listAccounts: (params?: { accountType?: string; isActive?: string }) =>
+    api.get('/accounting/chart-of-accounts', { params }).then((res) => res.data.data),
+
+  createAccount: (data: {
+    accountCode: string;
+    accountName: string;
+    accountType: string;
+    parentId?: string;
+    description?: string;
+  }) => api.post('/accounting/chart-of-accounts', data).then((res) => res.data.data),
+
+  updateAccount: (id: string, data: {
+    accountName?: string;
+    description?: string;
+    isActive?: boolean;
+    parentId?: string | null;
+  }) => api.put(`/accounting/chart-of-accounts/${id}`, data).then((res) => res.data.data),
+
+  seedDefaultCoA: () =>
+    api.post('/accounting/chart-of-accounts/seed').then((res) => res.data.data),
+
+  // GL Entries
+  queryGLEntries: (params?: {
+    startDate?: string;
+    endDate?: string;
+    accountId?: string;
+    referenceType?: string;
+    costCenter?: string;
+    fiscalPeriodId?: string;
+    page?: number;
+    limit?: number;
+  }) => api.get('/accounting/gl-entries', { params }).then((res) => res.data.data),
+
+  getJournal: (referenceId: string) =>
+    api.get(`/accounting/journal/${referenceId}`).then((res) => res.data.data),
+
+  reverseEntry: (id: string, reason?: string) =>
+    api.post(`/accounting/gl-entries/reverse/${id}`, { reason }).then((res) => res.data.data),
+
+  // Trial Balance
+  getTrialBalance: (params?: { asOfDate?: string; fiscalPeriodId?: string }) =>
+    api.get('/accounting/trial-balance', { params }).then((res) => res.data.data),
+
+  // Fiscal Periods
+  listFiscalPeriods: () =>
+    api.get('/accounting/fiscal-periods').then((res) => res.data.data),
+
+  createFiscalPeriod: (data: { name: string; startDate: string; endDate: string }) =>
+    api.post('/accounting/fiscal-periods', data).then((res) => res.data.data),
+
+  closeFiscalPeriod: (id: string) =>
+    api.put(`/accounting/fiscal-periods/${id}/close`).then((res) => res.data.data),
+};
+
 export default api;

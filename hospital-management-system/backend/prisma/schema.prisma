@@ -130,6 +130,11 @@ model Hospital {
   // Pre-Authorization
   preAuthRequests PreAuthRequest[]
 
+  // Accounting (GL / CoA)
+  glAccounts    GLAccount[]
+  glEntries     GLEntry[]
+  fiscalPeriods FiscalPeriod[]
+
   @@map("hospitals")
 }
 
@@ -8166,4 +8171,96 @@ enum WriteOffStatus {
   APPROVED
   REJECTED
   CANCELLED
+}
+
+// ==================== ACCOUNTING (GL / CoA) ====================
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  REVENUE
+  EXPENSE
+  EQUITY
+}
+
+enum GLReferenceType {
+  INVOICE
+  PAYMENT
+  REFUND
+  WRITE_OFF
+  DEPOSIT
+  REVERSAL
+  MANUAL
+}
+
+model GLAccount {
+  id          String      @id @default(cuid())
+  hospitalId  String
+  accountCode String
+  accountName String
+  accountType AccountType
+  parentId    String?
+  isActive    Boolean     @default(true)
+  description String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  hospital Hospital   @relation(fields: [hospitalId], references: [id])
+  parent   GLAccount? @relation("GLAccountHierarchy", fields: [parentId], references: [id])
+  children GLAccount[] @relation("GLAccountHierarchy")
+  glEntries GLEntry[]
+
+  @@unique([hospitalId, accountCode])
+  @@index([hospitalId, accountType])
+  @@index([hospitalId, isActive])
+  @@map("gl_accounts")
+}
+
+model GLEntry {
+  id              String          @id @default(cuid())
+  hospitalId      String
+  transactionDate DateTime
+  glAccountId     String
+  debitAmount     Decimal         @default(0) @db.Decimal(14, 2)
+  creditAmount    Decimal         @default(0) @db.Decimal(14, 2)
+  description     String
+  referenceType   GLReferenceType
+  referenceId     String
+  costCenter      String?
+  fiscalPeriodId  String?
+  reversedById    String?
+  reversesId      String?
+  createdAt       DateTime        @default(now())
+  createdBy       String
+
+  hospital     Hospital      @relation(fields: [hospitalId], references: [id])
+  glAccount    GLAccount     @relation(fields: [glAccountId], references: [id])
+  fiscalPeriod FiscalPeriod? @relation(fields: [fiscalPeriodId], references: [id])
+
+  @@index([hospitalId, transactionDate])
+  @@index([hospitalId, glAccountId])
+  @@index([hospitalId, referenceType, referenceId])
+  @@index([hospitalId, costCenter])
+  @@index([hospitalId, fiscalPeriodId])
+  @@map("gl_entries")
+}
+
+model FiscalPeriod {
+  id         String    @id @default(cuid())
+  hospitalId String
+  name       String
+  startDate  DateTime
+  endDate    DateTime
+  isClosed   Boolean   @default(false)
+  closedBy   String?
+  closedAt   DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  hospital  Hospital  @relation(fields: [hospitalId], references: [id])
+  glEntries GLEntry[]
+
+  @@unique([hospitalId, name])
+  @@index([hospitalId, startDate, endDate])
+  @@map("fiscal_periods")
 }
