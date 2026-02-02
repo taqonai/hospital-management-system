@@ -267,6 +267,24 @@ export default function AdminDashboard() {
   const isDeptLoading = !departmentPerformance && !errors.departmentPerformance;
   const isAppointmentsLoading = !todayAppointments && !errors.todayAppointments;
 
+  const weeklyBarOptions = {
+    ...barChartOptions,
+    plugins: {
+      ...barChartOptions.plugins,
+      legend: {
+        display: true,
+        position: 'bottom' as const,
+        labels: {
+          usePointStyle: true,
+          pointStyle: 'circle',
+          padding: 16,
+          font: { size: 12, family: "'Inter', 'Segoe UI', sans-serif" },
+          color: '#374151',
+        },
+      },
+    },
+  };
+
   const doughnutOptions = {
     ...pieChartOptions,
     cutout: '55%',
@@ -341,7 +359,7 @@ export default function AdminDashboard() {
             </div>
           ) : (
             <div className="h-64">
-              <Bar data={weeklyActivityData} options={barChartOptions} />
+              <Bar data={weeklyActivityData} options={weeklyBarOptions} />
             </div>
           )}
         </div>
