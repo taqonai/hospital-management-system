@@ -79,6 +79,33 @@ router.post(
   })
 );
 
+// Calculate copay for a patient
+router.get(
+  '/calculate-copay/:patientId',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const copayInfo = await billingService.calculateCopay(
+      req.params.patientId,
+      req.user!.hospitalId
+    );
+    sendSuccess(res, copayInfo);
+  })
+);
+
+// Get patient deposit balance
+router.get(
+  '/patients/:patientId/deposit-balance',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { depositService } = require('../services/depositService');
+    const balance = await depositService.getPatientDepositBalance(
+      req.params.patientId,
+      req.user!.hospitalId
+    );
+    sendSuccess(res, balance);
+  })
+);
+
 // Collect copay at check-in
 router.post(
   '/copay-collect',

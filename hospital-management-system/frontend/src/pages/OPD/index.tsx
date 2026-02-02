@@ -26,6 +26,7 @@ import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../hooks/useAuth';
 import VitalsRecordingModal from '../../components/vitals/VitalsRecordingModal';
+import CopayCollectionModal from '../../components/billing/CopayCollectionModal';
 
 interface QueueItem {
   id: string; // Appointment/Booking ID
@@ -377,6 +378,8 @@ export default function OPD() {
   const [showWalkInModal, setShowWalkInModal] = useState(false);
   const [selectedAppointmentForVitals, setSelectedAppointmentForVitals] = useState<QueueItem | null>(null);
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+  const [showCopayModal, setShowCopayModal] = useState(false);
+  const [selectedAppointmentForCopay, setSelectedAppointmentForCopay] = useState<QueueItem | null>(null);
   const { data: healthStatus } = useAIHealth();
   const isAIOnline = healthStatus?.status === 'connected';
   const { hasRole } = useAuth();
@@ -484,25 +487,45 @@ export default function OPD() {
   // Handle patient check-in (Front Desk / Receptionist only)
   const handleCheckIn = async (appointmentId: string) => {
     try {
-      // TODO P0-4: Add copay collection modal here
-      // 1. Find the appointment and patient from queue/appointments
-      // 2. Call billing API to calculate copay
-      // 3. Show modal with:
-      //    - Insurance info
-      //    - Copay amount
-      //    - Payment method selector (Cash/Card/Deposit)
-      //    - Collect / Waive / Defer buttons
-      // 4. If collect selected, call POST /api/v1/billing/copay-collect
-      // 5. Then proceed with check-in
+      // Find the appointment from queue or todayAppointments
+      const appointment = 
+        queue.find((item) => item.id === appointmentId) ||
+        todayAppointments.find((item) => item.id === appointmentId);
+
+      if (!appointment) {
+        toast.error('Appointment not found');
+        return;
+      }
+
+      // Set selected appointment and open copay modal
+      setSelectedAppointmentForCopay(appointment);
+      setShowCopayModal(true);
+    } catch (error: any) {
+      console.error('Failed to initiate check-in:', error);
+      toast.error(error.response?.data?.message || 'Failed to initiate check-in');
+    }
+  };
+
+  // Complete check-in after copay collection
+  const completeCheckIn = async (action: 'collected' | 'waived' | 'deferred') => {
+    if (!selectedAppointmentForCopay) return;
+
+    try {
+      await opdApi.checkIn(selectedAppointmentForCopay.id);
+      const actionMsg = action === 'collected' ? 'Copay collected and patient' : 
+                       action === 'waived' ? 'Copay waived and patient' : 
+                       'Copay deferred and patient';
+      toast.success(`${actionMsg} checked in successfully`);
       
-      // For now, proceeding with direct check-in (no copay collection)
-      await opdApi.checkIn(appointmentId);
-      toast.success('Patient checked in successfully');
       // Refresh queue
       const response = await opdApi.getQueue();
       setQueue(response.data.data || []);
+      
+      // Close modal
+      setShowCopayModal(false);
+      setSelectedAppointmentForCopay(null);
     } catch (error: any) {
-      console.error('Failed to check in patient:', error);
+      console.error('Failed to complete check-in:', error);
       toast.error(error.response?.data?.message || 'Failed to check in patient');
     }
   };
@@ -991,6 +1014,25 @@ export default function OPD() {
             };
             fetchQueue();
           }}
+        />
+      )}
+
+      {/* Copay Collection Modal */}
+      {showCopayModal && selectedAppointmentForCopay && (
+        <CopayCollectionModal
+          isOpen={showCopayModal}
+          onClose={() => {
+            setShowCopayModal(false);
+            setSelectedAppointmentForCopay(null);
+          }}
+          onSuccess={completeCheckIn}
+          patient={{
+            id: selectedAppointmentForCopay.patient.id,
+            firstName: selectedAppointmentForCopay.patient.firstName,
+            lastName: selectedAppointmentForCopay.patient.lastName,
+            mrn: selectedAppointmentForCopay.patient.mrn,
+          }}
+          appointmentId={selectedAppointmentForCopay.id}
         />
       )}
 

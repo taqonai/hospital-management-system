@@ -1017,6 +1017,18 @@ export const billingApi = {
   getPatientStatement: (patientId: string) => api.get(`/billing/patients/${patientId}/statement`),
   getStats: () => api.get('/billing/stats'),
   getOutstanding: () => api.get('/billing/outstanding'),
+  // Copay
+  calculateCopay: (patientId: string) => api.get(`/billing/calculate-copay/${patientId}`),
+  collectCopay: (data: {
+    patientId: string;
+    appointmentId: string;
+    amount: number;
+    paymentMethod: 'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'UPI' | 'DEPOSIT';
+    useDeposit?: boolean;
+    notes?: string;
+  }) => api.post('/billing/copay-collect', data),
+  getDepositBalance: (patientId: string) =>
+    api.get(`/billing/patients/${patientId}/deposit-balance`),
   // AI Auto Charge Capture
   extractCharges: (notes: string) =>
     api.post('/billing/extract-charges', { notes }),
