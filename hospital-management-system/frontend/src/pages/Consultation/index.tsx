@@ -51,7 +51,7 @@ import {
   NEWS2RiskLevel,
 } from '../../utils/news2';
 
-const AiDocIcon = ({ className = 'h-6 w-6' }: { className?: string }) => (
+const AiDocIcon = ({ className = 'h-8 w-8' }: { className?: string }) => (
   <img src="/ai-doc.png?v=2" alt="AI" className={`${className} inline-block`} />
 );
 
