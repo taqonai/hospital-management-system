@@ -50,6 +50,7 @@ import notificationAdminRoutes from './notificationAdminRoutes';
 import wellnessRoutes from './wellnessRoutes';
 import aiSettingsRoutes from './aiSettingsRoutes';
 import insuranceCodingRoutes from './insuranceCodingRoutes';
+import preAuthRoutes from './preAuthRoutes';
 // A'mad Precision Health Platform routes
 import healthPlatformRoutes from './healthPlatformRoutes';
 import genomicRoutes from './genomicRoutes';
@@ -62,6 +63,7 @@ import referralRoutes from './referralRoutes';
 import whatsappBotRoutes from './whatsappBotRoutes';
 import procurementRoutes from './procurementRoutes';
 import nurseRoutes from './nurseRoutes';
+import financialReportingRoutes from './financialReportingRoutes';
 
 const router = Router();
 
@@ -143,6 +145,9 @@ router.use('/ai-settings', aiSettingsRoutes);
 // Insurance Coding (ICD-10 / CPT) routes
 router.use('/insurance-coding', insuranceCodingRoutes);
 
+// Pre-Authorization routes
+router.use('/pre-auth', preAuthRoutes);
+
 // A'mad Precision Health Platform routes
 router.use('/health', healthPlatformRoutes);
 router.use('/genomics', genomicRoutes);
@@ -164,5 +169,8 @@ router.use('/procurement', procurementRoutes);
 
 // Nursing Module
 router.use('/nursing', nurseRoutes);
+
+// Financial Reporting
+router.use('/financial-reports', financialReportingRoutes);
 
 export default router;

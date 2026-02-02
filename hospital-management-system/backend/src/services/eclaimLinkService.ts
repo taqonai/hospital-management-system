@@ -686,6 +686,230 @@ export class EClaimLinkService {
       take: options.limit || 50,
     });
   }
+  /**
+   * Submit insurance claim to DHA eClaimLink API
+   * Feature-flagged - only runs if ENABLE_ECLAIM_API_SUBMISSION is true
+   */
+  async submitClaimToDHA(
+    claimId: string,
+    hospitalId: string
+  ): Promise<{
+    success: boolean;
+    dhaClaimId?: string;
+    submittedAt?: Date;
+    errorMessage?: string;
+    errorCode?: string;
+  }> {
+    // Check feature flag
+    const hospital = await prisma.hospital.findUnique({
+      where: { id: hospitalId },
+      select: { settings: true },
+    });
+
+    const settings = (hospital?.settings as any) || {};
+    const features = settings.features || {};
+
+    if (!features.ENABLE_ECLAIM_API_SUBMISSION) {
+      logger.info(`eClaimLink API submission disabled for hospital ${hospitalId}`);
+      return {
+        success: false,
+        errorMessage: 'eClaimLink API submission is not enabled for this hospital',
+        errorCode: 'FEATURE_DISABLED',
+      };
+    }
+
+    // Get claim details
+    const claim = await prisma.insuranceClaim.findFirst({
+      where: { id: claimId },
+      include: {
+        invoice: {
+          include: {
+            patient: {
+              include: {
+                insurances: {
+                  where: { isPrimary: true, isActive: true },
+                },
+              },
+            },
+          },
+        },
+        insurancePayer: true,
+      },
+    });
+
+    if (!claim) {
+      throw new Error(`Claim not found: ${claimId}`);
+    }
+
+    // Only submit to DHA if payer uses eClaimLink
+    if (claim.insurancePayer?.claimPlatform !== 'eClaimLink') {
+      logger.warn(`Payer ${claim.insurancePayer?.name} does not use eClaimLink`);
+      return {
+        success: false,
+        errorMessage: 'Payer does not use eClaimLink platform',
+        errorCode: 'PLATFORM_MISMATCH',
+      };
+    }
+
+    try {
+      // Generate eClaimLink XML (reuse existing method if applicable)
+      // For now, we'll create a simple XML structure
+      const xmlPayload = await this.buildClaimXML(claim);
+
+      // Call DHA eClaimLink API
+      const apiUrl = process.env.DHA_ECLAIM_API_URL || 'https://eclaimlink.dha.gov.ae/api/v1/claims/submit';
+      const apiKey = process.env.DHA_ECLAIM_API_KEY || '';
+
+      if (!apiKey) {
+        throw new Error('DHA eClaimLink API key not configured');
+      }
+
+      const axios = require('axios');
+      const response = await axios.post(
+        apiUrl,
+        xmlPayload,
+        {
+          headers: {
+            'Content-Type': 'application/xml',
+            'Authorization': `Bearer ${apiKey}`,
+            'X-Hospital-ID': hospitalId,
+          },
+          timeout: 30000, // 30 seconds
+        }
+      );
+
+      const responseData = response.data;
+
+      // Parse response
+      let dhaClaimId: string | undefined;
+      let success = false;
+      let errorMessage: string | undefined;
+
+      if (response.status === 200 || response.status === 201) {
+        // Success
+        dhaClaimId = responseData.claimId || responseData.id || responseData.referenceNumber;
+        success = true;
+
+        // Update claim with DHA response
+        await prisma.insuranceClaim.update({
+          where: { id: claimId },
+          data: {
+            eclaimLinkId: dhaClaimId,
+            eclaimLinkStatus: 'SUBMITTED',
+            eclaimLinkResponse: responseData,
+            status: 'SUBMITTED',
+            submittedAt: new Date(),
+          },
+        });
+
+        logger.info(`Claim ${claim.claimNumber} submitted to DHA eClaimLink: ${dhaClaimId}`);
+      } else {
+        // Failure
+        errorMessage = responseData.error || responseData.message || 'Unknown error';
+
+        await prisma.insuranceClaim.update({
+          where: { id: claimId },
+          data: {
+            eclaimLinkStatus: 'REJECTED',
+            eclaimLinkResponse: responseData,
+          },
+        });
+
+        logger.error(`Claim ${claim.claimNumber} submission failed: ${errorMessage}`);
+      }
+
+      return {
+        success,
+        dhaClaimId,
+        submittedAt: success ? new Date() : undefined,
+        errorMessage,
+      };
+    } catch (error: any) {
+      logger.error(`Error submitting claim to DHA eClaimLink: ${error.message}`, {
+        claimId,
+        error: error.response?.data || error.message,
+      });
+
+      // Update claim with error
+      await prisma.insuranceClaim.update({
+        where: { id: claimId },
+        data: {
+          eclaimLinkStatus: 'ERROR',
+          eclaimLinkResponse: {
+            error: error.message,
+            timestamp: new Date().toISOString(),
+          },
+        },
+      });
+
+      return {
+        success: false,
+        errorMessage: error.message,
+        errorCode: error.response?.status?.toString() || 'NETWORK_ERROR',
+      };
+    }
+  }
+
+  /**
+   * Build simple XML payload for claim submission
+   * (Simplified version - production would need full eClaimLink schema)
+   */
+  private async buildClaimXML(claim: any): Promise<string> {
+    const patient = claim.invoice.patient;
+    const insurance = patient.insurances?.[0];
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<Claim xmlns="http://eclaimlink.ae/schema/v1">
+  <ClaimHeader>
+    <ClaimNumber>${claim.claimNumber}</ClaimNumber>
+    <PayerCode>${claim.insurancePayer?.code || 'UNKNOWN'}</PayerCode>
+    <MemberID>${insurance?.subscriberId || ''}</MemberID>
+    <PolicyNumber>${claim.policyNumber}</PolicyNumber>
+    <PatientFileNo>${patient.mrn}</PatientFileNo>
+    <ServiceDate>${claim.createdAt.toISOString().split('T')[0]}</ServiceDate>
+    <ClaimAmount>${claim.claimAmount.toString()}</ClaimAmount>
+  </ClaimHeader>
+  <PatientInfo>
+    <FirstName>${patient.firstName}</FirstName>
+    <LastName>${patient.lastName}</LastName>
+    <DateOfBirth>${patient.dateOfBirth.toISOString().split('T')[0]}</DateOfBirth>
+    <Gender>${patient.gender}</Gender>
+  </PatientInfo>
+</Claim>`;
+
+    return xml;
+  }
+
+  /**
+   * Check submission status for a claim
+   */
+  async checkClaimStatus(claimId: string): Promise<{
+    eclaimLinkId?: string;
+    status?: string;
+    lastUpdated?: Date;
+    response?: any;
+  }> {
+    const claim = await prisma.insuranceClaim.findUnique({
+      where: { id: claimId },
+      select: {
+        eclaimLinkId: true,
+        eclaimLinkStatus: true,
+        eclaimLinkResponse: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!claim) {
+      throw new Error('Claim not found');
+    }
+
+    return {
+      eclaimLinkId: claim.eclaimLinkId || undefined,
+      status: claim.eclaimLinkStatus || undefined,
+      lastUpdated: claim.updatedAt,
+      response: claim.eclaimLinkResponse,
+    };
+  }
 }
 
 export const eclaimLinkService = new EClaimLinkService();

@@ -125,6 +125,10 @@ model Hospital {
   deposits    Deposit[]
   creditNotes CreditNote[]
   refunds     Refund[]
+  writeOffs   WriteOff[]
+
+  // Pre-Authorization
+  preAuthRequests PreAuthRequest[]
 
   @@map("hospitals")
 }
@@ -834,6 +838,9 @@ model Patient {
   creditNotes CreditNote[]
   refunds     Refund[]
 
+  // Pre-Authorization
+  preAuthRequests PreAuthRequest[]
+
   @@unique([hospitalId, mrn])
   @@unique([hospitalId, phone])
   @@map("patients")
@@ -1026,7 +1033,8 @@ model PatientInsurance {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  patient Patient @relation(fields: [patientId], references: [id])
+  patient         Patient          @relation(fields: [patientId], references: [id])
+  preAuthRequests PreAuthRequest[]
 
   @@map("patient_insurances")
 }
@@ -1942,6 +1950,7 @@ model Invoice {
   depositLedgers      DepositLedger[]
   creditNoteSources   CreditNote[]         @relation("CreditNoteSource")
   creditNoteApplied   CreditNote[]         @relation("CreditNoteApplication")
+  writeOffs           WriteOff[]
 
   @@map("invoices")
 }
@@ -2046,11 +2055,20 @@ model InsuranceClaim {
   updatedBy          String?
   submittedBy        String?
   processedBy        String?
+  // Appeal workflow fields
+  originalClaimId    String?     // FK to parent claim if this is a resubmission/appeal
+  resubmissionCode   String?     // Reason code for resubmission
+  appealDocumentUrl  String?     // S3 URL for appeal documentation
+  eclaimLinkId       String?     // DHA eClaimLink submission ID
+  eclaimLinkStatus   String?     // PENDING, SUBMITTED, ACCEPTED, REJECTED
+  eclaimLinkResponse Json?       // Response from DHA API
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
   invoice          Invoice          @relation(fields: [invoiceId], references: [id])
   insurancePayer   InsurancePayer?  @relation(fields: [insurancePayerId], references: [id])
+  originalClaim    InsuranceClaim?  @relation("ClaimAppeal", fields: [originalClaimId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  appeals          InsuranceClaim[] @relation("ClaimAppeal")
 
   @@map("insurance_claims")
 }
@@ -2063,6 +2081,62 @@ enum ClaimStatus {
   PARTIALLY_APPROVED
   REJECTED
   PAID
+}
+
+// ==================== PRE-AUTHORIZATION ====================
+
+model PreAuthRequest {
+  id                    String            @id @default(uuid())
+  hospitalId            String
+  patientId             String
+  insurancePolicyId     String
+  payerId               String?
+  requestNumber         String            @unique // PRE-AUTH-xxx
+  procedureCPTCode      String
+  diagnosisICDCode      String
+  requestedDate         DateTime          @default(now())
+  urgency               PreAuthUrgency    @default(ROUTINE)
+  clinicalJustification String?
+  estimatedCost         Decimal?          @db.Decimal(10, 2)
+  status                PreAuthStatus     @default(PENDING)
+  authorizationNumber   String?           // Approved auth number from payer
+  approvedUnits         Int?              // Number of approved visits/procedures
+  approvedAmount        Decimal?          @db.Decimal(10, 2)
+  approvedFrom          DateTime?
+  approvedTo            DateTime?
+  denialReason          String?
+  reviewerNotes         String?
+  payerResponseDate     DateTime?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  createdBy             String
+  updatedBy             String?
+
+  hospital  Hospital         @relation(fields: [hospitalId], references: [id])
+  patient   Patient          @relation(fields: [patientId], references: [id])
+  policy    PatientInsurance @relation(fields: [insurancePolicyId], references: [id])
+  payer     InsurancePayer?  @relation(fields: [payerId], references: [id])
+
+  @@index([hospitalId, status])
+  @@index([patientId])
+  @@index([payerId])
+  @@map("pre_auth_requests")
+}
+
+enum PreAuthUrgency {
+  ROUTINE
+  URGENT
+  EMERGENCY
+}
+
+enum PreAuthStatus {
+  PENDING
+  SUBMITTED
+  APPROVED
+  PARTIALLY_APPROVED
+  DENIED
+  EXPIRED
+  CANCELLED
 }
 
 // ==================== CHARGE MASTER & FEE SCHEDULES ====================
@@ -5866,11 +5940,12 @@ model InsurancePayer {
   createdBy               String?
 
   // Relations
-  hospital Hospital          @relation(fields: [hospitalId], references: [id])
-  icdRules ICD10PayerRule[]
-  cptRules CPTPayerRule[]
-  claims   InsuranceClaim[]
-  feeSchedules FeeSchedule[]
+  hospital        Hospital          @relation(fields: [hospitalId], references: [id])
+  icdRules        ICD10PayerRule[]
+  cptRules        CPTPayerRule[]
+  claims          InsuranceClaim[]
+  feeSchedules    FeeSchedule[]
+  preAuthRequests PreAuthRequest[]
 
   @@unique([hospitalId, code])
   @@index([hospitalId, isActive])
@@ -8048,4 +8123,47 @@ model Refund {
 
   @@index([hospitalId, status])
   @@map("refunds")
+}
+
+// ==================== WRITE-OFFS ====================
+
+model WriteOff {
+  id          String         @id @default(uuid())
+  hospitalId  String
+  invoiceId   String
+  amount      Decimal        @db.Decimal(10, 2)
+  reason      String
+  category    WriteOffCategory
+  status      WriteOffStatus @default(PENDING)
+  requestedBy String
+  approvedBy  String?
+  approvedAt  DateTime?
+  notes       String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  hospital Hospital @relation(fields: [hospitalId], references: [id])
+  invoice  Invoice  @relation(fields: [invoiceId], references: [id])
+
+  @@index([hospitalId, status])
+  @@index([invoiceId])
+  @@map("write_offs")
+}
+
+enum WriteOffCategory {
+  BAD_DEBT
+  CHARITY_CARE
+  CONTRACTUAL_ADJUSTMENT
+  ADMINISTRATIVE_ERROR
+  UNCOLLECTIBLE
+  DECEASED_PATIENT
+  SMALL_BALANCE
+  OTHER
+}
+
+enum WriteOffStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
 }

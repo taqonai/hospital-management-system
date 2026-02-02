@@ -922,6 +922,196 @@ export class BillingService {
       disclaimer: 'This is an estimate only. Actual charges may vary based on clinical needs and complications.',
     };
   }
+
+  /**
+   * Create a claim appeal (resubmission)
+   */
+  async createClaimAppeal(
+    hospitalId: string,
+    originalClaimId: string,
+    appealData: {
+      resubmissionCode: string;
+      appealNotes: string;
+      appealDocumentUrl?: string;
+      updatedClaimAmount?: number;
+    },
+    createdBy: string
+  ) {
+    // Get original claim
+    const originalClaim = await prisma.insuranceClaim.findFirst({
+      where: { id: originalClaimId },
+      include: { invoice: true },
+    });
+
+    if (!originalClaim) {
+      throw new NotFoundError('Original claim not found');
+    }
+
+    if (originalClaim.status !== 'REJECTED') {
+      throw new Error('Can only appeal rejected claims');
+    }
+
+    // Generate new claim number
+    const appealClaimNumber = this.generateClaimNumber();
+
+    // Create appeal claim
+    const appealClaim = await prisma.insuranceClaim.create({
+      data: {
+        invoiceId: originalClaim.invoiceId,
+        claimNumber: appealClaimNumber,
+        insuranceProvider: originalClaim.insuranceProvider,
+        insurancePayerId: originalClaim.insurancePayerId,
+        policyNumber: originalClaim.policyNumber,
+        claimAmount: appealData.updatedClaimAmount
+          ? new Decimal(appealData.updatedClaimAmount)
+          : originalClaim.claimAmount,
+        status: 'DRAFT',
+        originalClaimId,
+        resubmissionCode: appealData.resubmissionCode,
+        appealNotes: appealData.appealNotes,
+        appealDate: new Date(),
+        appealStatus: 'PENDING',
+        appealDocumentUrl: appealData.appealDocumentUrl,
+        createdBy,
+      },
+      include: {
+        invoice: true,
+        insurancePayer: true,
+        originalClaim: true,
+      },
+    });
+
+    // Update original claim
+    await prisma.insuranceClaim.update({
+      where: { id: originalClaimId },
+      data: {
+        appealStatus: 'APPEALED',
+        appealDate: new Date(),
+      },
+    });
+
+    return appealClaim;
+  }
+
+  /**
+   * Submit claim appeal
+   */
+  async submitClaimAppeal(
+    appealClaimId: string,
+    hospitalId: string,
+    submittedBy: string
+  ) {
+    const claim = await prisma.insuranceClaim.findFirst({
+      where: { id: appealClaimId },
+    });
+
+    if (!claim) {
+      throw new NotFoundError('Appeal claim not found');
+    }
+
+    if (claim.status !== 'DRAFT') {
+      throw new Error('Claim has already been submitted');
+    }
+
+    const updated = await prisma.insuranceClaim.update({
+      where: { id: appealClaimId },
+      data: {
+        status: 'SUBMITTED',
+        submittedAt: new Date(),
+        submittedBy,
+        appealStatus: 'UNDER_REVIEW',
+      },
+      include: {
+        invoice: true,
+        insurancePayer: true,
+        originalClaim: true,
+      },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Get claim appeal history
+   */
+  async getClaimAppealHistory(claimId: string, hospitalId: string) {
+    const claim = await prisma.insuranceClaim.findFirst({
+      where: { id: claimId },
+      include: {
+        originalClaim: {
+          include: {
+            originalClaim: true, // Parent's parent if exists
+          },
+        },
+        appeals: {
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+
+    if (!claim) {
+      throw new NotFoundError('Claim not found');
+    }
+
+    // Build appeal chain
+    const history: any[] = [];
+
+    // Add parent claims
+    let current: any = claim;
+    while (current.originalClaim) {
+      history.unshift({
+        id: current.originalClaim.id,
+        claimNumber: current.originalClaim.claimNumber,
+        status: current.originalClaim.status,
+        claimAmount: current.originalClaim.claimAmount,
+        approvedAmount: current.originalClaim.approvedAmount,
+        submittedAt: current.originalClaim.submittedAt,
+        processedAt: current.originalClaim.processedAt,
+        denialReasonCode: current.originalClaim.denialReasonCode,
+        appealStatus: current.originalClaim.appealStatus,
+        type: 'ORIGINAL',
+      });
+      current = current.originalClaim;
+    }
+
+    // Add current claim
+    history.push({
+      id: claim.id,
+      claimNumber: claim.claimNumber,
+      status: claim.status,
+      claimAmount: claim.claimAmount,
+      approvedAmount: claim.approvedAmount,
+      submittedAt: claim.submittedAt,
+      processedAt: claim.processedAt,
+      denialReasonCode: claim.denialReasonCode,
+      appealStatus: claim.appealStatus,
+      appealNotes: claim.appealNotes,
+      appealDocumentUrl: claim.appealDocumentUrl,
+      type: claim.originalClaimId ? 'APPEAL' : 'ORIGINAL',
+    });
+
+    // Add child appeals
+    if (claim.appeals && claim.appeals.length > 0) {
+      claim.appeals.forEach((appeal: any) => {
+        history.push({
+          id: appeal.id,
+          claimNumber: appeal.claimNumber,
+          status: appeal.status,
+          claimAmount: appeal.claimAmount,
+          approvedAmount: appeal.approvedAmount,
+          submittedAt: appeal.submittedAt,
+          processedAt: appeal.processedAt,
+          denialReasonCode: appeal.denialReasonCode,
+          appealStatus: appeal.appealStatus,
+          appealNotes: appeal.appealNotes,
+          appealDocumentUrl: appeal.appealDocumentUrl,
+          type: 'APPEAL',
+        });
+      });
+    }
+
+    return history;
+  }
 }
 
 export const billingService = new BillingService();

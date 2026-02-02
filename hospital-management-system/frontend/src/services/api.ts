@@ -2596,4 +2596,88 @@ export const referralApi = {
   expireOld: () => api.post('/referrals/expire'),
 };
 
+// =============================================================================
+// Financial Reporting API
+// =============================================================================
+
+export const financialReportsApi = {
+  // AR Aging Report
+  getARAgingReport: (asOfDate?: string) =>
+    api.get('/financial-reports/ar-aging', { params: { asOfDate } }).then((res) => res.data.data),
+
+  // Revenue Breakdown
+  getRevenueByDepartment: (startDate: string, endDate: string) =>
+    api
+      .get('/financial-reports/revenue/by-department', { params: { startDate, endDate } })
+      .then((res) => res.data.data),
+
+  getRevenueByDoctor: (startDate: string, endDate: string, limit?: number) =>
+    api
+      .get('/financial-reports/revenue/by-doctor', { params: { startDate, endDate, limit } })
+      .then((res) => res.data.data),
+
+  getRevenueByPayer: (startDate: string, endDate: string) =>
+    api
+      .get('/financial-reports/revenue/by-payer', { params: { startDate, endDate } })
+      .then((res) => res.data.data),
+
+  // Collection Rate
+  getCollectionRate: (startDate: string, endDate: string, groupBy?: 'day' | 'week' | 'month') =>
+    api
+      .get('/financial-reports/collection-rate', { params: { startDate, endDate, groupBy } })
+      .then((res) => res.data.data),
+
+  // Tax Summary
+  getTaxSummary: (startDate: string, endDate: string) =>
+    api
+      .get('/financial-reports/tax-summary', { params: { startDate, endDate } })
+      .then((res) => res.data.data),
+
+  // Write-Offs
+  getWriteOffSummary: (startDate: string, endDate: string) =>
+    api
+      .get('/financial-reports/write-offs/summary', { params: { startDate, endDate } })
+      .then((res) => res.data.data),
+
+  getWriteOffs: (params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+  }) => api.get('/financial-reports/write-offs', { params }).then((res) => res.data),
+
+  createWriteOff: (data: {
+    invoiceId: string;
+    amount: number;
+    reason: string;
+    category: string;
+    notes?: string;
+  }) => api.post('/financial-reports/write-offs', data).then((res) => res.data.data),
+
+  approveWriteOff: (id: string, notes?: string) =>
+    api.patch(`/financial-reports/write-offs/${id}/approve`, { notes }).then((res) => res.data.data),
+
+  rejectWriteOff: (id: string, notes?: string) =>
+    api.patch(`/financial-reports/write-offs/${id}/reject`, { notes }).then((res) => res.data.data),
+
+  // Export Reports
+  exportReport: async (reportType: string, startDate: string, endDate: string) => {
+    const response = await api.get('/financial-reports/export', {
+      params: { reportType, startDate, endDate },
+      responseType: 'blob',
+    });
+    
+    // Create download link
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${reportType}-${startDate}-${endDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+};
+
 export default api;

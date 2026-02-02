@@ -200,4 +200,78 @@ router.post(
   })
 );
 
+// ==================== Claim Appeals ====================
+
+// Create claim appeal
+router.post(
+  '/claims/:claimId/appeal',
+  authenticate,
+  authorizeWithPermission('billing:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const appealClaim = await billingService.createClaimAppeal(
+      req.user!.hospitalId,
+      req.params.claimId,
+      req.body,
+      req.user!.userId
+    );
+    sendCreated(res, appealClaim, 'Claim appeal created successfully');
+  })
+);
+
+// Submit claim appeal
+router.post(
+  '/claims/:claimId/appeal/submit',
+  authenticate,
+  authorizeWithPermission('billing:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const submitted = await billingService.submitClaimAppeal(
+      req.params.claimId,
+      req.user!.hospitalId,
+      req.user!.userId
+    );
+    sendSuccess(res, submitted, 'Claim appeal submitted successfully');
+  })
+);
+
+// Get claim appeal history
+router.get(
+  '/claims/:claimId/appeal-history',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const history = await billingService.getClaimAppealHistory(
+      req.params.claimId,
+      req.user!.hospitalId
+    );
+    sendSuccess(res, history, 'Claim appeal history retrieved successfully');
+  })
+);
+
+// ==================== eClaimLink Integration ====================
+
+// Submit claim to DHA eClaimLink
+router.post(
+  '/claims/:claimId/submit-eclaim',
+  authenticate,
+  authorizeWithPermission('billing:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { eclaimLinkService } = require('../services/eclaimLinkService');
+    const result = await eclaimLinkService.submitClaimToDHA(
+      req.params.claimId,
+      req.user!.hospitalId
+    );
+    sendSuccess(res, result, 'Claim submission to eClaimLink completed');
+  })
+);
+
+// Check eClaimLink submission status
+router.get(
+  '/claims/:claimId/eclaim-status',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { eclaimLinkService } = require('../services/eclaimLinkService');
+    const status = await eclaimLinkService.checkClaimStatus(req.params.claimId);
+    sendSuccess(res, status, 'eClaimLink status retrieved successfully');
+  })
+);
+
 export default router;

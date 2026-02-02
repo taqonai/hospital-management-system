@@ -1298,6 +1298,10 @@ export class PatientPortalService {
         payments: {
           orderBy: { paymentDate: 'desc' },
         },
+        claims: {
+          where: { status: { in: ['APPROVED', 'PROCESSING', 'SUBMITTED'] as any[] } },
+          select: { approvedAmount: true, claimAmount: true, status: true },
+        },
       },
       orderBy: { invoiceDate: 'desc' },
       skip,
@@ -1305,41 +1309,50 @@ export class PatientPortalService {
     });
 
     // Format response
-    const data = invoices.map(invoice => ({
-      id: invoice.id,
-      invoiceNumber: invoice.invoiceNumber,
-      billNumber: invoice.invoiceNumber,
-      type: invoice.items[0]?.category || 'GENERAL',
-      description: invoice.items.length > 0
-        ? invoice.items.map(i => i.description).join(', ').substring(0, 100)
-        : `Invoice #${invoice.invoiceNumber}`,
-      amount: Number(invoice.totalAmount),
-      totalAmount: Number(invoice.totalAmount),
-      paidAmount: Number(invoice.paidAmount),
-      balanceDue: Number(invoice.balanceAmount),
-      balanceAmount: Number(invoice.balanceAmount),
-      status: invoice.status,
-      dueDate: invoice.dueDate?.toISOString() || invoice.invoiceDate.toISOString(),
-      billDate: invoice.invoiceDate.toISOString(),
-      createdAt: invoice.createdAt.toISOString(),
-      items: invoice.items.map(item => ({
-        id: item.id,
-        description: item.description,
-        quantity: item.quantity,
-        unitPrice: Number(item.unitPrice),
-        total: Number(item.totalPrice),
-      })),
-      subtotal: Number(invoice.subtotal),
-      discount: Number(invoice.discount),
-      tax: Number(invoice.tax),
-      payments: invoice.payments.map(p => ({
-        id: p.id,
-        amount: Number(p.amount),
-        method: p.paymentMethod,
-        date: p.paymentDate.toISOString(),
-        reference: p.referenceNumber,
-      })),
-    }));
+    const data = invoices.map(invoice => {
+      // Calculate insurance pay from approved/submitted claims
+      const insurancePay = (invoice as any).claims?.reduce((sum: number, claim: any) => {
+        return sum + Number(claim.approvedAmount || claim.claimAmount || 0);
+      }, 0) || 0;
+
+      return {
+        id: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        billNumber: invoice.invoiceNumber,
+        type: invoice.items[0]?.category || 'GENERAL',
+        description: invoice.items.length > 0
+          ? invoice.items.map(i => i.description).join(', ').substring(0, 100)
+          : `Invoice #${invoice.invoiceNumber}`,
+        amount: Number(invoice.totalAmount),
+        totalAmount: Number(invoice.totalAmount),
+        paidAmount: Number(invoice.paidAmount),
+        balanceDue: Number(invoice.balanceAmount),
+        balanceAmount: Number(invoice.balanceAmount),
+        insurancePay,
+        status: invoice.status,
+        dueDate: invoice.dueDate?.toISOString() || invoice.invoiceDate.toISOString(),
+        billDate: invoice.invoiceDate.toISOString(),
+        createdAt: invoice.createdAt.toISOString(),
+        items: invoice.items.map(item => ({
+          id: item.id,
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: Number(item.unitPrice),
+          total: Number(item.totalPrice),
+        })),
+        subtotal: Number(invoice.subtotal),
+        discount: Number(invoice.discount),
+        tax: Number(invoice.tax),
+        insurancePayer: (invoice as any).claims?.[0]?.insuranceProvider || null,
+        payments: invoice.payments.map(p => ({
+          id: p.id,
+          amount: Number(p.amount),
+          method: p.paymentMethod,
+          date: p.paymentDate.toISOString(),
+          reference: p.referenceNumber,
+        })),
+      };
+    });
 
     return {
       data,

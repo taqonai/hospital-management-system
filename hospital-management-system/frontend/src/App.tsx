@@ -36,6 +36,7 @@ import Nursing from './pages/Nursing';
 import Radiology from './pages/Radiology';
 import Surgery from './pages/Surgery';
 import Billing from './pages/Billing';
+import FinancialReports from './pages/FinancialReports';
 import HR from './pages/HR';
 import EmployeeLeave from './pages/EmployeeLeave';
 import Housekeeping from './pages/Housekeeping';
@@ -253,6 +254,7 @@ function App() {
         <Route path="/pharmacy" element={<Pharmacy />} />
         <Route path="/surgery" element={<Surgery />} />
         <Route path="/billing" element={<Billing />} />
+        <Route path="/financial-reports" element={<FinancialReports />} />
         <Route path="/hr" element={<HR />} />
         <Route path="/my-leave" element={<EmployeeLeave />} />
         <Route path="/housekeeping" element={<Housekeeping />} />
