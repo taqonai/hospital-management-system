@@ -158,11 +158,34 @@ export default function AdminDashboard() {
   // ── Department Distribution Doughnut Chart ────────────────────────
   const getDepartmentDistributionData = () => {
     if (departmentPerformance && typeof departmentPerformance === 'object') {
-      // Handle both { departments: {...} } wrapper and direct object
       const perfData = departmentPerformance.departments || departmentPerformance;
-      const entries = Object.entries(perfData);
 
-      if (entries.length > 0) {
+      // Handle array format: [{ name, total, ... }]
+      if (Array.isArray(perfData) && perfData.length > 0) {
+        const departments = perfData.slice(0, 5).map((d: any) => ({
+          name: d.name || d.department || 'Unknown',
+          count: d.total || d.appointmentsTotal || 0,
+        }));
+
+        const total = departments.reduce((sum, d) => sum + d.count, 0);
+
+        return {
+          departments,
+          total,
+          chartData: {
+            labels: departments.map(d => d.name),
+            datasets: [{
+              data: departments.map(d => d.count),
+              backgroundColor: chartColorPalette.slice(0, departments.length),
+              borderWidth: 0,
+            }],
+          },
+        };
+      }
+
+      // Handle object format: { "Cardiology": { total, ... } }
+      const entries = Object.entries(perfData);
+      if (entries.length > 0 && typeof entries[0][1] === 'object') {
         const departments = entries.slice(0, 5).map(([name, data]: [string, any]) => ({
           name,
           count: data.total || 0,
