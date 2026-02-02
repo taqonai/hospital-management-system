@@ -790,7 +790,7 @@ export default function QualityManagement() {
 
           {/* Indicators Tab */}
           {activeTab === 'indicators' && (
-            <QualityIndicators indicators={indicators} onRefresh={refetchIndicators} />
+            <QualityIndicators onRefresh={refetchIndicators} />
           )}
 
           {/* Incidents Tab */}
