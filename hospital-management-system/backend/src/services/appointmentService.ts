@@ -350,14 +350,30 @@ export class AppointmentService {
     const where: any = { hospitalId };
 
     if (search) {
-      where.OR = [
-        { patient: { firstName: { contains: search, mode: 'insensitive' } } },
-        { patient: { lastName: { contains: search, mode: 'insensitive' } } },
-        { patient: { mrn: { contains: search, mode: 'insensitive' } } },
-        { doctor: { user: { firstName: { contains: search, mode: 'insensitive' } } } },
-        { doctor: { user: { lastName: { contains: search, mode: 'insensitive' } } } },
-        { doctor: { department: { name: { contains: search, mode: 'insensitive' } } } },
-      ];
+      const terms = search.trim().split(/\s+/);
+      if (terms.length === 1) {
+        const term = terms[0];
+        where.OR = [
+          { patient: { firstName: { contains: term, mode: 'insensitive' } } },
+          { patient: { lastName: { contains: term, mode: 'insensitive' } } },
+          { patient: { mrn: { contains: term, mode: 'insensitive' } } },
+          { doctor: { user: { firstName: { contains: term, mode: 'insensitive' } } } },
+          { doctor: { user: { lastName: { contains: term, mode: 'insensitive' } } } },
+          { doctor: { department: { name: { contains: term, mode: 'insensitive' } } } },
+        ];
+      } else {
+        // Multi-word: every word must match at least one name field (patient or doctor)
+        where.AND = terms.map(term => ({
+          OR: [
+            { patient: { firstName: { contains: term, mode: 'insensitive' } } },
+            { patient: { lastName: { contains: term, mode: 'insensitive' } } },
+            { patient: { mrn: { contains: term, mode: 'insensitive' } } },
+            { doctor: { user: { firstName: { contains: term, mode: 'insensitive' } } } },
+            { doctor: { user: { lastName: { contains: term, mode: 'insensitive' } } } },
+            { doctor: { department: { name: { contains: term, mode: 'insensitive' } } } },
+          ],
+        }));
+      }
     }
 
     if (doctorId) where.doctorId = doctorId;
