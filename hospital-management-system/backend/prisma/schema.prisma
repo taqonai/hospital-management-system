@@ -1999,7 +1999,7 @@ model Payment {
   invoice      Invoice               @relation(fields: [invoiceId], references: [id])
   transactions PaymentTransaction[]
 
-  @@index([referenceNumber])
+  @@index([referenceNumber]) // Not unique because nullable; enforce uniqueness in application logic
   @@map("payments")
 }
 

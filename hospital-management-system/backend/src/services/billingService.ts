@@ -173,6 +173,16 @@ export class BillingService {
     });
     if (!invoice) throw new NotFoundError('Invoice not found');
 
+    // Validate referenceNumber uniqueness
+    if (data.referenceNumber) {
+      const existing = await prisma.payment.findFirst({
+        where: { referenceNumber: data.referenceNumber },
+      });
+      if (existing) {
+        throw new Error(`Payment with reference number ${data.referenceNumber} already exists`);
+      }
+    }
+
     // Validate payment amount
     const currentBalance = Number(invoice.balanceAmount);
     if (data.amount > currentBalance) {
@@ -751,20 +761,10 @@ export class BillingService {
         price = priceResult.finalPrice;
         description = priceResult.description;
       } else {
-        // Try with the hardcoded charge database
-        const fallback = this.chargeDatabase[chargeCode];
-        if (fallback) {
-          price = fallback.price;
-          description = fallback.description;
-        }
+        console.warn(`[AUTO-BILLING] No ChargeMaster entry for ${chargeCode} in hospital ${hospitalId}`);
       }
     } catch (err) {
-      console.error('[AUTO-BILLING] ChargeMaster lookup failed, using fallback:', err);
-      const fallback = this.chargeDatabase[chargeCode];
-      if (fallback) {
-        price = fallback.price;
-        description = fallback.description;
-      }
+      console.error('[AUTO-BILLING] ChargeMaster lookup failed, using default:', err);
     }
 
     const doctorName = appointment.doctor?.user
@@ -885,19 +885,10 @@ export class BillingService {
         price = priceResult.finalPrice;
         description = `${priceResult.description} - ${imagingOrder.bodyPart}`;
       } else {
-        // Use hardcoded fallback
-        const fallback = this.chargeDatabase[chargeCode];
-        if (fallback) {
-          price = fallback.price;
-          description = `${fallback.description} - ${imagingOrder.bodyPart}`;
-        }
+        console.warn(`[AUTO-BILLING] No ChargeMaster entry for imaging ${chargeCode} in hospital ${hospitalId}`);
       }
     } catch (err) {
-      const fallback = this.chargeDatabase[chargeCode];
-      if (fallback) {
-        price = fallback.price;
-        description = `${fallback.description} - ${imagingOrder.bodyPart}`;
-      }
+      console.error('[AUTO-BILLING] Imaging ChargeMaster lookup failed, using default:', err);
     }
 
     // Find or create open invoice
@@ -1077,62 +1068,10 @@ export class BillingService {
       console.error('[BILLING] Failed to load charges from ChargeMaster:', error);
     }
 
-    // Fall back to hardcoded data
-    return this.chargeDatabase;
+    // No charges found — warn and return empty (don't throw to avoid breaking flows)
+    console.warn(`[BILLING] No charges found in ChargeMaster for hospital ${hospitalId}. Run seed script: npm run db:seed:charges`);
+    return {};
   }
-
-  // Standard price database (in currency units) - FALLBACK ONLY
-  private readonly chargeDatabase: Record<string, {
-    code: string;
-    description: string;
-    category: string;
-    price: number;
-    keywords: string[];
-  }> = {
-    // Consultations
-    'initial_consultation': { code: '99201', description: 'Initial Office Visit', category: 'CONSULTATION', price: 150, keywords: ['initial visit', 'new patient', 'first visit'] },
-    'follow_up': { code: '99211', description: 'Follow-up Visit', category: 'CONSULTATION', price: 75, keywords: ['follow up', 'review', 'check up', 'return visit'] },
-    'emergency_consult': { code: '99281', description: 'Emergency Consultation', category: 'EMERGENCY', price: 250, keywords: ['emergency', 'er visit', 'urgent'] },
-    'specialist_consult': { code: '99241', description: 'Specialist Consultation', category: 'CONSULTATION', price: 200, keywords: ['specialist', 'referral', 'second opinion'] },
-
-    // Procedures
-    'wound_care': { code: '97602', description: 'Wound Care Management', category: 'PROCEDURE', price: 100, keywords: ['wound dressing', 'wound care', 'debridement'] },
-    'suturing': { code: '12001', description: 'Simple Wound Repair', category: 'PROCEDURE', price: 150, keywords: ['suture', 'stitches', 'laceration repair'] },
-    'iv_infusion': { code: '96365', description: 'IV Infusion Therapy', category: 'PROCEDURE', price: 80, keywords: ['iv', 'infusion', 'drip', 'intravenous'] },
-    'catheterization': { code: '51702', description: 'Bladder Catheterization', category: 'PROCEDURE', price: 75, keywords: ['catheter', 'foley', 'urinary catheter'] },
-    'nebulization': { code: '94640', description: 'Nebulizer Treatment', category: 'PROCEDURE', price: 50, keywords: ['nebulizer', 'nebulization', 'inhaler treatment'] },
-    'ecg': { code: '93000', description: 'Electrocardiogram', category: 'DIAGNOSTIC', price: 100, keywords: ['ecg', 'ekg', 'electrocardiogram'] },
-    'blood_draw': { code: '36415', description: 'Venipuncture', category: 'LAB', price: 25, keywords: ['blood draw', 'venipuncture', 'blood collection'] },
-
-    // Imaging
-    'xray_chest': { code: '71046', description: 'Chest X-Ray', category: 'IMAGING', price: 150, keywords: ['chest x-ray', 'cxr', 'chest radiograph'] },
-    'xray_extremity': { code: '73030', description: 'Extremity X-Ray', category: 'IMAGING', price: 100, keywords: ['x-ray arm', 'x-ray leg', 'bone x-ray'] },
-    'ct_scan': { code: '70450', description: 'CT Scan', category: 'IMAGING', price: 500, keywords: ['ct scan', 'ct', 'cat scan'] },
-    'mri': { code: '70551', description: 'MRI Scan', category: 'IMAGING', price: 800, keywords: ['mri', 'magnetic resonance'] },
-    'ultrasound': { code: '76700', description: 'Ultrasound', category: 'IMAGING', price: 200, keywords: ['ultrasound', 'sonogram', 'usg'] },
-
-    // Lab
-    'cbc': { code: '85025', description: 'Complete Blood Count', category: 'LAB', price: 30, keywords: ['cbc', 'complete blood count', 'blood count'] },
-    'metabolic_panel': { code: '80053', description: 'Comprehensive Metabolic Panel', category: 'LAB', price: 50, keywords: ['metabolic panel', 'cmp', 'chemistry'] },
-    'lipid_panel': { code: '80061', description: 'Lipid Panel', category: 'LAB', price: 40, keywords: ['lipid panel', 'cholesterol'] },
-    'urinalysis': { code: '81003', description: 'Urinalysis', category: 'LAB', price: 20, keywords: ['urinalysis', 'urine test', 'ua'] },
-    'blood_culture': { code: '87040', description: 'Blood Culture', category: 'LAB', price: 75, keywords: ['blood culture', 'culture'] },
-
-    // Medications
-    'injection_im': { code: '96372', description: 'Intramuscular Injection', category: 'MEDICATION', price: 25, keywords: ['im injection', 'intramuscular'] },
-    'injection_iv': { code: '96374', description: 'IV Push Medication', category: 'MEDICATION', price: 35, keywords: ['iv push', 'iv medication'] },
-
-    // Room Charges
-    'room_general': { code: 'ROOM-GEN', description: 'General Ward (per day)', category: 'ACCOMMODATION', price: 300, keywords: ['admitted', 'ward', 'general bed'] },
-    'room_private': { code: 'ROOM-PVT', description: 'Private Room (per day)', category: 'ACCOMMODATION', price: 600, keywords: ['private room', 'single room'] },
-    'room_icu': { code: 'ROOM-ICU', description: 'ICU (per day)', category: 'ACCOMMODATION', price: 1500, keywords: ['icu', 'intensive care'] },
-
-    // Surgery
-    'surgery_minor': { code: 'SURG-MIN', description: 'Minor Surgical Procedure', category: 'SURGERY', price: 1000, keywords: ['minor surgery', 'minor procedure'] },
-    'surgery_major': { code: 'SURG-MAJ', description: 'Major Surgical Procedure', category: 'SURGERY', price: 5000, keywords: ['major surgery', 'operation'] },
-    'anesthesia_local': { code: '00300', description: 'Local Anesthesia', category: 'ANESTHESIA', price: 100, keywords: ['local anesthesia', 'local anaesthesia'] },
-    'anesthesia_general': { code: '00100', description: 'General Anesthesia', category: 'ANESTHESIA', price: 800, keywords: ['general anesthesia', 'ga'] },
-  };
 
   // Extract charges from clinical notes (async version with ChargeMaster support)
   async extractChargesFromNotesAsync(notes: string, hospitalId: string): Promise<{
@@ -1151,8 +1090,9 @@ export class BillingService {
     return this.extractChargesFromNotesSync(notes, chargeDb);
   }
 
-  // Extract charges from clinical notes (synchronous - for backward compatibility)
-  extractChargesFromNotes(notes: string): {
+  // Extract charges from clinical notes (async - uses ChargeMaster)
+  // Note: Previously sync, now async. All callers must await.
+  async extractChargesFromNotes(notes: string, hospitalId?: string): Promise<{
     capturedCharges: {
       code: string;
       description: string;
@@ -1163,8 +1103,9 @@ export class BillingService {
     }[];
     subtotal: number;
     suggestions: string[];
-  } {
-    return this.extractChargesFromNotesSync(notes, this.chargeDatabase);
+  }> {
+    const chargeDb = hospitalId ? await this.loadChargeDatabase(hospitalId) : {};
+    return this.extractChargesFromNotesSync(notes, chargeDb);
   }
 
   // Internal sync method used by both versions
@@ -1239,12 +1180,12 @@ export class BillingService {
   }
 
   // Get billing code suggestions for diagnosis
-  suggestBillingCodes(params: {
+  async suggestBillingCodes(hospitalId: string, params: {
     diagnosis?: string;
     procedures?: string[];
     isInpatient?: boolean;
     lengthOfStay?: number;
-  }): {
+  }): Promise<{
     suggestedCodes: {
       code: string;
       description: string;
@@ -1254,7 +1195,8 @@ export class BillingService {
     }[];
     estimatedTotal: number;
     missingCharges: string[];
-  } {
+  }> {
+    const chargeDb = await this.loadChargeDatabase(hospitalId);
     const suggestedCodes: {
       code: string;
       description: string;
@@ -1264,12 +1206,13 @@ export class BillingService {
     }[] = [];
     const missingCharges: string[] = [];
 
-    // Add consultation charge
+    // Add consultation charge from ChargeMaster or default
+    const consultCharge = chargeDb['99201'] || chargeDb['initial_consultation'];
     suggestedCodes.push({
-      code: '99201',
-      description: 'Initial Office Visit',
-      category: 'CONSULTATION',
-      price: 150,
+      code: consultCharge?.code || '99201',
+      description: consultCharge?.description || 'Initial Office Visit',
+      category: consultCharge?.category || 'CONSULTATION',
+      price: consultCharge?.price || 150,
       reason: 'Standard consultation fee',
     });
 
@@ -1277,7 +1220,7 @@ export class BillingService {
     if (params.procedures) {
       for (const proc of params.procedures) {
         const procLower = proc.toLowerCase();
-        for (const [, charge] of Object.entries(this.chargeDatabase)) {
+        for (const [, charge] of Object.entries(chargeDb)) {
           for (const keyword of charge.keywords) {
             if (procLower.includes(keyword)) {
               if (!suggestedCodes.find(c => c.code === charge.code)) {
@@ -1297,32 +1240,46 @@ export class BillingService {
     if (params.diagnosis) {
       const diagLower = params.diagnosis.toLowerCase();
 
-      // Common diagnosis-based suggestions
+      // Helper to safely push from chargeDb
+      const pushIfExists = (key: string, reason: string) => {
+        const charge = chargeDb[key];
+        if (charge) {
+          suggestedCodes.push({ ...charge, reason });
+        }
+      };
+
       if (diagLower.includes('diabetes')) {
-        suggestedCodes.push({ ...this.chargeDatabase['metabolic_panel'], reason: 'Diabetic monitoring' });
+        pushIfExists('80053', 'Diabetic monitoring');
+        pushIfExists('metabolic_panel', 'Diabetic monitoring');
         suggestedCodes.push({ code: '82947', description: 'Glucose Test', category: 'LAB', price: 15, reason: 'Diabetes management' });
       }
       if (diagLower.includes('heart') || diagLower.includes('cardiac') || diagLower.includes('chest pain')) {
-        suggestedCodes.push({ ...this.chargeDatabase['ecg'], reason: 'Cardiac evaluation' });
+        pushIfExists('93000', 'Cardiac evaluation');
+        pushIfExists('ecg', 'Cardiac evaluation');
         suggestedCodes.push({ code: '82553', description: 'Troponin', category: 'LAB', price: 45, reason: 'Cardiac markers' });
       }
       if (diagLower.includes('infection') || diagLower.includes('fever')) {
-        suggestedCodes.push({ ...this.chargeDatabase['cbc'], reason: 'Infection workup' });
-        suggestedCodes.push({ ...this.chargeDatabase['blood_culture'], reason: 'Infection identification' });
+        pushIfExists('85025', 'Infection workup');
+        pushIfExists('cbc', 'Infection workup');
+        pushIfExists('87040', 'Infection identification');
+        pushIfExists('blood_culture', 'Infection identification');
       }
       if (diagLower.includes('fracture') || diagLower.includes('injury')) {
-        suggestedCodes.push({ ...this.chargeDatabase['xray_extremity'], reason: 'Injury assessment' });
+        pushIfExists('73030', 'Injury assessment');
+        pushIfExists('xray_extremity', 'Injury assessment');
       }
     }
 
     // Add inpatient charges
     if (params.isInpatient && params.lengthOfStay) {
       const los = params.lengthOfStay;
+      const roomCharge = chargeDb['ROOM-GEN'] || chargeDb['room_general'];
+      const roomRate = roomCharge?.price || 300;
       suggestedCodes.push({
-        code: 'ROOM-GEN',
+        code: roomCharge?.code || 'ROOM-GEN',
         description: `General Ward (${los} days)`,
         category: 'ACCOMMODATION',
-        price: 300 * los,
+        price: roomRate * los,
         reason: `Room charges for ${los} days`,
       });
       missingCharges.push('Verify nursing care charges');
@@ -1334,31 +1291,40 @@ export class BillingService {
       missingCharges.push('No lab tests captured - verify if any were ordered');
     }
 
-    const estimatedTotal = suggestedCodes.reduce((sum, c) => sum + c.price, 0);
+    // Deduplicate by code
+    const seen = new Set<string>();
+    const deduped = suggestedCodes.filter(c => {
+      if (seen.has(c.code)) return false;
+      seen.add(c.code);
+      return true;
+    });
 
-    return { suggestedCodes, estimatedTotal, missingCharges };
+    const estimatedTotal = deduped.reduce((sum, c) => sum + c.price, 0);
+
+    return { suggestedCodes: deduped, estimatedTotal, missingCharges };
   }
 
-  // Estimate costs for procedure
-  estimateCost(params: {
+  // Estimate costs for procedure (async - uses ChargeMaster)
+  async estimateCost(hospitalId: string, params: {
     procedureName: string;
     isInpatient?: boolean;
     expectedStay?: number;
     includeAnesthesia?: boolean;
     insuranceCoverage?: number; // percentage
-  }): {
+  }): Promise<{
     breakdown: { item: string; quantity: number; unitPrice: number; total: number }[];
     subtotal: number;
     insuranceCoverage: number;
     patientResponsibility: number;
     disclaimer: string;
-  } {
+  }> {
+    const chargeDb = await this.loadChargeDatabase(hospitalId);
     const breakdown: { item: string; quantity: number; unitPrice: number; total: number }[] = [];
     const procLower = params.procedureName.toLowerCase();
 
-    // Find matching procedure
+    // Find matching procedure from ChargeMaster
     let procedureCharge = 2000; // Default
-    for (const [, charge] of Object.entries(this.chargeDatabase)) {
+    for (const [, charge] of Object.entries(chargeDb)) {
       for (const keyword of charge.keywords) {
         if (procLower.includes(keyword)) {
           procedureCharge = charge.price;
@@ -1385,7 +1351,11 @@ export class BillingService {
 
     // Add anesthesia if applicable
     if (params.includeAnesthesia) {
-      const anesthesiaPrice = procLower.includes('major') ? 800 : 200;
+      const anesthesiaCharge = chargeDb['00100'] || chargeDb['anesthesia_general'];
+      const localAnesthesia = chargeDb['00300'] || chargeDb['anesthesia_local'];
+      const anesthesiaPrice = procLower.includes('major')
+        ? (anesthesiaCharge?.price || 800)
+        : (localAnesthesia?.price || 200);
       breakdown.push({
         item: 'Anesthesia Services',
         quantity: 1,
@@ -1396,7 +1366,8 @@ export class BillingService {
 
     // Add room charges for inpatient
     if (params.isInpatient && params.expectedStay) {
-      const roomRate = 400; // Average
+      const roomCharge = chargeDb['ROOM-GEN'] || chargeDb['room_general'];
+      const roomRate = roomCharge?.price || 400;
       breakdown.push({
         item: 'Hospital Stay (per day)',
         quantity: params.expectedStay,

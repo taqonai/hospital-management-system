@@ -173,7 +173,7 @@ router.post(
   authorizeWithPermission('billing:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN', 'DOCTOR', 'RECEPTIONIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { notes } = req.body;
-    const result = billingService.extractChargesFromNotes(notes);
+    const result = await billingService.extractChargesFromNotes(notes, req.user!.hospitalId);
     sendSuccess(res, result);
   })
 );
@@ -184,7 +184,7 @@ router.post(
   authenticate,
   authorizeWithPermission('billing:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN', 'DOCTOR', 'RECEPTIONIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const result = billingService.suggestBillingCodes(req.body);
+    const result = await billingService.suggestBillingCodes(req.user!.hospitalId, req.body);
     sendSuccess(res, result);
   })
 );
@@ -195,7 +195,7 @@ router.post(
   authenticate,
   authorizeWithPermission('billing:read', ['ACCOUNTANT', 'HOSPITAL_ADMIN', 'DOCTOR', 'RECEPTIONIST', 'PATIENT']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const result = billingService.estimateCost(req.body);
+    const result = await billingService.estimateCost(req.user!.hospitalId, req.body);
     sendSuccess(res, result);
   })
 );
