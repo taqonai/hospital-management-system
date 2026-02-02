@@ -135,6 +135,9 @@ model Hospital {
   glEntries     GLEntry[]
   fiscalPeriods FiscalPeriod[]
 
+  // Deductible Tracking
+  deductibleLedgers DeductibleLedger[]
+
   @@map("hospitals")
 }
 
@@ -845,6 +848,9 @@ model Patient {
 
   // Pre-Authorization
   preAuthRequests PreAuthRequest[]
+
+  // Deductible Tracking
+  deductibleLedgers DeductibleLedger[]
 
   @@unique([hospitalId, mrn])
   @@unique([hospitalId, phone])
@@ -2067,6 +2073,9 @@ model InsuranceClaim {
   eclaimLinkId       String?     // DHA eClaimLink submission ID
   eclaimLinkStatus   String?     // PENDING, SUBMITTED, ACCEPTED, REJECTED
   eclaimLinkResponse Json?       // Response from DHA API
+  // COB (Coordination of Benefits)
+  isPrimary          Boolean     @default(true)
+  linkedClaimId      String?     // For COB - links to primary claim
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
@@ -8263,4 +8272,25 @@ model FiscalPeriod {
   @@unique([hospitalId, name])
   @@index([hospitalId, startDate, endDate])
   @@map("fiscal_periods")
+}
+
+// ==================== DEDUCTIBLE TRACKING ====================
+
+model DeductibleLedger {
+  id                  String   @id @default(uuid())
+  hospitalId          String
+  patientId           String
+  insurancePolicyId   String?  // Links to PatientInsurance
+  fiscalYear          Int      // e.g., 2026
+  accumulatedAmount   Decimal  @default(0) @db.Decimal(10, 2)
+  maxDeductible       Decimal  @db.Decimal(10, 2)
+  lastUpdated         DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  hospital Hospital @relation(fields: [hospitalId], references: [id])
+  patient  Patient  @relation(fields: [patientId], references: [id])
+
+  @@unique([hospitalId, patientId, fiscalYear])
+  @@map("deductible_ledgers")
 }

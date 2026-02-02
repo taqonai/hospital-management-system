@@ -4,6 +4,7 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { notificationService } from './notificationService';
 import { chargeManagementService } from './chargeManagementService';
 import { accountingService } from './accountingService';
+import { preAuthService } from './preAuthService';
 
 export class BillingService {
   private generateInvoiceNumber(): string {
@@ -374,6 +375,18 @@ export class BillingService {
         });
       } catch (glError) {
         console.error('[GL] Failed to post insurance payment GL entry:', glError);
+      }
+
+      // Update deductible ledger
+      try {
+        await preAuthService.updateDeductibleLedger(
+          result.claim.invoice.hospitalId,
+          result.claim.invoice.patientId,
+          Number(approvedAmount || result.claim.claimAmount),
+          10000 // default max deductible, should come from insurance plan
+        );
+      } catch (err) {
+        console.error('[DEDUCTIBLE] Failed to update deductible ledger:', err);
       }
     }
 

@@ -416,10 +416,33 @@ export class PreAuthService {
         const copay = Number(insurance.copay || 0);
         itemCopay = Math.min(copay, item.amount);
 
-        // Apply deductible (simplified - not tracking YTD)
+        // Apply deductible with YTD tracking via DeductibleLedger
         const deductible = Number(insurance.deductible || 0);
         const remainingAfterCopay = item.amount - itemCopay;
-        itemDeductible = Math.min(deductible, remainingAfterCopay);
+
+        // Look up YTD accumulated deductible
+        const fiscalYear = new Date().getFullYear();
+        let ytdAccumulated = 0;
+        try {
+          const ledger = await prisma.deductibleLedger.findUnique({
+            where: {
+              hospitalId_patientId_fiscalYear: {
+                hospitalId,
+                patientId,
+                fiscalYear,
+              },
+            },
+          });
+          if (ledger) {
+            ytdAccumulated = Number(ledger.accumulatedAmount);
+          }
+        } catch (err) {
+          logger.warn('[DEDUCTIBLE] Failed to query deductible ledger, using full deductible', err);
+        }
+
+        // Remaining deductible = max deductible - already accumulated this year
+        const remainingDeductible = Math.max(0, deductible - ytdAccumulated);
+        itemDeductible = Math.min(remainingDeductible, remainingAfterCopay);
 
         // Apply coinsurance (20% of remaining amount after copay/deductible)
         const remainingAfterDeductible = remainingAfterCopay - itemDeductible;
@@ -454,6 +477,38 @@ export class PreAuthService {
       patientResponsibility,
       breakdown,
     };
+  }
+
+  /**
+   * Update the deductible ledger for a patient after insurance payment
+   */
+  async updateDeductibleLedger(
+    hospitalId: string,
+    patientId: string,
+    amount: number,
+    maxDeductible: number
+  ) {
+    const fiscalYear = new Date().getFullYear();
+    await prisma.deductibleLedger.upsert({
+      where: {
+        hospitalId_patientId_fiscalYear: {
+          hospitalId,
+          patientId,
+          fiscalYear,
+        },
+      },
+      update: {
+        accumulatedAmount: { increment: amount },
+        lastUpdated: new Date(),
+      },
+      create: {
+        hospitalId,
+        patientId,
+        fiscalYear,
+        accumulatedAmount: amount,
+        maxDeductible,
+      },
+    });
   }
 
   /**

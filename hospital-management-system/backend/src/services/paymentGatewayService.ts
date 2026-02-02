@@ -585,54 +585,166 @@ export class PaymentGatewayService {
     const invoice = payment.invoice;
     const hospital = invoice.hospital;
     const patient = invoice.patient;
+    const currency = (invoice as any).currency || 'AED';
+    const fmt = (n: number) => `${currency} ${n.toFixed(2)}`;
 
     // Create PDF
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
     const chunks: Buffer[] = [];
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
 
-    doc.on('data', (chunk) => chunks.push(chunk));
+    const pageWidth = doc.page.width - 100; // minus margins
 
-    // Header
-    doc.fontSize(20).text(hospital.name, { align: 'center' });
-    doc.fontSize(10).text(hospital.address, { align: 'center' });
+    // ── Header ──
+    doc.fontSize(20).font('Helvetica-Bold').text(hospital.name, { align: 'center' });
+    doc.fontSize(9).font('Helvetica').text(hospital.address, { align: 'center' });
     doc.text(`${hospital.city}, ${hospital.state} ${hospital.zipCode}`, { align: 'center' });
-    doc.text(`Phone: ${hospital.phone} | Email: ${hospital.email}`, { align: 'center' });
-
-    doc.moveDown(2);
-    doc.fontSize(16).text('PAYMENT RECEIPT', { align: 'center', underline: true });
-    doc.moveDown(2);
-
-    // Receipt details
-    doc.fontSize(10);
-    doc.text(`Receipt Number: ${payment.id}`, 50, doc.y);
-    doc.text(`Date: ${payment.paymentDate.toLocaleDateString()}`, 300, doc.y - 12);
-    doc.moveDown();
-    doc.text(`Invoice Number: ${invoice.invoiceNumber}`);
-    doc.text(`Payment Method: ${payment.paymentMethod}`);
-    if (payment.referenceNumber) {
-      doc.text(`Reference: ${payment.referenceNumber}`);
+    doc.text(`Phone: ${hospital.phone}  |  Email: ${hospital.email}`, { align: 'center' });
+    if (hospital.website) {
+      doc.text(hospital.website, { align: 'center' });
     }
-    doc.moveDown(2);
 
-    // Patient details
-    doc.fontSize(12).text('Patient Information:', { underline: true });
-    doc.fontSize(10).moveDown(0.5);
-    doc.text(`Name: ${patient.firstName} ${patient.lastName}`);
-    doc.text(`MRN: ${patient.mrn}`);
-    doc.text(`Phone: ${patient.phone}`);
-    doc.moveDown(2);
+    // Divider
+    doc.moveDown(1);
+    doc.moveTo(50, doc.y).lineTo(50 + pageWidth, doc.y).stroke('#cccccc');
+    doc.moveDown(1);
 
-    // Payment details
-    doc.fontSize(12).text('Payment Details:', { underline: true });
-    doc.fontSize(10).moveDown(0.5);
-    doc.text(`Amount Paid: ${invoice.currency || 'AED'} ${Number(payment.amount).toFixed(2)}`);
-    doc.moveDown(2);
+    // ── Title ──
+    doc.fontSize(16).font('Helvetica-Bold').text('PAYMENT RECEIPT', { align: 'center' });
+    doc.moveDown(1.5);
 
-    // Footer
-    doc.fontSize(8).text('Thank you for your payment!', { align: 'center' });
-    doc.text('This is a computer-generated receipt and does not require a signature.', {
-      align: 'center',
-    });
+    // ── Receipt & Patient Info (two columns) ──
+    const leftX = 50;
+    const rightX = 320;
+    let y = doc.y;
+
+    doc.fontSize(10).font('Helvetica-Bold');
+    doc.text('Receipt Details', leftX, y);
+    doc.text('Patient Information', rightX, y);
+    y += 16;
+
+    doc.fontSize(9).font('Helvetica');
+    doc.text(`Receipt #: ${payment.id.substring(0, 8).toUpperCase()}`, leftX, y);
+    doc.text(`Name: ${patient.firstName} ${patient.lastName}`, rightX, y);
+    y += 13;
+    doc.text(`Date: ${payment.paymentDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`, leftX, y);
+    doc.text(`MRN: ${patient.mrn}`, rightX, y);
+    y += 13;
+    doc.text(`Invoice: ${invoice.invoiceNumber}`, leftX, y);
+    doc.text(`Phone: ${patient.phone}`, rightX, y);
+    y += 13;
+    doc.text(`Method: ${payment.paymentMethod}`, leftX, y);
+    if (patient.email) {
+      doc.text(`Email: ${patient.email}`, rightX, y);
+    }
+    y += 13;
+    if (payment.referenceNumber) {
+      doc.text(`Reference: ${payment.referenceNumber}`, leftX, y);
+      y += 13;
+    }
+
+    doc.y = y + 10;
+
+    // Divider
+    doc.moveTo(50, doc.y).lineTo(50 + pageWidth, doc.y).stroke('#cccccc');
+    doc.moveDown(1);
+
+    // ── Line Items Table ──
+    doc.fontSize(10).font('Helvetica-Bold').text('Invoice Items', leftX, doc.y);
+    doc.moveDown(0.5);
+
+    // Table header
+    const colX = { desc: 50, qty: 310, unit: 380, total: 460 };
+    y = doc.y;
+    doc.rect(50, y - 2, pageWidth, 16).fill('#f0f0f0');
+    doc.fillColor('#000000');
+    doc.fontSize(8).font('Helvetica-Bold');
+    doc.text('Description', colX.desc + 4, y + 2);
+    doc.text('Qty', colX.qty, y + 2, { width: 50, align: 'right' });
+    doc.text('Unit Price', colX.unit, y + 2, { width: 70, align: 'right' });
+    doc.text('Total', colX.total, y + 2, { width: 80, align: 'right' });
+    y += 18;
+
+    // Table rows
+    doc.font('Helvetica').fontSize(8);
+    let subtotal = 0;
+    for (const item of invoice.items) {
+      const qty = Number((item as any).quantity || 1);
+      const unitPrice = Number(item.unitPrice);
+      const lineTotal = Number(item.totalPrice);
+      subtotal += lineTotal;
+
+      doc.text(item.description, colX.desc + 4, y, { width: 250 });
+      doc.text(qty.toString(), colX.qty, y, { width: 50, align: 'right' });
+      doc.text(fmt(unitPrice), colX.unit, y, { width: 70, align: 'right' });
+      doc.text(fmt(lineTotal), colX.total, y, { width: 80, align: 'right' });
+      y += 14;
+    }
+
+    // Divider under items
+    doc.moveTo(colX.unit, y).lineTo(50 + pageWidth, y).stroke('#cccccc');
+    y += 6;
+
+    // Totals
+    doc.font('Helvetica');
+    const labelX = colX.unit - 20;
+    const valX = colX.total;
+    doc.text('Subtotal:', labelX, y, { width: 90, align: 'right' });
+    doc.text(fmt(subtotal), valX, y, { width: 80, align: 'right' });
+    y += 13;
+
+    const discount = Number((invoice as any).discountAmount || 0);
+    if (discount > 0) {
+      doc.text('Discount:', labelX, y, { width: 90, align: 'right' });
+      doc.text(`-${fmt(discount)}`, valX, y, { width: 80, align: 'right' });
+      y += 13;
+    }
+
+    const tax = Number((invoice as any).taxAmount || 0);
+    if (tax > 0) {
+      doc.text('Tax:', labelX, y, { width: 90, align: 'right' });
+      doc.text(fmt(tax), valX, y, { width: 80, align: 'right' });
+      y += 13;
+    }
+
+    doc.font('Helvetica-Bold');
+    doc.text('Total:', labelX, y, { width: 90, align: 'right' });
+    doc.text(fmt(Number(invoice.totalAmount)), valX, y, { width: 80, align: 'right' });
+    y += 18;
+
+    // ── Payment Summary ──
+    doc.moveTo(50, y).lineTo(50 + pageWidth, y).stroke('#cccccc');
+    y += 10;
+
+    doc.fontSize(10).font('Helvetica-Bold').text('Payment Summary', leftX, y);
+    y += 16;
+    doc.fontSize(9).font('Helvetica');
+    doc.text(`Amount Paid:`, leftX, y);
+    doc.font('Helvetica-Bold').text(fmt(Number(payment.amount)), leftX + 120, y);
+    y += 14;
+
+    const balance = Number(invoice.balanceAmount || 0);
+    doc.font('Helvetica').text(`Balance Remaining:`, leftX, y);
+    doc.font('Helvetica-Bold').text(fmt(balance), leftX + 120, y);
+    y += 14;
+
+    const totalPaid = Number(invoice.paidAmount || 0);
+    doc.font('Helvetica').text(`Total Paid to Date:`, leftX, y);
+    doc.text(fmt(totalPaid), leftX + 120, y);
+    y += 30;
+
+    // ── Footer ──
+    doc.moveTo(50, y).lineTo(50 + pageWidth, y).stroke('#cccccc');
+    y += 12;
+    doc.fontSize(9).font('Helvetica').fillColor('#555555');
+    doc.text('Thank you for your payment!', 50, y, { align: 'center', width: pageWidth });
+    y += 14;
+    doc.fontSize(7);
+    doc.text('This is a computer-generated receipt and does not require a signature.', 50, y, { align: 'center', width: pageWidth });
+    y += 10;
+    if (hospital.licenseNumber) {
+      doc.text(`License: ${hospital.licenseNumber}`, 50, y, { align: 'center', width: pageWidth });
+    }
 
     doc.end();
 
