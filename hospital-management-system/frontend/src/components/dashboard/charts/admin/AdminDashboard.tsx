@@ -27,40 +27,45 @@ export default function AdminDashboard() {
 
   // ── KPI Data ──────────────────────────────────────────────────────
   const totalPatients = executiveSummary?.patients?.total ?? 0;
-  const patientsTrend = executiveSummary?.patients?.trend ?? 0;
+  const newThisPeriod = executiveSummary?.patients?.newThisPeriod ?? executiveSummary?.patients?.new ?? 0;
   const appointmentsToday = todayStats?.today?.total ?? executiveSummary?.appointments?.todayTotal ?? 0;
-  const appointmentsTrend = executiveSummary?.appointments?.trend ?? 0;
+  const dailyAvg7d = executiveSummary?.appointments?.dailyAvg7d ?? 0;
+  const totalBeds = bedOccupancy?.total ?? executiveSummary?.bedOccupancy?.total ?? 0;
   const availableBeds = bedOccupancy?.available ?? executiveSummary?.bedOccupancy?.available ?? 0;
-  const bedsTrend = executiveSummary?.bedOccupancy?.trend ?? 0;
+  const occupancyRate = bedOccupancy?.occupancyRate ?? executiveSummary?.bedOccupancy?.occupancyRate ?? 0;
   const activeDoctors = executiveSummary?.staff?.activeDoctors ?? 0;
-  const doctorsTrend = executiveSummary?.staff?.trend ?? 0;
+  const totalDoctors = executiveSummary?.staff?.totalDoctors ?? 0;
 
   const kpiCards = [
     {
       title: 'Total Patients',
       value: totalPatients.toLocaleString(),
-      trend: patientsTrend,
+      subtitle: newThisPeriod > 0 ? `+${newThisPeriod} new this month` : 'No new this month',
+      subtitleColor: newThisPeriod > 0 ? 'text-emerald-600' : 'text-gray-400',
       icon: PatientIcon,
       iconBg: 'bg-blue-500',
     },
     {
       title: 'Appointments Today',
       value: appointmentsToday.toLocaleString(),
-      trend: appointmentsTrend,
+      subtitle: `Avg ${dailyAvg7d}/day this week`,
+      subtitleColor: 'text-gray-500',
       icon: CalendarBillingIcon,
       iconBg: 'bg-emerald-500',
     },
     {
       title: 'Available Beds',
-      value: availableBeds.toLocaleString(),
-      trend: bedsTrend,
+      value: `${availableBeds} / ${totalBeds}`,
+      subtitle: `${occupancyRate}% occupied`,
+      subtitleColor: occupancyRate >= 90 ? 'text-red-500' : occupancyRate >= 70 ? 'text-amber-500' : 'text-emerald-600',
       icon: HospitalBedIcon,
       iconBg: 'bg-purple-500',
     },
     {
       title: 'Active Doctors',
       value: activeDoctors.toLocaleString(),
-      trend: doctorsTrend,
+      subtitle: `${totalDoctors} total on staff`,
+      subtitleColor: 'text-gray-500',
       icon: HeartbeatIcon,
       iconBg: 'bg-orange-500',
     },
@@ -339,19 +344,11 @@ export default function AdminDashboard() {
                   <div className={`p-3 rounded-xl ${card.iconBg}`}>
                     <card.icon className="h-6 w-6 text-white" />
                   </div>
-                  {card.trend !== 0 && (
-                    <span
-                      className={`text-sm font-semibold ${
-                        card.trend > 0 ? 'text-emerald-500' : 'text-red-500'
-                      }`}
-                    >
-                      {card.trend > 0 ? '+' : ''}{card.trend}%
-                    </span>
-                  )}
                 </div>
                 <div className="mt-4">
                   <p className="text-sm font-medium text-gray-500">{card.title}</p>
                   <p className="text-3xl font-bold text-gray-900 mt-1">{card.value}</p>
+                  <p className={`text-xs font-medium mt-1 ${card.subtitleColor}`}>{card.subtitle}</p>
                 </div>
               </>
             )}

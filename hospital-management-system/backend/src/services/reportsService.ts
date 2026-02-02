@@ -90,28 +90,16 @@ export const reportsService = {
       }),
     ]);
 
-    // Calculate trend percentages
-    const calcTrend = (current: number, previous: number) => {
-      if (previous === 0) return current > 0 ? 100 : 0;
-      return Math.round(((current - previous) / previous) * 100);
-    };
-
-    const dailyAvg7d = last7DaysAppointmentCount > 0 ? last7DaysAppointmentCount / 7 : 0;
-    const appointmentsTrend = dailyAvg7d > 0
-      ? Math.round(((todayAppointmentCount - dailyAvg7d) / dailyAvg7d) * 100)
-      : todayAppointmentCount > 0 ? 100 : 0;
-
-    // Bed trend: more admissions this week vs last = fewer available beds = negative
-    const bedTrend = lastWeekAdmissions > 0
-      ? -calcTrend(thisWeekAdmissions, lastWeekAdmissions)
-      : thisWeekAdmissions > 0 ? -100 : 0;
+    const dailyAvg7d = last7DaysAppointmentCount > 0
+      ? Math.round((last7DaysAppointmentCount / 7) * 10) / 10
+      : 0;
 
     return {
       patients: {
         total: totalPatients,
         new: newPatients,
         growth: totalPatients > 0 ? Math.round((newPatients / totalPatients) * 100) : 0,
-        trend: calcTrend(newPatients, prevPeriodNewPatients),
+        newThisPeriod: newPatients,
       },
       appointments: {
         total: totalAppointments,
@@ -120,7 +108,7 @@ export const reportsService = {
           ? Math.round((completedAppointments / totalAppointments) * 100)
           : 0,
         todayTotal: todayAppointmentCount,
-        trend: appointmentsTrend,
+        dailyAvg7d,
       },
       revenue: {
         total: totalRevenue._sum.paidAmount || 0,
@@ -128,11 +116,9 @@ export const reportsService = {
       staff: {
         totalDoctors,
         activeDoctors,
-        trend: calcTrend(activeDoctors, prevMonthDoctors),
       },
       bedOccupancy: {
         ...bedOccupancy,
-        trend: bedTrend,
       },
     };
   },
