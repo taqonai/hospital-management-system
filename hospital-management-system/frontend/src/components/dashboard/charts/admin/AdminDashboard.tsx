@@ -283,7 +283,7 @@ export default function AdminDashboard() {
   };
 
   const handleAppointmentClick = (appointmentId: string) => {
-    navigate(`/appointments/${appointmentId}`);
+    navigate(`/appointments`);
   };
 
   const getAppointmentsList = () => {
