@@ -1577,6 +1577,14 @@ export const patientPortalApi = {
   downloadInvoice: (billId: string) =>
     api.get(`/patient-portal/bills/${billId}/download`, { responseType: 'blob' }),
 
+  // Payment Gateway (Stripe)
+  createPaymentIntent: (data: { invoiceId: string; amount: number; currency?: string }) =>
+    api.post('/payments/create-intent', data),
+  confirmPayment: (data: { transactionId: string }) =>
+    api.post('/payments/confirm', data),
+  downloadReceipt: (paymentId: string) =>
+    api.get(`/payments/${paymentId}/receipt`, { responseType: 'blob' }),
+
   // Insurance Claims
   getInsuranceClaims: (params?: { status?: string; page?: number; limit?: number }) =>
     api.get('/patient-portal/insurance-claims', { params }),

@@ -265,10 +265,23 @@ export default function Billing() {
   const paymentHistory: PaymentRecord[] = Array.isArray(paymentHistoryData) ? paymentHistoryData : [];
   const insuranceClaims: InsuranceClaim[] = Array.isArray(insuranceClaimsData) ? insuranceClaimsData : [];
 
-  // Payment mutation
+  // Payment mutation (using payment gateway)
   const paymentMutation = useMutation({
-    mutationFn: (data: { billId: string; amount: number; paymentMethod: string; cardLast4: string }) =>
-      patientPortalApi.makePayment(data),
+    mutationFn: async (data: { invoiceId: string; amount: number }) => {
+      // Step 1: Create payment intent
+      const intentResponse = await patientPortalApi.createPaymentIntent({
+        invoiceId: data.invoiceId,
+        amount: data.amount,
+        currency: 'AED',
+      });
+
+      const { transactionId } = intentResponse.data.data;
+
+      // Step 2: Confirm payment (in real scenario, Stripe Elements would handle card collection)
+      const confirmResponse = await patientPortalApi.confirmPayment({ transactionId });
+
+      return confirmResponse.data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['patient-billing-summary-page'] });
       queryClient.invalidateQueries({ queryKey: ['patient-bills-page'] });
@@ -353,29 +366,20 @@ export default function Billing() {
   const handleSubmitPayment = () => {
     if (!selectedBill) return;
 
-    // Basic validation
-    if (!cardNumber || cardNumber.replace(/\s/g, '').length !== 16) {
-      toast.error('Please enter a valid 16-digit card number');
+    const amount = Number(paymentAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Please enter a valid payment amount');
       return;
     }
-    if (!cardExpiry || !/^\d{2}\/\d{2}$/.test(cardExpiry)) {
-      toast.error('Please enter a valid expiry date (MM/YY)');
-      return;
-    }
-    if (!cardCvv || cardCvv.length < 3) {
-      toast.error('Please enter a valid CVV');
-      return;
-    }
-    if (!cardholderName.trim()) {
-      toast.error('Please enter the cardholder name');
+
+    if (amount > selectedBill.balanceDue) {
+      toast.error('Payment amount cannot exceed balance due');
       return;
     }
 
     paymentMutation.mutate({
-      billId: selectedBill.id,
-      amount: Number(paymentAmount),
-      paymentMethod: 'CARD',
-      cardLast4: cardNumber.replace(/\s/g, '').slice(-4),
+      invoiceId: selectedBill.id,
+      amount,
     });
   };
 
@@ -982,7 +986,7 @@ export default function Billing() {
                           Payment Amount <span className="text-red-500">*</span>
                         </label>
                         <div className="relative">
-                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">AED</span>
                           <input
                             type="number"
                             value={paymentAmount}
@@ -990,77 +994,25 @@ export default function Billing() {
                             min="1"
                             max={selectedBill?.balanceDue}
                             step="0.01"
-                            className="w-full rounded-xl border border-gray-300 bg-white pl-8 pr-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            className="w-full rounded-xl border border-gray-300 bg-white pl-14 pr-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                             required
                           />
                         </div>
                         <p className="mt-1 text-xs text-gray-500">You can pay the full amount or make a partial payment</p>
                       </div>
 
-                      {/* Card Number */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Card Number <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={cardNumber}
-                          onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
-                          placeholder="1234 5678 9012 3456"
-                          className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                          required
-                        />
-                      </div>
-
-                      {/* Expiry and CVV */}
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Expiry Date <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            value={cardExpiry}
-                            onChange={(e) => setCardExpiry(formatExpiry(e.target.value))}
-                            placeholder="MM/YY"
-                            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            required
-                          />
+                      {/* Payment Info */}
+                      <div className="p-4 bg-blue-50 rounded-xl space-y-2">
+                        <div className="flex items-center gap-2">
+                          <ShieldCheckIcon className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                          <p className="text-sm font-medium text-blue-900">Secure Online Payment</p>
                         </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            CVV <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            value={cardCvv}
-                            onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                            placeholder="123"
-                            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            required
-                          />
-                        </div>
-                      </div>
-
-                      {/* Cardholder Name */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Cardholder Name <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={cardholderName}
-                          onChange={(e) => setCardholderName(e.target.value)}
-                          placeholder="John Doe"
-                          className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                          required
-                        />
-                      </div>
-
-                      {/* Security Note */}
-                      <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl">
-                        <ShieldCheckIcon className="h-5 w-5 text-blue-600 flex-shrink-0" />
-                        <p className="text-sm text-blue-700">Your payment is secured with 256-bit SSL encryption</p>
+                        <p className="text-sm text-blue-700">
+                          This is a test payment gateway integration. In production, you will be redirected to a secure payment page to enter your card details.
+                        </p>
+                        <p className="text-xs text-blue-600">
+                          Note: Stripe Elements will be integrated when real API keys are configured.
+                        </p>
                       </div>
 
                       {/* Actions */}
@@ -1080,12 +1032,12 @@ export default function Billing() {
                           {paymentMutation.isPending ? (
                             <>
                               <ArrowPathIcon className="h-5 w-5 animate-spin" />
-                              Processing...
+                              Processing Payment...
                             </>
                           ) : (
                             <>
                               <CreditCardIcon className="h-5 w-5" />
-                              Pay <CurrencyDisplay amount={paymentAmount} />
+                              Proceed to Payment
                             </>
                           )}
                         </button>

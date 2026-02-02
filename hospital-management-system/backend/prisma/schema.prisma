@@ -118,6 +118,9 @@ model Hospital {
   notificationDeliveryLogs NotificationDeliveryLog[]
   notificationTemplates    NotificationTemplate[]
 
+  // Payment Gateway
+  paymentTransactions PaymentTransaction[]
+
   @@map("hospitals")
 }
 
@@ -1920,11 +1923,12 @@ model Invoice {
   updatedAt     DateTime      @updatedAt
 
   // Relations
-  hospital Hospital         @relation(fields: [hospitalId], references: [id])
-  patient  Patient          @relation(fields: [patientId], references: [id])
-  items    InvoiceItem[]
-  payments Payment[]
-  claims   InsuranceClaim[]
+  hospital            Hospital             @relation(fields: [hospitalId], references: [id])
+  patient             Patient              @relation(fields: [patientId], references: [id])
+  items               InvoiceItem[]
+  payments            Payment[]
+  claims              InsuranceClaim[]
+  paymentTransactions PaymentTransaction[]
 
   @@map("invoices")
 }
@@ -1962,9 +1966,11 @@ model Payment {
   referenceNumber String?
   notes           String?
   createdBy       String?
+  transactionId   String?
   createdAt       DateTime      @default(now())
 
-  invoice Invoice @relation(fields: [invoiceId], references: [id])
+  invoice      Invoice               @relation(fields: [invoiceId], references: [id])
+  transactions PaymentTransaction[]
 
   @@index([referenceNumber])
   @@map("payments")
@@ -1978,6 +1984,32 @@ enum PaymentMethod {
   NET_BANKING
   INSURANCE
   CHEQUE
+}
+
+model PaymentTransaction {
+  id                   String   @id @default(uuid())
+  hospitalId           String
+  invoiceId            String
+  paymentId            String?
+  gatewayProvider      String   @default("stripe")
+  gatewayTransactionId String?
+  gatewayStatus        String   // pending, succeeded, failed, refunded
+  amount               Decimal  @db.Decimal(10, 2)
+  currency             String   @default("AED")
+  paymentMethodType    String?
+  last4                String?
+  receiptUrl           String?
+  metadata             Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  hospital Hospital @relation(fields: [hospitalId], references: [id])
+  invoice  Invoice  @relation(fields: [invoiceId], references: [id])
+  payment  Payment? @relation(fields: [paymentId], references: [id])
+
+  @@index([hospitalId, gatewayTransactionId])
+  @@index([invoiceId])
+  @@map("payment_transactions")
 }
 
 model InsuranceClaim {

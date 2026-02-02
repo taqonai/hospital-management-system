@@ -16,6 +16,7 @@ import radiologyRoutes from './radiologyRoutes';
 import surgeryRoutes from './surgeryRoutes';
 import billingRoutes from './billingRoutes';
 import chargeManagementRoutes from './chargeManagementRoutes';
+import paymentGatewayRoutes from './paymentGatewayRoutes';
 import publicRoutes from './publicRoutes';
 import hrRoutes from './hrRoutes';
 import housekeepingRoutes from './housekeepingRoutes';
@@ -96,6 +97,7 @@ router.use('/radiology', radiologyRoutes);
 router.use('/surgery', surgeryRoutes);
 router.use('/billing', billingRoutes);
 router.use('/charge-management', chargeManagementRoutes);
+router.use('/payments', paymentGatewayRoutes);
 router.use('/hr', hrRoutes);
 router.use('/housekeeping', housekeepingRoutes);
 // New module routes
