@@ -1910,8 +1910,8 @@ model Invoice {
   paidAmount    Decimal       @default(0) @db.Decimal(10, 2)
   balanceAmount Decimal       @db.Decimal(10, 2)
   notes         String?
-  createdBy     String        @db.Uuid
-  updatedBy     String?       @db.Uuid
+  createdBy     String?
+  updatedBy     String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
@@ -1957,7 +1957,7 @@ model Payment {
   paymentMethod   PaymentMethod
   referenceNumber String?
   notes           String?
-  createdBy       String        @db.Uuid
+  createdBy       String?
   createdAt       DateTime      @default(now())
 
   invoice Invoice @relation(fields: [invoiceId], references: [id])
@@ -1981,7 +1981,7 @@ model InsuranceClaim {
   invoiceId          String
   claimNumber        String      @unique
   insuranceProvider  String
-  insurancePayerId   String?     @db.Uuid
+  insurancePayerId   String?
   policyNumber       String
   claimAmount        Decimal     @db.Decimal(10, 2)
   approvedAmount     Decimal?    @db.Decimal(10, 2)
@@ -1993,10 +1993,10 @@ model InsuranceClaim {
   appealDate         DateTime?
   appealStatus       String?
   notes              String?
-  createdBy          String      @db.Uuid
-  updatedBy          String?     @db.Uuid
-  submittedBy        String?     @db.Uuid
-  processedBy        String?     @db.Uuid
+  createdBy          String?
+  updatedBy          String?
+  submittedBy        String?
+  processedBy        String?
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 

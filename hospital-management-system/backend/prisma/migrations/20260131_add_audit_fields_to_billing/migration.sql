@@ -1,13 +1,13 @@
 -- Phase 1: Technical Debt Fixes - Add audit fields to billing models
 -- Migration: add_audit_fields_to_billing
--- NOTE: All column names use camelCase to match existing Prisma convention
+-- NOTE: All IDs are TEXT type to match existing Prisma schema convention
 
 -- ============================================================
 -- 1. Add audit fields to Invoice
 -- ============================================================
 ALTER TABLE "invoices" 
-  ADD COLUMN "createdBy" UUID,
-  ADD COLUMN "updatedBy" UUID;
+  ADD COLUMN "createdBy" TEXT,
+  ADD COLUMN "updatedBy" TEXT;
 
 -- Backfill existing invoices with hospital admin user
 UPDATE "invoices" 
@@ -31,21 +31,20 @@ WHERE "createdBy" IS NULL;
 -- 2. Update Payment table - add createdBy
 -- ============================================================
 ALTER TABLE "payments" 
-  ADD COLUMN "createdBy" UUID;
+  ADD COLUMN "createdBy" TEXT;
 
--- For existing payments, try to map receivedBy string to User.id
--- If receivedBy is a valid UUID, use it; otherwise use first admin
+-- For existing payments, copy receivedBy value as createdBy
 UPDATE "payments" 
-SET "createdBy" = 
-  CASE 
-    WHEN "receivedBy" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' 
-      THEN "receivedBy"::UUID
-    ELSE (
-      SELECT id FROM "users" 
-      WHERE role = 'HOSPITAL_ADMIN' 
-      LIMIT 1
-    )
-  END;
+SET "createdBy" = "receivedBy";
+
+-- Fallback for any NULLs
+UPDATE "payments" 
+SET "createdBy" = (
+  SELECT id FROM "users" 
+  WHERE role = 'HOSPITAL_ADMIN' 
+  LIMIT 1
+)
+WHERE "createdBy" IS NULL;
 
 -- Add partial unique index on referenceNumber (when not null)
 CREATE UNIQUE INDEX IF NOT EXISTS "unique_payment_reference_idx" 
@@ -56,15 +55,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS "unique_payment_reference_idx"
 -- 3. Add audit fields and new fields to InsuranceClaim
 -- ============================================================
 ALTER TABLE "insurance_claims" 
-  ADD COLUMN "insurancePayerId" UUID,
+  ADD COLUMN "insurancePayerId" TEXT,
   ADD COLUMN "denialReasonCode" TEXT,
   ADD COLUMN "appealNotes" TEXT,
   ADD COLUMN "appealDate" TIMESTAMP(3),
   ADD COLUMN "appealStatus" TEXT,
-  ADD COLUMN "createdBy" UUID,
-  ADD COLUMN "updatedBy" UUID,
-  ADD COLUMN "submittedBy" UUID,
-  ADD COLUMN "processedBy" UUID;
+  ADD COLUMN "createdBy" TEXT,
+  ADD COLUMN "updatedBy" TEXT,
+  ADD COLUMN "submittedBy" TEXT,
+  ADD COLUMN "processedBy" TEXT;
 
 -- Backfill createdBy for existing claims
 UPDATE "insurance_claims" 
