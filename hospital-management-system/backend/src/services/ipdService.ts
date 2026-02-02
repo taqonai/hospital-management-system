@@ -4,6 +4,7 @@ import {
   calculateNEWS2RiskLevel,
   getNEWS2ClinicalResponse,
 } from '../utils/news2';
+import { billingService } from './billingService';
 
 export class IPDService {
   // Ward Management
@@ -957,6 +958,14 @@ export class IPDService {
       },
       patients: patientsWithScores,
     };
+  }
+
+  /**
+   * Generate daily room charges for all active admissions.
+   * Can be called by a cron job (Sprint 4).
+   */
+  async generateDailyCharges(hospitalId: string) {
+    return billingService.generateIPDDailyCharges(hospitalId, 'system');
   }
 }
 

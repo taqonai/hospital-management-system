@@ -557,6 +557,480 @@ export class BillingService {
     return results;
   }
 
+  // ==================== AUTO-BILLING FROM CLINICAL EVENTS (Sprint 2) ====================
+
+  /**
+   * Find or create a PENDING invoice for a patient for today.
+   * Prevents creating multiple invoices per patient per day.
+   */
+  private async findOrCreateOpenInvoice(hospitalId: string, patientId: string, createdBy: string): Promise<any> {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    // Look for existing PENDING invoice for this patient created today
+    const existingInvoice = await prisma.invoice.findFirst({
+      where: {
+        hospitalId,
+        patientId,
+        status: 'PENDING',
+        invoiceDate: {
+          gte: todayStart,
+          lte: todayEnd,
+        },
+      },
+      include: {
+        patient: { select: { id: true, firstName: true, lastName: true, mrn: true, email: true, phone: true } },
+        items: true,
+      },
+    });
+
+    if (existingInvoice) {
+      return existingInvoice;
+    }
+
+    // Create a new empty invoice
+    const invoice = await this.createInvoice(hospitalId, {
+      patientId,
+      items: [],
+      createdBy,
+    });
+
+    return invoice;
+  }
+
+  /**
+   * Add a single item to an existing invoice and recalculate totals.
+   */
+  async addItemToInvoice(invoiceId: string, hospitalId: string, item: {
+    description: string;
+    category: string;
+    quantity: number;
+    unitPrice: number;
+    discount?: number;
+  }, createdBy: string) {
+    const invoice = await prisma.invoice.findFirst({
+      where: { id: invoiceId, hospitalId },
+      include: { items: true },
+    });
+
+    if (!invoice) throw new NotFoundError('Invoice not found');
+
+    if (invoice.status !== 'PENDING' && invoice.status !== 'PARTIALLY_PAID') {
+      throw new Error(`Cannot add items to invoice with status ${invoice.status}`);
+    }
+
+    const itemDiscount = item.discount || 0;
+    const totalPrice = (item.unitPrice * item.quantity) - itemDiscount;
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Create the invoice item
+      const newItem = await tx.invoiceItem.create({
+        data: {
+          invoiceId,
+          description: item.description,
+          category: item.category,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          discount: itemDiscount,
+          totalPrice,
+        },
+      });
+
+      // Recalculate invoice totals
+      const allItems = await tx.invoiceItem.findMany({
+        where: { invoiceId },
+      });
+
+      const subtotal = allItems.reduce((sum, i) => sum + Number(i.totalPrice), 0);
+      const invoiceDiscount = Number(invoice.discount);
+      const tax = Number(invoice.tax);
+      const totalAmount = subtotal - invoiceDiscount + tax;
+      const paidAmount = Number(invoice.paidAmount);
+      const balanceAmount = totalAmount - paidAmount;
+
+      // Update invoice
+      const updatedInvoice = await tx.invoice.update({
+        where: { id: invoiceId },
+        data: {
+          subtotal,
+          totalAmount,
+          balanceAmount: balanceAmount > 0 ? balanceAmount : 0,
+          updatedBy: createdBy,
+        },
+        include: {
+          patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
+          items: true,
+        },
+      });
+
+      return { item: newItem, invoice: updatedInvoice };
+    });
+
+    // Post updated GL entry
+    try {
+      await accountingService.recordInvoiceGL({
+        hospitalId,
+        invoiceId,
+        amount: Number(result.invoice.totalAmount),
+        description: `Invoice ${result.invoice.invoiceNumber} - item added: ${item.description}`,
+        createdBy,
+      });
+    } catch (glError) {
+      console.error('[GL] Failed to post updated invoice GL entry:', glError);
+    }
+
+    return result;
+  }
+
+  /**
+   * Auto-generate an invoice when an appointment is completed.
+   */
+  async autoGenerateInvoice(appointmentId: string, hospitalId: string, createdBy: string) {
+    console.log('[AUTO-BILLING] Generating invoice for appointment:', appointmentId);
+
+    const appointment = await prisma.appointment.findFirst({
+      where: { id: appointmentId, hospitalId },
+      include: {
+        patient: true,
+        doctor: {
+          include: {
+            user: { select: { id: true, firstName: true, lastName: true } },
+            department: true,
+          },
+        },
+        consultation: {
+          include: {
+            prescriptions: { include: { medications: true } },
+          },
+        },
+      },
+    });
+
+    if (!appointment) {
+      console.error('[AUTO-BILLING] Appointment not found:', appointmentId);
+      return null;
+    }
+
+    // Determine charge code based on appointment type
+    const chargeCodeMap: Record<string, string> = {
+      'CONSULTATION': 'initial_consultation',
+      'FOLLOW_UP': 'follow_up',
+      'EMERGENCY': 'emergency_consult',
+      'TELEMEDICINE': 'initial_consultation',
+      'PROCEDURE': 'specialist_consult',
+    };
+
+    const chargeCode = chargeCodeMap[appointment.type] || 'initial_consultation';
+
+    // Check if patient has insurance for fee schedule override
+    let payerId: string | undefined;
+    try {
+      const insurance = await prisma.patientInsurance.findFirst({
+        where: {
+          patientId: appointment.patientId,
+          isActive: true,
+          isPrimary: true,
+        },
+      });
+      if (insurance) {
+        payerId = insurance.id;
+      }
+    } catch (err) {
+      console.error('[AUTO-BILLING] Failed to check insurance:', err);
+    }
+
+    // Look up price from ChargeMaster
+    let price = 150; // Default fallback
+    let description = 'Consultation';
+
+    try {
+      const priceResult = await chargeManagementService.lookupPrice(hospitalId, chargeCode, payerId);
+      if (priceResult) {
+        price = priceResult.finalPrice;
+        description = priceResult.description;
+      } else {
+        // Try with the hardcoded charge database
+        const fallback = this.chargeDatabase[chargeCode];
+        if (fallback) {
+          price = fallback.price;
+          description = fallback.description;
+        }
+      }
+    } catch (err) {
+      console.error('[AUTO-BILLING] ChargeMaster lookup failed, using fallback:', err);
+      const fallback = this.chargeDatabase[chargeCode];
+      if (fallback) {
+        price = fallback.price;
+        description = fallback.description;
+      }
+    }
+
+    const doctorName = appointment.doctor?.user
+      ? `Dr. ${appointment.doctor.user.firstName} ${appointment.doctor.user.lastName}`
+      : 'Doctor';
+    const deptName = appointment.doctor?.department?.name || '';
+
+    // Create the invoice
+    const invoice = await this.createInvoice(hospitalId, {
+      patientId: appointment.patientId,
+      items: [
+        {
+          description: `${description} - ${doctorName}${deptName ? ` (${deptName})` : ''}`,
+          category: 'CONSULTATION',
+          quantity: 1,
+          unitPrice: price,
+        },
+      ],
+      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+      notes: `Auto-generated for appointment ${appointmentId}`,
+      createdBy,
+    });
+
+    console.log('[AUTO-BILLING] Invoice created:', invoice.invoiceNumber, 'Amount:', price);
+    return invoice;
+  }
+
+  /**
+   * Add lab test charges to a patient's invoice when a lab order is created.
+   */
+  async addLabCharges(labOrderId: string, hospitalId: string, createdBy: string) {
+    console.log('[AUTO-BILLING] Adding lab charges for order:', labOrderId);
+
+    const labOrder = await prisma.labOrder.findFirst({
+      where: { id: labOrderId, hospitalId },
+      include: {
+        tests: {
+          include: { labTest: true },
+        },
+        patient: true,
+      },
+    });
+
+    if (!labOrder) {
+      console.error('[AUTO-BILLING] Lab order not found:', labOrderId);
+      return null;
+    }
+
+    // Find or create open invoice
+    const invoice = await this.findOrCreateOpenInvoice(hospitalId, labOrder.patientId, createdBy);
+
+    // Add each test as an invoice item
+    for (const test of labOrder.tests) {
+      let price = Number(test.labTest.price) || 0;
+      let description = test.labTest.name;
+
+      // Try ChargeMaster lookup using the lab test code
+      try {
+        const priceResult = await chargeManagementService.lookupPrice(hospitalId, test.labTest.code);
+        if (priceResult) {
+          price = priceResult.finalPrice;
+          description = priceResult.description || test.labTest.name;
+        }
+      } catch (err) {
+        // Use LabTest.price as fallback (already set above)
+      }
+
+      if (price > 0) {
+        await this.addItemToInvoice(invoice.id, hospitalId, {
+          description: `Lab Test - ${description}`,
+          category: 'LAB',
+          quantity: 1,
+          unitPrice: price,
+        }, createdBy);
+      }
+    }
+
+    console.log('[AUTO-BILLING] Lab charges added for order:', labOrderId, 'Tests:', labOrder.tests.length);
+    return invoice;
+  }
+
+  /**
+   * Add imaging charges to a patient's invoice when an imaging order is created.
+   */
+  async addImagingCharges(imagingOrderId: string, hospitalId: string, createdBy: string) {
+    console.log('[AUTO-BILLING] Adding imaging charges for order:', imagingOrderId);
+
+    const imagingOrder = await prisma.imagingOrder.findFirst({
+      where: { id: imagingOrderId, hospitalId },
+      include: { patient: true },
+    });
+
+    if (!imagingOrder) {
+      console.error('[AUTO-BILLING] Imaging order not found:', imagingOrderId);
+      return null;
+    }
+
+    // Map modality type to charge code
+    const modalityChargeMap: Record<string, string> = {
+      'XRAY': 'xray_chest',
+      'CT': 'ct_scan',
+      'MRI': 'mri',
+      'ULTRASOUND': 'ultrasound',
+      'MAMMOGRAPHY': 'ultrasound', // fallback
+      'PET': 'ct_scan', // fallback to CT pricing
+      'FLUOROSCOPY': 'xray_chest', // fallback to X-ray pricing
+    };
+
+    const chargeCode = modalityChargeMap[imagingOrder.modalityType] || 'xray_chest';
+
+    let price = 150; // Default fallback
+    let description = `${imagingOrder.modalityType} - ${imagingOrder.bodyPart}`;
+
+    // Try ChargeMaster lookup
+    try {
+      const priceResult = await chargeManagementService.lookupPrice(hospitalId, chargeCode);
+      if (priceResult) {
+        price = priceResult.finalPrice;
+        description = `${priceResult.description} - ${imagingOrder.bodyPart}`;
+      } else {
+        // Use hardcoded fallback
+        const fallback = this.chargeDatabase[chargeCode];
+        if (fallback) {
+          price = fallback.price;
+          description = `${fallback.description} - ${imagingOrder.bodyPart}`;
+        }
+      }
+    } catch (err) {
+      const fallback = this.chargeDatabase[chargeCode];
+      if (fallback) {
+        price = fallback.price;
+        description = `${fallback.description} - ${imagingOrder.bodyPart}`;
+      }
+    }
+
+    // Find or create open invoice
+    const invoice = await this.findOrCreateOpenInvoice(hospitalId, imagingOrder.patientId, createdBy);
+
+    await this.addItemToInvoice(invoice.id, hospitalId, {
+      description: `Imaging - ${description}`,
+      category: 'IMAGING',
+      quantity: 1,
+      unitPrice: price,
+    }, createdBy);
+
+    console.log('[AUTO-BILLING] Imaging charges added for order:', imagingOrderId, 'Amount:', price);
+    return invoice;
+  }
+
+  /**
+   * Add pharmacy charges to a patient's invoice when a prescription is dispensed.
+   */
+  async addPharmacyCharges(prescriptionId: string, hospitalId: string, createdBy: string) {
+    console.log('[AUTO-BILLING] Adding pharmacy charges for prescription:', prescriptionId);
+
+    const prescription = await prisma.prescription.findFirst({
+      where: { id: prescriptionId },
+      include: {
+        medications: {
+          include: { drug: true },
+        },
+        patient: true,
+      },
+    });
+
+    if (!prescription) {
+      console.error('[AUTO-BILLING] Prescription not found:', prescriptionId);
+      return null;
+    }
+
+    const effectiveHospitalId = hospitalId || prescription.patient?.hospitalId;
+    if (!effectiveHospitalId) {
+      console.error('[AUTO-BILLING] No hospitalId available for prescription:', prescriptionId);
+      return null;
+    }
+
+    // Find or create open invoice
+    const invoice = await this.findOrCreateOpenInvoice(effectiveHospitalId, prescription.patientId, createdBy);
+
+    // Add each medication as an invoice item
+    for (const med of prescription.medications) {
+      let unitPrice = 0;
+
+      // Use drug price if available
+      if (med.drug) {
+        unitPrice = Number(med.drug.price) || 0;
+      }
+
+      // Try ChargeMaster lookup if drug price not available
+      if (unitPrice === 0 && med.drug) {
+        try {
+          const priceResult = await chargeManagementService.lookupPrice(effectiveHospitalId, med.drug.code);
+          if (priceResult) {
+            unitPrice = priceResult.finalPrice;
+          }
+        } catch (err) {
+          // Use drug price as fallback
+        }
+      }
+
+      if (unitPrice > 0) {
+        await this.addItemToInvoice(invoice.id, effectiveHospitalId, {
+          description: `Medication - ${med.drugName}${med.dosage ? ` (${med.dosage})` : ''}`,
+          category: 'MEDICATION',
+          quantity: med.quantity || 1,
+          unitPrice,
+        }, createdBy);
+      }
+    }
+
+    console.log('[AUTO-BILLING] Pharmacy charges added for prescription:', prescriptionId);
+    return invoice;
+  }
+
+  /**
+   * Generate daily room charges for all active inpatient admissions.
+   */
+  async generateIPDDailyCharges(hospitalId: string, createdBy: string) {
+    console.log('[AUTO-BILLING] Generating IPD daily charges for hospital:', hospitalId);
+
+    const activeAdmissions = await prisma.admission.findMany({
+      where: {
+        hospitalId,
+        dischargeDate: null,
+        status: 'ADMITTED',
+      },
+      include: {
+        bed: {
+          include: { ward: true },
+        },
+        patient: true,
+      },
+    });
+
+    const today = new Date().toISOString().split('T')[0];
+    const results = [];
+
+    for (const admission of activeAdmissions) {
+      try {
+        const dailyRate = Number(admission.bed.dailyRate) || 0;
+        if (dailyRate <= 0) continue;
+
+        const wardName = admission.bed.ward?.name || 'Ward';
+        const bedNumber = admission.bed.bedNumber;
+
+        // Find or create open invoice
+        const invoice = await this.findOrCreateOpenInvoice(hospitalId, admission.patientId, createdBy);
+
+        await this.addItemToInvoice(invoice.id, hospitalId, {
+          description: `Room charge - ${wardName} - Bed ${bedNumber} - ${today}`,
+          category: 'ACCOMMODATION',
+          quantity: 1,
+          unitPrice: dailyRate,
+        }, createdBy);
+
+        results.push({ admissionId: admission.id, status: 'charged', amount: dailyRate });
+      } catch (error) {
+        console.error('[AUTO-BILLING] Failed to charge admission:', admission.id, error);
+        results.push({ admissionId: admission.id, status: 'failed', error: String(error) });
+      }
+    }
+
+    console.log('[AUTO-BILLING] IPD daily charges generated:', results.length, 'admissions processed');
+    return results;
+  }
+
   // ==================== AI AUTO CHARGE CAPTURE ====================
 
   // Load charges from ChargeMaster or fall back to hardcoded

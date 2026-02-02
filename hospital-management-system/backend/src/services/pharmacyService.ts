@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { NotFoundError } from '../middleware/errorHandler';
 import { parse } from 'csv-parse/sync';
+import { billingService } from './billingService';
 
 export class PharmacyService {
   // Drug Management
@@ -189,6 +190,23 @@ export class PharmacyService {
         where: { id: prescriptionId },
         data: { status: 'COMPLETED' },
       });
+
+      // Auto-add pharmacy charges to patient invoice when fully dispensed
+      try {
+        const prescriptionData = await prisma.prescription.findUnique({
+          where: { id: prescriptionId },
+          include: { patient: true },
+        });
+        if (prescriptionData && prescriptionData.patient) {
+          await billingService.addPharmacyCharges(
+            prescriptionId,
+            prescriptionData.patient.hospitalId,
+            dispensedBy
+          );
+        }
+      } catch (error) {
+        console.error('[AUTO-BILLING] Failed to add pharmacy charges for prescription:', prescriptionId, error);
+      }
     }
 
     return prisma.prescription.findUnique({

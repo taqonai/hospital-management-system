@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler';
 import { notificationService } from './notificationService';
 import { storageService } from './storageService';
+import { billingService } from './billingService';
 import axios from 'axios';
 import FormData from 'form-data';
 import logger from '../utils/logger';
@@ -119,6 +120,13 @@ export class LaboratoryService {
     } catch (error) {
       console.error('[LAB NOTIFICATION] Failed to send order confirmation:', error);
       // Don't fail the lab order creation if notification fails
+    }
+
+    // Auto-add lab charges to patient invoice
+    try {
+      await billingService.addLabCharges(order.id, hospitalId, data.orderedBy);
+    } catch (error) {
+      console.error('[AUTO-BILLING] Failed to add lab charges for order:', order.id, error);
     }
 
     return order;

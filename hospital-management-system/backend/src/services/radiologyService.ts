@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import { NotFoundError } from '../middleware/errorHandler';
+import { billingService } from './billingService';
 
 export class RadiologyService {
   private generateOrderNumber(): string {
@@ -28,7 +29,7 @@ export class RadiologyService {
   }) {
     const orderNumber = this.generateOrderNumber();
 
-    return prisma.imagingOrder.create({
+    const order = await prisma.imagingOrder.create({
       data: {
         ...data,
         hospitalId,
@@ -39,6 +40,15 @@ export class RadiologyService {
         patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
       },
     });
+
+    // Auto-add imaging charges to patient invoice
+    try {
+      await billingService.addImagingCharges(order.id, hospitalId, data.orderedBy);
+    } catch (error) {
+      console.error('[AUTO-BILLING] Failed to add imaging charges for order:', order.id, error);
+    }
+
+    return order;
   }
 
   async getImagingOrders(hospitalId: string, params: {

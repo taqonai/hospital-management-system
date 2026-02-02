@@ -5,6 +5,7 @@ import { AppointmentStatus } from '@prisma/client';
 import { notificationService } from './notificationService';
 import { slotService } from './slotService';
 import { holidayService } from './holidayService';
+import { billingService } from './billingService';
 
 // Booking constraints
 const MAX_ADVANCE_BOOKING_DAYS = 30;
@@ -640,6 +641,16 @@ export class AppointmentService {
       } catch (error) {
         console.error('Failed to send confirmation notification:', error);
         // Don't fail the status update if notification fails
+      }
+    }
+
+    // Auto-generate invoice on appointment completion
+    if (status === 'COMPLETED') {
+      try {
+        await billingService.autoGenerateInvoice(id, hospitalId, appointment.doctorId || 'system');
+      } catch (error) {
+        console.error('[AUTO-BILLING] Failed to auto-generate invoice for appointment:', id, error);
+        // Don't fail the status update if billing fails
       }
     }
 
