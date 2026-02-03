@@ -22,6 +22,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import { doctorApi } from '../services/api';
+import DirhamSymbol from '../components/common/DirhamSymbol';
 import { Doctor } from '../types';
 import toast from 'react-hot-toast';
 
@@ -298,7 +299,7 @@ export default function Doctors() {
                         </a>
                       </div>
                       <div className="flex items-center gap-1">
-                        <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">AED</span>
+                        <DirhamSymbol size="1.25em" className="text-emerald-500" />
                         <span className="text-xl font-bold text-gray-900">
                           {doctor.consultationFee || 0}
                         </span>
