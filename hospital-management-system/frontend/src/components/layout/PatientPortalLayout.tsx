@@ -18,7 +18,6 @@ import {
   ShieldCheckIcon,
   DocumentTextIcon,
   ChevronDownIcon,
-  LightBulbIcon,
   ChartBarIcon,
   ClipboardDocumentListIcon,
   ClockIcon,
@@ -162,6 +161,21 @@ const getPatientInfo = (): PatientInfo | null => {
   }
 };
 
+// AI Checker icon (from PNG using CSS mask for currentColor support)
+const AICheckerIcon = ({ className }: { className?: string }) => (
+  <div
+    className={className}
+    style={{
+      backgroundColor: 'currentColor',
+      WebkitMaskImage: 'url(/icons/AIChecker.png)',
+      maskImage: 'url(/icons/AIChecker.png)',
+      WebkitMaskSize: 'contain',
+      WebkitMaskRepeat: 'no-repeat',
+      WebkitMaskPosition: 'center',
+    }}
+  />
+);
+
 // AI Sparkles icon
 const SparklesIcon = ({ className }: { className?: string }) => (
   <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -173,7 +187,7 @@ const SparklesIcon = ({ className }: { className?: string }) => (
 const navigationItems: NavItem[] = [
   { name: 'Dashboard', href: '/patient-portal/dashboard', icon: HomeIcon },
   { name: 'My Appointments', href: '/patient-portal/appointments', icon: CalendarDaysIcon },
-  { name: 'AI Health Assistant', href: '/patient-portal/health-assistant', icon: LightBulbIcon },
+  { name: 'AI Health Assistant', href: '/patient-portal/health-assistant', icon: AICheckerIcon },
   { name: 'Health Insights', href: '/patient-portal/health-insights', icon: ChartBarIcon },
   { name: 'Symptom Checker', href: '/patient-portal/symptom-checker', icon: SparklesIcon },
   { name: 'Medical History', href: '/patient-portal/medical-history', icon: ClipboardDocumentListIcon },
