@@ -74,8 +74,8 @@ export const config = {
   },
 
   rateLimit: {
-    windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10),
-    max: parseInt(process.env.RATE_LIMIT_MAX || '100', 10),
+    windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10), // 1 minute window
+    max: parseInt(process.env.RATE_LIMIT_MAX || '500', 10), // 500 requests per window (increased for E2E testing)
   },
 
   encryption: {
