@@ -2122,4 +2122,248 @@ router.put(
   })
 );
 
+// =============================================================================
+// Patient Portal Insurance Routes
+// =============================================================================
+
+/**
+ * Get patient's insurance policies
+ * GET /api/v1/patient-portal/insurance
+ */
+router.get(
+  '/insurance',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+
+    const insurances = await prisma.patientInsurance.findMany({
+      where: { 
+        patientId,
+        isActive: true,
+      },
+      orderBy: [
+        { isPrimary: 'desc' },
+        { createdAt: 'desc' },
+      ],
+    });
+
+    sendSuccess(res, insurances, 'Insurance policies retrieved');
+  })
+);
+
+/**
+ * Add new insurance policy
+ * POST /api/v1/patient-portal/insurance
+ */
+router.post(
+  '/insurance',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const {
+      providerName,
+      policyNumber,
+      groupNumber,
+      subscriberName,
+      subscriberId,
+      relationship,
+      effectiveDate,
+      expiryDate,
+      coverageType,
+      isPrimary,
+    } = req.body;
+
+    // Validate required fields
+    if (!providerName || !policyNumber || !subscriberName || !effectiveDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Provider name, policy number, subscriber name, and effective date are required',
+      });
+    }
+
+    // If setting as primary, unset other primary insurances
+    if (isPrimary) {
+      await prisma.patientInsurance.updateMany({
+        where: { patientId, isPrimary: true },
+        data: { isPrimary: false },
+      });
+    }
+
+    // Check if this is the first insurance (auto-set as primary)
+    const existingCount = await prisma.patientInsurance.count({
+      where: { patientId, isActive: true },
+    });
+
+    const insurance = await prisma.patientInsurance.create({
+      data: {
+        patientId,
+        providerName,
+        policyNumber,
+        groupNumber: groupNumber || null,
+        subscriberName,
+        subscriberId: subscriberId || '',
+        relationship: relationship || 'Self',
+        effectiveDate: new Date(effectiveDate),
+        expiryDate: expiryDate ? new Date(expiryDate) : null,
+        coverageType: coverageType || 'Basic',
+        networkTier: 'IN_NETWORK', // Default, will be verified later
+        isPrimary: isPrimary || existingCount === 0, // First insurance is auto-primary
+        isActive: true,
+      },
+    });
+
+    sendSuccess(res, insurance, 'Insurance added successfully');
+  })
+);
+
+/**
+ * Update insurance policy
+ * PUT /api/v1/patient-portal/insurance/:id
+ */
+router.put(
+  '/insurance/:id',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const insuranceId = req.params.id;
+    const {
+      providerName,
+      policyNumber,
+      groupNumber,
+      subscriberName,
+      subscriberId,
+      relationship,
+      effectiveDate,
+      expiryDate,
+      coverageType,
+      isPrimary,
+    } = req.body;
+
+    // Verify ownership
+    const existing = await prisma.patientInsurance.findFirst({
+      where: { id: insuranceId, patientId },
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Insurance not found',
+      });
+    }
+
+    // If setting as primary, unset other primary insurances
+    if (isPrimary && !existing.isPrimary) {
+      await prisma.patientInsurance.updateMany({
+        where: { patientId, isPrimary: true },
+        data: { isPrimary: false },
+      });
+    }
+
+    const insurance = await prisma.patientInsurance.update({
+      where: { id: insuranceId },
+      data: {
+        providerName: providerName ?? existing.providerName,
+        policyNumber: policyNumber ?? existing.policyNumber,
+        groupNumber: groupNumber !== undefined ? groupNumber : existing.groupNumber,
+        subscriberName: subscriberName ?? existing.subscriberName,
+        subscriberId: subscriberId ?? existing.subscriberId,
+        relationship: relationship ?? existing.relationship,
+        effectiveDate: effectiveDate ? new Date(effectiveDate) : existing.effectiveDate,
+        expiryDate: expiryDate ? new Date(expiryDate) : existing.expiryDate,
+        coverageType: coverageType ?? existing.coverageType,
+        isPrimary: isPrimary !== undefined ? isPrimary : existing.isPrimary,
+        updatedAt: new Date(),
+      },
+    });
+
+    sendSuccess(res, insurance, 'Insurance updated successfully');
+  })
+);
+
+/**
+ * Delete (deactivate) insurance policy
+ * DELETE /api/v1/patient-portal/insurance/:id
+ */
+router.delete(
+  '/insurance/:id',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const insuranceId = req.params.id;
+
+    // Verify ownership
+    const existing = await prisma.patientInsurance.findFirst({
+      where: { id: insuranceId, patientId },
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Insurance not found',
+      });
+    }
+
+    // Soft delete
+    await prisma.patientInsurance.update({
+      where: { id: insuranceId },
+      data: { isActive: false },
+    });
+
+    // If this was primary, set another one as primary
+    if (existing.isPrimary) {
+      const nextPrimary = await prisma.patientInsurance.findFirst({
+        where: { patientId, isActive: true },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (nextPrimary) {
+        await prisma.patientInsurance.update({
+          where: { id: nextPrimary.id },
+          data: { isPrimary: true },
+        });
+      }
+    }
+
+    sendSuccess(res, { deleted: true }, 'Insurance removed');
+  })
+);
+
+/**
+ * Set insurance as primary
+ * POST /api/v1/patient-portal/insurance/:id/set-primary
+ */
+router.post(
+  '/insurance/:id/set-primary',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const insuranceId = req.params.id;
+
+    // Verify ownership
+    const existing = await prisma.patientInsurance.findFirst({
+      where: { id: insuranceId, patientId, isActive: true },
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Insurance not found',
+      });
+    }
+
+    // Unset all primary
+    await prisma.patientInsurance.updateMany({
+      where: { patientId, isPrimary: true },
+      data: { isPrimary: false },
+    });
+
+    // Set this as primary
+    const insurance = await prisma.patientInsurance.update({
+      where: { id: insuranceId },
+      data: { isPrimary: true },
+    });
+
+    sendSuccess(res, insurance, 'Primary insurance updated');
+  })
+);
+
 export default router;

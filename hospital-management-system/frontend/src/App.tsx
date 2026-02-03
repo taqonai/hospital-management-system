@@ -119,6 +119,7 @@ import PatientPortalNutritionPlan from './pages/PatientPortal/NutritionPlan';
 import PatientPortalWellnessHub from './pages/PatientPortal/WellnessHub';
 import PatientPortalMessages from './pages/PatientPortal/components/Messages';
 import PatientPortalFullHistory from './pages/PatientPortal/PatientFullHistory';
+import PatientPortalInsurance from './pages/PatientPortal/Insurance';
 import PatientPortalLayout from './components/layout/PatientPortalLayout';
 
 // Asset Management
@@ -395,6 +396,7 @@ function App() {
         <Route path="prescriptions" element={<PatientPortalPrescriptions />} />
         <Route path="labs" element={<PatientPortalLabResults />} />
         <Route path="billing" element={<PatientPortalBilling />} />
+        <Route path="insurance" element={<PatientPortalInsurance />} />
         <Route path="settings" element={<PatientPortalSettings />} />
         <Route path="profile" element={<Navigate to="/patient-portal/settings" replace />} />
         <Route path="symptom-checker" element={<PatientPortalSymptomChecker />} />

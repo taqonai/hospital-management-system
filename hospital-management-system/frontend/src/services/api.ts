@@ -1666,6 +1666,35 @@ export const patientPortalApi = {
     api.put(`/patient-portal/notifications/${id}/read`),
   markAllNotificationsRead: () =>
     api.put('/patient-portal/notifications/read-all'),
+
+  // Insurance Management (Patient Self-Service)
+  getInsurance: () => api.get('/patient-portal/insurance'),
+  addInsurance: (data: {
+    providerName: string;
+    policyNumber: string;
+    groupNumber?: string;
+    subscriberName: string;
+    subscriberId?: string;
+    relationship: string;
+    effectiveDate: string;
+    expiryDate?: string;
+    coverageType: string;
+    isPrimary?: boolean;
+  }) => api.post('/patient-portal/insurance', data),
+  updateInsurance: (id: string, data: {
+    providerName?: string;
+    policyNumber?: string;
+    groupNumber?: string;
+    subscriberName?: string;
+    subscriberId?: string;
+    relationship?: string;
+    effectiveDate?: string;
+    expiryDate?: string;
+    coverageType?: string;
+    isPrimary?: boolean;
+  }) => api.put(`/patient-portal/insurance/${id}`, data),
+  deleteInsurance: (id: string) => api.delete(`/patient-portal/insurance/${id}`),
+  setPrimaryInsurance: (id: string) => api.post(`/patient-portal/insurance/${id}/set-primary`),
 };
 
 // Symptom Checker APIs

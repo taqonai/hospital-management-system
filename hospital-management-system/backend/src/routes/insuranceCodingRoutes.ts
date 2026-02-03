@@ -1825,4 +1825,82 @@ router.get(
   })
 );
 
+// ==================== Insurance Eligibility Verification ====================
+
+import { insuranceEligibilityService } from '../services/insuranceEligibilityService';
+
+/**
+ * POST /api/insurance-coding/eligibility/verify-eid
+ * Verify insurance eligibility by Emirates ID
+ * UAE standard: Uses EID to lookup patient and insurance coverage in real-time
+ */
+router.post(
+  '/eligibility/verify-eid',
+  authenticate,
+  authorize(['RECEPTIONIST', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { emiratesId } = req.body;
+    
+    if (!emiratesId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Emirates ID is required',
+      });
+    }
+
+    const result = await insuranceEligibilityService.lookupByEmiratesId(
+      req.user!.hospitalId,
+      emiratesId
+    );
+
+    sendSuccess(res, result);
+  })
+);
+
+/**
+ * POST /api/insurance-coding/eligibility/verify-patient
+ * Verify insurance eligibility by Patient ID
+ * Uses stored insurance data, with optional real-time DHA verification if EID available
+ */
+router.post(
+  '/eligibility/verify-patient',
+  authenticate,
+  authorize(['RECEPTIONIST', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { patientId } = req.body;
+    
+    if (!patientId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Patient ID is required',
+      });
+    }
+
+    const eligibility = await insuranceEligibilityService.verifyEligibilityByPatientId(
+      patientId,
+      req.user!.hospitalId
+    );
+
+    sendSuccess(res, eligibility);
+  })
+);
+
+/**
+ * GET /api/insurance-coding/eligibility/:patientId
+ * Get cached eligibility status for a patient
+ */
+router.get(
+  '/eligibility/:patientId',
+  authenticate,
+  authorize(['RECEPTIONIST', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const eligibility = await insuranceEligibilityService.verifyEligibilityByPatientId(
+      req.params.patientId,
+      req.user!.hospitalId
+    );
+
+    sendSuccess(res, eligibility);
+  })
+);
+
 export default router;

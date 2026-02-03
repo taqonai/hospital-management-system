@@ -16,6 +16,8 @@ import {
   ExclamationCircleIcon,
   ExclamationTriangleIcon,
   PlayIcon,
+  IdentificationIcon,
+  MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
 import { useAIHealth } from '../../hooks/useAI';
@@ -27,6 +29,7 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../../hooks/useAuth';
 import VitalsRecordingModal from '../../components/vitals/VitalsRecordingModal';
 import CopayCollectionModal from '../../components/billing/CopayCollectionModal';
+import EmiratesIdLookup from '../../components/insurance/EmiratesIdLookup';
 
 interface QueueItem {
   id: string; // Appointment/Booking ID
@@ -84,6 +87,8 @@ function WalkInModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
   const [chiefComplaint, setChiefComplaint] = useState('');
   const [priority, setPriority] = useState<'NORMAL' | 'URGENT'>('NORMAL');
   const [loadingDoctors, setLoadingDoctors] = useState(true);
+  const [searchMode, setSearchMode] = useState<'eid' | 'name'>('eid');
+  const [insuranceEligibility, setInsuranceEligibility] = useState<any>(null);
 
   // Fetch available doctors
   useEffect(() => {
@@ -186,55 +191,141 @@ function WalkInModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
             {/* Patient Selection */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Select Patient <span className="text-red-500">*</span>
+                Find Patient <span className="text-red-500">*</span>
               </label>
+              
               {selectedPatient ? (
-                <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-xl">
-                  <div>
-                    <span className="font-medium text-gray-900">
-                      {selectedPatient.firstName} {selectedPatient.lastName}
-                    </span>
-                    <span className="ml-2 text-sm text-gray-500">MRN: {selectedPatient.mrn}</span>
+                <div className="space-y-3">
+                  {/* Selected Patient Display */}
+                  <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-xl">
+                    <div>
+                      <span className="font-medium text-gray-900">
+                        {selectedPatient.firstName} {selectedPatient.lastName}
+                      </span>
+                      <span className="ml-2 text-sm text-gray-500">MRN: {selectedPatient.mrn}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedPatient(null);
+                        setInsuranceEligibility(null);
+                      }}
+                      className="text-sm text-red-600 hover:text-red-700"
+                    >
+                      Change
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedPatient(null)}
-                    className="text-sm text-red-600 hover:text-red-700"
-                  >
-                    Change
-                  </button>
-                </div>
-              ) : (
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search by name or MRN..."
-                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
-                  />
-                  {searching && (
-                    <div className="absolute right-3 top-3">
-                      <ArrowPathIcon className="h-5 w-5 animate-spin text-gray-400" />
+                  
+                  {/* Insurance Eligibility Status */}
+                  {insuranceEligibility && (
+                    <div className={clsx(
+                      'p-3 rounded-xl border',
+                      insuranceEligibility.eligible 
+                        ? 'bg-purple-50 border-purple-200' 
+                        : 'bg-orange-50 border-orange-200'
+                    )}>
+                      <div className="flex items-center gap-2">
+                        <CheckCircleIcon className={clsx(
+                          'h-5 w-5',
+                          insuranceEligibility.eligible ? 'text-purple-600' : 'text-orange-600'
+                        )} />
+                        <span className="font-medium text-sm">
+                          {insuranceEligibility.eligible 
+                            ? `Insured: ${insuranceEligibility.insuranceProvider}` 
+                            : 'Self-Pay (No Active Insurance)'}
+                        </span>
+                      </div>
+                      {insuranceEligibility.eligible && (
+                        <div className="mt-1 text-xs text-gray-600">
+                          Coverage: {insuranceEligibility.coveragePercentage}% | 
+                          Copay: {insuranceEligibility.copayPercentage}% | 
+                          Network: {insuranceEligibility.networkStatus === 'IN_NETWORK' ? '✅ In-Network' : '⚠️ Out-of-Network'}
+                        </div>
+                      )}
                     </div>
                   )}
-                  {patients.length > 0 && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
-                      {patients.map((patient) => (
-                        <button
-                          key={patient.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedPatient(patient);
-                            setSearchQuery('');
-                            setPatients([]);
-                          }}
-                          className="w-full text-left px-4 py-2 hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl"
-                        >
-                          <span className="font-medium">{patient.firstName} {patient.lastName}</span>
-                          <span className="ml-2 text-sm text-gray-500">MRN: {patient.mrn}</span>
-                        </button>
-                      ))}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Search Mode Tabs */}
+                  <div className="flex rounded-xl border border-gray-200 p-1 bg-gray-50">
+                    <button
+                      type="button"
+                      onClick={() => setSearchMode('eid')}
+                      className={clsx(
+                        'flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2',
+                        searchMode === 'eid'
+                          ? 'bg-white text-blue-600 shadow-sm'
+                          : 'text-gray-500 hover:text-gray-700'
+                      )}
+                    >
+                      <IdentificationIcon className="h-4 w-4" />
+                      Emirates ID
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSearchMode('name')}
+                      className={clsx(
+                        'flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2',
+                        searchMode === 'name'
+                          ? 'bg-white text-blue-600 shadow-sm'
+                          : 'text-gray-500 hover:text-gray-700'
+                      )}
+                    >
+                      <MagnifyingGlassIcon className="h-4 w-4" />
+                      Name / MRN
+                    </button>
+                  </div>
+
+                  {/* Emirates ID Lookup */}
+                  {searchMode === 'eid' && (
+                    <EmiratesIdLookup
+                      onPatientFound={(patient, eligibility) => {
+                        setSelectedPatient(patient);
+                        setInsuranceEligibility(eligibility);
+                        toast.success(`Patient found: ${patient.firstName} ${patient.lastName}`);
+                      }}
+                      onCreateNew={(emiratesId) => {
+                        toast('Redirecting to patient registration...', { icon: '📝' });
+                        window.open(`/patients/new?emiratesId=${emiratesId}`, '_blank');
+                      }}
+                    />
+                  )}
+
+                  {/* Traditional Name/MRN Search */}
+                  {searchMode === 'name' && (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search by name or MRN..."
+                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
+                      />
+                      {searching && (
+                        <div className="absolute right-3 top-3">
+                          <ArrowPathIcon className="h-5 w-5 animate-spin text-gray-400" />
+                        </div>
+                      )}
+                      {patients.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                          {patients.map((patient) => (
+                            <button
+                              key={patient.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedPatient(patient);
+                                setSearchQuery('');
+                                setPatients([]);
+                              }}
+                              className="w-full text-left px-4 py-2 hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl"
+                            >
+                              <span className="font-medium">{patient.firstName} {patient.lastName}</span>
+                              <span className="ml-2 text-sm text-gray-500">MRN: {patient.mrn}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
