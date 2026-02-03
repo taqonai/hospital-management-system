@@ -177,4 +177,8 @@ router.use('/financial-reports', financialReportingRoutes);
 import accountingRoutes from './accountingRoutes';
 router.use('/accounting', accountingRoutes);
 
+// Hospital Settings (DHA, Payment Gateway, Notifications)
+import settingsRoutes from './settingsRoutes';
+router.use('/settings', settingsRoutes);
+
 export default router;

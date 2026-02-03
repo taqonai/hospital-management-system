@@ -150,6 +150,7 @@ import Notifications from './pages/Notifications';
 import NotificationSettingsPage from './pages/Settings/Notifications';
 import TeamContacts from './pages/Settings/Notifications/TeamContacts';
 import DeliveryLogs from './pages/Settings/Notifications/DeliveryLogs';
+import HospitalSettings from './pages/Settings';
 
 // Protected Route Component with RBAC permission support
 interface ProtectedRouteProps {
@@ -340,6 +341,16 @@ function App() {
 
         {/* Notifications */}
         <Route path="/notifications" element={<Notifications />} />
+        
+        {/* Hospital Settings (Admin only) */}
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'SUPER_ADMIN']} permission="settings:write">
+              <HospitalSettings />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/settings/notifications"
           element={

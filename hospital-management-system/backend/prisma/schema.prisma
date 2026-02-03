@@ -141,6 +141,9 @@ model Hospital {
   // Payment Reminders
   paymentReminders PaymentReminder[]
 
+  // Hospital Settings
+  hospitalSettings HospitalSettings?
+
   @@map("hospitals")
 }
 
@@ -8389,4 +8392,20 @@ model PaymentReminder {
   @@index([invoiceId])
   @@index([patientId])
   @@map("payment_reminders")
+}
+
+// ==================== HOSPITAL SETTINGS ====================
+
+model HospitalSettings {
+  id                   String   @id @default(uuid())
+  hospitalId           String   @unique
+  dhaSettings          Json?    // DHA eClaimLink configuration
+  paymentSettings      Json?    // Payment gateway configuration
+  notificationSettings Json?    // Notification preferences
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  hospital Hospital @relation(fields: [hospitalId], references: [id])
+
+  @@map("hospital_settings")
 }
