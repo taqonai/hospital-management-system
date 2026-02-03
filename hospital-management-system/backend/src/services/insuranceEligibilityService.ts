@@ -7,6 +7,12 @@ import axios from 'axios';
  * Insurance Eligibility Service
  * Handles real-time eligibility verification with UAE insurance payers
  * Integrates with DHA eClaimLink for eligibility checks
+ * 
+ * CROSS-VERIFICATION SCENARIOS:
+ * A: Insurance Mismatch Alert (DB has insurance, DHA says NO/DIFFERENT)
+ * B: Policy Expired + Auto-Renewal (DB expired, DHA active → auto-update)
+ * C: Force EID Verification (Name/MRN check-in → prompt for EID verification)
+ * D: Coverage Change Warning (coverage terms changed since last visit)
  */
 
 // ==================== Type Definitions ====================
@@ -17,6 +23,32 @@ export interface EligibilityCheckRequest {
   memberId?: string;
   payerCode?: string;
   serviceDate?: Date;
+}
+
+// Alert types for cross-verification scenarios
+export type VerificationAlertType = 
+  | 'MISMATCH_DB_VS_DHA'      // Scenario A: DB has insurance, DHA says different/none
+  | 'POLICY_RENEWED'          // Scenario B: DB expired, DHA says active
+  | 'POLICY_CHANGED'          // Scenario D: Coverage terms changed
+  | 'EID_VERIFICATION_NEEDED' // Scenario C: Should verify via Emirates ID
+  | 'PROVIDER_CHANGED'        // Provider changed from last visit
+  | 'COVERAGE_REDUCED'        // Coverage percentage reduced
+  | 'COPAY_INCREASED';        // Copay amount increased
+
+export interface VerificationAlert {
+  type: VerificationAlertType;
+  severity: 'INFO' | 'WARNING' | 'ERROR';
+  title: string;
+  message: string;
+  details?: {
+    dbValue?: string | number;
+    dhaValue?: string | number;
+    field?: string;
+  };
+  actions?: Array<{
+    label: string;
+    action: 'USE_DB_DATA' | 'USE_DHA_DATA' | 'TREAT_AS_SELFPAY' | 'UPDATE_INSURANCE' | 'VERIFY_EID';
+  }>;
 }
 
 export interface EligibilityResponse {
@@ -66,6 +98,23 @@ export interface EligibilityResponse {
   message?: string;
   warnings?: string[];
   
+  // NEW: Cross-Verification Alerts (Scenarios A, B, C, D)
+  alerts?: VerificationAlert[];
+  
+  // NEW: Flags for UI handling
+  requiresEidVerification?: boolean;  // Scenario C
+  policyWasRenewed?: boolean;         // Scenario B
+  coverageChanged?: boolean;          // Scenario D
+  hasMismatch?: boolean;              // Scenario A
+  
+  // NEW: Previous values for comparison
+  previousCoverage?: {
+    provider?: string;
+    coveragePercentage?: number;
+    copayPercentage?: number;
+    copayAmount?: number;
+  };
+  
   // Verification Details
   verifiedAt?: Date;
   verificationSource: 'CACHED' | 'DHA_ECLAIM' | 'PAYER_API' | 'MANUAL';
@@ -87,11 +136,8 @@ class InsuranceEligibilityService {
   
   /**
    * Initialize DHA eClaimLink configuration
-   * In production, this would be loaded from environment or database
    */
   private async getDHAConfig(hospitalId: string): Promise<DHAEClaimLinkConfig | null> {
-    // For now, return mock config - in production, load from hospital settings
-    // TODO: Load from hospitalSettings table or environment variables
     return {
       baseUrl: process.env.DHA_ECLAIM_URL || 'https://eclaimlink.dha.gov.ae/api/v1',
       facilityId: process.env.DHA_FACILITY_ID || '',
@@ -104,6 +150,7 @@ class InsuranceEligibilityService {
   /**
    * Verify insurance eligibility by Emirates ID
    * Primary method for UAE HMS - uses Emirates ID to look up coverage
+   * Implements cross-verification scenarios A, B, D
    */
   async verifyEligibilityByEmiratesId(
     hospitalId: string,
@@ -112,8 +159,8 @@ class InsuranceEligibilityService {
   ): Promise<EligibilityResponse> {
     logger.info(`[Eligibility] Verifying by Emirates ID: ${emiratesId.substring(0, 5)}****`);
     
-    // Normalize Emirates ID (remove dashes/spaces)
     const normalizedEid = emiratesId.replace(/[-\s]/g, '').toUpperCase();
+    const alerts: VerificationAlert[] = [];
     
     // First, check if patient exists in our system with this Emirates ID
     const patient = await prisma.patient.findFirst({
@@ -130,36 +177,230 @@ class InsuranceEligibilityService {
       },
     });
 
-    // Check if DHA integration is enabled
+    const dbInsurance = patient?.insurances?.[0] || null;
     const dhaConfig = await this.getDHAConfig(hospitalId);
     
+    // Try DHA verification if enabled
     if (dhaConfig?.enabled) {
-      // In production: Call DHA eClaimLink API
       try {
         const dhaResponse = await this.callDHAEligibilityAPI(dhaConfig, normalizedEid, serviceDate);
         
-        // If patient exists, update their insurance info from DHA response
-        if (patient && dhaResponse.eligible) {
+        // CROSS-VERIFICATION: Compare DHA vs DB
+        if (patient && dbInsurance) {
+          const crossVerification = await this.crossVerifyInsurance(
+            patient.id,
+            dbInsurance,
+            dhaResponse,
+            alerts
+          );
+          
+          // Return cross-verified response with alerts
+          return {
+            ...crossVerification,
+            alerts: alerts.length > 0 ? alerts : undefined,
+          };
+        }
+        
+        // No DB record - just return DHA response
+        if (dhaResponse.eligible && patient) {
           await this.syncInsuranceFromDHA(patient.id, dhaResponse);
         }
         
         return dhaResponse;
       } catch (error) {
         logger.error('[Eligibility] DHA API call failed, falling back to cached data', { error });
-        // Fall back to cached data
+        // Fall back to cached data with warning
+        alerts.push({
+          type: 'EID_VERIFICATION_NEEDED',
+          severity: 'WARNING',
+          title: 'DHA Verification Unavailable',
+          message: 'Could not verify with DHA. Using cached insurance data.',
+          actions: [
+            { label: 'Use Cached Data', action: 'USE_DB_DATA' },
+            { label: 'Retry Verification', action: 'VERIFY_EID' },
+          ],
+        });
       }
     }
     
     // Fall back to cached insurance data from database
-    return this.getEligibilityFromCache(hospitalId, patient, normalizedEid);
+    const cachedResponse = await this.getEligibilityFromCache(hospitalId, patient, normalizedEid);
+    return {
+      ...cachedResponse,
+      alerts: alerts.length > 0 ? alerts : undefined,
+    };
+  }
+
+  /**
+   * CROSS-VERIFICATION: Compare DB insurance with DHA response
+   * Implements Scenarios A, B, D
+   */
+  private async crossVerifyInsurance(
+    patientId: string,
+    dbInsurance: any,
+    dhaResponse: EligibilityResponse,
+    alerts: VerificationAlert[]
+  ): Promise<EligibilityResponse> {
+    const now = new Date();
+    const dbExpired = dbInsurance.expiryDate && new Date(dbInsurance.expiryDate) < now;
+    
+    // Store previous values for comparison
+    const previousCoverage = {
+      provider: dbInsurance.providerName,
+      coveragePercentage: 100 - Number(dbInsurance.copayPercentage || 20),
+      copayPercentage: Number(dbInsurance.copayPercentage || 20),
+      copayAmount: Number(dbInsurance.copay || 0),
+    };
+
+    // ==================== SCENARIO A: Insurance Mismatch ====================
+    // DB has insurance but DHA says NOT eligible or NOT FOUND
+    if (!dhaResponse.eligible && dbInsurance) {
+      alerts.push({
+        type: 'MISMATCH_DB_VS_DHA',
+        severity: 'ERROR',
+        title: 'Insurance Verification Failed',
+        message: `Our records show ${dbInsurance.providerName} (${dbInsurance.policyNumber}), but DHA could not verify this coverage.`,
+        details: {
+          dbValue: `${dbInsurance.providerName} - ${dbInsurance.policyNumber}`,
+          dhaValue: 'Not Found / Not Eligible',
+          field: 'insurance',
+        },
+        actions: [
+          { label: 'Use Cached Data', action: 'USE_DB_DATA' },
+          { label: 'Treat as Self-Pay', action: 'TREAT_AS_SELFPAY' },
+          { label: 'Update Insurance', action: 'UPDATE_INSURANCE' },
+        ],
+      });
+
+      return {
+        eligible: false,
+        emiratesId: dhaResponse.emiratesId,
+        patientName: dhaResponse.patientName,
+        insuranceProvider: dbInsurance.providerName,
+        policyNumber: dbInsurance.policyNumber,
+        policyStatus: 'INACTIVE',
+        networkStatus: dbInsurance.networkTier || 'UNKNOWN',
+        planType: dbInsurance.coverageType,
+        coveragePercentage: previousCoverage.coveragePercentage,
+        copayPercentage: previousCoverage.copayPercentage,
+        message: 'Insurance mismatch detected. DHA cannot verify the policy on file.',
+        hasMismatch: true,
+        previousCoverage,
+        verificationSource: 'DHA_ECLAIM',
+        verifiedAt: new Date(),
+      };
+    }
+
+    // ==================== SCENARIO B: Policy Renewed ====================
+    // DB shows expired but DHA says ACTIVE
+    if (dbExpired && dhaResponse.eligible) {
+      logger.info(`[Eligibility] Policy renewed detected for patient ${patientId}`);
+      
+      // Auto-update the insurance in DB
+      await this.syncInsuranceFromDHA(patientId, dhaResponse);
+      
+      alerts.push({
+        type: 'POLICY_RENEWED',
+        severity: 'INFO',
+        title: 'Insurance Policy Renewed!',
+        message: `Good news! The insurance policy has been renewed. Updated from DHA records.`,
+        details: {
+          dbValue: `Expired: ${new Date(dbInsurance.expiryDate).toLocaleDateString()}`,
+          dhaValue: `Active until: ${dhaResponse.policyEndDate ? new Date(dhaResponse.policyEndDate).toLocaleDateString() : 'Unknown'}`,
+          field: 'expiryDate',
+        },
+      });
+
+      return {
+        ...dhaResponse,
+        policyWasRenewed: true,
+        previousCoverage,
+        message: 'Insurance policy has been renewed and records updated.',
+      };
+    }
+
+    // ==================== SCENARIO D: Coverage Changed ====================
+    if (dhaResponse.eligible) {
+      // Check for provider change
+      if (dhaResponse.insuranceProvider && 
+          dbInsurance.providerName && 
+          dhaResponse.insuranceProvider.toLowerCase() !== dbInsurance.providerName.toLowerCase()) {
+        alerts.push({
+          type: 'PROVIDER_CHANGED',
+          severity: 'WARNING',
+          title: 'Insurance Provider Changed',
+          message: `Insurance provider has changed from ${dbInsurance.providerName} to ${dhaResponse.insuranceProvider}.`,
+          details: {
+            dbValue: dbInsurance.providerName,
+            dhaValue: dhaResponse.insuranceProvider,
+            field: 'provider',
+          },
+        });
+      }
+
+      // Check for coverage reduction
+      const dbCoverage = 100 - Number(dbInsurance.copayPercentage || 20);
+      const dhaCoverage = dhaResponse.coveragePercentage || 80;
+      if (dhaCoverage < dbCoverage - 5) { // More than 5% reduction
+        alerts.push({
+          type: 'COVERAGE_REDUCED',
+          severity: 'WARNING',
+          title: 'Coverage Reduced',
+          message: `Insurance coverage has been reduced from ${dbCoverage}% to ${dhaCoverage}%.`,
+          details: {
+            dbValue: dbCoverage,
+            dhaValue: dhaCoverage,
+            field: 'coveragePercentage',
+          },
+        });
+      }
+
+      // Check for copay increase
+      const dbCopay = Number(dbInsurance.copay || 0);
+      const dhaCopay = dhaResponse.copayAmount || 0;
+      if (dhaCopay > dbCopay + 10) { // More than AED 10 increase
+        alerts.push({
+          type: 'COPAY_INCREASED',
+          severity: 'WARNING',
+          title: 'Copay Amount Increased',
+          message: `Copay has increased from AED ${dbCopay} to AED ${dhaCopay}.`,
+          details: {
+            dbValue: dbCopay,
+            dhaValue: dhaCopay,
+            field: 'copayAmount',
+          },
+        });
+      }
+
+      // Update DB with new values
+      await this.syncInsuranceFromDHA(patientId, dhaResponse);
+
+      const hasChanges = alerts.some(a => 
+        ['PROVIDER_CHANGED', 'COVERAGE_REDUCED', 'COPAY_INCREASED', 'POLICY_CHANGED'].includes(a.type)
+      );
+
+      return {
+        ...dhaResponse,
+        coverageChanged: hasChanges,
+        previousCoverage: hasChanges ? previousCoverage : undefined,
+        message: hasChanges 
+          ? 'Insurance verified. Some coverage terms have changed since last visit.' 
+          : 'Insurance verified successfully via DHA.',
+      };
+    }
+
+    // Default: Return DHA response
+    return dhaResponse;
   }
 
   /**
    * Verify eligibility by patient ID (uses stored insurance data)
+   * Implements Scenario C: Flag for EID verification if not verified via EID
    */
   async verifyEligibilityByPatientId(
     patientId: string,
-    hospitalId: string
+    hospitalId: string,
+    skipEidVerification: boolean = false
   ): Promise<EligibilityResponse> {
     logger.info(`[Eligibility] Verifying by Patient ID: ${patientId}`);
     
@@ -181,13 +422,48 @@ class InsuranceEligibilityService {
       throw new NotFoundError('Patient not found');
     }
 
-    // If patient has Emirates ID, try real-time verification
-    if (patient.emiratesId) {
+    const alerts: VerificationAlert[] = [];
+
+    // SCENARIO C: If patient has Emirates ID but we're not verifying via EID
+    if (patient.emiratesId && !skipEidVerification) {
+      // Full verification via Emirates ID
       return this.verifyEligibilityByEmiratesId(hospitalId, patient.emiratesId);
     }
 
-    // Otherwise, use cached insurance data
-    return this.getEligibilityFromCache(hospitalId, patient);
+    // Patient selected via Name/MRN without Emirates ID verification
+    // Add alert to prompt EID verification
+    if (patient.emiratesId) {
+      alerts.push({
+        type: 'EID_VERIFICATION_NEEDED',
+        severity: 'INFO',
+        title: 'Emirates ID Verification Recommended',
+        message: 'For accurate coverage information, verify insurance using Emirates ID.',
+        actions: [
+          { label: 'Verify Now', action: 'VERIFY_EID' },
+          { label: 'Use Cached Data', action: 'USE_DB_DATA' },
+        ],
+      });
+    } else {
+      // No Emirates ID on file
+      alerts.push({
+        type: 'EID_VERIFICATION_NEEDED',
+        severity: 'WARNING',
+        title: 'Emirates ID Not on File',
+        message: 'This patient does not have an Emirates ID registered. Insurance cannot be verified with DHA.',
+        actions: [
+          { label: 'Update Patient Info', action: 'UPDATE_INSURANCE' },
+          { label: 'Continue with Cached Data', action: 'USE_DB_DATA' },
+        ],
+      });
+    }
+
+    // Use cached insurance data
+    const cachedResponse = await this.getEligibilityFromCache(hospitalId, patient);
+    return {
+      ...cachedResponse,
+      requiresEidVerification: true,
+      alerts: alerts.length > 0 ? alerts : undefined,
+    };
   }
 
   /**
@@ -198,7 +474,6 @@ class InsuranceEligibilityService {
     patient: any,
     emiratesId?: string
   ): Promise<EligibilityResponse> {
-    // Base response for no insurance
     const noInsuranceResponse: EligibilityResponse = {
       eligible: false,
       emiratesId,
@@ -216,7 +491,6 @@ class InsuranceEligibilityService {
       };
     }
 
-    // Get primary insurance
     const primaryInsurance = patient.insurances?.[0];
     
     if (!primaryInsurance) {
@@ -241,13 +515,26 @@ class InsuranceEligibilityService {
         policyStartDate: primaryInsurance.effectiveDate,
         policyEndDate: expiryDate,
         networkStatus: (primaryInsurance.networkTier as any) || 'IN_NETWORK',
+        coveragePercentage: 100 - Number(primaryInsurance.copayPercentage || 20),
+        copayPercentage: Number(primaryInsurance.copayPercentage || 20),
         verificationSource: 'CACHED',
         message: 'Insurance policy has expired. Please update insurance or treat as self-pay.',
+        alerts: [{
+          type: 'EID_VERIFICATION_NEEDED',
+          severity: 'WARNING',
+          title: 'Insurance Expired - Verify for Renewal',
+          message: 'Policy appears expired. Verify with Emirates ID to check if it was renewed.',
+          actions: [
+            { label: 'Verify with Emirates ID', action: 'VERIFY_EID' },
+            { label: 'Treat as Self-Pay', action: 'TREAT_AS_SELFPAY' },
+            { label: 'Update Insurance', action: 'UPDATE_INSURANCE' },
+          ],
+        }],
         verifiedAt: new Date(),
       };
     }
 
-    // Calculate remaining benefits (from copay payments this year)
+    // Calculate remaining benefits
     const currentYear = new Date().getFullYear();
     const yearStart = new Date(currentYear, 0, 1);
     
@@ -263,13 +550,11 @@ class InsuranceEligibilityService {
     const annualCopayMax = Number(primaryInsurance.annualCopayMax || 0);
     const annualDeductible = Number(primaryInsurance.annualDeductible || 0);
 
-    // Return active insurance details
     return {
       eligible: true,
       emiratesId: patient.emiratesId,
       memberId: primaryInsurance.subscriberId,
       patientName: `${patient.firstName} ${patient.lastName}`,
-      
       insuranceProvider: primaryInsurance.providerName,
       policyNumber: primaryInsurance.policyNumber,
       policyStatus: 'ACTIVE',
@@ -277,32 +562,27 @@ class InsuranceEligibilityService {
       policyEndDate: primaryInsurance.expiryDate,
       networkStatus: (primaryInsurance.networkTier as any) || 'IN_NETWORK',
       planType: primaryInsurance.coverageType,
-      
       coveragePercentage: 100 - Number(primaryInsurance.copayPercentage || 20),
       copayPercentage: Number(primaryInsurance.copayPercentage || 20),
       copayAmount: Number(primaryInsurance.copay || 0),
-      
       deductible: {
         annual: annualDeductible,
         used: Math.min(annualCopayUsed, annualDeductible),
         remaining: Math.max(0, annualDeductible - annualCopayUsed),
       },
-      
       annualCopay: annualCopayMax > 0 ? {
         max: annualCopayMax,
         used: annualCopayUsed,
         remaining: Math.max(0, annualCopayMax - annualCopayUsed),
       } : undefined,
-      
       verificationSource: 'CACHED',
-      message: 'Insurance verified from cached records. For real-time verification, enable DHA eClaimLink integration.',
+      message: 'Insurance verified from cached records. For real-time verification, use Emirates ID lookup.',
       verifiedAt: new Date(),
     };
   }
 
   /**
    * Call DHA eClaimLink API for real-time eligibility check
-   * Implements actual DHA API integration using XML SOAP protocol
    */
   private async callDHAEligibilityAPI(
     config: DHAEClaimLinkConfig,
@@ -313,7 +593,6 @@ class InsuranceEligibilityService {
     
     const serviceDateStr = (serviceDate || new Date()).toISOString().split('T')[0];
     
-    // Build SOAP XML request for eligibility check
     const soapRequest = `<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
                xmlns:ecl="http://dha.gov.ae/eclaimlink">
@@ -342,33 +621,25 @@ class InsuranceEligibilityService {
             'Content-Type': 'application/xml',
             'Accept': 'application/xml',
           },
-          timeout: 30000, // 30 second timeout
+          timeout: 30000,
         }
       );
 
-      // Parse XML response
-      const xmlResponse = response.data;
-      return this.parseDHAEligibilityResponse(xmlResponse, emiratesId);
+      return this.parseDHAEligibilityResponse(response.data, emiratesId);
     } catch (error: any) {
       logger.error('[Eligibility] DHA API call failed', { 
         error: error.message,
         status: error.response?.status,
-        data: error.response?.data 
       });
-      
-      // If DHA API is down or unreachable, throw to fall back to cached data
       throw new Error(`DHA eClaimLink API error: ${error.message}`);
     }
   }
 
   /**
-   * Parse DHA eClaimLink XML response into EligibilityResponse
+   * Parse DHA eClaimLink XML response
    */
   private parseDHAEligibilityResponse(xmlResponse: string, emiratesId: string): EligibilityResponse {
     try {
-      // Simple XML parsing - in production, use a proper XML parser like xml2js or fast-xml-parser
-      // This handles the most common response format
-      
       const getTagValue = (xml: string, tag: string): string | undefined => {
         const regex = new RegExp(`<[^:]*:?${tag}[^>]*>([^<]*)<\/[^:]*:?${tag}>`, 'i');
         const match = xml.match(regex);
@@ -378,7 +649,6 @@ class InsuranceEligibilityService {
       const statusCode = getTagValue(xmlResponse, 'StatusCode');
       const statusMessage = getTagValue(xmlResponse, 'StatusMessage');
       
-      // Check for error response
       if (statusCode === 'ERROR' || statusCode === 'INVALID') {
         return {
           eligible: false,
@@ -391,7 +661,6 @@ class InsuranceEligibilityService {
         };
       }
 
-      // Parse successful response
       const policyStatus = getTagValue(xmlResponse, 'PolicyStatus') as any || 'ACTIVE';
       const isEligible = policyStatus === 'ACTIVE' || policyStatus === 'VALID';
 
@@ -402,7 +671,7 @@ class InsuranceEligibilityService {
         patientName: getTagValue(xmlResponse, 'PatientName'),
         insuranceProvider: getTagValue(xmlResponse, 'PayerName') || getTagValue(xmlResponse, 'InsuranceProvider'),
         policyNumber: getTagValue(xmlResponse, 'PolicyNumber'),
-        policyStatus: policyStatus,
+        policyStatus,
         policyStartDate: getTagValue(xmlResponse, 'EffectiveDate') ? new Date(getTagValue(xmlResponse, 'EffectiveDate')!) : undefined,
         policyEndDate: getTagValue(xmlResponse, 'ExpiryDate') ? new Date(getTagValue(xmlResponse, 'ExpiryDate')!) : undefined,
         networkStatus: (getTagValue(xmlResponse, 'NetworkStatus') as any) || 'IN_NETWORK',
@@ -426,7 +695,7 @@ class InsuranceEligibilityService {
         verifiedAt: new Date(),
       };
     } catch (error: any) {
-      logger.error('[Eligibility] Failed to parse DHA response', { error: error.message, xmlResponse: xmlResponse.substring(0, 500) });
+      logger.error('[Eligibility] Failed to parse DHA response', { error: error.message });
       throw new Error('Failed to parse DHA eligibility response');
     }
   }
@@ -441,7 +710,6 @@ class InsuranceEligibilityService {
 
     logger.info(`[Eligibility] Syncing insurance from DHA for patient ${patientId}`);
     
-    // Check if insurance already exists
     const existingInsurance = await prisma.patientInsurance.findFirst({
       where: {
         patientId,
@@ -450,40 +718,38 @@ class InsuranceEligibilityService {
       },
     });
 
+    const insuranceData = {
+      providerName: dhaResponse.insuranceProvider,
+      coverageType: dhaResponse.planType || 'Basic',
+      networkTier: dhaResponse.networkStatus,
+      effectiveDate: dhaResponse.policyStartDate || new Date(),
+      expiryDate: dhaResponse.policyEndDate,
+      copayPercentage: dhaResponse.copayPercentage,
+      copay: dhaResponse.copayAmount,
+      annualCopayMax: dhaResponse.annualCopay?.max,
+      annualDeductible: dhaResponse.deductible?.annual,
+    };
+
     if (existingInsurance) {
-      // Update existing insurance with DHA data
       await prisma.patientInsurance.update({
         where: { id: existingInsurance.id },
-        data: {
-          providerName: dhaResponse.insuranceProvider,
-          coverageType: dhaResponse.planType || existingInsurance.coverageType,
-          networkTier: dhaResponse.networkStatus,
-          effectiveDate: dhaResponse.policyStartDate || existingInsurance.effectiveDate,
-          expiryDate: dhaResponse.policyEndDate,
-          copayPercentage: dhaResponse.copayPercentage,
-          copay: dhaResponse.copayAmount,
-          annualCopayMax: dhaResponse.annualCopay?.max,
-          annualDeductible: dhaResponse.deductible?.annual,
-        },
+        data: insuranceData,
       });
     } else {
-      // Create new insurance record from DHA data
+      // Deactivate other primary insurances
+      await prisma.patientInsurance.updateMany({
+        where: { patientId, isPrimary: true, isActive: true },
+        data: { isPrimary: false },
+      });
+      
       await prisma.patientInsurance.create({
         data: {
           patientId,
-          providerName: dhaResponse.insuranceProvider!,
+          ...insuranceData,
           policyNumber: dhaResponse.policyNumber || 'DHA-AUTO',
           subscriberName: dhaResponse.patientName || '',
           subscriberId: dhaResponse.memberId || '',
           relationship: 'Self',
-          coverageType: dhaResponse.planType || 'Basic',
-          networkTier: dhaResponse.networkStatus,
-          effectiveDate: dhaResponse.policyStartDate || new Date(),
-          expiryDate: dhaResponse.policyEndDate,
-          copayPercentage: dhaResponse.copayPercentage,
-          copay: dhaResponse.copayAmount,
-          annualCopayMax: dhaResponse.annualCopay?.max,
-          annualDeductible: dhaResponse.deductible?.annual,
           isPrimary: true,
           isActive: true,
         },
@@ -504,7 +770,6 @@ class InsuranceEligibilityService {
   }> {
     const normalizedEid = emiratesId.replace(/[-\s]/g, '').toUpperCase();
     
-    // Find patient by Emirates ID
     const patient = await prisma.patient.findFirst({
       where: {
         hospitalId,
@@ -519,7 +784,6 @@ class InsuranceEligibilityService {
       },
     });
 
-    // Get eligibility
     const eligibility = await this.verifyEligibilityByEmiratesId(hospitalId, normalizedEid);
 
     return {
@@ -541,5 +805,4 @@ class InsuranceEligibilityService {
   }
 }
 
-// Export singleton instance
 export const insuranceEligibilityService = new InsuranceEligibilityService();

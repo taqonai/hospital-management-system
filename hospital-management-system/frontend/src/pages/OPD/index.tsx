@@ -220,27 +220,83 @@ function WalkInModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
                   {insuranceEligibility && (
                     <div className={clsx(
                       'p-3 rounded-xl border',
-                      insuranceEligibility.eligible 
-                        ? 'bg-purple-50 border-purple-200' 
-                        : 'bg-orange-50 border-orange-200'
+                      insuranceEligibility.requiresEidVerification
+                        ? 'bg-amber-50 border-amber-300'
+                        : insuranceEligibility.eligible 
+                          ? 'bg-purple-50 border-purple-200' 
+                          : 'bg-orange-50 border-orange-200'
                     )}>
-                      <div className="flex items-center gap-2">
-                        <CheckCircleIcon className={clsx(
-                          'h-5 w-5',
-                          insuranceEligibility.eligible ? 'text-purple-600' : 'text-orange-600'
-                        )} />
-                        <span className="font-medium text-sm">
-                          {insuranceEligibility.eligible 
-                            ? `Insured: ${insuranceEligibility.insuranceProvider}` 
-                            : 'Self-Pay (No Active Insurance)'}
-                        </span>
-                      </div>
-                      {insuranceEligibility.eligible && (
-                        <div className="mt-1 text-xs text-gray-600">
-                          Coverage: {insuranceEligibility.coveragePercentage}% | 
-                          Copay: {insuranceEligibility.copayPercentage}% | 
-                          Network: {insuranceEligibility.networkStatus === 'IN_NETWORK' ? '✅ In-Network' : '⚠️ Out-of-Network'}
+                      {/* Scenario C: EID Verification Needed */}
+                      {insuranceEligibility.requiresEidVerification ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <ExclamationTriangleIcon className="h-5 w-5 text-amber-600" />
+                            <span className="font-medium text-sm text-amber-800">
+                              Insurance Verification Recommended
+                            </span>
+                          </div>
+                          <p className="text-xs text-amber-700">
+                            Patient was found via Name/MRN. For accurate insurance coverage, verify using Emirates ID.
+                          </p>
+                          <div className="flex gap-2 mt-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedPatient(null);
+                                setInsuranceEligibility(null);
+                                setSearchMode('eid');
+                              }}
+                              className="px-3 py-1.5 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700"
+                            >
+                              Verify with EID
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                // Continue without EID verification - fetch cached data
+                                setInsuranceEligibility({
+                                  ...insuranceEligibility,
+                                  requiresEidVerification: false,
+                                  message: 'Using cached insurance data (not verified with DHA)',
+                                });
+                              }}
+                              className="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-300"
+                            >
+                              Use Cached Data
+                            </button>
+                          </div>
                         </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <CheckCircleIcon className={clsx(
+                              'h-5 w-5',
+                              insuranceEligibility.eligible ? 'text-purple-600' : 'text-orange-600'
+                            )} />
+                            <span className="font-medium text-sm">
+                              {insuranceEligibility.eligible 
+                                ? `Insured: ${insuranceEligibility.insuranceProvider}` 
+                                : 'Self-Pay (No Active Insurance)'}
+                            </span>
+                          </div>
+                          {insuranceEligibility.eligible && (
+                            <div className="mt-1 text-xs text-gray-600">
+                              Coverage: {insuranceEligibility.coveragePercentage}% | 
+                              Copay: {insuranceEligibility.copayPercentage}% | 
+                              Network: {insuranceEligibility.networkStatus === 'IN_NETWORK' ? '✅ In-Network' : '⚠️ Out-of-Network'}
+                            </div>
+                          )}
+                          {insuranceEligibility.verificationSource === 'CACHED' && (
+                            <p className="text-xs text-orange-600 mt-1">
+                              ⚠️ Using cached data - not verified with DHA
+                            </p>
+                          )}
+                          {insuranceEligibility.verificationSource === 'DHA_ECLAIM' && (
+                            <p className="text-xs text-green-600 mt-1">
+                              ✓ Verified with DHA eClaimLink
+                            </p>
+                          )}
+                        </>
                       )}
                     </div>
                   )}
@@ -294,38 +350,62 @@ function WalkInModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
 
                   {/* Traditional Name/MRN Search */}
                   {searchMode === 'name' && (
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search by name or MRN..."
-                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
-                      />
-                      {searching && (
-                        <div className="absolute right-3 top-3">
-                          <ArrowPathIcon className="h-5 w-5 animate-spin text-gray-400" />
+                    <div className="space-y-3">
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          placeholder="Search by name or MRN..."
+                          className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
+                        />
+                        {searching && (
+                          <div className="absolute right-3 top-3">
+                            <ArrowPathIcon className="h-5 w-5 animate-spin text-gray-400" />
+                          </div>
+                        )}
+                        {patients.length > 0 && (
+                          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                            {patients.map((patient) => (
+                              <button
+                                key={patient.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedPatient(patient);
+                                  setSearchQuery('');
+                                  setPatients([]);
+                                  // Show EID verification prompt (Scenario C)
+                                  setInsuranceEligibility({
+                                    eligible: false,
+                                    policyStatus: 'NOT_FOUND',
+                                    networkStatus: 'UNKNOWN',
+                                    verificationSource: 'CACHED',
+                                    requiresEidVerification: true,
+                                    message: 'Patient selected via Name/MRN. Verify insurance via Emirates ID for accurate coverage.',
+                                  });
+                                }}
+                                className="w-full text-left px-4 py-2 hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl"
+                              >
+                                <span className="font-medium">{patient.firstName} {patient.lastName}</span>
+                                <span className="ml-2 text-sm text-gray-500">MRN: {patient.mrn}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Scenario C: EID Verification Prompt */}
+                      <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-xl p-3 border border-amber-200">
+                        <div className="flex items-start gap-2">
+                          <ExclamationTriangleIcon className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                          <div className="text-xs">
+                            <p className="font-medium text-amber-800">Insurance Verification Recommended</p>
+                            <p className="text-amber-700 mt-0.5">
+                              For accurate coverage info, use Emirates ID lookup. Name/MRN search uses cached data only.
+                            </p>
+                          </div>
                         </div>
-                      )}
-                      {patients.length > 0 && (
-                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
-                          {patients.map((patient) => (
-                            <button
-                              key={patient.id}
-                              type="button"
-                              onClick={() => {
-                                setSelectedPatient(patient);
-                                setSearchQuery('');
-                                setPatients([]);
-                              }}
-                              className="w-full text-left px-4 py-2 hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl"
-                            >
-                              <span className="font-medium">{patient.firstName} {patient.lastName}</span>
-                              <span className="ml-2 text-sm text-gray-500">MRN: {patient.mrn}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                      </div>
                     </div>
                   )}
                 </div>
