@@ -202,6 +202,7 @@ const navigationItems: NavItem[] = [
   { name: 'Prescriptions', href: '/patient-portal/prescriptions', icon: PillIcon },
   { name: 'Lab Results', href: '/patient-portal/labs', icon: BeakerIcon },
   { name: 'Bills & Payments', href: '/patient-portal/billing', icon: CreditCardIcon },
+  { name: 'My Insurance', href: '/patient-portal/insurance', icon: ShieldCheckIcon },
   { name: 'Messages', href: '/patient-portal/messages', icon: ChatBubbleLeftRightIcon },
   { name: 'My Profile', href: '/patient-portal/settings', icon: UserCircleIcon },
 ];
