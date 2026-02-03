@@ -377,8 +377,35 @@ export const VitalsClipboardAIIcon: React.FC<IconProps> = ({ className = 'h-6 w-
   </svg>
 );
 
+// AI Doc Clipboard Icon (clipboard with cloud clip, medical cross, lines, and AI chip)
+export const AIDocClipboardIcon: React.FC<IconProps> = ({ className = 'h-6 w-6' }) => (
+  <svg
+    className={className}
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth={1.5}
+  >
+    {/* Clipboard body */}
+    <rect x="4" y="4" width="12" height="16" rx="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    {/* Cloud clip at top */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8 4V3.5a1.5 1.5 0 011.5-1.5h1a1.5 1.5 0 011.5 1.5V4" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 2.5a1 1 0 011-1h0a1 1 0 011 1" />
+    {/* Medical cross */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7v3M6.5 8.5h3" strokeWidth={1.8} />
+    {/* Document lines */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6.5 12.5h5M6.5 14.5h4M6.5 16.5h3" strokeWidth={1.2} />
+    {/* AI Chip - bottom right overlapping */}
+    <rect x="14" y="13" width="6" height="6" rx="1" strokeLinecap="round" strokeLinejoin="round" />
+    <text x="15.2" y="17.5" fill="currentColor" stroke="none" fontSize="4" fontWeight="bold" fontFamily="sans-serif">AI</text>
+    {/* Chip pins */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.5 13v-1M18.5 13v-1M14 14.5h-1M14 17.5h-1M15.5 19v1M18.5 19v1M20 14.5h1M20 17.5h1" strokeWidth={1} />
+  </svg>
+);
+
 // Export all icons as a collection
 export const HMSIcons = {
+  AIDocClipboard: AIDocClipboardIcon,
   HospitalAI: HospitalAIIcon,
   StethoscopeAI: StethoscopeAIIcon,
   HospitalBed: HospitalBedIcon,

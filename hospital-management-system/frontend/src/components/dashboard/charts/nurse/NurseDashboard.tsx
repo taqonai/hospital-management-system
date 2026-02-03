@@ -16,6 +16,7 @@ import {
   NotificationBellIcon,
   MedicalCrossHeartbeatIcon,
   IVDripIcon,
+  AIDocClipboardIcon,
 } from '../../../icons/HMSIcons';
 import { Bar } from 'react-chartjs-2';
 import { useNurseDashboard } from '../../../../hooks/useNurseDashboard';
@@ -134,7 +135,7 @@ export default function NurseDashboard() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-blue-500">
-              <PatientIcon className="h-5 w-5 text-white" />
+              <AIDocClipboardIcon className="h-5 w-5 text-white" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-gray-900">OPD - Vitals Queue</h2>
