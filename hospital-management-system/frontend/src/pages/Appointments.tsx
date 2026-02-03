@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   PlusIcon,
   FunnelIcon,
@@ -55,9 +55,11 @@ function formatTime(time: string) {
 }
 
 export default function Appointments() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [statusFilter, setStatusFilter] = useState('');
   const [cancelConfirm, setCancelConfirm] = useState<string | null>(null);
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState('appointmentDate');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -100,6 +102,30 @@ export default function Appointments() {
 
   const appointments = data?.data || [];
   const pagination = data?.pagination;
+
+  const scrollToAppointment = useCallback((id: string) => {
+    const row = document.getElementById(`appointment-row-${id}`);
+    if (row) {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedId(id);
+      const timer = setTimeout(() => setHighlightedId(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  useEffect(() => {
+    const appointmentId = searchParams.get('appointmentId');
+    if (!appointmentId || isLoading) return;
+
+    // Small delay to ensure the DOM has rendered the rows
+    const timer = setTimeout(() => {
+      scrollToAppointment(appointmentId);
+      // Clean the URL param after handling
+      searchParams.delete('appointmentId');
+      setSearchParams(searchParams, { replace: true });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchParams, isLoading, scrollToAppointment, setSearchParams]);
 
   const handleSort = (field: string) => {
     if (sortBy === field) {
@@ -257,7 +283,12 @@ export default function Appointments() {
                   return (
                     <tr
                       key={appointment.id}
-                      className="hover:bg-gray-50 transition-colors"
+                      id={`appointment-row-${appointment.id}`}
+                      className={`hover:bg-gray-50 transition-colors ${
+                        highlightedId === appointment.id
+                          ? 'bg-purple-50 ring-2 ring-purple-400 ring-inset animate-pulse'
+                          : ''
+                      }`}
                     >
                       <td className="px-4 py-3 text-sm text-gray-900">
                         {appointment.patient?.firstName} {appointment.patient?.lastName}

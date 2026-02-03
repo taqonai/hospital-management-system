@@ -75,8 +75,8 @@ npx playwright show-report             # View test report
 npx playwright codegen                 # Generate test code
 ```
 
-Configuration: `playwright.config.ts` (baseURL: https://spetaar.ai)
-Test files: `tests/*.spec.ts`
+Configuration: `playwright.config.ts` (baseURL: https://spetaar.ai, Chromium only, single worker)
+Test files: `tests/ipd-e2e.spec.ts`, `tests/ipd-review.spec.ts`, `tests/lab-diagnostics.spec.ts`, `tests/laboratory-e2e.spec.ts`
 
 ### Mobile App (React Native/Expo)
 ```bash
@@ -173,49 +173,30 @@ docker-compose restart [service]              # Restart service
 
 Note: TypeScript strict mode is disabled in backend and frontend (`"strict": false`), but enabled in mobile via Expo's base config.
 
-### AI Service Modules
-Located in `ai-services/`:
+### AI Services
 
-| Directory | Service Class | Purpose |
-|-----------|--------------|---------|
-| `diagnostic/` | DiagnosticAI | Symptom analysis, differential diagnosis |
-| `predictive/` | PredictiveAnalytics | Risk prediction, readmission risk |
-| `imaging/` | ImageAnalysisAI | X-ray, CT, MRI interpretation |
-| `chat/` | ChatAI | Conversational booking assistant |
-| `speech/` | SpeechToTextService | Whisper-based transcription |
-| `queue_ai/` | QueuePredictionAI | Wait time prediction |
-| `pharmacy/` | PharmacyAI | Drug interactions, dosing |
-| `clinical_notes/` | ClinicalNotesAI | Note generation from templates |
-| `symptom_checker/` | SymptomCheckerAI | Interactive symptom assessment |
-| `early_warning/` | EarlyWarningAI | Patient deterioration detection |
-| `med_safety/` | MedSafetyAI | Medication safety checks |
-| `smart_orders/` | SmartOrdersAI | Clinical order recommendations |
-| `ai_scribe/` | AIScribeService | Medical transcription |
-| `entity_extraction/` | EntityExtractionAI | Medical entity extraction from text |
-| `pdf_analysis/` | PDFAnalysisService | Medical PDF extraction and analysis |
-| `health_assistant/` | HealthAssistantAI | Patient-facing health chat assistant |
-| `genomic/` | GenomicAI | Genetic risk analysis, pharmacogenomics |
-| `nutrition_ai/` | NutritionAI | Diet analysis, meal recommendations |
-| `recommendation/` | RecommendationAI | Health recommendations engine |
-| `insurance_coding/` | InsuranceCodingAI | ICD-10/CPT code suggestions |
+20 Python services in `ai-services/`, each in its own directory with `service.py` and optional `knowledge_base.py`. All initialized in `ai-services/main.py`. See `ai-services/AGENT.md` for detailed patterns.
 
-### AI Models in Use
+**Models:** `gpt-4o` (complex: imaging, diagnosis, triage), `gpt-4o-mini` (simple: chat, SOAP notes, entity extraction), `whisper-1` (voice transcription), `all-MiniLM-L6-v2` (local semantic matching), plus rule-based algorithms. OpenAI requires `OPENAI_API_KEY`; SentenceTransformers and rule-based run locally.
 
-| Model | Provider | Purpose |
-|-------|----------|---------|
-| `gpt-4o` | OpenAI | Complex analysis (imaging, clinical notes, diagnosis, triage) |
-| `gpt-4o-mini` | OpenAI | Simple tasks (chat, entity extraction, SOAP notes) |
-| `whisper-1` | OpenAI | Voice transcription (Symptom Checker, AI Scribe) |
-| `all-MiniLM-L6-v2` | SentenceTransformers (local) | Symptom-to-diagnosis semantic matching |
-| Rule-based | Algorithmic | Risk prediction, queue estimation, drug interactions, medication safety |
+**Ollama Support:** Hospital-specific Ollama as OpenAI alternative via `ai-services/shared/llm_provider.py` (`HospitalAIConfig`).
 
-OpenAI models require `OPENAI_API_KEY`. SentenceTransformers and rule-based services run locally without API keys.
+All services implement graceful degradation to rule-based fallbacks when OpenAI is unavailable. Backend proxies AI calls with a 60-second timeout.
 
-**Ollama Support**: AI services support hospital-specific Ollama configuration as an OpenAI alternative. See `ai-services/shared/llm_provider.py` for the `HospitalAIConfig` abstraction.
+### Platform Scale
+
+| Metric | Value |
+|--------|-------|
+| Prisma Models | 193 (~7800 lines in `backend/prisma/schema.prisma`) |
+| API Endpoints | 1,031+ |
+| Frontend Pages | 113 |
+| Mobile Screens | 51 |
+| AI Services | 20 |
+| Backend Route Files | 68+ |
 
 ### Multi-Tenant Data Model
 
-All entities include `hospitalId` for tenant isolation. Prisma schema (`backend/prisma/schema.prisma`, ~7800 lines) covers 190+ models.
+All entities include `hospitalId` for tenant isolation. The `authorizeHospital` middleware enforces isolation at the API layer (`SUPER_ADMIN` bypasses).
 
 ### User Roles (UserRole enum)
 SUPER_ADMIN, HOSPITAL_ADMIN, DOCTOR, NURSE, RECEPTIONIST, LAB_TECHNICIAN, PHARMACIST, RADIOLOGIST, ACCOUNTANT, PATIENT, HR_MANAGER, HR_STAFF, HOUSEKEEPING_MANAGER, HOUSEKEEPING_STAFF, MAINTENANCE_STAFF, SECURITY_STAFF, DIETARY_STAFF, MARKETING
@@ -224,6 +205,8 @@ SUPER_ADMIN, HOSPITAL_ADMIN, DOCTOR, NURSE, RECEPTIONIST, LAB_TECHNICIAN, PHARMA
 Routes in `backend/src/routes/`, services in `backend/src/services/`. Each module follows:
 - `{module}Routes.ts` - Express router with endpoints
 - `{module}Service.ts` - Business logic with Prisma queries
+- Middleware chain: `authenticate` → `authorize(...roles)` → `authorizeHospital` → `asyncHandler(controller)`
+- Route handlers use `asyncHandler` wrapper from `backend/src/utils/asyncHandler.ts` to catch async errors
 
 **Standardized API responses** (`backend/src/utils/response.ts`): All endpoints must use the response helpers for consistent JSON format:
 - `sendSuccess(res, data, message)` - 200 with `{ success: true, data, message }`
@@ -238,12 +221,13 @@ Cron jobs in `backend/src/jobs/`, initialized on server start from `app.ts`:
 - `autoReorderCron.ts` - Pharmacy auto-reorder for low stock items
 
 Key routes (`/api/v1/`):
-- `/auth` - Login, register, refresh, profile
+- `/auth`, `/patient-auth` - Staff JWT login, patient OTP login
 - `/patients`, `/doctors`, `/appointments`, `/departments` - Core entities
-- `/ai`, `/ai-scribe`, `/symptom-checker` - AI endpoints
-- `/laboratory`, `/radiology`, `/pharmacy` - Diagnostics
+- `/ai`, `/ai-scribe`, `/symptom-checker`, `/ai-consultation`, `/ai-settings` - AI endpoints
+- `/laboratory`, `/radiology`, `/pharmacy`, `/advanced-pharmacy-ai` - Diagnostics
 - `/ipd`, `/opd`, `/emergency`, `/surgery` - Clinical departments
-- `/hr`, `/billing`, `/blood-bank` - Support services
+- `/nurse`, `/clinician` - Clinical staff workflows
+- `/hr`, `/billing`, `/financial-reporting`, `/blood-bank` - Support services
 - `/queue`, `/kiosk` - Patient flow
 - `/telemedicine`, `/patient-portal` - Remote care
 - `/medical-records`, `/dietary`, `/assets`, `/ambulance` - Ancillary services
@@ -251,18 +235,21 @@ Key routes (`/api/v1/`):
 - `/early-warning`, `/med-safety`, `/smart-orders` - Clinical safety AI
 - `/procurement` - Purchase orders, vendors, goods receipt
 - `/crm` - Marketing campaigns, surveys, leads
-- `/genomic`, `/health-platform`, `/wellness`, `/nutrition` - A'mad precision health platform
-- `/insurance-coding` - ICD-10/CPT code integration
+- `/genomic`, `/health-platform`, `/wellness`, `/nutrition`, `/recommendation` - A'mad precision health
+- `/insurance-coding`, `/pre-auth` - Insurance coding and pre-authorization
+- `/referral`, `/no-show` - Referrals and no-show management
+- `/notifications`, `/whatsapp-bot` - Notifications and WhatsApp booking bot
+- `/rbac` - Role and permission management
 - `/public` - Unauthenticated endpoints
 
 ### Authentication
-- JWT access token (15m) + refresh token (7d)
+- **Staff JWT:** Access token (15m) + refresh token (7d) via `/api/v1/auth`
+- **Patient JWT:** Separate flow with `type: 'patient'` claim, OTP via SMS/WhatsApp via `/api/v1/patient-auth`
 - `authenticate` middleware validates Bearer token
 - `authorize(...roles)` middleware for RBAC
 - `authorizeHospital` ensures tenant isolation
 - `optionalAuth` for endpoints with optional authentication
-- Password reset: Email-based OTP for staff (`/api/v1/auth/forgot-password`) and patients (`/api/v1/patient-auth/forgot-password`)
-- Mobile OTP login: Phone-based authentication for patient portal
+- Password reset: Email-based OTP for staff and patients (separate endpoints)
 
 ### RBAC (Role-Based Access Control)
 - Custom roles with granular permissions stored in database (`CustomRole`, `UserPermission`)
@@ -292,34 +279,11 @@ The **Appointment** entity is the central record linking all clinical data (vita
 
 ### Mobile App Architecture
 
-**Navigation Structure:**
-```
-RootNavigator (auth state check)
-├─ AuthNavigator (Login, Register, OTP)
-└─ MainNavigator (Bottom Tabs)
-    ├─ HomeStack → Dashboard
-    ├─ AppointmentsStack → List, Book, Detail
-    ├─ HealthStack → 15+ screens (SymptomChecker, HealthAssistant, Records, Fitness, Wellness, Messages)
-    └─ SettingsStack → Profile, Notifications, Billing
-```
+Patient-facing portal (51 screens). Entry: `mobile/index.ts` → `mobile/src/navigation/RootNavigator.tsx`.
 
-**Key Services** (`mobile/src/services/`):
-| Service | Purpose |
-|---------|---------|
-| `api/client.ts` | Axios with auto token refresh on 401 |
-| `api/patientPortal.ts` | Dashboard, appointments, records, billing |
-| `api/symptomChecker.ts` | AI symptom assessment with Whisper |
-| `api/healthPlatform.ts` | Health Connect/HealthKit data sync |
-| `api/genomics.ts` | Genomic data and genetic reports |
-| `api/nutritionAi.ts` | AI-powered nutrition analysis |
-| `api/wellness.ts` | Wellness metrics and recommendations |
-| `offline/cacheManager.ts` | TTL-based caching (5min-24hr) |
-| `offline/actionQueue.ts` | Queues mutations offline, syncs on reconnect |
-| `biometric/` | Face ID/Touch ID/Fingerprint auth |
-| `notifications/` | Push notifications with deep linking |
-| `storage/secureStorage.ts` | Encrypted token storage (expo-secure-store) |
+**Navigation:** RootNavigator → AuthNavigator (Login/Register/OTP) or MainNavigator (4 bottom tabs: Home, Appointments, Health, Settings). See `mobile/src/navigation/AGENT.md`.
 
-**Key Features:** Offline support with cache fallback, biometric login, 15min inactivity timeout, screenshot prevention on sensitive screens.
+**Key patterns:** Offline-first with TTL caching + action queue, biometric auth, 15min inactivity timeout, auto token refresh on 401, encrypted storage via expo-secure-store.
 
 See `mobile/src/*/AGENT.md` files for detailed implementation patterns.
 
@@ -432,11 +396,13 @@ React crashes (white screen) are usually JavaScript runtime errors. Common cause
 Check route authorization in `backend/src/routes/{module}Routes.ts`. Ensure the user's role is included in the `authorize()` middleware call.
 
 ### Prisma Issues
-After schema changes:
+The schema is ~7800 lines with 193 models, so `prisma generate` and `prisma migrate dev` can be slow. After schema changes:
 ```bash
-npx prisma generate
-npx prisma migrate dev
+npx prisma generate          # Regenerate client (required after any schema change)
+npx prisma migrate dev       # Create migration + apply (use for committed changes)
+npx prisma db push           # Direct push without migration file (faster for prototyping)
 ```
+Use `npm run db:push` for rapid iteration during development; use `npm run db:migrate` for changes that need a migration file.
 
 ### AI Service Connection Errors
 - Backend proxies AI calls via `AI_SERVICE_URL` env var
