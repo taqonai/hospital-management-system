@@ -1,7 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../config/database';
 import { WhatsAppSessionData, ConversationStep } from '../types/whatsapp';
-
-const prisma = new PrismaClient();
 
 export class WhatsAppSessionService {
   /**

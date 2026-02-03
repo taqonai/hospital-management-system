@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../config/database';
 import axios from 'axios';
 import whatsappSessionService from './whatsappSessionService';
 import whatsappService from './whatsappService';
@@ -8,8 +8,6 @@ import {
   ConversationStep,
   UAE_EMIRATES
 } from '../types/whatsapp';
-
-const prisma = new PrismaClient();
 
 export class WhatsAppBotService {
   private aiServiceUrl: string;
