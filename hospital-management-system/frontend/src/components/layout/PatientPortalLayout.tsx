@@ -167,7 +167,8 @@ const AICheckerIcon = ({ className }: { className?: string }) => (
     className={className}
     style={{
       backgroundColor: 'currentColor',
-      filter: 'brightness(0.7)',
+      filter: 'brightness(0.5)',
+      transform: 'scale(1.2)',
       WebkitMaskImage: 'url(/icons/AIChecker.png)',
       maskImage: 'url(/icons/AIChecker.png)',
       WebkitMaskSize: 'contain',
