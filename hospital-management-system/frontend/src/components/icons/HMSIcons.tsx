@@ -378,28 +378,28 @@ export const VitalsClipboardAIIcon: React.FC<IconProps> = ({ className = 'h-6 w-
 );
 
 // AI Doc Clipboard Icon (clipboard with cloud clip, medical cross, lines, and AI chip)
-// Designed for crisp, thick, visible lines
+// Designed for crisp, visible lines - 10% thinner strokes
 export const AIDocClipboardIcon: React.FC<IconProps> = ({ className = 'h-6 w-6' }) => (
   <svg
     className={className}
     fill="none"
     viewBox="0 0 24 24"
     stroke="currentColor"
-    strokeWidth={2}
+    strokeWidth={1.8}
   >
     {/* Clipboard body */}
     <rect x="3" y="4" width="12" height="16" rx="1.5" strokeLinecap="round" strokeLinejoin="round" />
     {/* Cloud clip at top */}
     <path strokeLinecap="round" strokeLinejoin="round" d="M7 4V3a2 2 0 012-2h0a2 2 0 012 2v1" />
-    {/* Medical cross - thicker */}
-    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 7v3M6 8.5h3" strokeWidth={2.5} />
-    {/* Document lines - thicker */}
-    <path strokeLinecap="round" strokeLinejoin="round" d="M6 13h5M6 15.5h4M6 18h3" strokeWidth={2} />
+    {/* Medical cross */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 7v3M6 8.5h3" strokeWidth={2.25} />
+    {/* Document lines */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 13h5M6 15.5h4M6 18h3" strokeWidth={1.8} />
     {/* AI Chip - bottom right */}
-    <rect x="14" y="13" width="7" height="7" rx="1" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
+    <rect x="14" y="13" width="7" height="7" rx="1" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} />
     <text x="15" y="18" fill="currentColor" stroke="none" fontSize="5" fontWeight="bold" fontFamily="sans-serif">AI</text>
-    {/* Chip pins - thicker */}
-    <path strokeLinecap="round" strokeLinejoin="round" d="M16 13v-1.5M19 13v-1.5M14 15h-1.5M14 18h-1.5M16 20v1.5M19 20v1.5M21 15h1.5M21 18h1.5" strokeWidth={1.5} />
+    {/* Chip pins */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16 13v-1.5M19 13v-1.5M14 15h-1.5M14 18h-1.5M16 20v1.5M19 20v1.5M21 15h1.5M21 18h1.5" strokeWidth={1.35} />
   </svg>
 );
 
