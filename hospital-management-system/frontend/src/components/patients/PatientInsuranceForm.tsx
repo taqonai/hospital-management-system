@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { XMarkIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ShieldCheckIcon, ShieldExclamationIcon, ClockIcon } from '@heroicons/react/24/outline';
 import { format } from 'date-fns';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import LoadingSpinner from '../common/LoadingSpinner';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../store';
 
 interface InsurancePayer {
   id: string;
@@ -28,6 +30,10 @@ interface PatientInsurance {
   isPrimary: boolean;
   isActive: boolean;
   createdAt: string;
+  // Verification fields
+  verificationStatus?: 'PENDING' | 'VERIFIED' | 'REJECTED';
+  verifiedAt?: string;
+  verificationNotes?: string;
 }
 
 interface PatientInsuranceFormProps {
@@ -113,6 +119,53 @@ export default function PatientInsuranceForm({ patientId }: PatientInsuranceForm
       toast.error(error.response?.data?.message || 'Failed to delete insurance');
     },
   });
+
+  // Get user role for admin verification buttons
+  const { user } = useSelector((state: RootState) => state.auth);
+  const isAdmin = user?.role === 'HOSPITAL_ADMIN' || user?.role === 'SUPER_ADMIN';
+
+  // Manual verification mutation (admin only)
+  const verifyInsuranceMutation = useMutation({
+    mutationFn: async ({ insuranceId, status, notes }: { insuranceId: string; status: 'VERIFIED' | 'REJECTED'; notes?: string }) => {
+      const token = localStorage.getItem('token');
+      return axios.post(`/api/v1/insurance-coding/insurance/${insuranceId}/verify`, 
+        { status, notes },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['patient-insurances', patientId] });
+      toast.success(`Insurance ${variables.status.toLowerCase()} successfully`);
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update verification status');
+    },
+  });
+
+  // Reset verification mutation (admin only)
+  const resetVerificationMutation = useMutation({
+    mutationFn: async (insuranceId: string) => {
+      const token = localStorage.getItem('token');
+      return axios.post(`/api/v1/insurance-coding/insurance/${insuranceId}/reset-verification`, 
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['patient-insurances', patientId] });
+      toast.success('Verification status reset to pending');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to reset verification');
+    },
+  });
+
+  const handleVerify = (insuranceId: string, status: 'VERIFIED' | 'REJECTED') => {
+    const notes = status === 'REJECTED' 
+      ? prompt('Reason for rejection (optional):') || undefined
+      : undefined;
+    verifyInsuranceMutation.mutate({ insuranceId, status, notes });
+  };
 
   const resetForm = () => {
     setFormData({
@@ -443,6 +496,22 @@ export default function PatientInsuranceForm({ patientId }: PatientInsuranceForm
                         Inactive
                       </span>
                     )}
+                    {/* Verification Status Badge */}
+                    {insurance.verificationStatus === 'VERIFIED' && (
+                      <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 flex items-center gap-1">
+                        <ShieldCheckIcon className="h-3 w-3" /> Verified
+                      </span>
+                    )}
+                    {insurance.verificationStatus === 'REJECTED' && (
+                      <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800 flex items-center gap-1">
+                        <ShieldExclamationIcon className="h-3 w-3" /> Rejected
+                      </span>
+                    )}
+                    {(!insurance.verificationStatus || insurance.verificationStatus === 'PENDING') && (
+                      <span className="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 flex items-center gap-1">
+                        <ClockIcon className="h-3 w-3" /> Pending
+                      </span>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
@@ -501,14 +570,51 @@ export default function PatientInsuranceForm({ patientId }: PatientInsuranceForm
                   </div>
                 </div>
 
-                <button
-                  onClick={() => handleDelete(insurance.id)}
-                  disabled={deleteInsuranceMutation.isPending}
-                  className="text-red-600 hover:text-red-800 p-2"
-                  title="Delete insurance"
-                >
-                  <TrashIcon className="h-5 w-5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  {/* Admin Verification Buttons */}
+                  {isAdmin && (
+                    <div className="flex items-center gap-1 mr-2 border-r pr-2">
+                      {insurance.verificationStatus !== 'VERIFIED' && (
+                        <button
+                          onClick={() => handleVerify(insurance.id, 'VERIFIED')}
+                          disabled={verifyInsuranceMutation.isPending}
+                          className="text-green-600 hover:text-green-800 p-1.5 rounded hover:bg-green-50"
+                          title="Mark as Verified"
+                        >
+                          <ShieldCheckIcon className="h-5 w-5" />
+                        </button>
+                      )}
+                      {insurance.verificationStatus !== 'REJECTED' && (
+                        <button
+                          onClick={() => handleVerify(insurance.id, 'REJECTED')}
+                          disabled={verifyInsuranceMutation.isPending}
+                          className="text-red-600 hover:text-red-800 p-1.5 rounded hover:bg-red-50"
+                          title="Mark as Rejected"
+                        >
+                          <ShieldExclamationIcon className="h-5 w-5" />
+                        </button>
+                      )}
+                      {insurance.verificationStatus && insurance.verificationStatus !== 'PENDING' && (
+                        <button
+                          onClick={() => resetVerificationMutation.mutate(insurance.id)}
+                          disabled={resetVerificationMutation.isPending}
+                          className="text-gray-500 hover:text-gray-700 p-1.5 rounded hover:bg-gray-100"
+                          title="Reset to Pending"
+                        >
+                          <ClockIcon className="h-5 w-5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => handleDelete(insurance.id)}
+                    disabled={deleteInsuranceMutation.isPending}
+                    className="text-red-600 hover:text-red-800 p-2"
+                    title="Delete insurance"
+                  >
+                    <TrashIcon className="h-5 w-5" />
+                  </button>
+                </div>
               </div>
             </div>
           ))}

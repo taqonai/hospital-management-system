@@ -1903,4 +1903,85 @@ router.get(
   })
 );
 
+// ==================== MANUAL INSURANCE VERIFICATION (Admin Only) ====================
+
+/**
+ * POST /api/insurance-coding/insurance/:insuranceId/verify
+ * Manually verify insurance (Hospital Admin only)
+ * Used until DHA eClaimLink integration is configured
+ */
+router.post(
+  '/insurance/:insuranceId/verify',
+  authenticate,
+  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { insuranceId } = req.params;
+    const { status, notes } = req.body;
+
+    if (!['VERIFIED', 'REJECTED'].includes(status)) {
+      return sendError(res, 'Status must be VERIFIED or REJECTED', 400);
+    }
+
+    // Check insurance exists
+    const insurance = await prisma.patientInsurance.findUnique({
+      where: { id: insuranceId },
+      include: { patient: true },
+    });
+
+    if (!insurance) {
+      return sendError(res, 'Insurance record not found', 404);
+    }
+
+    // Update verification status
+    const updated = await prisma.patientInsurance.update({
+      where: { id: insuranceId },
+      data: {
+        verificationStatus: status,
+        verifiedAt: new Date(),
+        verifiedBy: req.user!.id,
+        verificationNotes: notes || (status === 'VERIFIED' ? 'Manually verified by admin' : 'Rejected by admin'),
+        verificationSource: 'MANUAL',
+      },
+    });
+
+    logger.info(`[Insurance] Manual verification: ${insuranceId} -> ${status} by ${req.user!.email}`);
+
+    sendSuccess(res, {
+      id: updated.id,
+      verificationStatus: updated.verificationStatus,
+      verifiedAt: updated.verifiedAt,
+      verifiedBy: req.user!.email,
+      notes: updated.verificationNotes,
+    }, `Insurance ${status.toLowerCase()} successfully`);
+  })
+);
+
+/**
+ * POST /api/insurance-coding/insurance/:insuranceId/reset-verification
+ * Reset verification status to PENDING (Hospital Admin only)
+ */
+router.post(
+  '/insurance/:insuranceId/reset-verification',
+  authenticate,
+  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { insuranceId } = req.params;
+
+    const updated = await prisma.patientInsurance.update({
+      where: { id: insuranceId },
+      data: {
+        verificationStatus: 'PENDING',
+        verifiedAt: null,
+        verifiedBy: null,
+        verificationNotes: null,
+        verificationSource: null,
+      },
+    });
+
+    logger.info(`[Insurance] Verification reset: ${insuranceId} by ${req.user!.email}`);
+
+    sendSuccess(res, { id: updated.id, verificationStatus: 'PENDING' }, 'Verification status reset to pending');
+  })
+);
+
 export default router;

@@ -262,6 +262,9 @@ model User {
   // Nursing Module
   nurseAssignments NurseAssignment[] @relation("NurseAssignments")
 
+  // Insurance verification
+  verifiedInsurances PatientInsurance[] @relation("InsuranceVerifier")
+
   @@unique([hospitalId, email])
   @@map("users")
 }
@@ -1058,12 +1061,19 @@ model PatientInsurance {
   annualCopayMax    Decimal?  @db.Decimal(10, 2) // Max annual copay cap (e.g., AED 1000)
   isPrimary         Boolean   @default(true)
   isActive          Boolean   @default(true)
+  // Verification fields (manual until DHA integration)
+  verificationStatus String   @default("PENDING") // PENDING, VERIFIED, REJECTED
+  verifiedAt         DateTime?
+  verifiedBy         String?   // User ID of admin who verified
+  verificationNotes  String?   // Notes from manual verification
+  verificationSource String?   @default("MANUAL") // MANUAL, DHA_ECLAIM, PAYER_API
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
   patient         Patient          @relation(fields: [patientId], references: [id])
   preAuthRequests PreAuthRequest[]
   invoices        Invoice[]
+  verifier        User?            @relation("InsuranceVerifier", fields: [verifiedBy], references: [id])
 
   @@map("patient_insurances")
 }
