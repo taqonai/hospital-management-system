@@ -13,7 +13,7 @@ import {
   EnvelopeIcon,
   ArrowPathIcon,
   BuildingOfficeIcon,
-  CurrencyDollarIcon,
+
   PencilIcon,
   TrashIcon,
   EyeIcon,
@@ -298,7 +298,7 @@ export default function Doctors() {
                         </a>
                       </div>
                       <div className="flex items-center gap-1">
-                        <CurrencyDollarIcon className="h-5 w-5 text-emerald-500" />
+                        <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">AED</span>
                         <span className="text-xl font-bold text-gray-900">
                           {doctor.consultationFee || 0}
                         </span>
