@@ -135,7 +135,7 @@ export default function NurseDashboard() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-blue-500 flex items-center justify-center">
-              <AIDocClipboardIcon className="h-6 w-6 text-white" />
+              <img src="/icons/ai-doc-clipboard.png" alt="AI Doc" className="h-6 w-6 object-contain" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-gray-900">OPD - Vitals Queue</h2>
