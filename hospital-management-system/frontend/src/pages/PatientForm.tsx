@@ -22,6 +22,7 @@ interface PatientFormData {
   gender: 'MALE' | 'FEMALE';
   email: string;
   phone: string;
+  emiratesId: string; // UAE Emirates ID for mandatory health insurance
   address: string;
   city: string;
   state: string;
@@ -29,6 +30,7 @@ interface PatientFormData {
   bloodGroup: string;
   emergencyContact: string;
   emergencyPhone: string;
+  nationality: string;
 }
 
 const initialFormData: PatientFormData = {
@@ -38,6 +40,7 @@ const initialFormData: PatientFormData = {
   gender: 'MALE',
   email: '',
   phone: '',
+  emiratesId: '',
   address: '',
   city: '',
   state: '',
@@ -45,6 +48,7 @@ const initialFormData: PatientFormData = {
   bloodGroup: '',
   emergencyContact: '',
   emergencyPhone: '',
+  nationality: 'UAE',
 };
 
 const bloodGroups = [
@@ -96,6 +100,7 @@ export default function PatientForm() {
         gender: (patientData.gender as 'MALE' | 'FEMALE') || 'MALE',
         email: patientData.email || '',
         phone: patientData.phone || '',
+        emiratesId: patientData.emiratesId || '',
         address: patientData.address || '',
         city: patientData.city || '',
         state: patientData.state || '',
@@ -103,6 +108,7 @@ export default function PatientForm() {
         bloodGroup: patientData.bloodGroup || '',
         emergencyContact: patientData.emergencyContact || '',
         emergencyPhone: patientData.emergencyPhone || '',
+        nationality: patientData.nationality || '',
       });
     }
   }, [patientData]);
@@ -228,6 +234,9 @@ export default function PatientForm() {
     if (formData.bloodGroup) submitData.bloodGroup = formData.bloodGroup;
     if (formData.emergencyContact.trim()) submitData.emergencyContact = formData.emergencyContact.trim();
     if (formData.emergencyPhone.trim()) submitData.emergencyPhone = formData.emergencyPhone.trim();
+    // UAE-specific fields
+    if (formData.emiratesId.trim()) submitData.emiratesId = formData.emiratesId.replace(/-/g, '').trim();
+    if (formData.nationality) submitData.nationality = formData.nationality;
 
     if (isEditMode) {
       updateMutation.mutate(submitData);
@@ -358,6 +367,55 @@ export default function PatientForm() {
                   ))}
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Emirates ID <span className="text-orange-500 text-xs ml-1">(UAE Mandatory)</span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-mono text-sm">784-</span>
+                <input
+                  type="text"
+                  name="emiratesId"
+                  value={formData.emiratesId}
+                  onChange={handleChange}
+                  className={`w-full pl-14 pr-4 py-3 rounded-lg border ${errors.emiratesId ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono`}
+                  placeholder="XXXX-XXXXXXX-X"
+                  maxLength={18}
+                />
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Required for health insurance verification in UAE
+              </p>
+              {errors.emiratesId && <p className="mt-1 text-sm text-red-500">{errors.emiratesId}</p>}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Nationality
+              </label>
+              <select
+                name="nationality"
+                value={formData.nationality}
+                onChange={handleChange}
+                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="UAE">UAE</option>
+                <option value="India">India</option>
+                <option value="Pakistan">Pakistan</option>
+                <option value="Philippines">Philippines</option>
+                <option value="Egypt">Egypt</option>
+                <option value="Jordan">Jordan</option>
+                <option value="Syria">Syria</option>
+                <option value="Lebanon">Lebanon</option>
+                <option value="Bangladesh">Bangladesh</option>
+                <option value="Nepal">Nepal</option>
+                <option value="Sri Lanka">Sri Lanka</option>
+                <option value="UK">United Kingdom</option>
+                <option value="USA">United States</option>
+                <option value="Other">Other</option>
+              </select>
             </div>
           </div>
         </div>

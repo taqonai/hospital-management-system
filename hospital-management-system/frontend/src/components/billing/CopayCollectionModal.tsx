@@ -41,6 +41,7 @@ interface CopayInfo {
   annualCopay: { total: number; used: number; remaining: number };
   visitType: string;
   paymentRequired: boolean;
+  noInsurance?: boolean; // Flag for self-pay patients without insurance
 }
 
 interface DepositBalance {
@@ -190,6 +191,174 @@ export default function CopayCollectionModal({
                   Continue to Check-in
                 </button>
               </div>
+            ) : copayInfo?.noInsurance ? (
+              // Self-Pay Patient - No Insurance on File
+              <>
+                {/* Patient Info */}
+                <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-4 border border-blue-100">
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">Patient Information</h3>
+                  <div className="space-y-1">
+                    <p className="text-lg font-bold text-gray-900">
+                      {patient.firstName} {patient.lastName}
+                    </p>
+                    <p className="text-sm text-gray-600">MRN: {patient.mrn || 'N/A'}</p>
+                  </div>
+                </div>
+
+                {/* No Insurance Warning */}
+                <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 border-2 border-orange-200">
+                  <div className="flex items-start gap-3">
+                    <ExclamationTriangleIcon className="h-6 w-6 text-orange-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="text-base font-semibold text-orange-800 mb-1">
+                        No Insurance on File
+                      </h3>
+                      <p className="text-sm text-orange-700 mb-3">
+                        This patient does not have insurance details registered. They will be treated as a <strong>Self-Pay</strong> patient.
+                      </p>
+                      <p className="text-xs text-orange-600">
+                        💡 In UAE, health insurance is mandatory. Ask the patient for their Emirates ID to verify coverage.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Self-Pay Fee Breakdown */}
+                <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-4 border border-blue-100">
+                  <h3 className="text-sm font-medium text-gray-700 mb-3">Fee Breakdown (Self-Pay)</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Consultation Fee:</span>
+                      <span className="font-semibold text-gray-900">
+                        AED {copayInfo.consultationFee.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-gray-500">
+                      <span>Insurance Coverage:</span>
+                      <span>AED 0.00 (No insurance)</span>
+                    </div>
+                    <div className="flex justify-between text-blue-700 border-t pt-2 font-bold">
+                      <span>Patient Pays (100%):</span>
+                      <span>AED {copayInfo.patientAmount.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Amount Due */}
+                <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-6 border-2 border-orange-200">
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-gray-700 mb-2">Amount Due Now (Self-Pay)</p>
+                    <p className="text-4xl font-bold text-orange-700">
+                      AED {copayInfo.patientAmount.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Add Insurance Option */}
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-green-800">Has Insurance?</h3>
+                      <p className="text-xs text-green-600">Add insurance now to apply coverage</p>
+                    </div>
+                    <button
+                      onClick={() => window.open(`/patients/${patient.id}?tab=insurance`, '_blank')}
+                      className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
+                    >
+                      + Add Insurance
+                    </button>
+                  </div>
+                </div>
+
+                {/* Payment Method Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Payment Method <span className="text-red-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {paymentMethods.map((method) => {
+                      const Icon = method.icon;
+                      return (
+                        <button
+                          key={method.value}
+                          type="button"
+                          onClick={() => setPaymentMethod(method.value as PaymentMethod)}
+                          className={`
+                            relative p-4 rounded-xl border-2 transition-all duration-200
+                            ${
+                              paymentMethod === method.value
+                                ? 'border-orange-500 bg-orange-50'
+                                : 'border-gray-200 bg-white hover:border-gray-300'
+                            }
+                          `}
+                        >
+                          <Icon className={`h-6 w-6 mx-auto mb-2 ${
+                            paymentMethod === method.value ? 'text-orange-500' : 'text-gray-400'
+                          }`} />
+                          <span className={`text-sm font-medium ${
+                            paymentMethod === method.value ? 'text-orange-700' : 'text-gray-700'
+                          }`}>
+                            {method.label}
+                          </span>
+                          {paymentMethod === method.value && (
+                            <div className="absolute top-2 right-2">
+                              <CheckCircleIcon className="h-5 w-5 text-orange-500" />
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Notes (Optional)
+                  </label>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    rows={2}
+                    placeholder="e.g., Patient will submit insurance later..."
+                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 resize-none"
+                  />
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-col gap-3 pt-4 border-t border-gray-200">
+                  <button
+                    onClick={handleCollectPayment}
+                    disabled={processing}
+                    className="w-full px-6 py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold rounded-xl hover:from-orange-600 hover:to-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg"
+                  >
+                    {processing ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                        Processing...
+                      </span>
+                    ) : (
+                      `Collect Self-Pay - AED ${copayInfo.patientAmount.toFixed(2)}`
+                    )}
+                  </button>
+                  
+                  <button
+                    onClick={handleDefer}
+                    disabled={processing}
+                    className="w-full px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                  >
+                    Defer Payment (Collect Later)
+                  </button>
+
+                  <button
+                    onClick={onClose}
+                    disabled={processing}
+                    className="w-full px-4 py-2 bg-white text-gray-700 font-medium rounded-xl border-2 border-gray-200 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
             ) : (
               <>
                 {/* Patient Info */}

@@ -2454,26 +2454,6 @@ export class BillingService {
     visitType: string;
     paymentRequired: boolean;
   }> {
-    // Default values for no-insurance scenario
-    const defaultResponse = {
-      hasCopay: false,
-      consultationFee: 0,
-      coveragePercentage: 0,
-      copayPercentage: 100,
-      copayAmount: 0,
-      copayCapPerVisit: 0,
-      insuranceAmount: 0,
-      patientAmount: 0,
-      insuranceProvider: null,
-      policyNumber: null,
-      planType: 'SELF_PAY',
-      networkStatus: 'NONE',
-      deductible: { total: 0, used: 0, remaining: 0 },
-      annualCopay: { total: 0, used: 0, remaining: 0 },
-      visitType: 'NEW',
-      paymentRequired: false,
-    };
-
     // Look up patient's active primary insurance
     const patientInsurance = await prisma.patientInsurance.findFirst({
       where: {
@@ -2483,8 +2463,65 @@ export class BillingService {
       },
     });
 
+    // For self-pay patients (no insurance), calculate consultation fee
     if (!patientInsurance) {
-      return defaultResponse;
+      // Determine visit type from appointment
+      let visitType = 'NEW';
+      if (appointmentId) {
+        const appointment = await prisma.appointment.findUnique({
+          where: { id: appointmentId },
+          select: { type: true },
+        });
+        if (appointment) {
+          const typeMap: Record<string, string> = {
+            CONSULTATION: 'NEW',
+            FOLLOW_UP: 'FOLLOW_UP',
+            EMERGENCY: 'EMERGENCY',
+            TELEMEDICINE: 'NEW',
+            PROCEDURE: 'NEW',
+          };
+          visitType = typeMap[appointment.type] || 'NEW';
+        }
+      }
+
+      // Get consultation fee from ChargeMaster
+      const chargeCodeMap: Record<string, string> = {
+        NEW: 'initial_consultation',
+        FOLLOW_UP: 'follow_up',
+        EMERGENCY: 'emergency_consult',
+      };
+      const chargeCode = chargeCodeMap[visitType] || 'initial_consultation';
+
+      let consultationFee = 200; // Default fallback (AED)
+      try {
+        const priceResult = await chargeManagementService.lookupPrice(hospitalId, chargeCode);
+        if (priceResult) {
+          consultationFee = priceResult.finalPrice;
+        }
+      } catch (err) {
+        console.warn(`[COPAY] ChargeMaster lookup failed for self-pay ${chargeCode}, using default AED 200`);
+      }
+
+      // Self-pay: Patient pays 100% of consultation fee
+      return {
+        hasCopay: true, // YES - patient must pay
+        consultationFee,
+        coveragePercentage: 0,
+        copayPercentage: 100,
+        copayAmount: consultationFee,
+        copayCapPerVisit: 0,
+        insuranceAmount: 0,
+        patientAmount: consultationFee, // Full amount
+        insuranceProvider: null,
+        policyNumber: null,
+        planType: 'SELF_PAY',
+        networkStatus: 'NONE',
+        deductible: { total: 0, used: 0, remaining: 0 },
+        annualCopay: { total: 0, used: 0, remaining: 0 },
+        visitType,
+        paymentRequired: true, // Payment required for self-pay
+        noInsurance: true, // Flag to prompt adding insurance
+      };
     }
 
     // 1. Determine visit type from appointment (if provided)

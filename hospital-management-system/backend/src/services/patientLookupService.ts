@@ -13,7 +13,7 @@ export type PatientCreationSource = 'PORTAL' | 'BOOKING' | 'STAFF';
 /**
  * Match type for patient lookup results
  */
-export type PatientMatchType = 'email' | 'phone' | 'name_dob';
+export type PatientMatchType = 'emirates_id' | 'email' | 'phone' | 'name_dob';
 
 /**
  * Input data for patient lookup operations
@@ -49,6 +49,7 @@ export interface PatientSearchCriteria {
   firstName?: string;
   lastName?: string;
   dateOfBirth?: Date | string;
+  emiratesId?: string; // UAE Emirates ID for DHA integration
 }
 
 /**
@@ -134,15 +135,47 @@ export class PatientLookupService {
    * @param criteria - Search criteria including email, phone, name, and DOB
    * @returns The patient with match type, or null if not found
    */
+  /**
+   * Normalizes Emirates ID for consistent comparison
+   * Removes dashes and spaces, converts to uppercase
+   */
+  private normalizeEmiratesId(eid: string): string {
+    return eid.replace(/[-\s]/g, '').toUpperCase();
+  }
+
   async findExistingPatient(
     hospitalId: string,
     criteria: PatientSearchCriteria
   ): Promise<{ patient: Patient; matchedBy: PatientMatchType } | null> {
     logger.debug(`[PatientLookup] Searching for existing patient in hospital ${hospitalId}`, {
+      hasEmiratesId: !!criteria.emiratesId,
       hasEmail: !!criteria.email,
       hasPhone: !!criteria.phone,
       hasNameDob: !!(criteria.firstName && criteria.lastName && criteria.dateOfBirth),
     });
+
+    // Priority 0: Search by Emirates ID (highest priority in UAE - mandatory identifier)
+    if (criteria.emiratesId) {
+      const normalizedEid = this.normalizeEmiratesId(criteria.emiratesId);
+      
+      // Get all patients with Emirates ID and compare normalized
+      const patientsWithEid = await prisma.patient.findMany({
+        where: {
+          hospitalId,
+          emiratesId: { not: null },
+          isActive: true,
+        },
+      });
+
+      const patientByEid = patientsWithEid.find(
+        p => p.emiratesId && this.normalizeEmiratesId(p.emiratesId) === normalizedEid
+      );
+
+      if (patientByEid) {
+        logger.info(`[PatientLookup] Found patient by Emirates ID: ${patientByEid.id}`);
+        return { patient: patientByEid, matchedBy: 'emirates_id' };
+      }
+    }
 
     // Priority 1: Search by email (primary identifier)
     if (criteria.email) {

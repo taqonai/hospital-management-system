@@ -113,7 +113,7 @@ export default function EmiratesIdLookup({ onPatientFound, onCreateNew }: Emirat
       } else if (data.eligibility?.eligible) {
         toast.success('Insurance verified. Patient not in system - register to continue.');
       } else {
-        toast.warning('Patient not found and no active insurance detected.');
+        toast('Patient not found and no active insurance detected.', { icon: '⚠️' });
       }
     } catch (err: any) {
       console.error('EID lookup failed:', err);
