@@ -450,6 +450,96 @@ router.get(
 );
 
 /**
+ * @route   GET /api/v1/financial-reports/revenue/by-department-gl
+ * @desc    Get revenue by department from GL (cost center based)
+ * @access  ACCOUNTANT, HOSPITAL_ADMIN
+ */
+router.get(
+  '/revenue/by-department-gl',
+  authenticate,
+  authorizeWithPermission('financial-reports:read', [
+    UserRole.ACCOUNTANT,
+    UserRole.HOSPITAL_ADMIN,
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { startDate, endDate } = req.query;
+    const hospitalId = req.user!.hospitalId;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'startDate and endDate are required',
+      });
+    }
+
+    const report = await financialReportingService.getRevenueByDepartmentGL(
+      hospitalId,
+      new Date(startDate as string),
+      new Date(endDate as string)
+    );
+
+    sendSuccess(res, report, 'Revenue by department (GL) report generated successfully');
+  })
+);
+
+/**
+ * @route   GET /api/v1/financial-reports/ar-aging-detailed
+ * @desc    Get detailed AR aging report (Patient vs Insurance)
+ * @access  ACCOUNTANT, HOSPITAL_ADMIN
+ */
+router.get(
+  '/ar-aging-detailed',
+  authenticate,
+  authorizeWithPermission('financial-reports:read', [
+    UserRole.ACCOUNTANT,
+    UserRole.HOSPITAL_ADMIN,
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { asOfDate } = req.query;
+    const hospitalId = req.user!.hospitalId;
+
+    const date = asOfDate ? new Date(asOfDate as string) : new Date();
+
+    const report = await financialReportingService.getARAgingReportDetailed(hospitalId, date);
+
+    sendSuccess(res, report, 'Detailed AR Aging report generated successfully');
+  })
+);
+
+/**
+ * @route   GET /api/v1/financial-reports/claims/analytics
+ * @desc    Get claim status analytics report
+ * @access  ACCOUNTANT, HOSPITAL_ADMIN
+ */
+router.get(
+  '/claims/analytics',
+  authenticate,
+  authorizeWithPermission('financial-reports:read', [
+    UserRole.ACCOUNTANT,
+    UserRole.HOSPITAL_ADMIN,
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { startDate, endDate } = req.query;
+    const hospitalId = req.user!.hospitalId;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'startDate and endDate are required',
+      });
+    }
+
+    const report = await financialReportingService.getClaimAnalytics(
+      hospitalId,
+      new Date(startDate as string),
+      new Date(endDate as string)
+    );
+
+    sendSuccess(res, report, 'Claim analytics report generated successfully');
+  })
+);
+
+/**
  * @route   GET /api/v1/financial-reports/export
  * @desc    Export report data to CSV or XLSX
  * @access  ACCOUNTANT, HOSPITAL_ADMIN

@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { NotFoundError } from '../middleware/errorHandler';
 import { patientLookupService } from './patientLookupService';
+import { billingService } from './billingService';
 
 export class EmergencyService {
   // ESI Triage Levels:
@@ -251,18 +252,40 @@ export class EmergencyService {
     return admission;
   }
 
-  async dischargeFromEmergency(appointmentId: string, notes?: string) {
-    return prisma.appointment.update({
+  async dischargeFromEmergency(appointmentId: string, notes?: string, dischargedBy?: string) {
+    const appointment = await prisma.appointment.findUnique({ 
+      where: { id: appointmentId },
+      include: { patient: true },
+    });
+
+    if (!appointment) throw new NotFoundError('Emergency appointment not found');
+
+    const updatedAppointment = await prisma.appointment.update({
       where: { id: appointmentId },
       data: {
         status: 'COMPLETED',
         notes: JSON.stringify({
-          ...JSON.parse((await prisma.appointment.findUnique({ where: { id: appointmentId } }))?.notes || '{}'),
+          ...JSON.parse(appointment.notes || '{}'),
           dischargeNotes: notes,
           dischargedAt: new Date(),
         }),
       },
     });
+
+    // PHASE 2: Auto-generate ER visit billing
+    try {
+      await billingService.addERVisitFee(
+        appointmentId,
+        appointment.hospitalId,
+        dischargedBy || 'system'
+      );
+      console.log('[EMERGENCY] ER visit fee added for appointment:', appointmentId);
+    } catch (err) {
+      console.error('[EMERGENCY] Failed to add ER visit fee:', err);
+      // Don't fail discharge if billing fails
+    }
+
+    return updatedAppointment;
   }
 
   async getEmergencyStats(hospitalId: string) {
@@ -665,7 +688,7 @@ export class EmergencyService {
         return {
           id: doctor.id,
           name: `Dr. ${doctor.user.firstName} ${doctor.user.lastName}`,
-          specialization: doctor.specialization?.name || 'General',
+          specialization: (doctor.specialization as any)?.name || 'General',
           activePatients,
           availability: activePatients < 5 ? 'available' : activePatients < 8 ? 'busy' : 'overloaded',
         };
@@ -1063,7 +1086,7 @@ export class EmergencyService {
         vehicleType: trip.ambulance?.vehicleType || 'BASIC_LIFE_SUPPORT',
         patientInfo: trip.patientName || 'Unknown',
         chiefComplaint: trip.patientCondition || 'Not specified',
-        tripType: trip.tripType,
+        tripType: (trip as any).tripType,
         etaMinutes,
         pickupLocation: trip.pickupAddress || 'Unknown',
         destinationAddress: trip.destinationAddress || 'Unknown',

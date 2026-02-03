@@ -138,6 +138,9 @@ model Hospital {
   // Deductible Tracking
   deductibleLedgers DeductibleLedger[]
 
+  // Payment Reminders
+  paymentReminders PaymentReminder[]
+
   @@map("hospitals")
 }
 
@@ -853,6 +856,9 @@ model Patient {
   // Deductible Tracking
   deductibleLedgers DeductibleLedger[]
 
+  // Payment Reminders
+  paymentReminders PaymentReminder[]
+
   // Copay Payments
   copayPayments CopayPayment[]
 
@@ -1473,6 +1479,7 @@ model Admission {
   surgeries        Surgery[]
   dischargeSummary DischargeSummary?
   dischargeCoding  DischargeCoding?
+  invoices         Invoice[]         // IPD billing invoices
 
   // Nursing Module
   nurseAssignments          NurseAssignment[]
@@ -1950,6 +1957,7 @@ model Invoice {
   id                   String        @id @default(uuid())
   hospitalId           String
   patientId            String
+  admissionId          String?       // FK to Admission (for IPD billing)
   invoiceNumber        String        @unique
   invoiceDate          DateTime      @default(now())
   dueDate              DateTime?
@@ -1967,6 +1975,11 @@ model Invoice {
   copayCollected       Decimal       @default(0) @db.Decimal(10, 2) // Copay already paid
   primaryInsuranceId   String?                          // FK to PatientInsurance
   
+  // IPD discharge billing fields
+  depositAmount        Decimal       @default(0) @db.Decimal(10, 2) // Deposit collected
+  finalizedAt          DateTime?     // When invoice was finalized (discharge)
+  lastBedChargeDate    DateTime?     // Track last date bed charges were added
+  
   notes                String?
   createdBy            String?
   updatedBy            String?
@@ -1976,6 +1989,7 @@ model Invoice {
   // Relations
   hospital            Hospital             @relation(fields: [hospitalId], references: [id])
   patient             Patient              @relation(fields: [patientId], references: [id])
+  admission           Admission?           @relation(fields: [admissionId], references: [id])
   primaryInsurance    PatientInsurance?    @relation(fields: [primaryInsuranceId], references: [id])
   items               InvoiceItem[]
   payments            Payment[]
@@ -1985,6 +1999,7 @@ model Invoice {
   creditNoteSources   CreditNote[]         @relation("CreditNoteSource")
   creditNoteApplied   CreditNote[]         @relation("CreditNoteApplication")
   writeOffs           WriteOff[]
+  paymentReminders    PaymentReminder[]
 
   @@map("invoices")
 }
@@ -6027,6 +6042,7 @@ model ICD10PayerRule {
   waitingPeriodDays  Int? // Coverage waiting period
   copayAmount        Decimal?  @db.Decimal(10, 2)
   copayPercentage    Decimal?  @db.Decimal(5, 2)
+  copayOverride      Decimal?  @db.Decimal(10, 2) // Override copay for this diagnosis
   deductibleApplies  Boolean   @default(true)
   ageMinimum         Int? // Age restrictions
   ageMaximum         Int?
@@ -6057,6 +6073,7 @@ model CPTPayerRule {
   isCovered          Boolean   @default(true)
   requiresPreAuth    Boolean   @default(false)
   priceOverride      Decimal?  @db.Decimal(10, 2) // Payer-specific price
+  copayOverride      Decimal?  @db.Decimal(10, 2) // Override copay for this procedure
   maxUnitsPerVisit   Int? // Unit limit per encounter
   maxUnitsPerYear    Int? // Annual limit
   frequencyLimit     String? // e.g., "1/30days", "4/year"
@@ -8344,4 +8361,32 @@ model DeductibleLedger {
 
   @@unique([hospitalId, patientId, fiscalYear])
   @@map("deductible_ledgers")
+}
+
+// ==================== PAYMENT REMINDERS ====================
+
+model PaymentReminder {
+  id              String   @id @default(uuid())
+  hospitalId      String
+  invoiceId       String
+  patientId       String
+  reminderType    String   // EMAIL, SMS, BOTH
+  reminderLevel   Int      @default(1) // 1=gentle, 2=firm, 3=final
+  sentAt          DateTime @default(now())
+  dueAmount       Decimal  @db.Decimal(10, 2)
+  message         String?
+  status          String   @default("SENT") // SENT, DELIVERED, FAILED
+  responseDate    DateTime?
+  responseNotes   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  hospital Hospital @relation(fields: [hospitalId], references: [id])
+  invoice  Invoice  @relation(fields: [invoiceId], references: [id])
+  patient  Patient  @relation(fields: [patientId], references: [id])
+
+  @@index([hospitalId])
+  @@index([invoiceId])
+  @@index([patientId])
+  @@map("payment_reminders")
 }

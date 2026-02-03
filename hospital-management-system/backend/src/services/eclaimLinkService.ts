@@ -593,7 +593,7 @@ export class EClaimLinkService {
   }
 
   /**
-   * Generate DHA eClaimLink-compatible XML
+   * Generate DHA eClaimLink-compatible XML (full 837 professional/institutional format)
    */
   private generateXML(claimData: EClaimData): string {
     const { header, diagnoses, activities } = claimData;
@@ -615,17 +615,21 @@ export class EClaimLinkService {
         .replace(/'/g, '&apos;');
     };
 
+    // Generate Diagnosis XML (HL7/X12 837 format)
     const diagnosesXml = diagnoses
       .map(
-        (d) => `
+        (d, index) => `
       <Diagnosis>
+        <Sequence>${index + 1}</Sequence>
         <Type>${d.type}</Type>
         <Code>${escapeXml(d.diagnosisCode)}</Code>
+        <CodeType>ICD10</CodeType>
         ${d.dxInfoType ? `<DxInfoType>${escapeXml(d.dxInfoType)}</DxInfoType>` : ''}
       </Diagnosis>`
       )
       .join('');
 
+    // Generate Activity XML (procedures/services)
     const activitiesXml = activities
       .map(
         (a) => `
@@ -634,46 +638,85 @@ export class EClaimLinkService {
         <Start>${formatDateTime(a.startDate)}</Start>
         <Type>${a.activityType}</Type>
         <Code>${escapeXml(a.activityCode)}</Code>
+        <CodeType>CPT</CodeType>
         ${a.modifiers?.length ? `<Modifier>${a.modifiers.join(',')}</Modifier>` : ''}
         <Quantity>${a.quantity}</Quantity>
+        <UnitPrice>${a.unitPrice.toFixed(2)}</UnitPrice>
         <Net>${a.netAmount.toFixed(2)}</Net>
-        <Clinician>${escapeXml(a.clinicianLicense)}</Clinician>
+        <Clinician>
+          <LicenseNo>${escapeXml(a.clinicianLicense)}</LicenseNo>
+        </Clinician>
         ${a.priorAuthId ? `<PriorAuthorizationID>${escapeXml(a.priorAuthId)}</PriorAuthorizationID>` : ''}
       </Activity>`
       )
       .join('');
 
+    // Generate Observations XML (vitals, lab results, etc.)
+    const observationsXml = `
+      <Observation>
+        <ObservationType>CHIEF_COMPLAINT</ObservationType>
+        <Value>As documented in consultation</Value>
+      </Observation>`;
+
+    // Full DHA eClaimLink XML structure (based on HL7/X12 837)
     return `<?xml version="1.0" encoding="UTF-8"?>
-<Claim xmlns="http://dha.gov.ae/schema/eclaimlink" version="1.0">
-  <Header>
+<Claim.Submission xmlns="http://dha.gov.ae/schema/eclaimlink" version="2.0">
+  <Claim.Header>
     <SenderID>${escapeXml(header.providerLicenseNo)}</SenderID>
     <ReceiverID>${escapeXml(header.payerId)}</ReceiverID>
     <TransactionDate>${formatDateTime(new Date())}</TransactionDate>
-  </Header>
+    <TransactionID>${escapeXml(header.claimId)}</TransactionID>
+    <TradingPartnerServiceID>${escapeXml(this.facilityCode)}</TradingPartnerServiceID>
+  </Claim.Header>
   <Claim>
-    <ID>${escapeXml(header.claimId)}</ID>
-    <MemberID>${escapeXml(header.memberId)}</MemberID>
-    <PayerID>${escapeXml(header.payerId)}</PayerID>
-    <ProviderID>${escapeXml(header.providerLicenseNo)}</ProviderID>
-    <EmiratesIDNumber></EmiratesIDNumber>
-    <Gross>${header.grossAmount.toFixed(2)}</Gross>
-    <PatientShare>0.00</PatientShare>
-    <Net>${header.netAmount.toFixed(2)}</Net>
+    <ClaimInfo>
+      <ClaimID>${escapeXml(header.claimId)}</ClaimID>
+      <ClaimType>${header.claimType}</ClaimType>
+      <FilingIndicatorCode>MC</FilingIndicatorCode>
+      <SubmissionDate>${formatDate(new Date())}</SubmissionDate>
+    </ClaimInfo>
+    <Payer>
+      <PayerID>${escapeXml(header.payerId)}</PayerID>
+      <PayerName>${escapeXml(header.payerName)}</PayerName>
+    </Payer>
+    <Provider>
+      <ProviderID>${escapeXml(header.providerLicenseNo)}</ProviderID>
+      <ProviderName>${escapeXml(header.providerName)}</ProviderName>
+      <TaxID>${escapeXml(this.facilityCode)}</TaxID>
+    </Provider>
+    <Subscriber>
+      <MemberID>${escapeXml(header.memberId)}</MemberID>
+      <PolicyNumber>${escapeXml(header.idPayer)}</PolicyNumber>
+    </Subscriber>
+    <Patient>
+      <PatientFileNo>${escapeXml(header.patientFileNo)}</PatientFileNo>
+      <EmiratesIDNumber></EmiratesIDNumber>
+      <Relationship>SELF</Relationship>
+    </Patient>
+    <ClaimCharges>
+      <GrossAmount>${header.grossAmount.toFixed(2)}</GrossAmount>
+      <PatientShare>0.00</PatientShare>
+      <NetAmount>${header.netAmount.toFixed(2)}</NetAmount>
+      <Currency>AED</Currency>
+    </ClaimCharges>
     <Encounter>
       <FacilityID>${escapeXml(header.providerLicenseNo)}</FacilityID>
-      <Type>${header.claimType === 'IPD' ? '2' : '1'}</Type>
-      <PatientID>${escapeXml(header.patientFileNo)}</PatientID>
-      <Start>${formatDateTime(header.dateOfService)}</Start>
-      <End>${formatDateTime(header.dateOfService)}</End>
-      <StartType>1</StartType>
-      <EndType>1</EndType>
+      <EncounterType>${header.claimType === 'IPD' ? '2' : '1'}</EncounterType>
+      <EncounterTypeDescription>${header.claimType === 'IPD' ? 'INPATIENT' : 'OUTPATIENT'}</EncounterTypeDescription>
+      <PatientAccountNo>${escapeXml(header.patientFileNo)}</PatientAccountNo>
+      <AdmissionDate>${formatDateTime(header.dateOfService)}</AdmissionDate>
+      <DischargeDate>${formatDateTime(header.dateOfService)}</DischargeDate>
+      <AdmissionType>1</AdmissionType>
+      <DischargeStatus>1</DischargeStatus>
     </Encounter>
-    <Diagnosis>${diagnosesXml}
-    </Diagnosis>
-    <Activity>${activitiesXml}
-    </Activity>
+    <Diagnosis.List>${diagnosesXml}
+    </Diagnosis.List>
+    <Activity.List>${activitiesXml}
+    </Activity.List>
+    <Observation.List>${observationsXml}
+    </Observation.List>
   </Claim>
-</Claim>`;
+</Claim.Submission>`;
   }
 
   /**
@@ -1052,7 +1095,436 @@ export class EClaimLinkService {
   }
 
   /**
-   * DEPRECATED: Legacy implementation - use submitClaimToAPI instead
+   * Get Claim Reconciliation Advice (CRA) - DHA's ERA/835 equivalent
+   */
+  async getCRA(dhaClaimId: string): Promise<{
+    claimId: string;
+    status: string;
+    approvedAmount?: number;
+    deniedAmount?: number;
+    adjustmentReason?: string;
+    remittanceDate?: Date;
+    response?: any;
+  }> {
+    if (this.mode === 'sandbox') {
+      // Mock CRA response for sandbox mode
+      logger.info('[DHA eClaimLink SANDBOX] Mock CRA fetch:', { dhaClaimId });
+      return {
+        claimId: dhaClaimId,
+        status: 'APPROVED',
+        approvedAmount: 950.00,
+        deniedAmount: 50.00,
+        adjustmentReason: 'Procedure not covered',
+        remittanceDate: new Date(),
+        response: {
+          status: 'APPROVED',
+          message: 'Claim approved (sandbox mode)',
+          timestamp: new Date().toISOString(),
+        },
+      };
+    }
+
+    try {
+      // TODO: Update endpoint path when actual DHA documentation is available
+      const response = await this.apiClient.get(`/claims/cra/${dhaClaimId}`);
+
+      return {
+        claimId: dhaClaimId,
+        status: response.data.status || 'UNKNOWN',
+        approvedAmount: response.data.approvedAmount,
+        deniedAmount: response.data.deniedAmount,
+        adjustmentReason: response.data.adjustmentReason,
+        remittanceDate: response.data.remittanceDate ? new Date(response.data.remittanceDate) : undefined,
+        response: response.data,
+      };
+    } catch (error: any) {
+      logger.error('[DHA eClaimLink] CRA fetch failed:', error);
+      throw new Error(`Failed to fetch CRA: ${error.message}`);
+    }
+  }
+
+  /**
+   * Parse ERA XML response from DHA eClaimLink
+   * Converts XML remittance advice to structured data
+   */
+  async parseERAResponse(xmlResponse: string): Promise<{
+    dhaClaimId: string;
+    claimNumber: string;
+    status: 'APPROVED' | 'PARTIALLY_APPROVED' | 'REJECTED';
+    approvedAmount?: number;
+    deniedAmount?: number;
+    adjustmentReason?: string;
+    remittanceDate: Date;
+    rawResponse: any;
+  }> {
+    try {
+      // This is a simplified parser - production would use xml2js or similar
+      // For now, we'll parse basic fields using regex (not recommended for production)
+      
+      const statusMatch = xmlResponse.match(/<ClaimStatus>(.*?)<\/ClaimStatus>/);
+      const approvedAmountMatch = xmlResponse.match(/<ApprovedAmount>(.*?)<\/ApprovedAmount>/);
+      const deniedAmountMatch = xmlResponse.match(/<DeniedAmount>(.*?)<\/DeniedAmount>/);
+      const adjustmentReasonMatch = xmlResponse.match(/<AdjustmentReason>(.*?)<\/AdjustmentReason>/);
+      const dhaClaimIdMatch = xmlResponse.match(/<DhaClaimId>(.*?)<\/DhaClaimId>/);
+      const claimNumberMatch = xmlResponse.match(/<ClaimNumber>(.*?)<\/ClaimNumber>/);
+      const remittanceDateMatch = xmlResponse.match(/<RemittanceDate>(.*?)<\/RemittanceDate>/);
+
+      let status: 'APPROVED' | 'PARTIALLY_APPROVED' | 'REJECTED' = 'REJECTED';
+      const statusStr = statusMatch ? statusMatch[1] : 'REJECTED';
+      
+      if (statusStr === 'APPROVED' || statusStr === 'PAID') {
+        status = 'APPROVED';
+      } else if (statusStr === 'PARTIALLY_APPROVED' || statusStr === 'PARTIAL') {
+        status = 'PARTIALLY_APPROVED';
+      }
+
+      const approvedAmount = approvedAmountMatch ? parseFloat(approvedAmountMatch[1]) : undefined;
+      const deniedAmount = deniedAmountMatch ? parseFloat(deniedAmountMatch[1]) : undefined;
+
+      return {
+        dhaClaimId: dhaClaimIdMatch ? dhaClaimIdMatch[1] : '',
+        claimNumber: claimNumberMatch ? claimNumberMatch[1] : '',
+        status,
+        approvedAmount,
+        deniedAmount,
+        adjustmentReason: adjustmentReasonMatch ? adjustmentReasonMatch[1] : undefined,
+        remittanceDate: remittanceDateMatch ? new Date(remittanceDateMatch[1]) : new Date(),
+        rawResponse: { xml: xmlResponse },
+      };
+    } catch (error: any) {
+      logger.error('[DHA eClaimLink] ERA parsing failed:', error);
+      throw new Error(`Failed to parse ERA response: ${error.message}`);
+    }
+  }
+
+  /**
+   * Fetch and process remittance for a claim
+   */
+  async fetchAndProcessRemittance(claimId: string): Promise<{
+    success: boolean;
+    message?: string;
+    errorMessage?: string;
+  }> {
+    try {
+      const claim = await prisma.insuranceClaim.findUnique({
+        where: { id: claimId },
+        select: { eclaimLinkId: true, claimNumber: true },
+      });
+
+      if (!claim || !claim.eclaimLinkId) {
+        throw new Error('Claim not found or not submitted to eClaimLink');
+      }
+
+      // Fetch CRA from DHA
+      const cra = await this.getCRA(claim.eclaimLinkId);
+
+      // Process remittance
+      const result = await this.processRemittance({
+        dhaClaimId: claim.eclaimLinkId,
+        claimNumber: claim.claimNumber,
+        status: cra.status as 'APPROVED' | 'PARTIALLY_APPROVED' | 'REJECTED',
+        approvedAmount: cra.approvedAmount,
+        deniedAmount: cra.deniedAmount,
+        adjustmentReason: cra.adjustmentReason,
+        remittanceDate: cra.remittanceDate || new Date(),
+        rawResponse: cra.response,
+      });
+
+      if (result.success) {
+        return {
+          success: true,
+          message: `Remittance processed successfully for claim ${claim.claimNumber}`,
+        };
+      } else {
+        return {
+          success: false,
+          errorMessage: result.errorMessage || 'Unknown error processing remittance',
+        };
+      }
+    } catch (error: any) {
+      logger.error('[DHA eClaimLink] Fetch and process remittance failed:', error);
+      return {
+        success: false,
+        errorMessage: error.message,
+      };
+    }
+  }
+
+  /**
+   * Process Electronic Remittance Advice (ERA/835)
+   * Called when DHA sends remittance for approved claims
+   */
+  async processRemittance(remittanceData: {
+    dhaClaimId: string;
+    claimNumber: string;
+    status: 'APPROVED' | 'PARTIALLY_APPROVED' | 'REJECTED';
+    approvedAmount?: number;
+    deniedAmount?: number;
+    adjustmentReason?: string;
+    remittanceDate: Date;
+    rawResponse: any;
+  }): Promise<{
+    success: boolean;
+    claimUpdated?: boolean;
+    paymentCreated?: boolean;
+    appealCreated?: boolean;
+    secondaryClaimCreated?: boolean;
+    glEntriesPosted?: boolean;
+    errorMessage?: string;
+  }> {
+    logger.info('[DHA eClaimLink] Processing remittance for claim:', remittanceData.claimNumber);
+
+    try {
+      // Find the insurance claim by DHA claim ID or claim number
+      const claim = await prisma.insuranceClaim.findFirst({
+        where: {
+          OR: [
+            { eclaimLinkId: remittanceData.dhaClaimId },
+            { claimNumber: remittanceData.claimNumber },
+          ],
+        },
+        include: {
+          invoice: {
+            include: {
+              patient: {
+                include: {
+                  insurances: {
+                    where: { isActive: true },
+                    orderBy: [
+                      { isPrimary: 'desc' },
+                      { createdAt: 'desc' },
+                    ],
+                  },
+                },
+              },
+              hospital: true,
+            },
+          },
+        },
+      });
+
+      if (!claim) {
+        throw new Error(`Claim not found: ${remittanceData.claimNumber}`);
+      }
+
+      let paymentCreated = false;
+      let appealCreated = false;
+      let secondaryClaimCreated = false;
+      let glEntriesPosted = false;
+
+      // Update claim status and response
+      await prisma.insuranceClaim.update({
+        where: { id: claim.id },
+        data: {
+          eclaimLinkStatus: remittanceData.status,
+          eclaimLinkResponse: remittanceData.rawResponse,
+          status: remittanceData.status === 'APPROVED' ? 'PAID' : 
+                  remittanceData.status === 'PARTIALLY_APPROVED' ? 'PARTIALLY_APPROVED' : 'REJECTED',
+          approvedAmount: remittanceData.approvedAmount,
+          denialReasonCode: remittanceData.adjustmentReason,
+          processedAt: remittanceData.remittanceDate,
+        },
+      });
+
+      // APPROVED: Create payment + GL entries
+      if (remittanceData.status === 'APPROVED' && remittanceData.approvedAmount) {
+        await prisma.payment.create({
+          data: {
+            invoiceId: claim.invoiceId,
+            amount: remittanceData.approvedAmount,
+            paymentMethod: 'INSURANCE',
+            referenceNumber: `ERA-${remittanceData.dhaClaimId}`,
+            notes: `Insurance payment from DHA eClaimLink - Claim ${remittanceData.claimNumber}`,
+            createdBy: 'system',
+          },
+        });
+
+        // Update invoice
+        const invoice = claim.invoice;
+        const newPaidAmount = Number(invoice.paidAmount) + remittanceData.approvedAmount;
+        const newBalance = Number(invoice.totalAmount) - newPaidAmount;
+
+        await prisma.invoice.update({
+          where: { id: claim.invoiceId },
+          data: {
+            paidAmount: newPaidAmount,
+            balanceAmount: newBalance > 0 ? newBalance : 0,
+            status: newBalance <= 0 ? 'PAID' : 'PARTIALLY_PAID',
+            updatedBy: 'system',
+          },
+        });
+
+        // Post GL entries
+        glEntriesPosted = await this.postInsurancePaymentGL(
+          claim,
+          remittanceData.approvedAmount,
+          remittanceData.remittanceDate
+        );
+
+        paymentCreated = true;
+        logger.info(`[DHA eClaimLink] Payment created for claim ${remittanceData.claimNumber}: ${remittanceData.approvedAmount}`);
+      }
+
+      // PARTIALLY_APPROVED: Create payment + check for COB (secondary claim)
+      if (remittanceData.status === 'PARTIALLY_APPROVED' && remittanceData.approvedAmount) {
+        // Create payment for approved portion
+        await prisma.payment.create({
+          data: {
+            invoiceId: claim.invoiceId,
+            amount: remittanceData.approvedAmount,
+            paymentMethod: 'INSURANCE',
+            referenceNumber: `ERA-${remittanceData.dhaClaimId}`,
+            notes: `Partial insurance payment from DHA eClaimLink - Claim ${remittanceData.claimNumber}`,
+            createdBy: 'system',
+          },
+        });
+
+        // Update invoice
+        const invoice = claim.invoice;
+        const newPaidAmount = Number(invoice.paidAmount) + remittanceData.approvedAmount;
+        const newBalance = Number(invoice.totalAmount) - newPaidAmount;
+
+        await prisma.invoice.update({
+          where: { id: claim.invoiceId },
+          data: {
+            paidAmount: newPaidAmount,
+            balanceAmount: newBalance > 0 ? newBalance : 0,
+            status: newBalance <= 0 ? 'PAID' : 'PARTIALLY_PAID',
+            updatedBy: 'system',
+          },
+        });
+
+        // Post GL entries for partial payment
+        glEntriesPosted = await this.postInsurancePaymentGL(
+          claim,
+          remittanceData.approvedAmount,
+          remittanceData.remittanceDate
+        );
+
+        paymentCreated = true;
+
+        // COB: Check if patient has secondary insurance
+        if (claim.isPrimary && newBalance > 0) {
+          const secondaryInsurance = invoice.patient.insurances.find(
+            (ins: any) => !ins.isPrimary && ins.isActive
+          );
+
+          if (secondaryInsurance) {
+            // Create secondary claim
+            const secondaryClaimNumber = this.generateClaimNumber();
+            await prisma.insuranceClaim.create({
+              data: {
+                invoiceId: claim.invoiceId,
+                claimNumber: secondaryClaimNumber,
+                insuranceProvider: secondaryInsurance.providerName,
+                insurancePayerId: secondaryInsurance.id,
+                policyNumber: secondaryInsurance.policyNumber,
+                claimAmount: newBalance,
+                isPrimary: false,
+                linkedClaimId: claim.id,
+                notes: `Secondary claim - Primary claim ${remittanceData.claimNumber} partially approved for ${remittanceData.approvedAmount}`,
+                createdBy: 'system',
+                submittedBy: 'system',
+              },
+            });
+
+            secondaryClaimCreated = true;
+            logger.info(`[DHA eClaimLink] Secondary claim created for remaining balance: ${newBalance}`);
+          }
+        }
+      }
+
+      // REJECTED: Create appeal (optional)
+      if (remittanceData.status === 'REJECTED') {
+        // For now, just log - actual appeal creation can be manual or automated based on business rules
+        logger.warn(`[DHA eClaimLink] Claim ${remittanceData.claimNumber} rejected: ${remittanceData.adjustmentReason}`);
+        appealCreated = false; // Set to true when implemented
+      }
+
+      return {
+        success: true,
+        claimUpdated: true,
+        paymentCreated,
+        appealCreated,
+        secondaryClaimCreated,
+        glEntriesPosted,
+      };
+    } catch (error: any) {
+      logger.error('[DHA eClaimLink] Remittance processing failed:', error);
+      return {
+        success: false,
+        errorMessage: error.message,
+      };
+    }
+  }
+
+  /**
+   * Post GL entries for insurance payment
+   */
+  private async postInsurancePaymentGL(
+    claim: any,
+    approvedAmount: number,
+    remittanceDate: Date
+  ): Promise<boolean> {
+    try {
+      const hospitalId = claim.invoice.hospitalId;
+
+      // Get GL accounts for insurance receivable and cash
+      const insuranceReceivableAccount = await prisma.gLAccount.findFirst({
+        where: { hospitalId, accountCode: '1200' }, // Insurance Receivable
+      });
+
+      const cashAccount = await prisma.gLAccount.findFirst({
+        where: { hospitalId, accountCode: '1000' }, // Cash/Bank
+      });
+
+      if (!insuranceReceivableAccount || !cashAccount) {
+        logger.warn('[DHA eClaimLink] GL accounts not found. Skipping GL posting.');
+        return false;
+      }
+
+      // Import accountingService dynamically to avoid circular dependency
+      const { accountingService } = await import('./accountingService');
+
+      // Create journal entry
+      await accountingService.createJournalEntry({
+        hospitalId,
+        transactionDate: remittanceDate,
+        referenceType: 'PAYMENT',
+        referenceId: claim.id,
+        description: `Insurance payment for claim ${claim.claimNumber} - ${claim.insuranceProvider}`,
+        lines: [
+          {
+            glAccountId: cashAccount.id,
+            debitAmount: approvedAmount,
+            creditAmount: 0,
+            description: `Insurance payment received - Claim ${claim.claimNumber}`,
+          },
+          {
+            glAccountId: insuranceReceivableAccount.id,
+            debitAmount: 0,
+            creditAmount: approvedAmount,
+            description: `Clear insurance receivable - Claim ${claim.claimNumber}`,
+          },
+        ],
+        createdBy: 'system',
+      });
+
+      logger.info(`[DHA eClaimLink] GL entries posted for claim ${claim.claimNumber}`);
+      return true;
+    } catch (error: any) {
+      logger.error('[DHA eClaimLink] Failed to post GL entries:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Helper: Generate claim number
+   */
+  private generateClaimNumber(): string {
+    const timestamp = Date.now().toString(36).toUpperCase();
+    const random = Math.random().toString(36).substring(2, 5).toUpperCase();
+    return `CLM-${timestamp}${random}`;
   }
 
   /**

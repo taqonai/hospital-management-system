@@ -94,7 +94,7 @@ export class IPDService {
     return prisma.bed.update({
       where: { id },
       data: {
-        ...(data.status && { status: data.status }),
+        ...(data.status && { status: data.status as any }),
         ...(data.dailyRate !== undefined && { dailyRate: data.dailyRate }),
       },
       include: {
@@ -129,6 +129,8 @@ export class IPDService {
     treatmentPlan?: string;
     estimatedDays?: number;
     notes?: string;
+    depositAmount?: number; // PHASE 2: Admission deposit
+    createdBy?: string; // PHASE 2: For billing
   }) {
     // Update bed status
     await prisma.bed.update({
@@ -136,19 +138,41 @@ export class IPDService {
       data: { status: 'OCCUPIED' },
     });
 
-    return prisma.admission.create({
+    const admission = await prisma.admission.create({
       data: {
-        ...data,
         hospitalId,
-        admissionDate: new Date(),
+        patientId: data.patientId,
+        bedId: data.bedId,
+        admissionType: data.admissionType,
+        admittingDoctorId: data.admittingDoctorId,
+        chiefComplaint: data.chiefComplaint,
         diagnosis: data.diagnosis || [],
         icdCodes: data.icdCodes || [],
+        treatmentPlan: data.treatmentPlan,
+        estimatedDays: data.estimatedDays,
+        notes: data.notes,
+        admissionDate: new Date(),
       },
       include: {
         patient: true,
         bed: { include: { ward: true } },
       },
     });
+
+    // PHASE 2: Auto-create admission invoice
+    try {
+      const invoice = await billingService.createAdmissionInvoice(hospitalId, admission.id, {
+        patientId: data.patientId,
+        depositAmount: data.depositAmount,
+        createdBy: data.createdBy || 'system',
+      });
+      console.log('[IPD] Admission invoice created:', invoice.invoiceNumber);
+    } catch (err) {
+      console.error('[IPD] Failed to create admission invoice:', err);
+      // Don't fail admission if billing fails
+    }
+
+    return admission;
   }
 
   async getAdmissions(hospitalId: string, params: {
@@ -283,25 +307,53 @@ export class IPDService {
     warningSignsToWatch?: string[];
     preparedBy: string;
   }) {
-    const admission = await prisma.admission.findUnique({ where: { id: admissionId } });
+    const admission = await prisma.admission.findUnique({ 
+      where: { id: admissionId },
+      include: { patient: true },
+    });
     if (!admission) throw new NotFoundError('Admission not found');
+
+    const dischargeDate = new Date();
+
+    // PHASE 2: Finalize discharge billing BEFORE creating discharge summary
+    try {
+      const billingResult = await billingService.finalizeDischargeInvoice(
+        admission.hospitalId,
+        admissionId,
+        {
+          dischargeDate,
+          finalizedBy: data.preparedBy,
+        }
+      );
+      console.log('[IPD] Discharge billing finalized:', billingResult.summary);
+    } catch (err) {
+      console.error('[IPD] Failed to finalize discharge billing:', err);
+      // Don't fail discharge if billing fails - allow manual correction
+    }
 
     // Create discharge summary
     const summary = await prisma.dischargeSummary.create({
       data: {
         admissionId,
-        dischargeDate: new Date(),
-        ...data,
+        dischargeDate,
+        dischargeType: data.dischargeType,
+        finalDiagnosis: data.finalDiagnosis,
         proceduresPerformed: data.proceduresPerformed || [],
+        conditionAtDischarge: data.conditionAtDischarge,
         medicationsOnDischarge: data.medicationsOnDischarge || [],
+        followUpInstructions: data.followUpInstructions,
+        followUpDate: data.followUpDate,
+        dietaryInstructions: data.dietaryInstructions,
+        activityRestrictions: data.activityRestrictions,
         warningSignsToWatch: data.warningSignsToWatch || [],
+        preparedBy: data.preparedBy,
       },
     });
 
     // Update admission status
     await prisma.admission.update({
       where: { id: admissionId },
-      data: { status: 'DISCHARGED', dischargeDate: new Date() },
+      data: { status: 'DISCHARGED', dischargeDate },
     });
 
     // Free bed
@@ -821,7 +873,7 @@ export class IPDService {
     });
 
     if (!doctor) {
-      throw new ValidationError('Only doctors can create prescriptions');
+      throw new Error('Only doctors can create prescriptions');
     }
 
     // Create prescription with medications
@@ -834,7 +886,7 @@ export class IPDService {
         status: 'ACTIVE',
         notes: data.notes,
         medications: {
-          create: data.medications.map(med => ({
+          create: data.medications.map((med: any) => ({
             drugId: med.drugId,
             dosage: med.dosage,
             frequency: med.frequency,
@@ -842,7 +894,7 @@ export class IPDService {
             duration: med.duration,
             instructions: med.instructions,
             status: 'PENDING',
-          })),
+          })) as any,
         },
       },
       include: {

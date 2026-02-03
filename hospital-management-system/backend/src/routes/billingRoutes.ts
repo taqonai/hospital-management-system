@@ -318,4 +318,108 @@ router.get(
   })
 );
 
+// ==================== CREDIT NOTES ====================
+
+/**
+ * POST /api/v1/billing/credit-notes
+ * Create a credit note
+ */
+router.post(
+  '/credit-notes',
+  authenticate,
+  authorizeWithPermission('billing:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const creditNote = await billingService.createCreditNote(req.user!.hospitalId, {
+      ...req.body,
+      createdBy: req.user!.userId,
+    });
+    sendCreated(res, creditNote, 'Credit note created');
+  })
+);
+
+/**
+ * GET /api/v1/billing/credit-notes
+ * List credit notes
+ */
+router.get(
+  '/credit-notes',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { page, limit, status, patientId } = req.query;
+    const result = await billingService.getCreditNotes(req.user!.hospitalId, {
+      page: Number(page) || 1,
+      limit: Number(limit) || 20,
+      status: status as string,
+      patientId: patientId as string,
+    });
+    sendPaginated(res, result.data, result.pagination);
+  })
+);
+
+/**
+ * PATCH /api/v1/billing/credit-notes/:id/issue
+ * Issue a credit note (DRAFT → ISSUED, posts to GL)
+ */
+router.patch(
+  '/credit-notes/:id/issue',
+  authenticate,
+  authorizeWithPermission('billing:approve', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const creditNote = await billingService.issueCreditNote(
+      req.params.id,
+      req.user!.hospitalId,
+      req.user!.userId
+    );
+    sendSuccess(res, creditNote, 'Credit note issued successfully');
+  })
+);
+
+/**
+ * PATCH /api/v1/billing/credit-notes/:id/apply
+ * Apply credit note to an invoice
+ */
+router.patch(
+  '/credit-notes/:id/apply',
+  authenticate,
+  authorizeWithPermission('billing:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { invoiceId } = req.body;
+    if (!invoiceId) {
+      return res.status(400).json({
+        success: false,
+        message: 'invoiceId is required',
+      });
+    }
+
+    const result = await billingService.applyCreditNoteToInvoice(
+      req.params.id,
+      invoiceId,
+      req.user!.hospitalId,
+      req.user!.userId
+    );
+    sendSuccess(res, result, 'Credit note applied to invoice successfully');
+  })
+);
+
+// ==================== RECEIPTS ====================
+
+/**
+ * GET /api/v1/billing/receipts/:paymentId/pdf
+ * Generate payment receipt HTML (ready for PDF printing)
+ */
+router.get(
+  '/receipts/:paymentId/pdf',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const html = await billingService.generateReceiptHTML(
+      req.params.paymentId,
+      req.user!.hospitalId
+    );
+    
+    // Set content type to HTML (can be printed as PDF from browser)
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  })
+);
+
 export default router;

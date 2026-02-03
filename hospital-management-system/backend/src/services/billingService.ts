@@ -310,16 +310,33 @@ export class BillingService {
       updateData.denialReasonCode = denialReasonCode;
     }
 
-    // Wrap claim update + auto-payment in atomic transaction
+    // Wrap claim update + auto-payment + COB in atomic transaction
     const result = await prisma.$transaction(async (tx) => {
       // Update claim
       const claim = await tx.insuranceClaim.update({
         where: { id: claimId },
         data: updateData,
-        include: { invoice: true },
+        include: {
+          invoice: {
+            include: {
+              patient: {
+                include: {
+                  insurances: {
+                    where: { isActive: true },
+                    orderBy: [
+                      { isPrimary: 'desc' },
+                      { createdAt: 'desc' },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
       });
 
       let autoPayment: { id: string } | null = null;
+      let secondaryClaim: { id: string; claimNumber: string } | null = null;
 
       // If claim approved/paid, create auto-payment
       if ((status === 'APPROVED' || status === 'PAID') && processedBy) {
@@ -360,21 +377,92 @@ export class BillingService {
         });
       }
 
-      return { claim, autoPayment };
+      // PARTIALLY_APPROVED: Create payment + check for COB (Coordination of Benefits)
+      if (status === 'PARTIALLY_APPROVED' && approvedAmount) {
+        const paymentAmount = approvedAmount;
+
+        // Create payment record for approved portion
+        autoPayment = await tx.payment.create({
+          data: {
+            invoiceId: claim.invoiceId,
+            amount: paymentAmount,
+            paymentMethod: 'INSURANCE',
+            referenceNumber: claim.claimNumber,
+            notes: `Partial insurance claim ${claim.claimNumber}`,
+            createdBy: processedBy || 'system',
+          },
+        });
+
+        // Update invoice
+        const invoice = claim.invoice;
+        const newPaidAmount = Number(invoice.paidAmount) + paymentAmount;
+        const newBalance = Number(invoice.totalAmount) - newPaidAmount;
+
+        let newStatus = invoice.status;
+        if (newBalance <= 0) {
+          newStatus = 'PAID';
+        } else if (newPaidAmount > 0) {
+          newStatus = 'PARTIALLY_PAID';
+        }
+
+        await tx.invoice.update({
+          where: { id: claim.invoiceId },
+          data: {
+            paidAmount: newPaidAmount,
+            balanceAmount: newBalance > 0 ? newBalance : 0,
+            status: newStatus,
+            updatedBy: processedBy || 'system',
+          },
+        });
+
+        // COB: Check if patient has secondary insurance
+        if (claim.isPrimary && newBalance > 0) {
+          const secondaryInsurance = invoice.patient.insurances.find(
+            (ins: any) => !ins.isPrimary && ins.isActive
+          );
+
+          if (secondaryInsurance) {
+            // Auto-create secondary claim for remaining balance
+            const secondaryClaimNumber = this.generateClaimNumber();
+            
+            secondaryClaim = await tx.insuranceClaim.create({
+              data: {
+                invoiceId: claim.invoiceId,
+                claimNumber: secondaryClaimNumber,
+                insuranceProvider: secondaryInsurance.providerName,
+                insurancePayerId: secondaryInsurance.id,
+                policyNumber: secondaryInsurance.policyNumber,
+                claimAmount: newBalance,
+                isPrimary: false,
+                linkedClaimId: claim.id,
+                notes: `Secondary claim - Primary claim ${claim.claimNumber} partially approved for ${paymentAmount}. Primary payer: ${claim.insuranceProvider}`,
+                createdBy: processedBy || 'system',
+                submittedBy: processedBy || 'system',
+              },
+              select: { id: true, claimNumber: true },
+            });
+
+            console.log(`[COB] Auto-created secondary claim ${secondaryClaimNumber} for remaining balance: ${newBalance}`);
+          }
+        }
+      }
+
+      return { claim, autoPayment, secondaryClaim };
     });
 
-    // Post insurance payment to GL
+    // Post insurance claim payment to GL (handles partial approvals with auto write-off)
     if (result.autoPayment) {
       try {
-        await accountingService.recordPaymentGL({
+        await accountingService.recordClaimPaymentGL({
           hospitalId: result.claim.invoice.hospitalId,
-          paymentId: result.autoPayment.id,
-          amount: Number(approvedAmount || result.claim.claimAmount),
-          description: `Insurance payment - Claim ${result.claim.claimNumber}`,
+          claimId: result.claim.id,
+          approvedAmount: Number(approvedAmount || result.claim.claimAmount),
+          claimedAmount: Number(result.claim.claimAmount),
+          description: `Insurance claim payment - ${result.claim.claimNumber}`,
           createdBy: processedBy || 'system',
         });
       } catch (glError) {
-        console.error('[GL] Failed to post insurance payment GL entry:', glError);
+        console.error('[GL] Failed to post insurance claim payment GL entry:', glError);
       }
 
       // Update deductible ledger
@@ -582,22 +670,272 @@ export class BillingService {
 
   // ==================== AUTO-BILLING FROM CLINICAL EVENTS (Sprint 2) ====================
 
+  // ==================== PHASE 2: IPD BILLING ====================
+
+  /**
+   * 2.1 Create DRAFT invoice for admission
+   * Called when patient is admitted
+   */
+  async createAdmissionInvoice(hospitalId: string, admissionId: string, data: {
+    patientId: string;
+    depositAmount?: number;
+    createdBy: string;
+  }) {
+    console.log('[IPD BILLING] Creating admission invoice for:', admissionId);
+
+    // Check for active patient insurance
+    let primaryInsuranceId: string | undefined;
+    let shouldTriggerPreAuth = false;
+
+    try {
+      const insurance = await prisma.patientInsurance.findFirst({
+        where: {
+          patientId: data.patientId,
+          isActive: true,
+          isPrimary: true,
+        },
+      });
+
+      if (insurance) {
+        primaryInsuranceId = insurance.id;
+        shouldTriggerPreAuth = true;
+      }
+    } catch (err) {
+      console.error('[IPD BILLING] Failed to check insurance:', err);
+    }
+
+    // Create DRAFT invoice linked to admission
+    const invoiceNumber = this.generateInvoiceNumber();
+    const depositAmount = data.depositAmount || 0;
+
+    const invoice = await prisma.invoice.create({
+      data: {
+        hospitalId,
+        patientId: data.patientId,
+        admissionId,
+        invoiceNumber,
+        status: 'PENDING', // Use PENDING instead of DRAFT for compatibility
+        subtotal: 0,
+        totalAmount: 0,
+        balanceAmount: 0,
+        depositAmount,
+        paidAmount: depositAmount, // Deposit counts as payment
+        primaryInsuranceId,
+        createdBy: data.createdBy,
+        notes: 'IPD admission invoice - charges will accumulate during stay',
+      },
+      include: {
+        patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
+      },
+    });
+
+    // If deposit was collected, record it as a payment
+    if (depositAmount > 0) {
+      await prisma.payment.create({
+        data: {
+          invoiceId: invoice.id,
+          amount: depositAmount,
+          paymentMethod: 'DEPOSIT',
+          notes: 'Admission deposit',
+          createdBy: data.createdBy,
+        },
+      });
+    }
+
+    // Trigger pre-authorization request if patient has insurance
+    if (shouldTriggerPreAuth && primaryInsuranceId) {
+      try {
+        // TODO: Implement autoTriggerPreAuth in preAuthService
+        // await preAuthService.autoTriggerPreAuth(
+        //   hospitalId,
+        //   data.patientId,
+        //   primaryInsuranceId,
+        //   admissionId,
+        //   data.createdBy
+        // );
+        console.log('[IPD BILLING] Pre-auth auto-trigger TODO for admission:', admissionId);
+      } catch (err) {
+        console.error('[IPD BILLING] Failed to trigger pre-auth:', err);
+        // Don't fail admission if pre-auth fails
+      }
+    }
+
+    console.log('[IPD BILLING] Admission invoice created:', invoice.invoiceNumber);
+    return invoice;
+  }
+
+  /**
+   * 2.2 Accumulate daily bed charges for all active admissions
+   * This will be called by a cron job
+   */
+  async accumulateDailyBedCharges(hospitalId: string, createdBy: string = 'system'): Promise<{
+    processed: number;
+    charged: number;
+    failed: number;
+    totalAmount: number;
+    errors: string[];
+  }> {
+    console.log('[IPD BILLING] Starting daily bed charge accumulation for hospital:', hospitalId);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().split('T')[0];
+
+    // Find all active admissions
+    const activeAdmissions = await prisma.admission.findMany({
+      where: {
+        hospitalId,
+        status: 'ADMITTED',
+        dischargeDate: null,
+      },
+      include: {
+        bed: true,
+        patient: true,
+        invoices: {
+          where: { admissionId: { not: null } },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    const results = {
+      processed: activeAdmissions.length,
+      charged: 0,
+      failed: 0,
+      totalAmount: 0,
+      errors: [] as string[],
+    };
+
+    for (const admission of activeAdmissions) {
+      try {
+        // Find admission invoice
+        const invoice = admission.invoices[0];
+        if (!invoice) {
+          results.errors.push(`Admission ${admission.id}: No invoice found`);
+          results.failed++;
+          continue;
+        }
+
+        // Check if already charged today
+        const lastChargeDate = invoice.lastBedChargeDate
+          ? new Date(invoice.lastBedChargeDate).toISOString().split('T')[0]
+          : null;
+
+        if (lastChargeDate === todayStr) {
+          console.log(`[IPD BILLING] Admission ${admission.id} already charged today, skipping`);
+          continue;
+        }
+
+        // Get bed daily rate
+        const dailyRate = Number(admission.bed.dailyRate);
+        if (dailyRate <= 0) {
+          console.log(`[IPD BILLING] Admission ${admission.id} bed has no daily rate, skipping`);
+          continue;
+        }
+
+        // Add bed charge to invoice
+        const bedNumber = admission.bed.bedNumber;
+        const wardName = await prisma.ward.findUnique({
+          where: { id: admission.bed.wardId },
+          select: { name: true },
+        });
+
+        await this.addItemToInvoice(invoice.id, hospitalId, {
+          description: `Room charge - ${wardName?.name || 'Ward'} - Bed ${bedNumber} - ${todayStr}`,
+          category: 'ACCOMMODATION',
+          quantity: 1,
+          unitPrice: dailyRate,
+        }, createdBy);
+
+        // Update last bed charge date
+        await prisma.invoice.update({
+          where: { id: invoice.id },
+          data: { lastBedChargeDate: today },
+        });
+
+        results.charged++;
+        results.totalAmount += dailyRate;
+
+        console.log(`[IPD BILLING] Added bed charge for admission ${admission.id}: ${dailyRate}`);
+      } catch (error) {
+        results.failed++;
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        results.errors.push(`Admission ${admission.id}: ${errorMessage}`);
+        console.error(`[IPD BILLING] Failed to charge admission ${admission.id}:`, error);
+      }
+    }
+
+    console.log('[IPD BILLING] Daily bed charge accumulation complete:', results);
+    return results;
+  }
+
+  /**
+   * 2.3 Helper: Find active admission for patient
+   */
+  private async findActiveAdmission(hospitalId: string, patientId: string): Promise<any | null> {
+    return prisma.admission.findFirst({
+      where: {
+        hospitalId,
+        patientId,
+        status: 'ADMITTED',
+        dischargeDate: null,
+      },
+      include: {
+        invoices: {
+          where: { admissionId: { not: null } },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+  }
+
   /**
    * Find or create a PENDING invoice for a patient for today.
    * Prevents creating multiple invoices per patient per day.
+   * 
+   * UPDATED FOR PHASE 2: Now checks for active admission first
    */
-  private async findOrCreateOpenInvoice(hospitalId: string, patientId: string, createdBy: string): Promise<any> {
+  private async findOrCreateOpenInvoice(hospitalId: string, patientId: string, createdBy: string, admissionId?: string): Promise<any> {
+    // PHASE 2: If admissionId provided, use that admission's invoice
+    if (admissionId) {
+      const admissionInvoice = await prisma.invoice.findFirst({
+        where: {
+          hospitalId,
+          admissionId,
+          status: { in: ['PENDING', 'PARTIALLY_PAID'] },
+        },
+        include: {
+          patient: { select: { id: true, firstName: true, lastName: true, mrn: true, email: true, phone: true } },
+          items: true,
+        },
+      });
+
+      if (admissionInvoice) {
+        return admissionInvoice;
+      }
+    }
+
+    // PHASE 2: Check if patient has active admission
+    const activeAdmission = await this.findActiveAdmission(hospitalId, patientId);
+    if (activeAdmission && activeAdmission.invoices.length > 0) {
+      console.log('[AUTO-BILLING] Patient has active admission, using admission invoice');
+      return activeAdmission.invoices[0];
+    }
+
+    // OPD flow: Look for existing PENDING invoice for this patient created today
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
-    // Look for existing PENDING invoice for this patient created today
     const existingInvoice = await prisma.invoice.findFirst({
       where: {
         hospitalId,
         patientId,
         status: 'PENDING',
+        admissionId: null, // OPD invoices have no admissionId
         invoiceDate: {
           gte: todayStart,
           lte: todayEnd,
@@ -613,7 +951,7 @@ export class BillingService {
       return existingInvoice;
     }
 
-    // Create a new empty invoice
+    // Create a new empty OPD invoice
     const invoice = await this.createInvoice(hospitalId, {
       patientId,
       items: [],
@@ -902,6 +1240,7 @@ export class BillingService {
 
   /**
    * Add lab test charges to a patient's invoice when a lab order is created.
+   * UPDATED PHASE 2: Checks for active admission
    */
   async addLabCharges(labOrderId: string, hospitalId: string, createdBy: string) {
     console.log('[AUTO-BILLING] Adding lab charges for order:', labOrderId);
@@ -921,8 +1260,12 @@ export class BillingService {
       return null;
     }
 
-    // Find or create open invoice
-    const invoice = await this.findOrCreateOpenInvoice(hospitalId, labOrder.patientId, createdBy);
+    // PHASE 2: Check for active admission
+    const activeAdmission = await this.findActiveAdmission(hospitalId, labOrder.patientId);
+    const admissionId = activeAdmission?.id;
+
+    // Find or create open invoice (will use admission invoice if exists)
+    const invoice = await this.findOrCreateOpenInvoice(hospitalId, labOrder.patientId, createdBy, admissionId);
 
     // Add each test as an invoice item
     for (const test of labOrder.tests) {
@@ -956,6 +1299,7 @@ export class BillingService {
 
   /**
    * Add imaging charges to a patient's invoice when an imaging order is created.
+   * UPDATED PHASE 2: Checks for active admission
    */
   async addImagingCharges(imagingOrderId: string, hospitalId: string, createdBy: string) {
     console.log('[AUTO-BILLING] Adding imaging charges for order:', imagingOrderId);
@@ -999,8 +1343,12 @@ export class BillingService {
       console.error('[AUTO-BILLING] Imaging ChargeMaster lookup failed, using default:', err);
     }
 
-    // Find or create open invoice
-    const invoice = await this.findOrCreateOpenInvoice(hospitalId, imagingOrder.patientId, createdBy);
+    // PHASE 2: Check for active admission
+    const activeAdmission = await this.findActiveAdmission(hospitalId, imagingOrder.patientId);
+    const admissionId = activeAdmission?.id;
+
+    // Find or create open invoice (will use admission invoice if exists)
+    const invoice = await this.findOrCreateOpenInvoice(hospitalId, imagingOrder.patientId, createdBy, admissionId);
 
     await this.addItemToInvoice(invoice.id, hospitalId, {
       description: `Imaging - ${description}`,
@@ -1015,6 +1363,7 @@ export class BillingService {
 
   /**
    * Add pharmacy charges to a patient's invoice when a prescription is dispensed.
+   * UPDATED PHASE 2: Checks for active admission
    */
   async addPharmacyCharges(prescriptionId: string, hospitalId: string, createdBy: string) {
     console.log('[AUTO-BILLING] Adding pharmacy charges for prescription:', prescriptionId);
@@ -1026,6 +1375,7 @@ export class BillingService {
           include: { drug: true },
         },
         patient: true,
+        admission: true, // PHASE 2: Include admission
       },
     });
 
@@ -1040,8 +1390,15 @@ export class BillingService {
       return null;
     }
 
-    // Find or create open invoice
-    const invoice = await this.findOrCreateOpenInvoice(effectiveHospitalId, prescription.patientId, createdBy);
+    // PHASE 2: Check for admission (from prescription or active admission)
+    let admissionId = prescription.admissionId;
+    if (!admissionId) {
+      const activeAdmission = await this.findActiveAdmission(effectiveHospitalId, prescription.patientId);
+      admissionId = activeAdmission?.id;
+    }
+
+    // Find or create open invoice (will use admission invoice if exists)
+    const invoice = await this.findOrCreateOpenInvoice(effectiveHospitalId, prescription.patientId, createdBy, admissionId);
 
     // Add each medication as an invoice item
     for (const med of prescription.medications) {
@@ -1075,6 +1432,368 @@ export class BillingService {
     }
 
     console.log('[AUTO-BILLING] Pharmacy charges added for prescription:', prescriptionId);
+    return invoice;
+  }
+
+  /**
+   * Add surgery charges to a patient's invoice when a surgery is completed.
+   * UPDATED PHASE 2: Uses admission invoice
+   */
+  async addSurgeryCharges(surgeryId: string, hospitalId: string, createdBy: string) {
+    console.log('[AUTO-BILLING] Adding surgery charges for surgery:', surgeryId);
+
+    const surgery = await prisma.surgery.findFirst({
+      where: { id: surgeryId },
+      include: {
+        admission: {
+          include: { patient: true },
+        },
+        surgeon: {
+          include: { user: true },
+        },
+      },
+    });
+
+    if (!surgery) {
+      console.error('[AUTO-BILLING] Surgery not found:', surgeryId);
+      return null;
+    }
+
+    const effectiveHospitalId = hospitalId || surgery.admission?.patient?.hospitalId;
+    if (!effectiveHospitalId) {
+      console.error('[AUTO-BILLING] No hospitalId available for surgery:', surgeryId);
+      return null;
+    }
+
+    // PHASE 2: Surgery is always linked to admission
+    const admissionId = surgery.admissionId;
+
+    // Find or create open invoice (will use admission invoice)
+    const invoice = await this.findOrCreateOpenInvoice(effectiveHospitalId, surgery.patientId, createdBy, admissionId);
+
+    // Add procedure fee (from CPT code lookup or default pricing)
+    let procedureFee = 5000; // Default fallback
+    let procedureDescription = surgery.procedureName || surgery.surgeryType;
+
+    if (surgery.cptCode) {
+      try {
+        const priceResult = await chargeManagementService.lookupPrice(effectiveHospitalId, surgery.cptCode);
+        if (priceResult) {
+          procedureFee = priceResult.finalPrice;
+          procedureDescription = priceResult.description || procedureDescription;
+        } else {
+          console.warn(`[AUTO-BILLING] No ChargeMaster entry for CPT ${surgery.cptCode} in hospital ${effectiveHospitalId}`);
+        }
+      } catch (err) {
+        console.error('[AUTO-BILLING] Surgery ChargeMaster lookup failed, using default:', err);
+      }
+    }
+
+    const surgeonName = surgery.surgeon?.user
+      ? `Dr. ${surgery.surgeon.user.firstName} ${surgery.surgeon.user.lastName}`
+      : 'Surgeon';
+
+    // Add procedure fee
+    await this.addItemToInvoice(invoice.id, effectiveHospitalId, {
+      description: `Surgery - ${procedureDescription} - ${surgeonName}`,
+      category: 'PROCEDURE',
+      quantity: 1,
+      unitPrice: procedureFee,
+    }, createdBy);
+
+    // Add anesthesia fee if specified
+    if (surgery.anesthesiaType) {
+      let anesthesiaFee = 1500; // Default
+      const anesthesiaCode = 'anesthesia_general'; // Could map different types
+
+      try {
+        const priceResult = await chargeManagementService.lookupPrice(effectiveHospitalId, anesthesiaCode);
+        if (priceResult) {
+          anesthesiaFee = priceResult.finalPrice;
+        }
+      } catch (err) {
+        // Use default
+      }
+
+      await this.addItemToInvoice(invoice.id, effectiveHospitalId, {
+        description: `Anesthesia - ${surgery.anesthesiaType}`,
+        category: 'PROCEDURE',
+        quantity: 1,
+        unitPrice: anesthesiaFee,
+      }, createdBy);
+    }
+
+    // Add OT facility fee
+    let otFee = 2000; // Default
+    try {
+      const priceResult = await chargeManagementService.lookupPrice(effectiveHospitalId, 'ot_facility_fee');
+      if (priceResult) {
+        otFee = priceResult.finalPrice;
+      }
+    } catch (err) {
+      // Use default
+    }
+
+    await this.addItemToInvoice(invoice.id, effectiveHospitalId, {
+      description: `Operation Theatre - ${surgery.operationTheatre}`,
+      category: 'PROCEDURE',
+      quantity: 1,
+      unitPrice: otFee,
+    }, createdBy);
+
+    console.log('[AUTO-BILLING] Surgery charges added for surgery:', surgeryId);
+    return invoice;
+  }
+
+  /**
+   * 2.4 Finalize invoice on discharge
+   * Called when patient is discharged
+   */
+  async finalizeDischargeInvoice(hospitalId: string, admissionId: string, data: {
+    dischargeDate: Date;
+    finalizedBy: string;
+  }): Promise<any> {
+    console.log('[IPD BILLING] Finalizing discharge invoice for admission:', admissionId);
+
+    // Find admission invoice
+    const invoice = await prisma.invoice.findFirst({
+      where: {
+        hospitalId,
+        admissionId,
+        status: { in: ['PENDING', 'PARTIALLY_PAID'] },
+      },
+      include: {
+        items: true,
+        patient: true,
+        primaryInsurance: true,
+        admission: {
+          include: {
+            bed: {
+              include: { ward: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!invoice) {
+      console.error('[IPD BILLING] No invoice found for admission:', admissionId);
+      throw new Error('Admission invoice not found');
+    }
+
+    // Calculate final bed charges up to discharge date
+    const admission = invoice.admission;
+    if (!admission) {
+      throw new Error('Admission not found');
+    }
+
+    const admissionDate = new Date(admission.admissionDate);
+    const dischargeDate = new Date(data.dischargeDate);
+    
+    // Calculate days between last bed charge and discharge
+    const lastChargeDate = invoice.lastBedChargeDate 
+      ? new Date(invoice.lastBedChargeDate)
+      : admissionDate;
+    
+    const daysToCharge = Math.ceil((dischargeDate.getTime() - lastChargeDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    // Add final bed charges if needed
+    if (daysToCharge > 0 && admission.bed) {
+      const dailyRate = Number(admission.bed.dailyRate);
+      if (dailyRate > 0) {
+        const wardName = admission.bed.ward?.name || 'Ward';
+        const bedNumber = admission.bed.bedNumber;
+        
+        for (let i = 0; i < daysToCharge; i++) {
+          const chargeDate = new Date(lastChargeDate);
+          chargeDate.setDate(chargeDate.getDate() + i + 1);
+          const chargeDateStr = chargeDate.toISOString().split('T')[0];
+
+          await this.addItemToInvoice(invoice.id, hospitalId, {
+            description: `Room charge - ${wardName} - Bed ${bedNumber} - ${chargeDateStr}`,
+            category: 'ACCOMMODATION',
+            quantity: 1,
+            unitPrice: dailyRate,
+          }, data.finalizedBy);
+        }
+
+        console.log(`[IPD BILLING] Added ${daysToCharge} final bed charges`);
+      }
+    }
+
+    // Reload invoice with updated totals
+    const updatedInvoice = await prisma.invoice.findUnique({
+      where: { id: invoice.id },
+      include: {
+        items: true,
+        primaryInsurance: true,
+        patient: true,
+      },
+    });
+
+    if (!updatedInvoice) {
+      throw new Error('Failed to reload invoice');
+    }
+
+    // Apply full insurance split across ALL line items (if not already done)
+    // This is handled automatically by addItemToInvoice, but we need to calculate totals
+    let totalInsurancePortion = 0;
+    let totalPatientPortion = 0;
+
+    for (const item of updatedInvoice.items) {
+      if (item.insuranceAmount !== null) {
+        totalInsurancePortion += Number(item.insuranceAmount);
+      }
+      if (item.patientAmount !== null) {
+        totalPatientPortion += Number(item.patientAmount);
+      }
+    }
+
+    // If no insurance split was calculated, assume patient pays full amount
+    if (totalInsurancePortion === 0 && totalPatientPortion === 0) {
+      totalPatientPortion = Number(updatedInvoice.totalAmount);
+    }
+
+    // Calculate balance: Total - Insurance portion - Deposit used - Already paid
+    const depositUsed = Math.min(Number(updatedInvoice.depositAmount), totalPatientPortion);
+    const alreadyPaid = Number(updatedInvoice.paidAmount);
+    const balanceDue = totalPatientPortion - alreadyPaid;
+
+    // Update invoice to finalized status
+    const finalizedInvoice = await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: {
+        status: balanceDue <= 0 ? 'PAID' : 'PENDING',
+        insuranceTotal: totalInsurancePortion,
+        patientTotal: totalPatientPortion,
+        balanceAmount: balanceDue > 0 ? balanceDue : 0,
+        finalizedAt: new Date(),
+        updatedBy: data.finalizedBy,
+        notes: `${updatedInvoice.notes || ''}\n\nFinalized on discharge: ${data.dischargeDate.toISOString().split('T')[0]}`,
+      },
+      include: {
+        items: true,
+        patient: true,
+        primaryInsurance: true,
+      },
+    });
+
+    // Auto-submit insurance claim if patient has insurance
+    if (updatedInvoice.primaryInsurance && totalInsurancePortion > 0) {
+      try {
+        await this.submitInsuranceClaim(finalizedInvoice.id, {
+          insuranceProvider: updatedInvoice.primaryInsurance.providerName,
+          insurancePayerId: updatedInvoice.primaryInsuranceId || undefined,
+          policyNumber: updatedInvoice.primaryInsurance.policyNumber,
+          claimAmount: totalInsurancePortion,
+          notes: `Discharge claim for admission ${admissionId}`,
+          createdBy: data.finalizedBy,
+          submittedBy: data.finalizedBy,
+        });
+        console.log('[IPD BILLING] Insurance claim submitted automatically');
+      } catch (err) {
+        console.error('[IPD BILLING] Failed to submit insurance claim:', err);
+        // Don't fail discharge if claim submission fails
+      }
+    }
+
+    console.log('[IPD BILLING] Discharge invoice finalized:', {
+      invoiceNumber: finalizedInvoice.invoiceNumber,
+      totalAmount: Number(finalizedInvoice.totalAmount),
+      insurancePortion: totalInsurancePortion,
+      patientPortion: totalPatientPortion,
+      depositUsed,
+      balanceDue,
+    });
+
+    return {
+      invoice: finalizedInvoice,
+      summary: {
+        totalAmount: Number(finalizedInvoice.totalAmount),
+        insurancePortion: totalInsurancePortion,
+        patientPortion: totalPatientPortion,
+        depositCollected: Number(finalizedInvoice.depositAmount),
+        depositUsed,
+        alreadyPaid,
+        balanceDue: balanceDue > 0 ? balanceDue : 0,
+        lengthOfStay: Math.ceil((dischargeDate.getTime() - admissionDate.getTime()) / (1000 * 60 * 60 * 24)),
+      },
+    };
+  }
+
+  /**
+   * 2.5 ER visit fee based on ESI triage level
+   * Called when ER visit is completed
+   */
+  async addERVisitFee(appointmentId: string, hospitalId: string, createdBy: string) {
+    console.log('[AUTO-BILLING] Adding ER visit fee for appointment:', appointmentId);
+
+    const appointment = await prisma.appointment.findFirst({
+      where: { id: appointmentId, hospitalId, type: 'EMERGENCY' },
+      include: { patient: true },
+    });
+
+    if (!appointment) {
+      console.error('[AUTO-BILLING] Emergency appointment not found:', appointmentId);
+      return null;
+    }
+
+    // Extract ESI level from notes
+    let esiLevel = 3; // Default
+    try {
+      const notes = appointment.notes ? JSON.parse(appointment.notes) : {};
+      esiLevel = notes.esiLevel || 3;
+    } catch (err) {
+      console.error('[AUTO-BILLING] Failed to parse appointment notes:', err);
+    }
+
+    // Map ESI level to charge code
+    const esiChargeMap: Record<number, string> = {
+      1: 'er_visit_level_1', // Resuscitation
+      2: 'er_visit_level_2', // Emergent
+      3: 'er_visit_level_3', // Urgent
+      4: 'er_visit_level_4', // Less Urgent
+      5: 'er_visit_level_5', // Non-Urgent
+    };
+
+    const chargeCode = esiChargeMap[esiLevel] || 'er_visit_level_3';
+
+    // Default pricing based on ESI level
+    const defaultPricing: Record<number, number> = {
+      1: 1000, // Critical
+      2: 750,  // High acuity
+      3: 500,  // Moderate
+      4: 300,  // Low acuity
+      5: 150,  // Minimal
+    };
+
+    let price = defaultPricing[esiLevel] || 500;
+    let description = `ER Visit - ESI Level ${esiLevel}`;
+
+    // Try ChargeMaster lookup
+    try {
+      const priceResult = await chargeManagementService.lookupPrice(hospitalId, chargeCode);
+      if (priceResult) {
+        price = priceResult.finalPrice;
+        description = priceResult.description;
+      } else {
+        console.warn(`[AUTO-BILLING] No ChargeMaster entry for ER visit ${chargeCode}, using default pricing`);
+      }
+    } catch (err) {
+      console.error('[AUTO-BILLING] ER ChargeMaster lookup failed, using default:', err);
+    }
+
+    // Find or create OPD invoice (ER visits are outpatient)
+    const invoice = await this.findOrCreateOpenInvoice(hospitalId, appointment.patientId, createdBy);
+
+    await this.addItemToInvoice(invoice.id, hospitalId, {
+      description,
+      category: 'CONSULTATION',
+      quantity: 1,
+      unitPrice: price,
+    }, createdBy);
+
+    console.log('[AUTO-BILLING] ER visit fee added:', { esiLevel, price });
     return invoice;
   }
 
@@ -1946,6 +2665,454 @@ export class BillingService {
       visitType,
       paymentRequired: patientAmount > 0,
     };
+  }
+
+  // ==================== CREDIT NOTES ====================
+
+  /**
+   * Create a credit note for an invoice or patient
+   */
+  async createCreditNote(hospitalId: string, data: {
+    invoiceId?: string;
+    patientId: string;
+    amount: number;
+    reason: string;
+    createdBy: string;
+  }) {
+    // Generate credit note number
+    const timestamp = Date.now().toString(36).toUpperCase();
+    const random = Math.random().toString(36).substring(2, 5).toUpperCase();
+    const creditNoteNumber = `CN-${timestamp}${random}`;
+
+    // Validate invoice if provided
+    if (data.invoiceId) {
+      const invoice = await prisma.invoice.findFirst({
+        where: { id: data.invoiceId, hospitalId },
+      });
+      if (!invoice) {
+        throw new NotFoundError('Invoice not found');
+      }
+    }
+
+    return prisma.creditNote.create({
+      data: {
+        hospitalId,
+        invoiceId: data.invoiceId,
+        patientId: data.patientId,
+        creditNoteNumber,
+        amount: data.amount,
+        reason: data.reason,
+        status: 'DRAFT',
+        createdBy: data.createdBy,
+      },
+      include: {
+        patient: true,
+        invoice: true,
+      },
+    });
+  }
+
+  /**
+   * Issue a credit note (status DRAFT → ISSUED)
+   * Posts to GL when issued
+   */
+  async issueCreditNote(creditNoteId: string, hospitalId: string, issuedBy: string) {
+    const creditNote = await prisma.creditNote.findFirst({
+      where: { id: creditNoteId, hospitalId },
+      include: {
+        invoice: true,
+        patient: true,
+      },
+    });
+
+    if (!creditNote) {
+      throw new NotFoundError('Credit note not found');
+    }
+
+    if (creditNote.status !== 'DRAFT') {
+      throw new Error(`Cannot issue credit note with status ${creditNote.status}`);
+    }
+
+    // Update status to ISSUED
+    const issuedCreditNote = await prisma.creditNote.update({
+      where: { id: creditNoteId },
+      data: { status: 'ISSUED' },
+      include: {
+        invoice: true,
+        patient: true,
+      },
+    });
+
+    // Post to GL (reduces revenue and receivables)
+    try {
+      const isInsurance = creditNote.invoice?.primaryInsuranceId != null;
+      await accountingService.recordCreditNoteGL({
+        hospitalId,
+        creditNoteId: issuedCreditNote.id,
+        amount: Number(creditNote.amount),
+        description: `Credit Note ${creditNote.creditNoteNumber} - ${creditNote.reason}`,
+        createdBy: issuedBy,
+        isInsurance,
+      });
+    } catch (glError) {
+      console.error('[GL] Failed to post credit note GL entry:', glError);
+    }
+
+    return issuedCreditNote;
+  }
+
+  /**
+   * Apply credit note to an invoice (reduces invoice balance)
+   */
+  async applyCreditNoteToInvoice(
+    creditNoteId: string,
+    invoiceId: string,
+    hospitalId: string,
+    appliedBy: string
+  ) {
+    const creditNote = await prisma.creditNote.findFirst({
+      where: { id: creditNoteId, hospitalId, status: 'ISSUED' },
+    });
+
+    if (!creditNote) {
+      throw new NotFoundError('Credit note not found or not issued');
+    }
+
+    if (creditNote.appliedToInvoiceId) {
+      throw new Error('Credit note already applied to an invoice');
+    }
+
+    const invoice = await prisma.invoice.findFirst({
+      where: { id: invoiceId, hospitalId },
+    });
+
+    if (!invoice) {
+      throw new NotFoundError('Invoice not found');
+    }
+
+    // Apply credit note to invoice
+    const result = await prisma.$transaction(async (tx) => {
+      // Update credit note
+      const updatedCreditNote = await tx.creditNote.update({
+        where: { id: creditNoteId },
+        data: {
+          appliedToInvoiceId: invoiceId,
+          status: 'APPLIED',
+        },
+      });
+
+      // Reduce invoice balance
+      const creditAmount = Number(creditNote.amount);
+      const newBalance = Math.max(0, Number(invoice.balanceAmount) - creditAmount);
+
+      const updatedInvoice = await tx.invoice.update({
+        where: { id: invoiceId },
+        data: {
+          balanceAmount: newBalance,
+          status: newBalance === 0 ? 'PAID' : invoice.status,
+        },
+      });
+
+      return { creditNote: updatedCreditNote, invoice: updatedInvoice };
+    });
+
+    return result;
+  }
+
+  /**
+   * Get credit notes list
+   */
+  async getCreditNotes(hospitalId: string, params: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    patientId?: string;
+  }) {
+    const { page = 1, limit = 20, status, patientId } = params;
+
+    const where: any = { hospitalId };
+    if (status) where.status = status;
+    if (patientId) where.patientId = patientId;
+
+    const [data, total] = await Promise.all([
+      prisma.creditNote.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          patient: { select: { firstName: true, lastName: true, mrn: true } },
+          invoice: { select: { invoiceNumber: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.creditNote.count({ where }),
+    ]);
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: page < Math.ceil(total / limit),
+        hasPrev: page > 1,
+      },
+    };
+  }
+
+  /**
+   * Generate receipt HTML for a payment
+   */
+  async generateReceiptHTML(paymentId: string, hospitalId: string): Promise<string> {
+    const payment = await prisma.payment.findFirst({
+      where: { id: paymentId },
+      include: {
+        invoice: {
+          include: {
+            patient: true,
+            items: true,
+            hospital: true,
+          },
+        },
+      },
+    });
+
+    if (!payment || payment.invoice.hospitalId !== hospitalId) {
+      throw new NotFoundError('Payment not found');
+    }
+
+    const invoice = payment.invoice;
+    const patient = invoice.patient;
+    const hospital = invoice.hospital;
+
+    const receiptNumber = `RCP-${payment.id.substring(0, 8).toUpperCase()}`;
+    const paymentDate = payment.paymentDate.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Payment Receipt - ${receiptNumber}</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      color: #333;
+    }
+    .header {
+      text-align: center;
+      border-bottom: 2px solid #333;
+      padding-bottom: 20px;
+      margin-bottom: 30px;
+    }
+    .header h1 {
+      margin: 0;
+      color: #2563eb;
+    }
+    .header p {
+      margin: 5px 0;
+      color: #666;
+    }
+    .receipt-info {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 30px;
+    }
+    .info-section {
+      flex: 1;
+    }
+    .info-section h3 {
+      margin-top: 0;
+      color: #2563eb;
+      font-size: 14px;
+      text-transform: uppercase;
+    }
+    .info-section p {
+      margin: 5px 0;
+      font-size: 13px;
+    }
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+    .items-table th {
+      background-color: #f3f4f6;
+      padding: 12px;
+      text-align: left;
+      border-bottom: 2px solid #ddd;
+      font-size: 13px;
+      text-transform: uppercase;
+    }
+    .items-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #eee;
+      font-size: 13px;
+    }
+    .amount-section {
+      text-align: right;
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 2px solid #333;
+    }
+    .amount-row {
+      display: flex;
+      justify-content: flex-end;
+      margin: 8px 0;
+    }
+    .amount-label {
+      width: 200px;
+      text-align: right;
+      padding-right: 20px;
+      font-weight: bold;
+    }
+    .amount-value {
+      width: 120px;
+      text-align: right;
+    }
+    .total-amount {
+      font-size: 18px;
+      color: #2563eb;
+      font-weight: bold;
+    }
+    .footer {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid #ddd;
+      text-align: center;
+      font-size: 12px;
+      color: #666;
+    }
+    .payment-method {
+      background-color: #f0fdf4;
+      border-left: 4px solid #16a34a;
+      padding: 15px;
+      margin: 20px 0;
+    }
+    .payment-method strong {
+      color: #16a34a;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>${hospital.name}</h1>
+    <p>${hospital.address || ''}</p>
+    <p>Phone: ${hospital.phone || 'N/A'} | Email: ${hospital.email || 'N/A'}</p>
+  </div>
+
+  <div class="receipt-info">
+    <div class="info-section">
+      <h3>Receipt Information</h3>
+      <p><strong>Receipt Number:</strong> ${receiptNumber}</p>
+      <p><strong>Date:</strong> ${paymentDate}</p>
+      <p><strong>Invoice Number:</strong> ${invoice.invoiceNumber}</p>
+    </div>
+    <div class="info-section">
+      <h3>Patient Information</h3>
+      <p><strong>Name:</strong> ${patient.firstName} ${patient.lastName}</p>
+      <p><strong>MRN:</strong> ${patient.mrn}</p>
+      <p><strong>Phone:</strong> ${patient.phone || 'N/A'}</p>
+    </div>
+  </div>
+
+  <h3>Invoice Items</h3>
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th>Category</th>
+        <th style="text-align: right;">Quantity</th>
+        <th style="text-align: right;">Unit Price</th>
+        <th style="text-align: right;">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${invoice.items
+        .map(
+          (item: any) => `
+        <tr>
+          <td>${item.description}</td>
+          <td>${item.category}</td>
+          <td style="text-align: right;">${item.quantity}</td>
+          <td style="text-align: right;">${Number(item.unitPrice).toFixed(2)}</td>
+          <td style="text-align: right;">${Number(item.totalPrice).toFixed(2)}</td>
+        </tr>
+      `
+        )
+        .join('')}
+    </tbody>
+  </table>
+
+  <div class="amount-section">
+    <div class="amount-row">
+      <div class="amount-label">Subtotal:</div>
+      <div class="amount-value">${Number(invoice.subtotal).toFixed(2)}</div>
+    </div>
+    ${
+      Number(invoice.discount) > 0
+        ? `
+    <div class="amount-row">
+      <div class="amount-label">Discount:</div>
+      <div class="amount-value">-${Number(invoice.discount).toFixed(2)}</div>
+    </div>
+    `
+        : ''
+    }
+    ${
+      Number(invoice.tax) > 0
+        ? `
+    <div class="amount-row">
+      <div class="amount-label">Tax:</div>
+      <div class="amount-value">${Number(invoice.tax).toFixed(2)}</div>
+    </div>
+    `
+        : ''
+    }
+    <div class="amount-row">
+      <div class="amount-label">Total Amount:</div>
+      <div class="amount-value">${Number(invoice.totalAmount).toFixed(2)}</div>
+    </div>
+    <div class="amount-row total-amount">
+      <div class="amount-label">Amount Paid:</div>
+      <div class="amount-value">${Number(payment.amount).toFixed(2)}</div>
+    </div>
+    <div class="amount-row">
+      <div class="amount-label">Balance Due:</div>
+      <div class="amount-value">${Number(invoice.balanceAmount).toFixed(2)}</div>
+    </div>
+  </div>
+
+  <div class="payment-method">
+    <p><strong>Payment Method:</strong> ${payment.paymentMethod}</p>
+    ${payment.referenceNumber ? `<p><strong>Reference Number:</strong> ${payment.referenceNumber}</p>` : ''}
+    ${payment.notes ? `<p><strong>Notes:</strong> ${payment.notes}</p>` : ''}
+  </div>
+
+  <div class="footer">
+    <p>Thank you for your payment!</p>
+    <p>This is an official receipt for your records.</p>
+    <p>Receipt generated on ${new Date().toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })}</p>
+  </div>
+</body>
+</html>
+    `;
+
+    return html;
   }
 
   /**

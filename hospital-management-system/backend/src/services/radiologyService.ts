@@ -41,12 +41,8 @@ export class RadiologyService {
       },
     });
 
-    // Auto-add imaging charges to patient invoice
-    try {
-      await billingService.addImagingCharges(order.id, hospitalId, data.orderedBy);
-    } catch (error) {
-      console.error('[AUTO-BILLING] Failed to add imaging charges for order:', order.id, error);
-    }
+    // NOTE: Billing moved to completion (when study is added and order marked COMPLETED)
+    // to prevent billing for orders that are never performed
 
     return order;
   }
@@ -202,10 +198,23 @@ export class RadiologyService {
     });
 
     // Update order status
-    await prisma.imagingOrder.update({
+    const completedOrder = await prisma.imagingOrder.update({
       where: { id: orderId },
       data: { status: 'COMPLETED', performedDate: new Date() },
+      include: { patient: { select: { hospitalId: true } } },
     });
+
+    // Auto-generate invoice for imaging charges when study is completed
+    try {
+      await billingService.addImagingCharges(
+        orderId,
+        completedOrder.hospitalId,
+        'system'
+      );
+    } catch (error) {
+      console.error('[AUTO-BILLING] Failed to add imaging charges for order:', orderId, error);
+      // Don't fail the study creation if billing fails
+    }
 
     return study;
   }

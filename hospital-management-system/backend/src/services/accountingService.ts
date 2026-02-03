@@ -410,8 +410,12 @@ class AccountingService {
     description: string;
     costCenter?: string;
     createdBy: string;
+    refundFromInsurance?: boolean;
   }) {
-    const arAccount = await this.getAccountByCode(params.hospitalId, '1100');
+    // Determine which receivable account to use (Patient or Insurance)
+    const arAccount = params.refundFromInsurance
+      ? await this.getAccountByCode(params.hospitalId, '1200') // Insurance Receivable
+      : await this.getAccountByCode(params.hospitalId, '1100'); // Patient Receivable
     const cashAccount = await this.getAccountByCode(params.hospitalId, '1000');
 
     return this.createJournalEntry({
@@ -425,6 +429,100 @@ class AccountingService {
         { glAccountId: arAccount.id, debitAmount: params.amount, creditAmount: 0, costCenter: params.costCenter },
         { glAccountId: cashAccount.id, debitAmount: 0, creditAmount: params.amount, costCenter: params.costCenter },
       ],
+    });
+  }
+
+  async recordCreditNoteGL(params: {
+    hospitalId: string;
+    creditNoteId: string;
+    amount: number;
+    description: string;
+    costCenter?: string;
+    createdBy: string;
+    isInsurance?: boolean;
+  }) {
+    const revenueAccount = await this.getAccountByCode(params.hospitalId, '4000');
+    // Credit notes reduce receivables (patient or insurance)
+    const arAccount = params.isInsurance
+      ? await this.getAccountByCode(params.hospitalId, '1200') // Insurance Receivable
+      : await this.getAccountByCode(params.hospitalId, '1100'); // Patient Receivable
+
+    return this.createJournalEntry({
+      hospitalId: params.hospitalId,
+      transactionDate: new Date(),
+      referenceType: 'MANUAL', // Credit notes are adjustments
+      referenceId: params.creditNoteId,
+      description: params.description,
+      createdBy: params.createdBy,
+      lines: [
+        { glAccountId: revenueAccount.id, debitAmount: params.amount, creditAmount: 0, costCenter: params.costCenter },
+        { glAccountId: arAccount.id, debitAmount: 0, creditAmount: params.amount, costCenter: params.costCenter },
+      ],
+    });
+  }
+
+  async recordClaimPaymentGL(params: {
+    hospitalId: string;
+    claimId: string;
+    approvedAmount: number;
+    claimedAmount: number;
+    description: string;
+    costCenter?: string;
+    createdBy: string;
+  }) {
+    const cashAccount = await this.getAccountByCode(params.hospitalId, '1000');
+    const insuranceAR = await this.getAccountByCode(params.hospitalId, '1200');
+
+    const lines: JournalLineInput[] = [];
+
+    // DR: Cash for approved amount
+    lines.push({
+      glAccountId: cashAccount.id,
+      debitAmount: params.approvedAmount,
+      creditAmount: 0,
+      costCenter: params.costCenter,
+    });
+
+    // CR: Insurance Receivable for approved amount
+    lines.push({
+      glAccountId: insuranceAR.id,
+      debitAmount: 0,
+      creditAmount: params.approvedAmount,
+      costCenter: params.costCenter,
+    });
+
+    // If partial approval, write off the difference
+    const writeOffAmount = params.claimedAmount - params.approvedAmount;
+    if (writeOffAmount > 0.01) {
+      const badDebtAccount = await this.getAccountByCode(params.hospitalId, '5100');
+      
+      // DR: Bad Debt Expense for denied amount
+      lines.push({
+        glAccountId: badDebtAccount.id,
+        debitAmount: writeOffAmount,
+        creditAmount: 0,
+        costCenter: params.costCenter,
+        description: `Claim denial/adjustment - ${params.description}`,
+      });
+
+      // CR: Insurance Receivable for denied amount
+      lines.push({
+        glAccountId: insuranceAR.id,
+        debitAmount: 0,
+        creditAmount: writeOffAmount,
+        costCenter: params.costCenter,
+        description: `Claim denial/adjustment - ${params.description}`,
+      });
+    }
+
+    return this.createJournalEntry({
+      hospitalId: params.hospitalId,
+      transactionDate: new Date(),
+      referenceType: 'PAYMENT',
+      referenceId: params.claimId,
+      description: params.description,
+      createdBy: params.createdBy,
+      lines,
     });
   }
 

@@ -378,12 +378,14 @@ export class PreAuthService {
 
   /**
    * Calculate copay, deductible, and coinsurance for invoice items
+   * Enhanced with payer-specific rules from CPTPayerRule and ICD10PayerRule
    */
   async calculateCopayDeductible(
     hospitalId: string,
     patientId: string,
     items: Array<{
       cptCode?: string;
+      icdCode?: string;
       description: string;
       amount: number;
     }>
@@ -397,12 +399,38 @@ export class PreAuthService {
       },
     });
 
+    // Get patient demographics for age/gender restrictions
+    const patient = await prisma.patient.findFirst({
+      where: { id: patientId, hospitalId },
+      select: { dateOfBirth: true, gender: true },
+    });
+
     let totalAmount = 0;
     let totalCopay = 0;
     let totalDeductible = 0;
     let totalCoinsurance = 0;
 
     const breakdown: CopayDeductibleCalculation['breakdown'] = [];
+
+    // Get YTD deductible accumulation
+    const fiscalYear = new Date().getFullYear();
+    let ytdAccumulated = 0;
+    try {
+      const ledger = await prisma.deductibleLedger.findUnique({
+        where: {
+          hospitalId_patientId_fiscalYear: {
+            hospitalId,
+            patientId,
+            fiscalYear,
+          },
+        },
+      });
+      if (ledger) {
+        ytdAccumulated = Number(ledger.accumulatedAmount);
+      }
+    } catch (err) {
+      logger.warn('[DEDUCTIBLE] Failed to query deductible ledger, using full deductible', err);
+    }
 
     for (const item of items) {
       let itemCopay = 0;
@@ -412,41 +440,94 @@ export class PreAuthService {
       totalAmount += item.amount;
 
       if (insurance) {
-        // Apply copay (fixed amount per service)
-        const copay = Number(insurance.copay || 0);
-        itemCopay = Math.min(copay, item.amount);
+        // Check for payer-specific rules
+        let payerCopayOverride: number | null = null;
+        let payerCoinsuranceOverride: number | null = null;
+        let isRestricted = false;
 
-        // Apply deductible with YTD tracking via DeductibleLedger
-        const deductible = Number(insurance.deductible || 0);
-        const remainingAfterCopay = item.amount - itemCopay;
-
-        // Look up YTD accumulated deductible
-        const fiscalYear = new Date().getFullYear();
-        let ytdAccumulated = 0;
-        try {
-          const ledger = await prisma.deductibleLedger.findUnique({
+        if (item.cptCode) {
+          const cptPayerRule = await (prisma.cPTPayerRule as any).findFirst({
             where: {
-              hospitalId_patientId_fiscalYear: {
-                hospitalId,
-                patientId,
-                fiscalYear,
-              },
+              cptCode: { code: item.cptCode },
+              payerId: (insurance as any).payerId || undefined,
+              isActive: true,
             },
           });
-          if (ledger) {
-            ytdAccumulated = Number(ledger.accumulatedAmount);
+
+          if (cptPayerRule) {
+            // Check age restrictions
+            if (patient && patient.dateOfBirth) {
+              const age = Math.floor(
+                (Date.now() - patient.dateOfBirth.getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+              );
+              if (
+                (cptPayerRule.ageMinimum !== null && age < cptPayerRule.ageMinimum) ||
+                (cptPayerRule.ageMaximum !== null && age > cptPayerRule.ageMaximum)
+              ) {
+                isRestricted = true;
+              }
+            }
+
+            // Check gender restrictions
+            if (patient && cptPayerRule.genderRestriction) {
+              if (patient.gender !== cptPayerRule.genderRestriction) {
+                isRestricted = true;
+              }
+            }
+
+            // Apply payer-specific copay
+            if (!isRestricted) {
+              if (cptPayerRule.copayOverride !== null) {
+                payerCopayOverride = Number(cptPayerRule.copayOverride);
+              }
+              if (cptPayerRule.priceOverride !== null) {
+                payerCoinsuranceOverride = Number(cptPayerRule.priceOverride);
+              }
+            }
           }
-        } catch (err) {
-          logger.warn('[DEDUCTIBLE] Failed to query deductible ledger, using full deductible', err);
         }
 
-        // Remaining deductible = max deductible - already accumulated this year
-        const remainingDeductible = Math.max(0, deductible - ytdAccumulated);
-        itemDeductible = Math.min(remainingDeductible, remainingAfterCopay);
+        if (item.icdCode && !isRestricted) {
+          const icdPayerRule = await (prisma.iCD10PayerRule as any).findFirst({
+            where: {
+              icd10Code: { code: item.icdCode },
+              payerId: (insurance as any).payerId || undefined,
+              isActive: true,
+            },
+          });
 
-        // Apply coinsurance (20% of remaining amount after copay/deductible)
-        const remainingAfterDeductible = remainingAfterCopay - itemDeductible;
-        itemCoinsurance = remainingAfterDeductible * 0.2; // 20% coinsurance
+          if (icdPayerRule) {
+            // ICD rules can also have copay overrides
+            if (icdPayerRule.copayOverride !== null) {
+              payerCopayOverride = Number(icdPayerRule.copayOverride);
+            }
+          }
+        }
+
+        // If service is restricted by age/gender, patient pays 100%
+        if (isRestricted) {
+          itemCoinsurance = item.amount;
+        } else {
+          // Apply copay (use payer override or default)
+          const copay = payerCopayOverride !== null 
+            ? payerCopayOverride 
+            : Number(insurance.copay || 0);
+          itemCopay = Math.min(copay, item.amount);
+
+          // Apply deductible
+          const deductible = Number(insurance.deductible || 0);
+          const remainingAfterCopay = item.amount - itemCopay;
+          const remainingDeductible = Math.max(0, deductible - ytdAccumulated);
+          itemDeductible = Math.min(remainingDeductible, remainingAfterCopay);
+          ytdAccumulated += itemDeductible; // Track for next item
+
+          // Apply coinsurance (use payer override or default 20%)
+          const coinsuranceRate = payerCoinsuranceOverride !== null
+            ? payerCoinsuranceOverride / 100
+            : 0.2;
+          const remainingAfterDeductible = remainingAfterCopay - itemDeductible;
+          itemCoinsurance = remainingAfterDeductible * coinsuranceRate;
+        }
       } else {
         // No insurance - patient pays 100%
         itemCoinsurance = item.amount;

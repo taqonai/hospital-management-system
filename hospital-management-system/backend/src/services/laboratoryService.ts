@@ -122,13 +122,8 @@ export class LaboratoryService {
       // Don't fail the lab order creation if notification fails
     }
 
-    // Auto-billing: Add lab charges to invoice
-    try {
-      await billingService.addLabCharges(order.id, hospitalId, data.orderedBy);
-    } catch (error) {
-      console.error('[AUTO-BILLING] Failed to add lab charges for order:', order.id, error);
-      // Don't fail the lab order creation if billing fails
-    }
+    // NOTE: Billing moved to completion (when all tests are verified)
+    // to prevent billing for cancelled/incomplete orders
 
     return order;
   }
@@ -354,6 +349,14 @@ export class LaboratoryService {
         },
       });
       console.log(`[LAB STATUS] Order ${labOrder.orderNumber} transitioned: IN_PROGRESS → COMPLETED (all tests finished)`);
+
+      // Auto-generate invoice for lab charges
+      try {
+        await billingService.addLabCharges(labOrder.id, labOrder.hospitalId, 'system');
+      } catch (error) {
+        console.error('[AUTO-BILLING] Failed to add lab charges for order:', labOrder.id, error);
+        // Don't fail the lab completion if billing fails
+      }
 
       // Send notification when all results are ready
       try {
@@ -600,6 +603,14 @@ export class LaboratoryService {
           },
         });
         logger.info(`[LAB STATUS] Order ${labOrder.orderNumber} transitioned: IN_PROGRESS → COMPLETED (all AI-extracted)`);
+
+        // Auto-generate invoice for lab charges
+        try {
+          await billingService.addLabCharges(labOrder.id, labOrder.hospitalId, 'system');
+        } catch (error) {
+          logger.error('[AUTO-BILLING] Failed to add lab charges for order:', labOrder.id, error);
+          // Don't fail the lab completion if billing fails
+        }
       }
       // ==================== END AUTOMATIC STATUS TRANSITION ====================
 

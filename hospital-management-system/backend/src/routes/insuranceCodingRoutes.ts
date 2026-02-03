@@ -1684,4 +1684,145 @@ router.get(
   })
 );
 
+// ==================== DHA eClaimLink Submission & Status ====================
+
+// Submit claim to DHA eClaimLink API
+router.post(
+  '/eclaim/submit/:claimId',
+  authenticate,
+  authorizeWithPermission('insurance_coding:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const result = await eclaimLinkService.submitClaimToDHA(
+      req.params.claimId,
+      req.user!.hospitalId
+    );
+    if (result.success) {
+      sendSuccess(res, result, `Claim submitted successfully to DHA eClaimLink`);
+    } else {
+      res.status(400).json({
+        success: false,
+        error: result.errorMessage,
+        code: result.errorCode,
+      });
+    }
+  })
+);
+
+// Check claim status from DHA eClaimLink
+router.get(
+  '/eclaim/status/:claimId',
+  authenticate,
+  authorizeWithPermission('insurance_coding:read', ['ACCOUNTANT', 'HOSPITAL_ADMIN', 'DOCTOR']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const status = await eclaimLinkService.checkClaimStatus(req.params.claimId);
+    sendSuccess(res, status);
+  })
+);
+
+// Refresh claim status from DHA eClaimLink API
+router.post(
+  '/eclaim/refresh-status/:claimId',
+  authenticate,
+  authorizeWithPermission('insurance_coding:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const result = await eclaimLinkService.refreshClaimStatus(req.params.claimId);
+    if (result.updated) {
+      sendSuccess(res, result, `Claim status refreshed successfully`);
+    } else {
+      res.status(400).json({
+        success: false,
+        error: result.errorMessage,
+      });
+    }
+  })
+);
+
+// ==================== DHA eClaimLink Remittance Processing ====================
+
+// Fetch and process remittance for a claim
+router.post(
+  '/eclaim/remittance/fetch/:claimId',
+  authenticate,
+  authorizeWithPermission('insurance_coding:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const result = await eclaimLinkService.fetchAndProcessRemittance(req.params.claimId);
+    if (result.success) {
+      sendSuccess(res, result, result.message);
+    } else {
+      res.status(400).json({
+        success: false,
+        error: result.errorMessage,
+      });
+    }
+  })
+);
+
+// Process remittance manually (when ERA XML is received via webhook or file)
+router.post(
+  '/eclaim/remittance/process',
+  authenticate,
+  authorizeWithPermission('insurance_coding:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { dhaClaimId, claimNumber, status, approvedAmount, deniedAmount, adjustmentReason, remittanceDate, rawResponse } = req.body;
+    
+    if (!dhaClaimId || !claimNumber || !status) {
+      return res.status(400).json({
+        success: false,
+        error: 'dhaClaimId, claimNumber, and status are required',
+      });
+    }
+
+    const result = await eclaimLinkService.processRemittance({
+      dhaClaimId,
+      claimNumber,
+      status,
+      approvedAmount,
+      deniedAmount,
+      adjustmentReason,
+      remittanceDate: remittanceDate ? new Date(remittanceDate) : new Date(),
+      rawResponse: rawResponse || {},
+    });
+
+    if (result.success) {
+      sendSuccess(res, result, 'Remittance processed successfully');
+    } else {
+      res.status(400).json({
+        success: false,
+        error: result.errorMessage,
+      });
+    }
+  })
+);
+
+// Parse ERA XML response
+router.post(
+  '/eclaim/remittance/parse-xml',
+  authenticate,
+  authorizeWithPermission('insurance_coding:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { xmlResponse } = req.body;
+    
+    if (!xmlResponse) {
+      return res.status(400).json({
+        success: false,
+        error: 'xmlResponse is required',
+      });
+    }
+
+    const parsed = await eclaimLinkService.parseERAResponse(xmlResponse);
+    sendSuccess(res, parsed, 'ERA XML parsed successfully');
+  })
+);
+
+// Get CRA (Claim Reconciliation Advice) from DHA
+router.get(
+  '/eclaim/cra/:dhaClaimId',
+  authenticate,
+  authorizeWithPermission('insurance_coding:read', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const cra = await eclaimLinkService.getCRA(req.params.dhaClaimId);
+    sendSuccess(res, cra);
+  })
+);
+
 export default router;

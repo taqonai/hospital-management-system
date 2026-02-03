@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import { NotFoundError } from '../middleware/errorHandler';
+import { billingService } from './billingService';
 
 export class SurgeryService {
   async scheduleSurgery(data: {
@@ -138,10 +139,31 @@ export class SurgeryService {
     complications?: string;
     notes?: string;
   }) {
-    return this.updateSurgeryStatus(id, 'COMPLETED', {
+    const surgery = await this.updateSurgeryStatus(id, 'COMPLETED', {
       ...data,
       actualEndTime: new Date(),
     });
+
+    // Auto-generate invoice for surgery charges
+    try {
+      const surgeryWithDetails = await prisma.surgery.findUnique({
+        where: { id },
+        include: { admission: { select: { hospitalId: true } } },
+      });
+      
+      if (surgeryWithDetails?.admission?.hospitalId) {
+        await billingService.addSurgeryCharges(
+          id,
+          surgeryWithDetails.admission.hospitalId,
+          data.notes || 'system'
+        );
+      }
+    } catch (error) {
+      console.error('[AUTO-BILLING] Failed to add surgery charges for surgery:', id, error);
+      // Don't fail the surgery completion if billing fails
+    }
+
+    return surgery;
   }
 
   async cancelSurgery(id: string, reason: string) {

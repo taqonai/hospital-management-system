@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { patientService } from '../services/patientService';
 import { authenticate, authorize, authorizeWithPermission, authorizeHospital } from '../middleware/auth';
-import { validate, createPatientSchema, updatePatientSchema, uuidParamSchema, paginationSchema } from '../middleware/validation';
+import { validate, createPatientSchema, updatePatientSchema, uuidParamSchema, paginationSchema, emiratesIdParamSchema } from '../middleware/validation';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
@@ -68,6 +68,7 @@ router.get(
 router.get(
   '/search/eid/:emiratesId',
   authenticate,
+  validate(emiratesIdParamSchema),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const patient = await patientService.findByEmiratesId(req.params.emiratesId, req.user!.hospitalId);
     sendSuccess(res, patient);

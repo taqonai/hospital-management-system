@@ -807,6 +807,713 @@ export class FinancialReportingService {
   }
 
   /**
+   * Get Revenue by Department Report with GL-based cost center tracking
+   */
+  async getRevenueByDepartmentGL(
+    hospitalId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<Array<{
+    department: string;
+    totalRevenue: number;
+    totalExpenses: number;
+    netIncome: number;
+  }>> {
+    // Query GL entries grouped by cost center (department)
+    const entries = await prisma.$queryRaw<
+      Array<{
+        costCenter: string;
+        accountType: string;
+        totalDebits: Prisma.Decimal;
+        totalCredits: Prisma.Decimal;
+      }>
+    >`
+      SELECT 
+        COALESCE(ge.cost_center, 'Unassigned') as "costCenter",
+        ga.account_type as "accountType",
+        SUM(ge.debit_amount) as "totalDebits",
+        SUM(ge.credit_amount) as "totalCredits"
+      FROM gl_entries ge
+      INNER JOIN gl_accounts ga ON ge.gl_account_id = ga.id
+      WHERE ge.hospital_id = ${hospitalId}::uuid
+        AND ge.transaction_date >= ${startDate}
+        AND ge.transaction_date <= ${endDate}
+        AND ga.account_type IN ('REVENUE', 'EXPENSE')
+      GROUP BY ge.cost_center, ga.account_type
+      ORDER BY "costCenter" ASC
+    `;
+
+    // Group by cost center
+    const departmentMap = new Map<string, { revenue: number; expenses: number }>();
+
+    for (const entry of entries) {
+      const dept = entry.costCenter || 'Unassigned';
+      const existing = departmentMap.get(dept) || { revenue: 0, expenses: 0 };
+
+      const debits = Number(entry.totalDebits);
+      const credits = Number(entry.totalCredits);
+
+      if (entry.accountType === 'REVENUE') {
+        existing.revenue += credits - debits; // Net credit = revenue
+      } else if (entry.accountType === 'EXPENSE') {
+        existing.expenses += debits - credits; // Net debit = expense
+      }
+
+      departmentMap.set(dept, existing);
+    }
+
+    return Array.from(departmentMap.entries())
+      .map(([department, data]) => ({
+        department,
+        totalRevenue: data.revenue,
+        totalExpenses: data.expenses,
+        netIncome: data.revenue - data.expenses,
+      }))
+      .sort((a, b) => b.totalRevenue - a.totalRevenue);
+  }
+
+  /**
+   * Get A/R Aging Report with separate Patient and Insurance buckets
+   */
+  async getARAgingReportDetailed(
+    hospitalId: string,
+    asOfDate: Date = new Date()
+  ): Promise<{
+    asOfDate: Date;
+    patientAR: {
+      current: number;
+      days30to60: number;
+      days60to90: number;
+      days90plus: number;
+      total: number;
+    };
+    insuranceAR: {
+      current: number;
+      days30to60: number;
+      days60to90: number;
+      days90plus: number;
+      total: number;
+    };
+    grandTotal: number;
+    details: Array<{
+      invoiceNumber: string;
+      patientName: string;
+      invoiceDate: Date;
+      dueDate: Date | null;
+      totalAmount: number;
+      balanceAmount: number;
+      daysOverdue: number;
+      bucket: string;
+      type: 'PATIENT' | 'INSURANCE';
+    }>;
+  }> {
+    const invoices = await prisma.invoice.findMany({
+      where: {
+        hospitalId,
+        balanceAmount: { gt: 0 },
+        status: { notIn: ['CANCELLED', 'REFUNDED'] },
+      },
+      include: {
+        patient: {
+          select: {
+            firstName: true,
+            lastName: true,
+            mrn: true,
+          },
+        },
+        primaryInsurance: true,
+      },
+      orderBy: {
+        dueDate: 'asc',
+      },
+    });
+
+    const patientBuckets = { current: 0, days30to60: 0, days60to90: 0, days90plus: 0, total: 0 };
+    const insuranceBuckets = { current: 0, days30to60: 0, days60to90: 0, days90plus: 0, total: 0 };
+
+    const details = invoices.map((invoice) => {
+      const dueDate = invoice.dueDate || invoice.invoiceDate;
+      const daysOverdue = Math.floor(
+        (asOfDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      const balanceAmount = Number(invoice.balanceAmount);
+      const isInsurance = !!invoice.primaryInsurance;
+      const type: 'PATIENT' | 'INSURANCE' = isInsurance ? 'INSURANCE' : 'PATIENT';
+
+      let bucket = 'current';
+      const buckets = isInsurance ? insuranceBuckets : patientBuckets;
+
+      if (daysOverdue <= 30) {
+        buckets.current += balanceAmount;
+        bucket = 'current';
+      } else if (daysOverdue <= 60) {
+        buckets.days30to60 += balanceAmount;
+        bucket = '30-60 days';
+      } else if (daysOverdue <= 90) {
+        buckets.days60to90 += balanceAmount;
+        bucket = '60-90 days';
+      } else {
+        buckets.days90plus += balanceAmount;
+        bucket = '90+ days';
+      }
+
+      buckets.total += balanceAmount;
+
+      return {
+        invoiceNumber: invoice.invoiceNumber,
+        patientName: `${invoice.patient.firstName} ${invoice.patient.lastName}`,
+        invoiceDate: invoice.invoiceDate,
+        dueDate: invoice.dueDate,
+        totalAmount: Number(invoice.totalAmount),
+        balanceAmount,
+        daysOverdue: Math.max(0, daysOverdue),
+        bucket,
+        type,
+      };
+    });
+
+    return {
+      asOfDate,
+      patientAR: patientBuckets,
+      insuranceAR: insuranceBuckets,
+      grandTotal: patientBuckets.total + insuranceBuckets.total,
+      details,
+    };
+  }
+
+  /**
+   * Get Claim Status Analytics Report
+   */
+  async getClaimAnalytics(
+    hospitalId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<{
+    startDate: Date;
+    endDate: Date;
+    totalClaims: number;
+    totalClaimedAmount: number;
+    totalApprovedAmount: number;
+    approvalRate: number;
+    averageProcessingDays: number;
+    byStatus: Array<{
+      status: string;
+      count: number;
+      totalAmount: number;
+      percentage: number;
+    }>;
+    denialReasons: Array<{
+      reason: string;
+      count: number;
+      totalAmount: number;
+    }>;
+  }> {
+    const claims = await prisma.insuranceClaim.findMany({
+      where: {
+        invoice: { hospitalId },
+        submittedAt: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      select: {
+        status: true,
+        claimAmount: true,
+        approvedAmount: true,
+        submittedAt: true,
+        processedAt: true,
+        denialReasonCode: true,
+      },
+    });
+
+    const totalClaims = claims.length;
+    const totalClaimedAmount = claims.reduce((sum, c) => sum + Number(c.claimAmount), 0);
+    const totalApprovedAmount = claims.reduce(
+      (sum, c) => sum + Number(c.approvedAmount || 0),
+      0
+    );
+
+    const approvedClaims = claims.filter((c) => c.status === 'APPROVED' || c.status === 'PAID');
+    const approvalRate =
+      totalClaims > 0 ? (approvedClaims.length / totalClaims) * 100 : 0;
+
+    // Calculate average processing time for processed claims
+    const processedClaims = claims.filter((c) => c.processedAt && c.submittedAt);
+    const totalProcessingDays = processedClaims.reduce((sum, c) => {
+      const days = Math.floor(
+        (c.processedAt!.getTime() - c.submittedAt!.getTime()) / (1000 * 60 * 60 * 24)
+      );
+      return sum + days;
+    }, 0);
+    const averageProcessingDays =
+      processedClaims.length > 0 ? totalProcessingDays / processedClaims.length : 0;
+
+    // Group by status
+    const statusMap = new Map<string, { count: number; amount: number }>();
+    claims.forEach((claim) => {
+      const status = claim.status;
+      const existing = statusMap.get(status) || { count: 0, amount: 0 };
+      statusMap.set(status, {
+        count: existing.count + 1,
+        amount: existing.amount + Number(claim.claimAmount),
+      });
+    });
+
+    const byStatus = Array.from(statusMap.entries()).map(([status, data]) => ({
+      status,
+      count: data.count,
+      totalAmount: data.amount,
+      percentage: totalClaims > 0 ? (data.count / totalClaims) * 100 : 0,
+    }));
+
+    // Group by denial reason
+    const denialReasonMap = new Map<string, { count: number; amount: number }>();
+    claims
+      .filter((c) => c.status === 'REJECTED' && c.denialReasonCode)
+      .forEach((claim) => {
+        const reason = claim.denialReasonCode || 'Unknown';
+        const existing = denialReasonMap.get(reason) || { count: 0, amount: 0 };
+        denialReasonMap.set(reason, {
+          count: existing.count + 1,
+          amount: existing.amount + Number(claim.claimAmount),
+        });
+      });
+
+    const denialReasons = Array.from(denialReasonMap.entries())
+      .map(([reason, data]) => ({
+        reason,
+        count: data.count,
+        totalAmount: data.amount,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    return {
+      startDate,
+      endDate,
+      totalClaims,
+      totalClaimedAmount,
+      totalApprovedAmount,
+      approvalRate,
+      averageProcessingDays,
+      byStatus,
+      denialReasons,
+    };
+  }
+
+  /**
+   * Get denial analytics
+   * Top denial reasons, denial rate by payer, trend over time
+   */
+  async getDenialAnalytics(
+    hospitalId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<{
+    startDate: Date;
+    endDate: Date;
+    totalClaims: number;
+    deniedClaims: number;
+    denialRate: number;
+    totalDeniedAmount: number;
+    topDenialReasons: Array<{
+      reason: string;
+      code: string;
+      count: number;
+      totalAmount: number;
+      percentage: number;
+    }>;
+    denialRateByPayer: Array<{
+      payerId: string;
+      payerName: string;
+      totalClaims: number;
+      deniedClaims: number;
+      denialRate: number;
+    }>;
+    monthlyTrend: Array<{
+      month: string;
+      totalClaims: number;
+      deniedClaims: number;
+      denialRate: number;
+    }>;
+  }> {
+    // Get all claims in date range
+    const claims = await prisma.insuranceClaim.findMany({
+      where: {
+        invoice: { hospitalId },
+        submittedAt: { gte: startDate, lte: endDate },
+      },
+      include: {
+        payer: true,
+      },
+    });
+
+    const totalClaims = claims.length;
+    const deniedClaims = claims.filter((c) => c.status === 'REJECTED').length;
+    const denialRate = totalClaims > 0 ? (deniedClaims / totalClaims) * 100 : 0;
+    const totalDeniedAmount = claims
+      .filter((c) => c.status === 'REJECTED')
+      .reduce((sum, c) => sum + Number(c.claimAmount), 0);
+
+    // Top denial reasons
+    const denialReasonMap = new Map<
+      string,
+      { code: string; count: number; amount: number }
+    >();
+
+    claims
+      .filter((c) => c.status === 'REJECTED' && c.denialReasonCode)
+      .forEach((claim) => {
+        const code = claim.denialReasonCode || 'UNKNOWN';
+        const reason = claim.denialReason || 'Unknown reason';
+        const key = `${code}|${reason}`;
+        const existing = denialReasonMap.get(key) || { code, count: 0, amount: 0 };
+        denialReasonMap.set(key, {
+          code,
+          count: existing.count + 1,
+          amount: existing.amount + Number(claim.claimAmount),
+        });
+      });
+
+    const topDenialReasons = Array.from(denialReasonMap.entries())
+      .map(([key, data]) => {
+        const [code, reason] = key.split('|');
+        return {
+          reason,
+          code,
+          count: data.count,
+          totalAmount: data.amount,
+          percentage: deniedClaims > 0 ? (data.count / deniedClaims) * 100 : 0,
+        };
+      })
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    // Denial rate by payer
+    const payerMap = new Map<
+      string,
+      { payerName: string; total: number; denied: number }
+    >();
+
+    claims.forEach((claim) => {
+      const payerId = claim.payerId;
+      const payerName = claim.payer?.name || 'Unknown';
+      const existing = payerMap.get(payerId) || {
+        payerName,
+        total: 0,
+        denied: 0,
+      };
+      payerMap.set(payerId, {
+        payerName,
+        total: existing.total + 1,
+        denied: existing.denied + (claim.status === 'REJECTED' ? 1 : 0),
+      });
+    });
+
+    const denialRateByPayer = Array.from(payerMap.entries())
+      .map(([payerId, data]) => ({
+        payerId,
+        payerName: data.payerName,
+        totalClaims: data.total,
+        deniedClaims: data.denied,
+        denialRate: data.total > 0 ? (data.denied / data.total) * 100 : 0,
+      }))
+      .sort((a, b) => b.denialRate - a.denialRate);
+
+    // Monthly trend
+    const monthMap = new Map<string, { total: number; denied: number }>();
+
+    claims.forEach((claim) => {
+      const month = claim.submittedAt
+        ? claim.submittedAt.toISOString().slice(0, 7)
+        : '';
+      if (!month) return;
+
+      const existing = monthMap.get(month) || { total: 0, denied: 0 };
+      monthMap.set(month, {
+        total: existing.total + 1,
+        denied: existing.denied + (claim.status === 'REJECTED' ? 1 : 0),
+      });
+    });
+
+    const monthlyTrend = Array.from(monthMap.entries())
+      .map(([month, data]) => ({
+        month,
+        totalClaims: data.total,
+        deniedClaims: data.denied,
+        denialRate: data.total > 0 ? (data.denied / data.total) * 100 : 0,
+      }))
+      .sort((a, b) => a.month.localeCompare(b.month));
+
+    return {
+      startDate,
+      endDate,
+      totalClaims,
+      deniedClaims,
+      denialRate,
+      totalDeniedAmount,
+      topDenialReasons,
+      denialRateByPayer,
+      monthlyTrend,
+    };
+  }
+
+  /**
+   * Get collection effectiveness analytics
+   * Collection ratio, average days to collect, by payer
+   */
+  async getCollectionEffectiveness(
+    hospitalId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<{
+    startDate: Date;
+    endDate: Date;
+    overallCollectionRatio: number;
+    averageDaysToCollect: number;
+    byPayer: Array<{
+      payerId: string;
+      payerName: string;
+      totalBilled: number;
+      totalCollected: number;
+      collectionRatio: number;
+      averageDaysToCollect: number;
+      outstandingBalance: number;
+    }>;
+  }> {
+    // Get all claims with invoices
+    const claims = await prisma.insuranceClaim.findMany({
+      where: {
+        invoice: {
+          hospitalId,
+          invoiceDate: { gte: startDate, lte: endDate },
+        },
+      },
+      include: {
+        payer: true,
+        invoice: {
+          include: {
+            payments: true,
+          },
+        },
+      },
+    });
+
+    let totalBilled = 0;
+    let totalCollected = 0;
+    let totalDaysToCollect = 0;
+    let collectedCount = 0;
+
+    const payerMap = new Map<
+      string,
+      {
+        payerName: string;
+        billed: number;
+        collected: number;
+        daysToCollect: number;
+        collectedCount: number;
+      }
+    >();
+
+    claims.forEach((claim) => {
+      const claimAmount = Number(claim.claimAmount);
+      const approvedAmount = Number(claim.approvedAmount || 0);
+      const paidAmount = Number(claim.paidAmount || 0);
+
+      totalBilled += claimAmount;
+      totalCollected += paidAmount;
+
+      // Calculate days to collect if payment received
+      if (paidAmount > 0 && claim.submittedAt && claim.invoice.payments.length > 0) {
+        const firstPayment = claim.invoice.payments[0];
+        const daysToCollect = Math.floor(
+          (firstPayment.paymentDate.getTime() - claim.submittedAt.getTime()) /
+            (1000 * 60 * 60 * 24)
+        );
+        totalDaysToCollect += daysToCollect;
+        collectedCount++;
+
+        // Update payer stats
+        const payerId = claim.payerId;
+        const payerName = claim.payer?.name || 'Unknown';
+        const existing = payerMap.get(payerId) || {
+          payerName,
+          billed: 0,
+          collected: 0,
+          daysToCollect: 0,
+          collectedCount: 0,
+        };
+
+        payerMap.set(payerId, {
+          payerName,
+          billed: existing.billed + claimAmount,
+          collected: existing.collected + paidAmount,
+          daysToCollect: existing.daysToCollect + daysToCollect,
+          collectedCount: existing.collectedCount + 1,
+        });
+      } else {
+        // Update payer totals even if not collected
+        const payerId = claim.payerId;
+        const payerName = claim.payer?.name || 'Unknown';
+        const existing = payerMap.get(payerId) || {
+          payerName,
+          billed: 0,
+          collected: 0,
+          daysToCollect: 0,
+          collectedCount: 0,
+        };
+
+        payerMap.set(payerId, {
+          ...existing,
+          billed: existing.billed + claimAmount,
+          collected: existing.collected + paidAmount,
+        });
+      }
+    });
+
+    const overallCollectionRatio =
+      totalBilled > 0 ? (totalCollected / totalBilled) * 100 : 0;
+    const averageDaysToCollect =
+      collectedCount > 0 ? totalDaysToCollect / collectedCount : 0;
+
+    const byPayer = Array.from(payerMap.entries())
+      .map(([payerId, data]) => ({
+        payerId,
+        payerName: data.payerName,
+        totalBilled: data.billed,
+        totalCollected: data.collected,
+        collectionRatio: data.billed > 0 ? (data.collected / data.billed) * 100 : 0,
+        averageDaysToCollect:
+          data.collectedCount > 0 ? data.daysToCollect / data.collectedCount : 0,
+        outstandingBalance: data.billed - data.collected,
+      }))
+      .sort((a, b) => b.totalBilled - a.totalBilled);
+
+    return {
+      startDate,
+      endDate,
+      overallCollectionRatio,
+      averageDaysToCollect,
+      byPayer,
+    };
+  }
+
+  /**
+   * Get claim turnaround time analytics
+   * Average time from submission to payment, by payer
+   */
+  async getClaimTurnaroundTime(
+    hospitalId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<{
+    startDate: Date;
+    endDate: Date;
+    overallAverageDays: number;
+    medianDays: number;
+    byPayer: Array<{
+      payerId: string;
+      payerName: string;
+      claimCount: number;
+      averageDays: number;
+      medianDays: number;
+      minDays: number;
+      maxDays: number;
+    }>;
+    byStatus: Array<{
+      status: string;
+      claimCount: number;
+      averageDays: number;
+    }>;
+  }> {
+    // Get all processed claims
+    const claims = await prisma.insuranceClaim.findMany({
+      where: {
+        invoice: { hospitalId },
+        submittedAt: { gte: startDate, lte: endDate },
+        processedAt: { not: null },
+      },
+      include: {
+        payer: true,
+      },
+    });
+
+    const turnaroundTimes: number[] = [];
+    const payerMap = new Map<string, { payerName: string; times: number[] }>();
+    const statusMap = new Map<string, number[]>();
+
+    claims.forEach((claim) => {
+      if (!claim.submittedAt || !claim.processedAt) return;
+
+      const days = Math.floor(
+        (claim.processedAt.getTime() - claim.submittedAt.getTime()) /
+          (1000 * 60 * 60 * 24)
+      );
+
+      turnaroundTimes.push(days);
+
+      // By payer
+      const payerId = claim.payerId;
+      const payerName = claim.payer?.name || 'Unknown';
+      const existing = payerMap.get(payerId) || { payerName, times: [] };
+      existing.times.push(days);
+      payerMap.set(payerId, existing);
+
+      // By status
+      const status = claim.status;
+      const statusTimes = statusMap.get(status) || [];
+      statusTimes.push(days);
+      statusMap.set(status, statusTimes);
+    });
+
+    // Calculate overall average and median
+    const overallAverageDays =
+      turnaroundTimes.length > 0
+        ? turnaroundTimes.reduce((sum, t) => sum + t, 0) / turnaroundTimes.length
+        : 0;
+
+    const sortedTimes = [...turnaroundTimes].sort((a, b) => a - b);
+    const medianDays =
+      sortedTimes.length > 0
+        ? sortedTimes[Math.floor(sortedTimes.length / 2)]
+        : 0;
+
+    // By payer
+    const byPayer = Array.from(payerMap.entries())
+      .map(([payerId, data]) => {
+        const times = data.times.sort((a, b) => a - b);
+        return {
+          payerId,
+          payerName: data.payerName,
+          claimCount: times.length,
+          averageDays: times.reduce((sum, t) => sum + t, 0) / times.length,
+          medianDays: times[Math.floor(times.length / 2)],
+          minDays: times[0],
+          maxDays: times[times.length - 1],
+        };
+      })
+      .sort((a, b) => b.claimCount - a.claimCount);
+
+    // By status
+    const byStatus = Array.from(statusMap.entries())
+      .map(([status, times]) => ({
+        status,
+        claimCount: times.length,
+        averageDays: times.reduce((sum, t) => sum + t, 0) / times.length,
+      }))
+      .sort((a, b) => b.claimCount - a.claimCount);
+
+    return {
+      startDate,
+      endDate,
+      overallAverageDays,
+      medianDays,
+      byPayer,
+      byStatus,
+    };
+  }
+
+  /**
    * Export report data to CSV format
    */
   exportToCSV(data: any[], filename: string): string {

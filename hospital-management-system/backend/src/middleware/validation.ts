@@ -42,6 +42,15 @@ export const uuidParamSchema = z.object({
   }),
 });
 
+export const emiratesIdParamSchema = z.object({
+  params: z.object({
+    emiratesId: z.string().regex(
+      /^784[-\s]?\d{4}[-\s]?\d{7}[-\s]?\d$/,
+      'Invalid Emirates ID format. Expected: 784-YYYY-NNNNNNN-C'
+    ),
+  }),
+});
+
 // Auth schemas
 export const loginSchema = z.object({
   body: z.object({
