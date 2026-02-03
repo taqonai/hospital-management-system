@@ -1,7 +1,7 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticate, authorizeRoles } from '../middleware/auth';
-import { sendSuccess, sendError } from '../utils/responseHandler';
+import { sendSuccess, sendError } from '../utils/response';
 import axios from 'axios';
 import Stripe from 'stripe';
 
