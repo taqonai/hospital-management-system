@@ -170,28 +170,14 @@ export class NoShowService {
             },
           });
 
-          // Increment patient's no-show count and check for blocking
-          const NO_SHOW_BLOCK_THRESHOLD = 3;
-          const updatedPatient = await prisma.patient.update({
+          // Increment patient's no-show count (tracking only, no blocking)
+          await prisma.patient.update({
             where: { id: appointment.patientId },
             data: {
               noShowCount: { increment: 1 },
               lastNoShowAt: new Date(),
             },
           });
-
-          // Block patient if they exceed threshold
-          if (updatedPatient.noShowCount >= NO_SHOW_BLOCK_THRESHOLD && updatedPatient.status !== 'BLOCKED') {
-            await prisma.patient.update({
-              where: { id: appointment.patientId },
-              data: {
-                status: 'BLOCKED',
-                blockedAt: new Date(),
-                blockedReason: `Blocked due to ${updatedPatient.noShowCount} no-show appointments`,
-              },
-            });
-            console.log(`[NO_SHOW] Patient ${appointment.patientId} blocked after ${updatedPatient.noShowCount} no-shows`);
-          }
 
           // Send notification to patient
           let notificationSent = false;

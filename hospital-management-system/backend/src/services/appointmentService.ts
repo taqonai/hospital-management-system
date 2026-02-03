@@ -185,14 +185,6 @@ export class AppointmentService {
       throw new NotFoundError('Patient not found');
     }
 
-    // Check if patient is blocked due to repeated no-shows
-    if (patient.status === 'BLOCKED') {
-      throw new AppError(
-        `Patient is blocked from booking appointments due to repeated no-shows (${patient.noShowCount} no-shows). Please contact administration.`,
-        403
-      );
-    }
-
     // Normalize the date and create date range for consistent comparison
     const appointmentDate = new Date(data.appointmentDate);
     const startOfDay = new Date(appointmentDate);

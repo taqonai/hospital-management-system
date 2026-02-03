@@ -172,6 +172,7 @@ const SparklesIcon = ({ className }: { className?: string }) => (
 // Navigation items configuration
 const navigationItems: NavItem[] = [
   { name: 'Dashboard', href: '/patient-portal/dashboard', icon: HomeIcon },
+  { name: 'My Appointments', href: '/patient-portal/appointments', icon: CalendarDaysIcon },
   { name: 'AI Health Assistant', href: '/patient-portal/health-assistant', icon: LightBulbIcon },
   { name: 'Health Insights', href: '/patient-portal/health-insights', icon: ChartBarIcon },
   { name: 'Symptom Checker', href: '/patient-portal/symptom-checker', icon: SparklesIcon },
@@ -181,7 +182,6 @@ const navigationItems: NavItem[] = [
   { name: 'Fitness Tracker', href: '/patient-portal/fitness', icon: FireIcon },
   { name: 'Nutrition & Diet', href: '/patient-portal/nutrition', icon: CakeIcon },
   { name: 'Wellness Hub', href: '/patient-portal/wellness', icon: TrophyIcon },
-  { name: 'My Appointments', href: '/patient-portal/appointments', icon: CalendarDaysIcon },
   { name: 'Medical Records', href: '/patient-portal/records', icon: FolderIcon },
   { name: 'Prescriptions', href: '/patient-portal/prescriptions', icon: PillIcon },
   { name: 'Lab Results', href: '/patient-portal/labs', icon: BeakerIcon },
