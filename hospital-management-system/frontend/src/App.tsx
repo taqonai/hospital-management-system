@@ -32,7 +32,6 @@ import IPD from './pages/IPD';
 import AdmissionDetail from './pages/IPD/AdmissionDetail';
 import OPD from './pages/OPD';
 import Emergency from './pages/Emergency';
-import Nursing from './pages/Nursing';
 import NurseStation from './pages/NurseStation';
 import Radiology from './pages/Radiology';
 import Surgery from './pages/Surgery';
@@ -246,11 +245,6 @@ function App() {
           </ProtectedRoute>
         } />
         <Route path="/emergency" element={<Emergency />} />
-        <Route path="/nursing" element={
-            <ProtectedRoute allowedRoles={['NURSE', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']} permission="nursing:dashboard">
-              <Nursing />
-            </ProtectedRoute>
-          } />
         <Route path="/nurse-station" element={
             <ProtectedRoute allowedRoles={['NURSE', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']} permission="nursing:dashboard">
               <NurseStation />
