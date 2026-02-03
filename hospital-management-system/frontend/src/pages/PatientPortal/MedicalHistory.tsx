@@ -129,13 +129,10 @@ export default function MedicalHistory() {
   });
 
   // Ref to always have access to the latest formData value
-  // Only sync ref when NOT editing (to preserve manual updates during edit)
   const formDataRef = useRef(formData);
   useEffect(() => {
-    if (!isEditing) {
-      formDataRef.current = formData;
-    }
-  }, [formData, isEditing]);
+    formDataRef.current = formData;
+  }, [formData]);
 
   // Patient profile for gender/age check
   const [patientProfile, setPatientProfile] = useState<{
@@ -763,7 +760,7 @@ export default function MedicalHistory() {
                       {isEditing ? (
                         <textarea
                           value={formData.currentTreatment || ''}
-                          onChange={(e) => setFormData({ ...formData, currentTreatment: e.target.value })}
+                          onChange={(e) => { const v = e.target.value; setFormData(prev => ({ ...prev, currentTreatment: v })); }}
                           placeholder="e.g., Chemotherapy every 2 weeks, Dialysis 3x/week, Physical therapy sessions..."
                           className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-rose-500 focus:border-rose-500"
                           rows={3}
@@ -793,7 +790,7 @@ export default function MedicalHistory() {
                                 <input
                                   type="radio"
                                   checked={formData.isPregnant === true}
-                                  onChange={() => setFormData({ ...formData, isPregnant: true })}
+                                  onChange={() => setFormData(prev => ({ ...prev, isPregnant: true }))}
                                   className="w-4 h-4 text-pink-600 border-gray-300 focus:ring-pink-500"
                                 />
                                 <span className="ml-2 text-gray-700">Yes, I am pregnant</span>
@@ -802,7 +799,7 @@ export default function MedicalHistory() {
                                 <input
                                   type="radio"
                                   checked={formData.isPregnant === false}
-                                  onChange={() => setFormData({ ...formData, isPregnant: false, expectedDueDate: null })}
+                                  onChange={() => setFormData(prev => ({ ...prev, isPregnant: false, expectedDueDate: null }))}
                                   className="w-4 h-4 text-pink-600 border-gray-300 focus:ring-pink-500"
                                 />
                                 <span className="ml-2 text-gray-700">No</span>
@@ -811,7 +808,7 @@ export default function MedicalHistory() {
                                 <input
                                   type="radio"
                                   checked={formData.isPregnant === null || formData.isPregnant === undefined}
-                                  onChange={() => setFormData({ ...formData, isPregnant: null, expectedDueDate: null })}
+                                  onChange={() => setFormData(prev => ({ ...prev, isPregnant: null, expectedDueDate: null }))}
                                   className="w-4 h-4 text-pink-600 border-gray-300 focus:ring-pink-500"
                                 />
                                 <span className="ml-2 text-gray-700">Not specified</span>
@@ -825,7 +822,7 @@ export default function MedicalHistory() {
                                 <input
                                   type="date"
                                   value={formData.expectedDueDate || ''}
-                                  onChange={(e) => setFormData({ ...formData, expectedDueDate: e.target.value })}
+                                  onChange={(e) => { const v = e.target.value; setFormData(prev => ({ ...prev, expectedDueDate: v })); }}
                                   className="px-4 py-2 rounded-xl border border-pink-300 focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
                                 />
                               </div>
