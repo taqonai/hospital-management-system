@@ -285,7 +285,7 @@ export default function CopayCollectionModal({
                         {copayInfo && (
                           <div className="flex justify-between">
                             <span className="text-gray-600">Amount Paid:</span>
-                            <span className="font-semibold text-gray-900">AED {copayInfo.patientAmount.toFixed(2)}</span>
+                            <span className="font-semibold text-gray-900">AED {Number(copayInfo.patientAmount || 0).toFixed(2)}</span>
                           </div>
                         )}
                         {receiptInfo.vatAmount > 0 && (
@@ -892,12 +892,12 @@ export default function CopayCollectionModal({
                 {/* Deposit Balance Warning */}
                 {paymentMethod === 'DEPOSIT' && depositBalance && (
                   <div className={`rounded-xl p-4 border ${
-                    depositBalance.availableBalance >= copayInfo.copayAmount
+                    depositBalance.availableBalance >= copayInfo.patientAmount
                       ? 'bg-green-50 border-green-200'
                       : 'bg-red-50 border-red-200'
                   }`}>
                     <div className="flex items-start gap-3">
-                      {depositBalance.availableBalance >= copayInfo.copayAmount ? (
+                      {depositBalance.availableBalance >= copayInfo.patientAmount ? (
                         <CheckCircleIcon className="h-5 w-5 text-green-600 mt-0.5" />
                       ) : (
                         <ExclamationTriangleIcon className="h-5 w-5 text-red-600 mt-0.5" />
@@ -907,13 +907,13 @@ export default function CopayCollectionModal({
                           Available Deposit Balance
                         </p>
                         <p className={`text-lg font-bold ${
-                          depositBalance.availableBalance >= copayInfo.copayAmount
+                          depositBalance.availableBalance >= copayInfo.patientAmount
                             ? 'text-green-700'
                             : 'text-red-700'
                         }`}>
                           AED {depositBalance.availableBalance.toFixed(2)}
                         </p>
-                        {depositBalance.availableBalance < copayInfo.copayAmount && (
+                        {depositBalance.availableBalance < copayInfo.patientAmount && (
                           <p className="text-sm text-red-600 mt-1">
                             Insufficient balance. Please select another payment method.
                           </p>
