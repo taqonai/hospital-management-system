@@ -185,8 +185,7 @@ export class FinancialReportingService {
         AND DATE(i."invoiceDate") = DATE(a."appointmentDate")
       INNER JOIN doctors doc ON a."doctorId" = doc.id
       INNER JOIN departments d ON doc."departmentId" = d.id
-      WHERE i."hospitalId" = ${hospitalId}::uuid
-        AND i."invoiceDate" >= ${startDate}
+      WHERE i."hospitalId" = ${hospitalId}        AND i."invoiceDate" >= ${startDate}
         AND i."invoiceDate" <= ${endDate}
         AND i.status != 'CANCELLED'
       GROUP BY d.id, d.name, d.code
@@ -235,8 +234,7 @@ export class FinancialReportingService {
         AND DATE(i."invoiceDate") = DATE(a."appointmentDate")
       INNER JOIN doctors doc ON a."doctorId" = doc.id
       INNER JOIN users u ON doc."userId" = u.id
-      WHERE i."hospitalId" = ${hospitalId}::uuid
-        AND i."invoiceDate" >= ${startDate}
+      WHERE i."hospitalId" = ${hospitalId}        AND i."invoiceDate" >= ${startDate}
         AND i."invoiceDate" <= ${endDate}
         AND i.status != 'CANCELLED'
       GROUP BY doc.id, u."firstName", u."lastName", doc.specialization
@@ -344,8 +342,7 @@ export class FinancialReportingService {
         SUM("totalAmount") as billed,
         SUM("paidAmount") as collected
       FROM invoices
-      WHERE "hospitalId" = ${hospitalId}::uuid
-        AND "invoiceDate" >= ${startDate}
+      WHERE "hospitalId" = ${hospitalId}        AND "invoiceDate" >= ${startDate}
         AND "invoiceDate" <= ${endDate}
         AND status NOT IN ('CANCELLED', 'REFUNDED')
       GROUP BY TO_CHAR("invoiceDate", ${dateFormat})
@@ -697,8 +694,7 @@ export class FinancialReportingService {
         COALESCE(SUM(ge."creditAmount"), 0) as "totalCredits"
       FROM gl_entries ge
       INNER JOIN gl_accounts ga ON ge."glAccountId" = ga.id
-      WHERE ge."hospitalId" = ${hospitalId}::uuid
-        AND ge."transactionDate" >= ${startDate}
+      WHERE ge."hospitalId" = ${hospitalId}        AND ge."transactionDate" >= ${startDate}
         AND ge."transactionDate" <= ${endDate}
         AND ga."accountType" IN ('REVENUE', 'EXPENSE')
       GROUP BY ga.id, ga."accountCode", ga."accountName", ga."accountType"
@@ -756,8 +752,7 @@ export class FinancialReportingService {
         COALESCE(SUM(ge."creditAmount"), 0) as "totalCredits"
       FROM gl_entries ge
       INNER JOIN gl_accounts ga ON ge."glAccountId" = ga.id
-      WHERE ge."hospitalId" = ${hospitalId}::uuid
-        AND ge."transactionDate" <= ${asOfDate}
+      WHERE ge."hospitalId" = ${hospitalId}        AND ge."transactionDate" <= ${asOfDate}
         AND ga."accountType" IN ('ASSET', 'LIABILITY', 'EQUITY')
       GROUP BY ga.id, ga."accountCode", ga."accountName", ga."accountType"
       ORDER BY ga."accountCode" ASC
@@ -835,8 +830,7 @@ export class FinancialReportingService {
         SUM(ge."creditAmount") as "totalCredits"
       FROM gl_entries ge
       INNER JOIN gl_accounts ga ON ge."glAccountId" = ga.id
-      WHERE ge."hospitalId" = ${hospitalId}::uuid
-        AND ge."transactionDate" >= ${startDate}
+      WHERE ge."hospitalId" = ${hospitalId}        AND ge."transactionDate" >= ${startDate}
         AND ge."transactionDate" <= ${endDate}
         AND ga."accountType" IN ('REVENUE', 'EXPENSE')
       GROUP BY ge."costCenter", ga."accountType"
