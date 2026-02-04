@@ -727,6 +727,23 @@ export const opdApi = {
   getPatientStatus: (patientId: string) => api.get(`/opd/patient-status/${patientId}`),
   // Get patient's medical summary (medical history + allergies) for nurse vitals modal
   getPatientMedicalSummary: (patientId: string) => api.get(`/opd/patient-medical-summary/${patientId}`),
+  // Medical record CRUD for nurse vitals modal
+  updatePatientMedicalHistory: (patientId: string, data: { chronicConditions?: string[]; familyHistory?: string[] }) =>
+    api.put(`/opd/patient-medical-history/${patientId}`, data),
+  addPatientAllergy: (patientId: string, data: { allergen: string; type: string; severity: string; reaction?: string; notes?: string }) =>
+    api.post(`/opd/patient-allergies/${patientId}`, data),
+  updatePatientAllergy: (patientId: string, allergyId: string, data: { allergen?: string; type?: string; severity?: string; reaction?: string; notes?: string }) =>
+    api.put(`/opd/patient-allergies/${patientId}/${allergyId}`, data),
+  deletePatientAllergy: (patientId: string, allergyId: string) =>
+    api.delete(`/opd/patient-allergies/${patientId}/${allergyId}`),
+  updatePastSurgery: (patientId: string, surgeryId: string, data: any) =>
+    api.put(`/opd/patient-surgeries/${patientId}/${surgeryId}`, data),
+  deletePastSurgery: (patientId: string, surgeryId: string) =>
+    api.delete(`/opd/patient-surgeries/${patientId}/${surgeryId}`),
+  updateImmunization: (patientId: string, immunizationId: string, data: any) =>
+    api.put(`/opd/patient-immunizations/${patientId}/${immunizationId}`, data),
+  deleteImmunization: (patientId: string, immunizationId: string) =>
+    api.delete(`/opd/patient-immunizations/${patientId}/${immunizationId}`),
 };
 
 // Emergency APIs

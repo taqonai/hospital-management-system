@@ -292,4 +292,100 @@ router.get(
   })
 );
 
+// Update patient's medical history (chronic conditions & family history)
+router.put(
+  '/patient-medical-history/:patientId',
+  authenticate,
+  authorizeWithPermission('opd:visits:write', ['NURSE', 'DOCTOR', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { patientId } = req.params;
+    const result = await opdService.updatePatientMedicalHistory(patientId, req.user!.hospitalId, req.body, req.user!.userId);
+    sendSuccess(res, result, 'Medical history updated');
+  })
+);
+
+// Add allergy for a patient
+router.post(
+  '/patient-allergies/:patientId',
+  authenticate,
+  authorizeWithPermission('opd:visits:write', ['NURSE', 'DOCTOR', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { patientId } = req.params;
+    const result = await opdService.addPatientAllergy(patientId, req.user!.hospitalId, req.body);
+    sendSuccess(res, result, 'Allergy added');
+  })
+);
+
+// Update allergy for a patient
+router.put(
+  '/patient-allergies/:patientId/:allergyId',
+  authenticate,
+  authorizeWithPermission('opd:visits:write', ['NURSE', 'DOCTOR', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { patientId, allergyId } = req.params;
+    const result = await opdService.updatePatientAllergy(patientId, req.user!.hospitalId, allergyId, req.body);
+    sendSuccess(res, result, 'Allergy updated');
+  })
+);
+
+// Delete allergy for a patient
+router.delete(
+  '/patient-allergies/:patientId/:allergyId',
+  authenticate,
+  authorizeWithPermission('opd:visits:write', ['NURSE', 'DOCTOR', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { patientId, allergyId } = req.params;
+    const result = await opdService.deletePatientAllergy(patientId, req.user!.hospitalId, allergyId);
+    sendSuccess(res, result, 'Allergy deleted');
+  })
+);
+
+// Update past surgery record
+router.put(
+  '/patient-surgeries/:patientId/:surgeryId',
+  authenticate,
+  authorizeWithPermission('opd:visits:write', ['NURSE', 'DOCTOR', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { patientId, surgeryId } = req.params;
+    const result = await opdService.updatePastSurgery(patientId, req.user!.hospitalId, surgeryId, req.body, req.user!.userId);
+    sendSuccess(res, result, 'Past surgery updated');
+  })
+);
+
+// Delete past surgery record
+router.delete(
+  '/patient-surgeries/:patientId/:surgeryId',
+  authenticate,
+  authorizeWithPermission('opd:visits:write', ['NURSE', 'DOCTOR', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { patientId, surgeryId } = req.params;
+    const result = await opdService.deletePastSurgery(patientId, req.user!.hospitalId, surgeryId);
+    sendSuccess(res, result, 'Past surgery deleted');
+  })
+);
+
+// Update immunization record
+router.put(
+  '/patient-immunizations/:patientId/:immunizationId',
+  authenticate,
+  authorizeWithPermission('opd:visits:write', ['NURSE', 'DOCTOR', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { patientId, immunizationId } = req.params;
+    const result = await opdService.updateImmunization(patientId, req.user!.hospitalId, immunizationId, req.body, req.user!.userId);
+    sendSuccess(res, result, 'Immunization updated');
+  })
+);
+
+// Delete immunization record
+router.delete(
+  '/patient-immunizations/:patientId/:immunizationId',
+  authenticate,
+  authorizeWithPermission('opd:visits:write', ['NURSE', 'DOCTOR', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { patientId, immunizationId } = req.params;
+    const result = await opdService.deleteImmunization(patientId, req.user!.hospitalId, immunizationId);
+    sendSuccess(res, result, 'Immunization deleted');
+  })
+);
+
 export default router;

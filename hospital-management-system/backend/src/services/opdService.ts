@@ -1224,6 +1224,12 @@ export class OPDService {
         allergies: {
           orderBy: { createdAt: 'desc' },
         },
+        pastSurgeries: {
+          orderBy: { surgeryDate: 'desc' },
+        },
+        immunizations: {
+          orderBy: { dateAdministered: 'desc' },
+        },
       },
     });
 
@@ -1252,7 +1258,283 @@ export class OPDService {
         reaction: a.reaction || null,
         notes: a.notes || null,
       })),
+      detailedPastSurgeries: (patient as any).pastSurgeries?.map((s: any) => ({
+        id: s.id,
+        surgeryName: s.surgeryName,
+        surgeryDate: s.surgeryDate,
+        hospitalName: s.hospitalName,
+        hospitalLocation: s.hospitalLocation || null,
+        surgeonName: s.surgeonName || null,
+        indication: s.indication || null,
+        complications: s.complications || null,
+        outcome: s.outcome || null,
+        notes: s.notes || null,
+        verificationStatus: s.verificationStatus,
+      })) || [],
+      detailedImmunizations: (patient as any).immunizations?.map((i: any) => ({
+        id: i.id,
+        vaccineName: i.vaccineName,
+        vaccineType: i.vaccineType || null,
+        doseNumber: i.doseNumber || null,
+        dateAdministered: i.dateAdministered,
+        administeredBy: i.administeredBy || null,
+        lotNumber: i.lotNumber || null,
+        nextDueDate: i.nextDueDate || null,
+        reactions: i.reactions || null,
+        notes: i.notes || null,
+        verificationStatus: i.verificationStatus,
+      })) || [],
     };
+  }
+
+  // Update patient's medical history (chronic conditions & family history)
+  async updatePatientMedicalHistory(patientId: string, hospitalId: string, data: {
+    chronicConditions?: string[];
+    familyHistory?: string[];
+  }, updatedBy: string) {
+    const patient = await prisma.patient.findFirst({
+      where: { id: patientId, hospitalId },
+    });
+    if (!patient) {
+      throw new NotFoundError('Patient not found');
+    }
+
+    const medicalHistory = await prisma.medicalHistory.upsert({
+      where: { patientId },
+      update: {
+        ...(data.chronicConditions !== undefined && { chronicConditions: data.chronicConditions }),
+        ...(data.familyHistory !== undefined && { familyHistory: data.familyHistory }),
+      },
+      create: {
+        patientId,
+        chronicConditions: data.chronicConditions || [],
+        familyHistory: data.familyHistory || [],
+        pastSurgeries: [],
+        currentMedications: [],
+        immunizations: [],
+      },
+    });
+
+    return medicalHistory;
+  }
+
+  // Add a new allergy for a patient
+  async addPatientAllergy(patientId: string, hospitalId: string, data: {
+    allergen: string;
+    type: string;
+    severity: string;
+    reaction?: string;
+    notes?: string;
+  }) {
+    const patient = await prisma.patient.findFirst({
+      where: { id: patientId, hospitalId },
+    });
+    if (!patient) {
+      throw new NotFoundError('Patient not found');
+    }
+
+    const allergy = await prisma.allergy.create({
+      data: {
+        patientId,
+        allergen: data.allergen,
+        type: data.type as any,
+        severity: data.severity as any,
+        reaction: data.reaction || null,
+        notes: data.notes || null,
+      },
+    });
+
+    return allergy;
+  }
+
+  // Update an existing allergy
+  async updatePatientAllergy(patientId: string, hospitalId: string, allergyId: string, data: {
+    allergen?: string;
+    type?: string;
+    severity?: string;
+    reaction?: string;
+    notes?: string;
+  }) {
+    const patient = await prisma.patient.findFirst({
+      where: { id: patientId, hospitalId },
+    });
+    if (!patient) {
+      throw new NotFoundError('Patient not found');
+    }
+
+    const allergy = await prisma.allergy.findFirst({
+      where: { id: allergyId, patientId },
+    });
+    if (!allergy) {
+      throw new NotFoundError('Allergy record not found');
+    }
+
+    const updated = await prisma.allergy.update({
+      where: { id: allergyId },
+      data: {
+        ...(data.allergen !== undefined && { allergen: data.allergen }),
+        ...(data.type !== undefined && { type: data.type as any }),
+        ...(data.severity !== undefined && { severity: data.severity as any }),
+        ...(data.reaction !== undefined && { reaction: data.reaction || null }),
+        ...(data.notes !== undefined && { notes: data.notes || null }),
+      },
+    });
+
+    return updated;
+  }
+
+  // Delete an allergy
+  async deletePatientAllergy(patientId: string, hospitalId: string, allergyId: string) {
+    const patient = await prisma.patient.findFirst({
+      where: { id: patientId, hospitalId },
+    });
+    if (!patient) {
+      throw new NotFoundError('Patient not found');
+    }
+
+    const allergy = await prisma.allergy.findFirst({
+      where: { id: allergyId, patientId },
+    });
+    if (!allergy) {
+      throw new NotFoundError('Allergy record not found');
+    }
+
+    await prisma.allergy.delete({ where: { id: allergyId } });
+    return { success: true };
+  }
+
+  // Update a past surgery record
+  async updatePastSurgery(patientId: string, hospitalId: string, surgeryId: string, data: {
+    surgeryName?: string;
+    surgeryDate?: string;
+    hospitalName?: string;
+    hospitalLocation?: string;
+    surgeonName?: string;
+    indication?: string;
+    complications?: string;
+    outcome?: string;
+    notes?: string;
+  }, updatedBy: string) {
+    const patient = await prisma.patient.findFirst({
+      where: { id: patientId, hospitalId },
+    });
+    if (!patient) {
+      throw new NotFoundError('Patient not found');
+    }
+
+    const surgery = await prisma.pastSurgery.findFirst({
+      where: { id: surgeryId, patientId },
+    });
+    if (!surgery) {
+      throw new NotFoundError('Past surgery record not found');
+    }
+
+    const updated = await prisma.pastSurgery.update({
+      where: { id: surgeryId },
+      data: {
+        ...(data.surgeryName !== undefined && { surgeryName: data.surgeryName }),
+        ...(data.surgeryDate !== undefined && { surgeryDate: new Date(data.surgeryDate) }),
+        ...(data.hospitalName !== undefined && { hospitalName: data.hospitalName }),
+        ...(data.hospitalLocation !== undefined && { hospitalLocation: data.hospitalLocation || null }),
+        ...(data.surgeonName !== undefined && { surgeonName: data.surgeonName || null }),
+        ...(data.indication !== undefined && { indication: data.indication || null }),
+        ...(data.complications !== undefined && { complications: data.complications || null }),
+        ...(data.outcome !== undefined && { outcome: data.outcome || null }),
+        ...(data.notes !== undefined && { notes: data.notes || null }),
+        verificationStatus: 'NURSE_VERIFIED',
+        verifiedBy: updatedBy,
+        verifiedAt: new Date(),
+      },
+    });
+
+    return updated;
+  }
+
+  // Delete a past surgery record
+  async deletePastSurgery(patientId: string, hospitalId: string, surgeryId: string) {
+    const patient = await prisma.patient.findFirst({
+      where: { id: patientId, hospitalId },
+    });
+    if (!patient) {
+      throw new NotFoundError('Patient not found');
+    }
+
+    const surgery = await prisma.pastSurgery.findFirst({
+      where: { id: surgeryId, patientId },
+    });
+    if (!surgery) {
+      throw new NotFoundError('Past surgery record not found');
+    }
+
+    await prisma.pastSurgery.delete({ where: { id: surgeryId } });
+    return { success: true };
+  }
+
+  // Update an immunization record
+  async updateImmunization(patientId: string, hospitalId: string, immunizationId: string, data: {
+    vaccineName?: string;
+    vaccineType?: string;
+    doseNumber?: number;
+    dateAdministered?: string;
+    administeredBy?: string;
+    lotNumber?: string;
+    nextDueDate?: string;
+    reactions?: string;
+    notes?: string;
+  }, updatedBy: string) {
+    const patient = await prisma.patient.findFirst({
+      where: { id: patientId, hospitalId },
+    });
+    if (!patient) {
+      throw new NotFoundError('Patient not found');
+    }
+
+    const immunization = await prisma.immunization.findFirst({
+      where: { id: immunizationId, patientId },
+    });
+    if (!immunization) {
+      throw new NotFoundError('Immunization record not found');
+    }
+
+    const updated = await prisma.immunization.update({
+      where: { id: immunizationId },
+      data: {
+        ...(data.vaccineName !== undefined && { vaccineName: data.vaccineName }),
+        ...(data.vaccineType !== undefined && { vaccineType: data.vaccineType || null }),
+        ...(data.doseNumber !== undefined && { doseNumber: data.doseNumber || null }),
+        ...(data.dateAdministered !== undefined && { dateAdministered: new Date(data.dateAdministered) }),
+        ...(data.administeredBy !== undefined && { administeredBy: data.administeredBy || null }),
+        ...(data.lotNumber !== undefined && { lotNumber: data.lotNumber || null }),
+        ...(data.nextDueDate !== undefined && { nextDueDate: data.nextDueDate ? new Date(data.nextDueDate) : null }),
+        ...(data.reactions !== undefined && { reactions: data.reactions || null }),
+        ...(data.notes !== undefined && { notes: data.notes || null }),
+        verificationStatus: 'NURSE_VERIFIED',
+        verifiedBy: updatedBy,
+        verifiedAt: new Date(),
+      },
+    });
+
+    return updated;
+  }
+
+  // Delete an immunization record
+  async deleteImmunization(patientId: string, hospitalId: string, immunizationId: string) {
+    const patient = await prisma.patient.findFirst({
+      where: { id: patientId, hospitalId },
+    });
+    if (!patient) {
+      throw new NotFoundError('Patient not found');
+    }
+
+    const immunization = await prisma.immunization.findFirst({
+      where: { id: immunizationId, patientId },
+    });
+    if (!immunization) {
+      throw new NotFoundError('Immunization record not found');
+    }
+
+    await prisma.immunization.delete({ where: { id: immunizationId } });
+    return { success: true };
   }
 }
 

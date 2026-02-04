@@ -9,6 +9,8 @@ import {
   XMarkIcon,
   ExclamationCircleIcon,
   ExclamationTriangleIcon,
+  PencilIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
 import { opdApi, patientApi } from '../../services/api';
@@ -92,6 +94,8 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
   // State for detailed medical history (first consultation)
   const [showMedicalHistory, setShowMedicalHistory] = useState(false);
   const [pastSurgeries, setPastSurgeries] = useState<Array<{
+    id?: string;
+    isExisting?: boolean;
     surgeryName: string;
     surgeryDate: string;
     hospitalName: string;
@@ -103,6 +107,8 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
     notes: string;
   }>>([]);
   const [immunizations, setImmunizations] = useState<Array<{
+    id?: string;
+    isExisting?: boolean;
     vaccineName: string;
     vaccineType: string;
     doseNumber: string;
@@ -113,6 +119,8 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
     reactions: string;
     notes: string;
   }>>([]);
+  const [deletedSurgeryIds, setDeletedSurgeryIds] = useState<string[]>([]);
+  const [deletedImmunizationIds, setDeletedImmunizationIds] = useState<string[]>([]);
 
   // State for AI risk assessment display
   const [riskAssessment, setRiskAssessment] = useState<any>(null);
@@ -121,7 +129,7 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
   // State for patient's booking notes (read-only display)
   const [patientBookingNotes, setPatientBookingNotes] = useState<string | null>(null);
 
-  // State for patient medical summary (read-only display from MedicalHistory model)
+  // State for patient medical summary (editable from MedicalHistory model)
   const [medicalSummary, setMedicalSummary] = useState<{
     medicalHistory: {
       chronicConditions: string[];
@@ -138,9 +146,55 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
       type: string;
       severity: string;
       reaction: string | null;
+      notes?: string | null;
+    }>;
+    detailedPastSurgeries?: Array<{
+      id: string;
+      surgeryName: string;
+      surgeryDate: string;
+      hospitalName: string;
+      hospitalLocation: string | null;
+      surgeonName: string | null;
+      indication: string | null;
+      complications: string | null;
+      outcome: string | null;
+      notes: string | null;
+      verificationStatus: string;
+    }>;
+    detailedImmunizations?: Array<{
+      id: string;
+      vaccineName: string;
+      vaccineType: string | null;
+      doseNumber: number | null;
+      dateAdministered: string;
+      administeredBy: string | null;
+      lotNumber: string | null;
+      nextDueDate: string | null;
+      reactions: string | null;
+      notes: string | null;
+      verificationStatus: string;
     }>;
   } | null>(null);
   const [loadingMedicalSummary, setLoadingMedicalSummary] = useState(false);
+
+  // Editable medical records state
+  const [editableChronicConditions, setEditableChronicConditions] = useState<string[]>([]);
+  const [editableFamilyHistory, setEditableFamilyHistory] = useState<string[]>([]);
+  const [newConditionInput, setNewConditionInput] = useState('');
+  const [newFamilyHistoryInput, setNewFamilyHistoryInput] = useState('');
+  const [editableAllergies, setEditableAllergies] = useState<Array<{
+    id: string;
+    allergen: string;
+    type: string;
+    severity: string;
+    reaction: string;
+    notes: string;
+    isEditing?: boolean;
+  }>>([]);
+  const [showAddAllergyForm, setShowAddAllergyForm] = useState(false);
+  const [newAllergy, setNewAllergy] = useState({ allergen: '', type: 'OTHER', severity: 'MILD', reaction: '', notes: '' });
+  const [savingMedicalHistory, setSavingMedicalHistory] = useState(false);
+  const [savingAllergy, setSavingAllergy] = useState(false);
 
   // Calculate if pregnancy question should be shown
   const patientAge = patientData?.dateOfBirth ? calculateAge(patientData.dateOfBirth) : null;
@@ -183,7 +237,66 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
       setLoadingMedicalSummary(true);
       try {
         const response = await opdApi.getPatientMedicalSummary(appointment.patient.id);
-        setMedicalSummary(response.data?.data || null);
+        const data = response.data?.data || null;
+        setMedicalSummary(data);
+
+        // Populate editable state from fetched data
+        if (data) {
+          setEditableChronicConditions(data.medicalHistory?.chronicConditions || []);
+          setEditableFamilyHistory(data.medicalHistory?.familyHistory || []);
+          setEditableAllergies((data.allergies || []).map((a: any) => ({
+            id: a.id,
+            allergen: a.allergen,
+            type: a.type,
+            severity: a.severity,
+            reaction: a.reaction || '',
+            notes: a.notes || '',
+          })));
+
+          // Helper to format date to YYYY-MM-DD for date input
+          const formatDate = (dateValue: string | Date | null | undefined): string => {
+            if (!dateValue) return '';
+            try {
+              const d = new Date(dateValue);
+              if (isNaN(d.getTime())) return '';
+              return d.toISOString().split('T')[0];
+            } catch { return ''; }
+          };
+
+          // Pre-populate past surgeries from detailed records
+          if (data.detailedPastSurgeries?.length > 0) {
+            setPastSurgeries(data.detailedPastSurgeries.map((s: any) => ({
+              id: s.id,
+              isExisting: true,
+              surgeryName: s.surgeryName || '',
+              surgeryDate: formatDate(s.surgeryDate),
+              hospitalName: s.hospitalName || '',
+              hospitalLocation: s.hospitalLocation || '',
+              surgeonName: s.surgeonName || '',
+              indication: s.indication || '',
+              complications: s.complications || '',
+              outcome: s.outcome || '',
+              notes: s.notes || '',
+            })));
+          }
+
+          // Pre-populate immunizations from detailed records
+          if (data.detailedImmunizations?.length > 0) {
+            setImmunizations(data.detailedImmunizations.map((i: any) => ({
+              id: i.id,
+              isExisting: true,
+              vaccineName: i.vaccineName || '',
+              vaccineType: i.vaccineType || '',
+              doseNumber: i.doseNumber?.toString() || '',
+              dateAdministered: formatDate(i.dateAdministered),
+              administeredBy: i.administeredBy || '',
+              lotNumber: i.lotNumber || '',
+              nextDueDate: formatDate(i.nextDueDate),
+              reactions: i.reactions || '',
+              notes: i.notes || '',
+            })));
+          }
+        }
       } catch (error) {
         console.error('Failed to fetch patient medical summary:', error);
         setMedicalSummary(null);
@@ -313,10 +426,61 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
     e.preventDefault();
     setLoading(true);
     try {
-      // Filter out empty surgery records (only include those with at least name and date)
-      const validSurgeries = pastSurgeries.filter(s => s.surgeryName.trim() && s.surgeryDate);
-      // Filter out empty immunization records (only include those with at least vaccine name and date)
-      const validImmunizations = immunizations.filter(i => i.vaccineName.trim() && i.dateAdministered);
+      const patientId = appointment.patient?.id;
+
+      // Handle deleted existing surgeries
+      if (patientId && deletedSurgeryIds.length > 0) {
+        await Promise.all(deletedSurgeryIds.map(id =>
+          opdApi.deletePastSurgery(patientId, id).catch(err => console.error('Failed to delete surgery:', err))
+        ));
+      }
+
+      // Handle deleted existing immunizations
+      if (patientId && deletedImmunizationIds.length > 0) {
+        await Promise.all(deletedImmunizationIds.map(id =>
+          opdApi.deleteImmunization(patientId, id).catch(err => console.error('Failed to delete immunization:', err))
+        ));
+      }
+
+      // Handle updates to existing surgeries
+      const existingSurgeries = pastSurgeries.filter(s => s.isExisting && s.id && s.surgeryName.trim());
+      if (patientId && existingSurgeries.length > 0) {
+        await Promise.all(existingSurgeries.map(s =>
+          opdApi.updatePastSurgery(patientId, s.id!, {
+            surgeryName: s.surgeryName,
+            surgeryDate: s.surgeryDate,
+            hospitalName: s.hospitalName,
+            hospitalLocation: s.hospitalLocation || undefined,
+            surgeonName: s.surgeonName || undefined,
+            indication: s.indication || undefined,
+            complications: s.complications || undefined,
+            outcome: s.outcome || undefined,
+            notes: s.notes || undefined,
+          }).catch(err => console.error('Failed to update surgery:', err))
+        ));
+      }
+
+      // Handle updates to existing immunizations
+      const existingImmunizations = immunizations.filter(i => i.isExisting && i.id && i.vaccineName.trim());
+      if (patientId && existingImmunizations.length > 0) {
+        await Promise.all(existingImmunizations.map(i =>
+          opdApi.updateImmunization(patientId, i.id!, {
+            vaccineName: i.vaccineName,
+            vaccineType: i.vaccineType || undefined,
+            doseNumber: i.doseNumber ? parseInt(i.doseNumber) : undefined,
+            dateAdministered: i.dateAdministered,
+            administeredBy: i.administeredBy || undefined,
+            lotNumber: i.lotNumber || undefined,
+            nextDueDate: i.nextDueDate || undefined,
+            reactions: i.reactions || undefined,
+            notes: i.notes || undefined,
+          }).catch(err => console.error('Failed to update immunization:', err))
+        ));
+      }
+
+      // Only send NEW (non-existing) surgeries and immunizations via the vitals endpoint
+      const newSurgeries = pastSurgeries.filter(s => !s.isExisting && s.surgeryName.trim() && s.surgeryDate);
+      const newImmunizations = immunizations.filter(i => !i.isExisting && i.vaccineName.trim() && i.dateAdministered);
 
       const vitalsData = {
         temperature: vitals.temperature ? parseFloat(vitals.temperature) : undefined,
@@ -330,13 +494,11 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
         bloodSugar: vitals.bloodSugar ? parseFloat(vitals.bloodSugar) : undefined,
         painLevel: vitals.painLevel ? parseInt(vitals.painLevel) : undefined,
         notes: vitals.notes || undefined,
-        // New pregnancy and medication fields
         isPregnant: vitals.isPregnant,
         expectedDueDate: vitals.expectedDueDate || undefined,
         currentMedications: vitals.currentMedications.length > 0 ? vitals.currentMedications : undefined,
         currentTreatment: vitals.currentTreatment || undefined,
-        // Detailed medical history (first consultation)
-        pastSurgeries: validSurgeries.length > 0 ? validSurgeries.map(s => ({
+        pastSurgeries: newSurgeries.length > 0 ? newSurgeries.map(s => ({
           surgeryName: s.surgeryName,
           surgeryDate: s.surgeryDate,
           hospitalName: s.hospitalName,
@@ -347,7 +509,7 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
           outcome: s.outcome || undefined,
           notes: s.notes || undefined,
         })) : undefined,
-        immunizations: validImmunizations.length > 0 ? validImmunizations.map(i => ({
+        immunizations: newImmunizations.length > 0 ? newImmunizations.map(i => ({
           vaccineName: i.vaccineName,
           vaccineType: i.vaccineType || undefined,
           doseNumber: i.doseNumber ? parseInt(i.doseNumber) : undefined,
@@ -427,6 +589,10 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
   };
 
   const removePastSurgery = (index: number) => {
+    const surgery = pastSurgeries[index];
+    if (surgery.isExisting && surgery.id) {
+      setDeletedSurgeryIds(prev => [...prev, surgery.id!]);
+    }
     setPastSurgeries(pastSurgeries.filter((_, i) => i !== index));
   };
 
@@ -451,6 +617,10 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
   };
 
   const removeImmunization = (index: number) => {
+    const imm = immunizations[index];
+    if (imm.isExisting && imm.id) {
+      setDeletedImmunizationIds(prev => [...prev, imm.id!]);
+    }
     setImmunizations(immunizations.filter((_, i) => i !== index));
   };
 
@@ -458,6 +628,115 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
     const updated = [...immunizations];
     updated[index] = { ...updated[index], [field]: value };
     setImmunizations(updated);
+  };
+
+  // Editable medical records handlers
+  const addChronicCondition = () => {
+    if (newConditionInput.trim()) {
+      setEditableChronicConditions(prev => [...prev, newConditionInput.trim()]);
+      setNewConditionInput('');
+    }
+  };
+
+  const removeChronicCondition = (index: number) => {
+    setEditableChronicConditions(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const addFamilyHistory = () => {
+    if (newFamilyHistoryInput.trim()) {
+      setEditableFamilyHistory(prev => [...prev, newFamilyHistoryInput.trim()]);
+      setNewFamilyHistoryInput('');
+    }
+  };
+
+  const removeFamilyHistory = (index: number) => {
+    setEditableFamilyHistory(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSaveMedicalHistory = async () => {
+    if (!appointment.patient?.id) return;
+    setSavingMedicalHistory(true);
+    try {
+      await opdApi.updatePatientMedicalHistory(appointment.patient.id, {
+        chronicConditions: editableChronicConditions,
+        familyHistory: editableFamilyHistory,
+      });
+      toast.success('Medical history saved');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to save medical history');
+    } finally {
+      setSavingMedicalHistory(false);
+    }
+  };
+
+  const handleAddAllergy = async () => {
+    if (!appointment.patient?.id || !newAllergy.allergen.trim()) return;
+    setSavingAllergy(true);
+    try {
+      const response = await opdApi.addPatientAllergy(appointment.patient.id, {
+        allergen: newAllergy.allergen,
+        type: newAllergy.type,
+        severity: newAllergy.severity,
+        reaction: newAllergy.reaction || undefined,
+        notes: newAllergy.notes || undefined,
+      });
+      const created = response.data?.data;
+      if (created) {
+        setEditableAllergies(prev => [...prev, {
+          id: created.id,
+          allergen: created.allergen,
+          type: created.type,
+          severity: created.severity,
+          reaction: created.reaction || '',
+          notes: created.notes || '',
+        }]);
+      }
+      setNewAllergy({ allergen: '', type: 'OTHER', severity: 'MILD', reaction: '', notes: '' });
+      setShowAddAllergyForm(false);
+      toast.success('Allergy added');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to add allergy');
+    } finally {
+      setSavingAllergy(false);
+    }
+  };
+
+  const handleUpdateAllergy = async (index: number) => {
+    const allergy = editableAllergies[index];
+    if (!appointment.patient?.id || !allergy.id) return;
+    setSavingAllergy(true);
+    try {
+      await opdApi.updatePatientAllergy(appointment.patient.id, allergy.id, {
+        allergen: allergy.allergen,
+        type: allergy.type,
+        severity: allergy.severity,
+        reaction: allergy.reaction || undefined,
+        notes: allergy.notes || undefined,
+      });
+      const updated = [...editableAllergies];
+      updated[index] = { ...updated[index], isEditing: false };
+      setEditableAllergies(updated);
+      toast.success('Allergy updated');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to update allergy');
+    } finally {
+      setSavingAllergy(false);
+    }
+  };
+
+  const handleDeleteAllergy = async (index: number) => {
+    const allergy = editableAllergies[index];
+    if (!appointment.patient?.id || !allergy.id) return;
+    setSavingAllergy(true);
+    try {
+      await opdApi.deletePatientAllergy(appointment.patient.id, allergy.id);
+      setEditableAllergies(prev => prev.filter((_, i) => i !== index));
+      toast.success('Allergy deleted');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to delete allergy');
+    } finally {
+      setSavingAllergy(false);
+    }
   };
 
   return (
@@ -514,105 +793,219 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
               </div>
             )}
 
-            {/* Patient Medical History (Read-Only) */}
+            {/* Patient Medical Records (Editable) */}
             {!loadingMedicalSummary && medicalSummary && (
-              (medicalSummary.medicalHistory?.chronicConditions?.length > 0 ||
-               medicalSummary.medicalHistory?.pastSurgeries?.length > 0 ||
-               medicalSummary.medicalHistory?.currentTreatment ||
-               medicalSummary.allergies?.length > 0) && (
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                  <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
-                    <ClipboardDocumentListIcon className="h-5 w-5" />
-                    Patient Medical History (Read-Only)
-                  </h3>
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                  <ClipboardDocumentListIcon className="h-5 w-5" />
+                  Patient Medical Records
+                  <span className="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full font-normal">Editable</span>
+                </h3>
 
-                  {/* Allergies - Highlighted for safety */}
-                  {medicalSummary.allergies?.length > 0 && (
-                    <div className="mb-3 p-2.5 bg-red-100 border border-red-300 rounded-lg">
-                      <span className="text-xs text-red-700 uppercase font-semibold flex items-center gap-1 mb-1.5">
-                        <ExclamationTriangleIcon className="h-4 w-4" /> Allergies
-                      </span>
-                      <div className="flex flex-wrap gap-1">
-                        {medicalSummary.allergies.map((a, i) => (
-                          <span
-                            key={i}
-                            className="px-2 py-0.5 bg-red-200 text-red-900 rounded text-sm font-medium"
-                          >
-                            {a.allergen} ({a.severity})
+                {/* Allergies - Safety-critical, immediate save */}
+                <div className="mb-3 p-2.5 bg-red-100 border border-red-300 rounded-lg">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs text-red-700 uppercase font-semibold flex items-center gap-1">
+                      <ExclamationTriangleIcon className="h-4 w-4" /> Allergies
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddAllergyForm(!showAddAllergyForm)}
+                      className="flex items-center gap-1 px-2 py-0.5 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700 transition-colors"
+                    >
+                      <PlusIcon className="h-3 w-3" /> Add
+                    </button>
+                  </div>
+
+                  {editableAllergies.length === 0 && !showAddAllergyForm && (
+                    <p className="text-xs text-red-600 italic">No known allergies recorded.</p>
+                  )}
+
+                  {editableAllergies.map((allergy, i) => (
+                    <div key={allergy.id} className="mb-1.5">
+                      {allergy.isEditing ? (
+                        <div className="bg-white p-2 rounded border border-red-200 space-y-1.5">
+                          <div className="grid grid-cols-3 gap-1.5">
+                            <input type="text" value={allergy.allergen} placeholder="Allergen"
+                              onChange={(e) => { const u = [...editableAllergies]; u[i] = { ...u[i], allergen: e.target.value }; setEditableAllergies(u); }}
+                              className="px-2 py-1 border border-gray-300 rounded text-sm" />
+                            <select value={allergy.type}
+                              onChange={(e) => { const u = [...editableAllergies]; u[i] = { ...u[i], type: e.target.value }; setEditableAllergies(u); }}
+                              className="px-2 py-1 border border-gray-300 rounded text-sm">
+                              <option value="DRUG">Drug</option><option value="FOOD">Food</option>
+                              <option value="ENVIRONMENTAL">Environmental</option><option value="OTHER">Other</option>
+                            </select>
+                            <select value={allergy.severity}
+                              onChange={(e) => { const u = [...editableAllergies]; u[i] = { ...u[i], severity: e.target.value }; setEditableAllergies(u); }}
+                              className="px-2 py-1 border border-gray-300 rounded text-sm">
+                              <option value="MILD">Mild</option><option value="MODERATE">Moderate</option>
+                              <option value="SEVERE">Severe</option><option value="LIFE_THREATENING">Life-threatening</option>
+                            </select>
+                          </div>
+                          <input type="text" value={allergy.reaction} placeholder="Reaction"
+                            onChange={(e) => { const u = [...editableAllergies]; u[i] = { ...u[i], reaction: e.target.value }; setEditableAllergies(u); }}
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm" />
+                          <div className="flex gap-1.5">
+                            <button type="button" onClick={() => handleUpdateAllergy(i)} disabled={savingAllergy}
+                              className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 disabled:opacity-50">Save</button>
+                            <button type="button" onClick={() => { const u = [...editableAllergies]; u[i] = { ...u[i], isEditing: false }; setEditableAllergies(u); }}
+                              className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300">Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <span className="px-2 py-0.5 bg-red-200 text-red-900 rounded text-sm font-medium flex-1">
+                            {allergy.allergen} ({allergy.severity.replace('_', ' ')})
+                            {allergy.reaction && <span className="text-red-700 text-xs ml-1">- {allergy.reaction}</span>}
                           </span>
-                        ))}
+                          <button type="button" onClick={() => { const u = [...editableAllergies]; u[i] = { ...u[i], isEditing: true }; setEditableAllergies(u); }}
+                            className="p-0.5 text-red-600 hover:text-red-800 hover:bg-red-200 rounded transition-colors">
+                            <PencilIcon className="h-3.5 w-3.5" />
+                          </button>
+                          <button type="button" onClick={() => handleDeleteAllergy(i)} disabled={savingAllergy}
+                            className="p-0.5 text-red-600 hover:text-red-800 hover:bg-red-200 rounded transition-colors disabled:opacity-50">
+                            <TrashIcon className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {showAddAllergyForm && (
+                    <div className="bg-white p-2 rounded border border-red-200 mt-1.5 space-y-1.5">
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <input type="text" value={newAllergy.allergen} placeholder="Allergen *"
+                          onChange={(e) => setNewAllergy({ ...newAllergy, allergen: e.target.value })}
+                          className="px-2 py-1 border border-gray-300 rounded text-sm" />
+                        <select value={newAllergy.type} onChange={(e) => setNewAllergy({ ...newAllergy, type: e.target.value })}
+                          className="px-2 py-1 border border-gray-300 rounded text-sm">
+                          <option value="DRUG">Drug</option><option value="FOOD">Food</option>
+                          <option value="ENVIRONMENTAL">Environmental</option><option value="OTHER">Other</option>
+                        </select>
+                        <select value={newAllergy.severity} onChange={(e) => setNewAllergy({ ...newAllergy, severity: e.target.value })}
+                          className="px-2 py-1 border border-gray-300 rounded text-sm">
+                          <option value="MILD">Mild</option><option value="MODERATE">Moderate</option>
+                          <option value="SEVERE">Severe</option><option value="LIFE_THREATENING">Life-threatening</option>
+                        </select>
                       </div>
-                    </div>
-                  )}
-
-                  {/* Chronic Conditions */}
-                  {medicalSummary.medicalHistory?.chronicConditions?.length > 0 && (
-                    <div className="mb-3">
-                      <span className="text-xs text-gray-500 uppercase font-medium">Chronic Conditions</span>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {medicalSummary.medicalHistory.chronicConditions.map((c, i) => (
-                          <span key={i} className="px-2 py-0.5 bg-rose-100 text-rose-800 rounded text-sm">
-                            {c}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Past Surgeries */}
-                  {medicalSummary.medicalHistory?.pastSurgeries?.length > 0 && (
-                    <div className="mb-3">
-                      <span className="text-xs text-gray-500 uppercase font-medium">Past Surgeries</span>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {medicalSummary.medicalHistory.pastSurgeries.map((s, i) => (
-                          <span key={i} className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-sm">
-                            {s}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Ongoing Treatment from MedicalHistory */}
-                  {medicalSummary.medicalHistory?.currentTreatment && (
-                    <div className="mb-3">
-                      <span className="text-xs text-gray-500 uppercase font-medium">Ongoing Treatment</span>
-                      <p className="mt-1 text-sm text-gray-700 bg-cyan-50 px-2 py-1 rounded">
-                        {medicalSummary.medicalHistory.currentTreatment}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Patient Medications from MedicalHistory */}
-                  {medicalSummary.medicalHistory?.currentMedications?.length > 0 && (
-                    <div className="mb-3">
-                      <span className="text-xs text-gray-500 uppercase font-medium">Current Medications (from Medical History)</span>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {medicalSummary.medicalHistory.currentMedications.map((m, i) => (
-                          <span key={i} className="px-2 py-0.5 bg-green-100 text-green-800 rounded text-sm">
-                            {m}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Pregnancy Status from MedicalHistory */}
-                  {medicalSummary.medicalHistory?.isPregnant === true && (
-                    <div className="p-2 bg-pink-100 border border-pink-300 rounded-lg">
-                      <div className="flex items-center gap-2 text-pink-800">
-                        <span className="text-lg">🤰</span>
-                        <span className="font-medium text-sm">Patient is Pregnant</span>
-                        {medicalSummary.medicalHistory.expectedDueDate && (
-                          <span className="text-xs text-pink-600">
-                            (Due: {new Date(medicalSummary.medicalHistory.expectedDueDate).toLocaleDateString()})
-                          </span>
-                        )}
+                      <input type="text" value={newAllergy.reaction} placeholder="Reaction (optional)"
+                        onChange={(e) => setNewAllergy({ ...newAllergy, reaction: e.target.value })}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm" />
+                      <div className="flex gap-1.5">
+                        <button type="button" onClick={handleAddAllergy} disabled={savingAllergy || !newAllergy.allergen.trim()}
+                          className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 disabled:opacity-50">
+                          {savingAllergy ? 'Saving...' : 'Save Allergy'}
+                        </button>
+                        <button type="button" onClick={() => setShowAddAllergyForm(false)}
+                          className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300">Cancel</button>
                       </div>
                     </div>
                   )}
                 </div>
-              )
+
+                {/* Chronic Conditions - Editable pills */}
+                <div className="mb-3">
+                  <span className="text-xs text-gray-500 uppercase font-medium">Chronic Conditions</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {editableChronicConditions.map((c, i) => (
+                      <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-100 text-rose-800 rounded text-sm">
+                        {c}
+                        <button type="button" onClick={() => removeChronicCondition(i)}
+                          className="text-rose-500 hover:text-rose-700"><XMarkIcon className="h-3 w-3" /></button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-1.5 mt-1.5">
+                    <input type="text" value={newConditionInput} placeholder="Add condition..."
+                      onChange={(e) => setNewConditionInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addChronicCondition(); } }}
+                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm" />
+                    <button type="button" onClick={addChronicCondition} disabled={!newConditionInput.trim()}
+                      className="px-2 py-1 bg-rose-600 text-white rounded text-xs hover:bg-rose-700 disabled:opacity-50">Add</button>
+                  </div>
+                </div>
+
+                {/* Family History - Editable pills */}
+                <div className="mb-3">
+                  <span className="text-xs text-gray-500 uppercase font-medium">Family History</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {editableFamilyHistory.map((f, i) => (
+                      <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-800 rounded text-sm">
+                        {f}
+                        <button type="button" onClick={() => removeFamilyHistory(i)}
+                          className="text-amber-500 hover:text-amber-700"><XMarkIcon className="h-3 w-3" /></button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-1.5 mt-1.5">
+                    <input type="text" value={newFamilyHistoryInput} placeholder="Add family history..."
+                      onChange={(e) => setNewFamilyHistoryInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addFamilyHistory(); } }}
+                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm" />
+                    <button type="button" onClick={addFamilyHistory} disabled={!newFamilyHistoryInput.trim()}
+                      className="px-2 py-1 bg-amber-600 text-white rounded text-xs hover:bg-amber-700 disabled:opacity-50">Add</button>
+                  </div>
+                </div>
+
+                {/* Save Medical History button (batch save for conditions + family history) */}
+                <button type="button" onClick={handleSaveMedicalHistory} disabled={savingMedicalHistory}
+                  className="w-full py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5 mb-3">
+                  {savingMedicalHistory ? (
+                    <><ArrowPathIcon className="h-4 w-4 animate-spin" /> Saving...</>
+                  ) : (
+                    <><CheckCircleIcon className="h-4 w-4" /> Save Medical History Changes</>
+                  )}
+                </button>
+
+                {/* Past Surgeries summary */}
+                {medicalSummary.medicalHistory?.pastSurgeries?.length > 0 && (
+                  <div className="mb-3">
+                    <span className="text-xs text-gray-500 uppercase font-medium">Past Surgeries (from summary)</span>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {medicalSummary.medicalHistory.pastSurgeries.map((s, i) => (
+                        <span key={i} className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-sm">{s}</span>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1 italic">Edit detailed surgery records in the "Detailed Medical History" section below.</p>
+                  </div>
+                )}
+
+                {/* Ongoing Treatment from MedicalHistory */}
+                {medicalSummary.medicalHistory?.currentTreatment && (
+                  <div className="mb-3">
+                    <span className="text-xs text-gray-500 uppercase font-medium">Ongoing Treatment</span>
+                    <p className="mt-1 text-sm text-gray-700 bg-cyan-50 px-2 py-1 rounded">
+                      {medicalSummary.medicalHistory.currentTreatment}
+                    </p>
+                  </div>
+                )}
+
+                {/* Patient Medications from MedicalHistory */}
+                {medicalSummary.medicalHistory?.currentMedications?.length > 0 && (
+                  <div className="mb-3">
+                    <span className="text-xs text-gray-500 uppercase font-medium">Current Medications (from Medical History)</span>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {medicalSummary.medicalHistory.currentMedications.map((m, i) => (
+                        <span key={i} className="px-2 py-0.5 bg-green-100 text-green-800 rounded text-sm">{m}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Pregnancy Status from MedicalHistory */}
+                {medicalSummary.medicalHistory?.isPregnant === true && (
+                  <div className="p-2 bg-pink-100 border border-pink-300 rounded-lg">
+                    <div className="flex items-center gap-2 text-pink-800">
+                      <span className="font-medium text-sm">Patient is Pregnant</span>
+                      {medicalSummary.medicalHistory.expectedDueDate && (
+                        <span className="text-xs text-pink-600">
+                          (Due: {new Date(medicalSummary.medicalHistory.expectedDueDate).toLocaleDateString()})
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Primary Vitals */}
@@ -1004,9 +1397,16 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                     )}
 
                     {pastSurgeries.map((surgery, index) => (
-                      <div key={index} className="p-4 mb-3 border border-gray-200 rounded-lg bg-gray-50">
+                      <div key={surgery.id || index} className="p-4 mb-3 border border-gray-200 rounded-lg bg-gray-50">
                         <div className="flex items-center justify-between mb-3">
-                          <span className="font-medium text-gray-700">Surgery #{index + 1}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-gray-700">Surgery #{index + 1}</span>
+                            {surgery.isExisting ? (
+                              <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">From patient records</span>
+                            ) : (
+                              <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">New</span>
+                            )}
+                          </div>
                           <button
                             type="button"
                             onClick={() => removePastSurgery(index)}
@@ -1121,9 +1521,16 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                     )}
 
                     {immunizations.map((immunization, index) => (
-                      <div key={index} className="p-4 mb-3 border border-gray-200 rounded-lg bg-gray-50">
+                      <div key={immunization.id || index} className="p-4 mb-3 border border-gray-200 rounded-lg bg-gray-50">
                         <div className="flex items-center justify-between mb-3">
-                          <span className="font-medium text-gray-700">Vaccine #{index + 1}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-gray-700">Vaccine #{index + 1}</span>
+                            {immunization.isExisting ? (
+                              <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">From patient records</span>
+                            ) : (
+                              <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">New</span>
+                            )}
+                          </div>
                           <button
                             type="button"
                             onClick={() => removeImmunization(index)}
