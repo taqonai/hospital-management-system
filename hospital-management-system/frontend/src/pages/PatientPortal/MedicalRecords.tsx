@@ -21,15 +21,15 @@ import PastSurgeriesTab from './medical-records/PastSurgeriesTab';
 import HealthProfileTab from './medical-records/HealthProfileTab';
 
 const tabs = [
-  { key: 'visits', label: 'Visit History', icon: FolderIcon },
   { key: 'allergies', label: 'Allergies', icon: ExclamationTriangleIcon },
   { key: 'immunizations', label: 'Immunizations', icon: ShieldExclamationIcon },
   { key: 'surgeries', label: 'Past Surgeries', icon: ClipboardDocumentListIcon },
   { key: 'profile', label: 'Health Profile', icon: HeartIcon },
+  { key: 'visits', label: 'Visit History', icon: FolderIcon },
 ];
 
 export default function MedicalRecords() {
-  const [activeTab, setActiveTab] = useState('visits');
+  const [activeTab, setActiveTab] = useState('allergies');
   const [showAnalysis, setShowAnalysis] = useState(false);
 
   // AI Analysis mutation
