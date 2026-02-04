@@ -915,222 +915,7 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
               </div>
             </div>
 
-            {/* Patient Medical Records (Editable) */}
-            {!loadingMedicalSummary && medicalSummary && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
-                  <ClipboardDocumentListIcon className="h-5 w-5" />
-                  Patient Medical Records
-                  <span className="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full font-normal">Editable</span>
-                </h3>
-
-                {/* Allergies - Safety-critical, immediate save */}
-                <div className="mb-3 p-2.5 bg-red-100 border border-red-300 rounded-lg">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs text-red-700 uppercase font-semibold flex items-center gap-1">
-                      <ExclamationTriangleIcon className="h-4 w-4" /> Allergies
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setShowAddAllergyForm(!showAddAllergyForm)}
-                      className="flex items-center gap-1 px-2 py-0.5 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700 transition-colors"
-                    >
-                      <PlusIcon className="h-3 w-3" /> Add
-                    </button>
-                  </div>
-
-                  {editableAllergies.length === 0 && !showAddAllergyForm && (
-                    <p className="text-xs text-red-600 italic">No known allergies recorded.</p>
-                  )}
-
-                  {editableAllergies.map((allergy, i) => (
-                    <div key={allergy.id} className="mb-1.5">
-                      {allergy.isEditing ? (
-                        <div className="bg-white p-2 rounded border border-red-200 space-y-1.5">
-                          <div className="grid grid-cols-3 gap-1.5">
-                            <input type="text" value={allergy.allergen} placeholder="Allergen"
-                              onChange={(e) => { const u = [...editableAllergies]; u[i] = { ...u[i], allergen: e.target.value }; setEditableAllergies(u); }}
-                              className="px-2 py-1 border border-gray-300 rounded text-sm" />
-                            <select value={allergy.type}
-                              onChange={(e) => { const u = [...editableAllergies]; u[i] = { ...u[i], type: e.target.value }; setEditableAllergies(u); }}
-                              className="px-2 py-1 border border-gray-300 rounded text-sm">
-                              <option value="DRUG">Drug</option><option value="FOOD">Food</option>
-                              <option value="ENVIRONMENTAL">Environmental</option><option value="OTHER">Other</option>
-                            </select>
-                            <select value={allergy.severity}
-                              onChange={(e) => { const u = [...editableAllergies]; u[i] = { ...u[i], severity: e.target.value }; setEditableAllergies(u); }}
-                              className="px-2 py-1 border border-gray-300 rounded text-sm">
-                              <option value="MILD">Mild</option><option value="MODERATE">Moderate</option>
-                              <option value="SEVERE">Severe</option><option value="LIFE_THREATENING">Life-threatening</option>
-                            </select>
-                          </div>
-                          <input type="text" value={allergy.reaction} placeholder="Reaction"
-                            onChange={(e) => { const u = [...editableAllergies]; u[i] = { ...u[i], reaction: e.target.value }; setEditableAllergies(u); }}
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm" />
-                          <div className="flex gap-1.5">
-                            <button type="button" onClick={() => handleUpdateAllergy(i)} disabled={savingAllergy}
-                              className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 disabled:opacity-50">Save</button>
-                            <button type="button" onClick={() => { const u = [...editableAllergies]; u[i] = { ...u[i], isEditing: false }; setEditableAllergies(u); }}
-                              className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300">Cancel</button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1">
-                          <span className="px-2 py-0.5 bg-red-200 text-red-900 rounded text-sm font-medium flex-1">
-                            {allergy.allergen} ({allergy.severity.replace('_', ' ')})
-                            {allergy.reaction && <span className="text-red-700 text-xs ml-1">- {allergy.reaction}</span>}
-                          </span>
-                          <button type="button" onClick={() => { const u = [...editableAllergies]; u[i] = { ...u[i], isEditing: true }; setEditableAllergies(u); }}
-                            className="p-0.5 text-red-600 hover:text-red-800 hover:bg-red-200 rounded transition-colors">
-                            <PencilIcon className="h-3.5 w-3.5" />
-                          </button>
-                          <button type="button" onClick={() => handleDeleteAllergy(i)} disabled={savingAllergy}
-                            className="p-0.5 text-red-600 hover:text-red-800 hover:bg-red-200 rounded transition-colors disabled:opacity-50">
-                            <TrashIcon className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-
-                  {showAddAllergyForm && (
-                    <div className="bg-white p-2 rounded border border-red-200 mt-1.5 space-y-1.5">
-                      <div className="grid grid-cols-3 gap-1.5">
-                        <input type="text" value={newAllergy.allergen} placeholder="Allergen *"
-                          onChange={(e) => setNewAllergy({ ...newAllergy, allergen: e.target.value })}
-                          className="px-2 py-1 border border-gray-300 rounded text-sm" />
-                        <select value={newAllergy.type} onChange={(e) => setNewAllergy({ ...newAllergy, type: e.target.value })}
-                          className="px-2 py-1 border border-gray-300 rounded text-sm">
-                          <option value="DRUG">Drug</option><option value="FOOD">Food</option>
-                          <option value="ENVIRONMENTAL">Environmental</option><option value="OTHER">Other</option>
-                        </select>
-                        <select value={newAllergy.severity} onChange={(e) => setNewAllergy({ ...newAllergy, severity: e.target.value })}
-                          className="px-2 py-1 border border-gray-300 rounded text-sm">
-                          <option value="MILD">Mild</option><option value="MODERATE">Moderate</option>
-                          <option value="SEVERE">Severe</option><option value="LIFE_THREATENING">Life-threatening</option>
-                        </select>
-                      </div>
-                      <input type="text" value={newAllergy.reaction} placeholder="Reaction (optional)"
-                        onChange={(e) => setNewAllergy({ ...newAllergy, reaction: e.target.value })}
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm" />
-                      <div className="flex gap-1.5">
-                        <button type="button" onClick={handleAddAllergy} disabled={savingAllergy || !newAllergy.allergen.trim()}
-                          className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 disabled:opacity-50">
-                          {savingAllergy ? 'Saving...' : 'Save Allergy'}
-                        </button>
-                        <button type="button" onClick={() => setShowAddAllergyForm(false)}
-                          className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300">Cancel</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Chronic Conditions - Editable pills */}
-                <div className="mb-3">
-                  <span className="text-xs text-gray-500 uppercase font-medium">Chronic Conditions</span>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {editableChronicConditions.map((c, i) => (
-                      <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-100 text-rose-800 rounded text-sm">
-                        {c}
-                        <button type="button" onClick={() => removeChronicCondition(i)}
-                          className="text-rose-500 hover:text-rose-700"><XMarkIcon className="h-3 w-3" /></button>
-                      </span>
-                    ))}
-                  </div>
-                  <div className="flex gap-1.5 mt-1.5">
-                    <input type="text" value={newConditionInput} placeholder="Add condition..."
-                      onChange={(e) => setNewConditionInput(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addChronicCondition(); } }}
-                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm" />
-                    <button type="button" onClick={addChronicCondition} disabled={!newConditionInput.trim()}
-                      className="px-2 py-1 bg-rose-600 text-white rounded text-xs hover:bg-rose-700 disabled:opacity-50">Add</button>
-                  </div>
-                </div>
-
-                {/* Family History - Editable pills */}
-                <div className="mb-3">
-                  <span className="text-xs text-gray-500 uppercase font-medium">Family History</span>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {editableFamilyHistory.map((f, i) => (
-                      <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-800 rounded text-sm">
-                        {f}
-                        <button type="button" onClick={() => removeFamilyHistory(i)}
-                          className="text-amber-500 hover:text-amber-700"><XMarkIcon className="h-3 w-3" /></button>
-                      </span>
-                    ))}
-                  </div>
-                  <div className="flex gap-1.5 mt-1.5">
-                    <input type="text" value={newFamilyHistoryInput} placeholder="Add family history..."
-                      onChange={(e) => setNewFamilyHistoryInput(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addFamilyHistory(); } }}
-                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm" />
-                    <button type="button" onClick={addFamilyHistory} disabled={!newFamilyHistoryInput.trim()}
-                      className="px-2 py-1 bg-amber-600 text-white rounded text-xs hover:bg-amber-700 disabled:opacity-50">Add</button>
-                  </div>
-                </div>
-
-                {/* Save Medical History button (batch save for conditions + family history) */}
-                <button type="button" onClick={handleSaveMedicalHistory} disabled={savingMedicalHistory}
-                  className="w-full py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5 mb-3">
-                  {savingMedicalHistory ? (
-                    <><ArrowPathIcon className="h-4 w-4 animate-spin" /> Saving...</>
-                  ) : (
-                    <><CheckCircleIcon className="h-4 w-4" /> Save Medical History Changes</>
-                  )}
-                </button>
-
-                {/* Past Surgeries summary */}
-                {medicalSummary.medicalHistory?.pastSurgeries?.length > 0 && (
-                  <div className="mb-3">
-                    <span className="text-xs text-gray-500 uppercase font-medium">Past Surgeries (from summary)</span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {medicalSummary.medicalHistory.pastSurgeries.map((s, i) => (
-                        <span key={i} className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-sm">{s}</span>
-                      ))}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1 italic">Edit detailed surgery records in the "Detailed Medical History" section below.</p>
-                  </div>
-                )}
-
-                {/* Ongoing Treatment from MedicalHistory */}
-                {medicalSummary.medicalHistory?.currentTreatment && (
-                  <div className="mb-3">
-                    <span className="text-xs text-gray-500 uppercase font-medium">Ongoing Treatment</span>
-                    <p className="mt-1 text-sm text-gray-700 bg-cyan-50 px-2 py-1 rounded">
-                      {medicalSummary.medicalHistory.currentTreatment}
-                    </p>
-                  </div>
-                )}
-
-                {/* Patient Medications from MedicalHistory */}
-                {medicalSummary.medicalHistory?.currentMedications?.length > 0 && (
-                  <div className="mb-3">
-                    <span className="text-xs text-gray-500 uppercase font-medium">Current Medications (from Medical History)</span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {medicalSummary.medicalHistory.currentMedications.map((m, i) => (
-                        <span key={i} className="px-2 py-0.5 bg-green-100 text-green-800 rounded text-sm">{m}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Pregnancy Status from MedicalHistory */}
-                {medicalSummary.medicalHistory?.isPregnant === true && (
-                  <div className="p-2 bg-pink-100 border border-pink-300 rounded-lg">
-                    <div className="flex items-center gap-2 text-pink-800">
-                      <span className="font-medium text-sm">Patient is Pregnant</span>
-                      {medicalSummary.medicalHistory.expectedDueDate && (
-                        <span className="text-xs text-pink-600">
-                          (Due: {new Date(medicalSummary.medicalHistory.expectedDueDate).toLocaleDateString()})
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Body Measurements */}
+            {/* 2. Body Measurements */}
             <div>
               <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                 <span className="w-2 h-2 bg-blue-500 rounded-full" />
@@ -1203,11 +988,11 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
               </div>
             </div>
 
-            {/* Patient Details Section - Pregnancy, Medications, Treatment */}
-            <div className="p-4 bg-pink-50 rounded-xl border border-pink-200">
-              <h3 className="text-sm font-semibold text-pink-900 mb-4 flex items-center gap-2">
-                <span className="w-2 h-2 bg-pink-500 rounded-full" />
-                Patient Details
+            {/* 3. Patient Medical Records */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <span className="w-2 h-2 bg-emerald-500 rounded-full" />
+                Patient Medical Records
               </h3>
 
               {/* Loading indicator */}
@@ -1218,16 +1003,176 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                 </div>
               )}
 
+              {/* Allergies, Conditions, Family History - from medical summary */}
+              {!loadingMedicalSummary && medicalSummary && (
+                <div className="space-y-4 mb-4">
+                  {/* Allergies */}
+                  <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-medium text-gray-700 uppercase flex items-center gap-1">
+                        <ExclamationTriangleIcon className="h-4 w-4 text-red-500" /> Allergies
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddAllergyForm(!showAddAllergyForm)}
+                        className="flex items-center gap-1 px-2 py-0.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 transition-colors"
+                      >
+                        <PlusIcon className="h-3 w-3" /> Add
+                      </button>
+                    </div>
+
+                    {editableAllergies.length === 0 && !showAddAllergyForm && (
+                      <p className="text-xs text-gray-500 italic">No known allergies recorded.</p>
+                    )}
+
+                    {editableAllergies.map((allergy, i) => (
+                      <div key={allergy.id} className="mb-1.5">
+                        {allergy.isEditing ? (
+                          <div className="bg-white p-2 rounded-xl border border-gray-200 space-y-1.5">
+                            <div className="grid grid-cols-3 gap-1.5">
+                              <input type="text" value={allergy.allergen} placeholder="Allergen"
+                                onChange={(e) => { const u = [...editableAllergies]; u[i] = { ...u[i], allergen: e.target.value }; setEditableAllergies(u); }}
+                                className="px-2 py-1.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500" />
+                              <select value={allergy.type}
+                                onChange={(e) => { const u = [...editableAllergies]; u[i] = { ...u[i], type: e.target.value }; setEditableAllergies(u); }}
+                                className="px-2 py-1.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500">
+                                <option value="DRUG">Drug</option><option value="FOOD">Food</option>
+                                <option value="ENVIRONMENTAL">Environmental</option><option value="OTHER">Other</option>
+                              </select>
+                              <select value={allergy.severity}
+                                onChange={(e) => { const u = [...editableAllergies]; u[i] = { ...u[i], severity: e.target.value }; setEditableAllergies(u); }}
+                                className="px-2 py-1.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500">
+                                <option value="MILD">Mild</option><option value="MODERATE">Moderate</option>
+                                <option value="SEVERE">Severe</option><option value="LIFE_THREATENING">Life-threatening</option>
+                              </select>
+                            </div>
+                            <input type="text" value={allergy.reaction} placeholder="Reaction"
+                              onChange={(e) => { const u = [...editableAllergies]; u[i] = { ...u[i], reaction: e.target.value }; setEditableAllergies(u); }}
+                              className="w-full px-2 py-1.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500" />
+                            <div className="flex gap-1.5">
+                              <button type="button" onClick={() => handleUpdateAllergy(i)} disabled={savingAllergy}
+                                className="px-2.5 py-1 bg-emerald-600 text-white rounded-xl text-xs hover:bg-emerald-700 disabled:opacity-50">Save</button>
+                              <button type="button" onClick={() => { const u = [...editableAllergies]; u[i] = { ...u[i], isEditing: false }; setEditableAllergies(u); }}
+                                className="px-2.5 py-1 bg-gray-200 text-gray-700 rounded-xl text-xs hover:bg-gray-300">Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <span className="px-2 py-0.5 bg-red-100 text-red-900 rounded-xl text-sm font-medium flex-1">
+                              {allergy.allergen} ({allergy.severity.replace('_', ' ')})
+                              {allergy.reaction && <span className="text-red-700 text-xs ml-1">- {allergy.reaction}</span>}
+                            </span>
+                            <button type="button" onClick={() => { const u = [...editableAllergies]; u[i] = { ...u[i], isEditing: true }; setEditableAllergies(u); }}
+                              className="p-0.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                              <PencilIcon className="h-3.5 w-3.5" />
+                            </button>
+                            <button type="button" onClick={() => handleDeleteAllergy(i)} disabled={savingAllergy}
+                              className="p-0.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50">
+                              <TrashIcon className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    {showAddAllergyForm && (
+                      <div className="bg-white p-2 rounded-xl border border-gray-200 mt-1.5 space-y-1.5">
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <input type="text" value={newAllergy.allergen} placeholder="Allergen *"
+                            onChange={(e) => setNewAllergy({ ...newAllergy, allergen: e.target.value })}
+                            className="px-2 py-1.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500" />
+                          <select value={newAllergy.type} onChange={(e) => setNewAllergy({ ...newAllergy, type: e.target.value })}
+                            className="px-2 py-1.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500">
+                            <option value="DRUG">Drug</option><option value="FOOD">Food</option>
+                            <option value="ENVIRONMENTAL">Environmental</option><option value="OTHER">Other</option>
+                          </select>
+                          <select value={newAllergy.severity} onChange={(e) => setNewAllergy({ ...newAllergy, severity: e.target.value })}
+                            className="px-2 py-1.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500">
+                            <option value="MILD">Mild</option><option value="MODERATE">Moderate</option>
+                            <option value="SEVERE">Severe</option><option value="LIFE_THREATENING">Life-threatening</option>
+                          </select>
+                        </div>
+                        <input type="text" value={newAllergy.reaction} placeholder="Reaction (optional)"
+                          onChange={(e) => setNewAllergy({ ...newAllergy, reaction: e.target.value })}
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500" />
+                        <div className="flex gap-1.5">
+                          <button type="button" onClick={handleAddAllergy} disabled={savingAllergy || !newAllergy.allergen.trim()}
+                            className="px-2.5 py-1 bg-red-600 text-white rounded-xl text-xs hover:bg-red-700 disabled:opacity-50">
+                            {savingAllergy ? 'Saving...' : 'Save Allergy'}
+                          </button>
+                          <button type="button" onClick={() => setShowAddAllergyForm(false)}
+                            className="px-2.5 py-1 bg-gray-200 text-gray-700 rounded-xl text-xs hover:bg-gray-300">Cancel</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Chronic Conditions */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1.5">Chronic Conditions</label>
+                    <div className="flex flex-wrap gap-1 mb-1.5">
+                      {editableChronicConditions.map((c, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-50 text-rose-800 rounded-xl text-sm border border-rose-200">
+                          {c}
+                          <button type="button" onClick={() => removeChronicCondition(i)}
+                            className="text-rose-400 hover:text-rose-700"><XMarkIcon className="h-3 w-3" /></button>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex gap-1.5">
+                      <input type="text" value={newConditionInput} placeholder="Add condition..."
+                        onChange={(e) => setNewConditionInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addChronicCondition(); } }}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500" />
+                      <button type="button" onClick={addChronicCondition} disabled={!newConditionInput.trim()}
+                        className="px-3 py-2 bg-emerald-600 text-white rounded-xl text-xs font-medium hover:bg-emerald-700 disabled:opacity-50">Add</button>
+                    </div>
+                  </div>
+
+                  {/* Family History */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1.5">Family History</label>
+                    <div className="flex flex-wrap gap-1 mb-1.5">
+                      {editableFamilyHistory.map((f, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-800 rounded-xl text-sm border border-amber-200">
+                          {f}
+                          <button type="button" onClick={() => removeFamilyHistory(i)}
+                            className="text-amber-400 hover:text-amber-700"><XMarkIcon className="h-3 w-3" /></button>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex gap-1.5">
+                      <input type="text" value={newFamilyHistoryInput} placeholder="Add family history..."
+                        onChange={(e) => setNewFamilyHistoryInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addFamilyHistory(); } }}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500" />
+                      <button type="button" onClick={addFamilyHistory} disabled={!newFamilyHistoryInput.trim()}
+                        className="px-3 py-2 bg-emerald-600 text-white rounded-xl text-xs font-medium hover:bg-emerald-700 disabled:opacity-50">Add</button>
+                    </div>
+                  </div>
+
+                  {/* Save Medical History button */}
+                  <button type="button" onClick={handleSaveMedicalHistory} disabled={savingMedicalHistory}
+                    className="w-full py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5">
+                    {savingMedicalHistory ? (
+                      <><ArrowPathIcon className="h-4 w-4 animate-spin" /> Saving...</>
+                    ) : (
+                      <><CheckCircleIcon className="h-4 w-4" /> Save Medical History Changes</>
+                    )}
+                  </button>
+                </div>
+              )}
+
               {/* Pregnancy Check - Female aged 13-51 only */}
               {showPregnancyQuestion && (
                 <div className="mb-4">
                   <label className="block text-xs font-medium text-gray-700 mb-2">
-                    Is the patient pregnant? <span className="text-red-500">*</span>
+                    Is the patient pregnant?
                   </label>
                   <div className="flex gap-3">
                     <label className={clsx(
-                      'flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg border-2 transition-colors text-sm',
-                      vitals.isPregnant === true ? 'bg-pink-100 border-pink-500 text-pink-700' : 'bg-white border-gray-200 hover:border-gray-300'
+                      'flex items-center gap-2 cursor-pointer px-4 py-2 rounded-xl border-2 transition-colors text-sm',
+                      vitals.isPregnant === true ? 'bg-pink-50 border-pink-400 text-pink-700' : 'bg-white border-gray-200 hover:border-gray-300'
                     )}>
                       <input
                         type="radio"
@@ -1239,8 +1184,8 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                       <span className="font-medium">Yes</span>
                     </label>
                     <label className={clsx(
-                      'flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg border-2 transition-colors text-sm',
-                      vitals.isPregnant === false ? 'bg-green-100 border-green-500 text-green-700' : 'bg-white border-gray-200 hover:border-gray-300'
+                      'flex items-center gap-2 cursor-pointer px-4 py-2 rounded-xl border-2 transition-colors text-sm',
+                      vitals.isPregnant === false ? 'bg-green-50 border-green-400 text-green-700' : 'bg-white border-gray-200 hover:border-gray-300'
                     )}>
                       <input
                         type="radio"
@@ -1253,11 +1198,10 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                     </label>
                   </div>
 
-                  {/* Expected Due Date - shown only if pregnant */}
                   {vitals.isPregnant === true && (
                     <div className="mt-3">
                       <label className="block text-xs font-medium text-gray-600 mb-1">
-                        Expected Due Date <span className="text-gray-400">(optional, max 42 weeks from today)</span>
+                        Expected Due Date <span className="text-gray-400">(optional)</span>
                       </label>
                       <input
                         type="date"
@@ -1265,11 +1209,8 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                         onChange={(e) => setVitals({ ...vitals, expectedDueDate: e.target.value })}
                         min={new Date().toISOString().split('T')[0]}
                         max={new Date(Date.now() + 294 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
-                        className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500 text-sm"
+                        className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
                       />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Due date must be within 42 weeks (9 months + 2 weeks) from today
-                      </p>
                     </div>
                   )}
                 </div>
@@ -1281,11 +1222,10 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                   Current Medications <span className="text-gray-400">(optional)</span>
                 </label>
 
-                {/* Medications List */}
                 {vitals.currentMedications.length > 0 && (
                   <div className="mb-3 space-y-2">
                     {vitals.currentMedications.map((med, index) => (
-                      <div key={index} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-gray-200">
+                      <div key={index} className="flex items-center gap-2 bg-gray-50 p-2 rounded-xl border border-gray-200">
                         <div className="flex-1 text-sm">
                           <span className="font-medium text-gray-900">{med.name}</span>
                           {med.dosage && <span className="text-gray-600 ml-2">{med.dosage}</span>}
@@ -1294,7 +1234,7 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                         <button
                           type="button"
                           onClick={() => removeMedication(index)}
-                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
                         >
                           <XMarkIcon className="h-4 w-4" />
                         </button>
@@ -1303,7 +1243,6 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                   </div>
                 )}
 
-                {/* Add New Medication */}
                 <div className="flex gap-2 items-end flex-wrap">
                   <div className="flex-1 min-w-[120px]">
                     <input
@@ -1311,7 +1250,7 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                       placeholder="Medication name"
                       value={newMedication.name}
                       onChange={(e) => setNewMedication({ ...newMedication, name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500 text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
                     />
                   </div>
                   <div className="w-20">
@@ -1320,7 +1259,7 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                       placeholder="Dosage"
                       value={newMedication.dosage}
                       onChange={(e) => setNewMedication({ ...newMedication, dosage: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500 text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
                     />
                   </div>
                   <div className="w-24">
@@ -1329,14 +1268,14 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                       placeholder="Frequency"
                       value={newMedication.frequency}
                       onChange={(e) => setNewMedication({ ...newMedication, frequency: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500 text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
                     />
                   </div>
                   <button
                     type="button"
                     onClick={addMedication}
                     disabled={!newMedication.name.trim()}
-                    className="flex items-center gap-1 px-3 py-2 bg-pink-600 text-white rounded-lg text-sm font-medium hover:bg-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center gap-1 px-3 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     <PlusIcon className="h-4 w-4" />
                     Add
@@ -1344,8 +1283,8 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                 </div>
               </div>
 
-              {/* Current Treatment */}
-              <div>
+              {/* Current Treatment / Ongoing Conditions */}
+              <div className="mb-4">
                 <label className="block text-xs font-medium text-gray-700 mb-1">
                   Current Treatment / Ongoing Conditions <span className="text-gray-400">(optional)</span>
                 </label>
@@ -1354,319 +1293,201 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                   onChange={(e) => setVitals({ ...vitals, currentTreatment: e.target.value })}
                   placeholder="e.g., Undergoing chemotherapy, Dialysis 3x/week, Post-surgery recovery..."
                   rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500 text-sm resize-none"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
                 />
               </div>
-            </div>
 
-            {/* Patient's Booking Notes (Read-only) */}
-            {patientBookingNotes && (
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl">
-                <label className="block text-xs font-medium text-blue-700 mb-1">
-                  Patient's Notes from Booking
-                </label>
-                <div className="text-sm text-gray-800 whitespace-pre-wrap">
-                  {patientBookingNotes}
+              {/* Past Surgeries */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="block text-xs font-medium text-gray-700">
+                    Past Surgeries <span className="text-gray-400">(optional)</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addPastSurgery}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-medium hover:bg-emerald-700 transition-colors"
+                  >
+                    <PlusIcon className="h-3.5 w-3.5" />
+                    Add Surgery
+                  </button>
                 </div>
-              </div>
-            )}
 
-            {/* Detailed Medical History (First Consultation) */}
-            <div className="border border-purple-200 rounded-xl overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setShowMedicalHistory(!showMedicalHistory)}
-                className="w-full px-4 py-3 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 transition-colors flex items-center justify-between"
-              >
-                <div className="flex items-center gap-2">
-                  <ClipboardDocumentListIcon className="h-5 w-5 text-purple-600" />
-                  <span className="font-semibold text-purple-900">
-                    Detailed Medical History
-                  </span>
-                  <span className="text-xs text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full">
-                    First Visit Collection
-                  </span>
-                </div>
-                <span className="text-purple-600">
-                  {showMedicalHistory ? '▼' : '▶'}
-                </span>
-              </button>
-
-              {showMedicalHistory && (
-                <div className="p-4 space-y-4 bg-white">
-                  {/* Past Surgeries Section */}
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <label className="block text-sm font-semibold text-gray-700">
-                        Past Surgeries <span className="text-gray-400 font-normal">(optional)</span>
-                      </label>
-                      <button
-                        type="button"
-                        onClick={addPastSurgery}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors"
-                      >
-                        <PlusIcon className="h-4 w-4" />
-                        Add Surgery
-                      </button>
-                    </div>
-
-                    {pastSurgeries.length === 0 && (
-                      <p className="text-sm text-gray-500 text-center py-3 bg-gray-50 rounded-lg">
-                        No past surgeries recorded. Click "Add Surgery" to enter details.
-                      </p>
-                    )}
-
-                    {pastSurgeries.map((surgery, index) => (
-                      <div key={surgery.id || index} className="p-4 mb-3 border border-gray-200 rounded-lg bg-gray-50">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-gray-700">Surgery #{index + 1}</span>
-                            {surgery.isExisting ? (
-                              <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">From patient records</span>
-                            ) : (
-                              <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">New</span>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removePastSurgery(index)}
-                            className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
-                          >
-                            <XMarkIcon className="h-5 w-5" />
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="col-span-2">
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                              Surgery Name <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="e.g., Appendectomy, Cesarean Section"
-                              value={surgery.surgeryName}
-                              onChange={(e) => updatePastSurgery(index, 'surgeryName', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                              Date <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="date"
-                              value={surgery.surgeryDate}
-                              onChange={(e) => updatePastSurgery(index, 'surgeryDate', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                              Hospital Name <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="Hospital name"
-                              value={surgery.hospitalName}
-                              onChange={(e) => updatePastSurgery(index, 'hospitalName', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                              Location (City/Country)
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="e.g., Dubai, UAE"
-                              value={surgery.hospitalLocation}
-                              onChange={(e) => updatePastSurgery(index, 'hospitalLocation', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                              Surgeon Name
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="Dr. name"
-                              value={surgery.surgeonName}
-                              onChange={(e) => updatePastSurgery(index, 'surgeonName', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
-                            />
-                          </div>
-
-                          <div className="col-span-2">
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                              Complications / Outcome
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="e.g., Successful, no complications"
-                              value={surgery.complications}
-                              onChange={(e) => updatePastSurgery(index, 'complications', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Immunizations Section */}
-                  <div className="pt-4 border-t border-gray-200">
-                    <div className="flex items-center justify-between mb-3">
-                      <label className="block text-sm font-semibold text-gray-700">
-                        Immunization Records <span className="text-gray-400 font-normal">(optional)</span>
-                      </label>
-                      <button
-                        type="button"
-                        onClick={addImmunization}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
-                      >
-                        <PlusIcon className="h-4 w-4" />
-                        Add Vaccine
-                      </button>
-                    </div>
-
-                    {immunizations.length === 0 && (
-                      <p className="text-sm text-gray-500 text-center py-3 bg-gray-50 rounded-lg">
-                        No immunizations recorded. Click "Add Vaccine" to enter details.
-                      </p>
-                    )}
-
-                    {immunizations.map((immunization, index) => (
-                      <div key={immunization.id || index} className="p-4 mb-3 border border-gray-200 rounded-lg bg-gray-50">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-gray-700">Vaccine #{index + 1}</span>
-                            {immunization.isExisting ? (
-                              <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">From patient records</span>
-                            ) : (
-                              <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">New</span>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeImmunization(index)}
-                            className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
-                          >
-                            <XMarkIcon className="h-5 w-5" />
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                              Vaccine Name <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="e.g., COVID-19, MMR, Hepatitis B"
-                              value={immunization.vaccineName}
-                              onChange={(e) => updateImmunization(index, 'vaccineName', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                              Brand/Type
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="e.g., Pfizer-BioNTech"
-                              value={immunization.vaccineType}
-                              onChange={(e) => updateImmunization(index, 'vaccineType', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                              Date Administered <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="date"
-                              value={immunization.dateAdministered}
-                              onChange={(e) => updateImmunization(index, 'dateAdministered', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                              Dose Number
-                            </label>
-                            <input
-                              type="number"
-                              placeholder="1, 2, 3..."
-                              value={immunization.doseNumber}
-                              onChange={(e) => updateImmunization(index, 'doseNumber', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                            />
-                          </div>
-
-                          <div className="col-span-2">
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                              Healthcare Provider/Clinic
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="e.g., City Health Clinic"
-                              value={immunization.administeredBy}
-                              onChange={(e) => updateImmunization(index, 'administeredBy', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                              Lot Number
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="For tracking"
-                              value={immunization.lotNumber}
-                              onChange={(e) => updateImmunization(index, 'lotNumber', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                              Next Due Date
-                            </label>
-                            <input
-                              type="date"
-                              value={immunization.nextDueDate}
-                              onChange={(e) => updateImmunization(index, 'nextDueDate', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <p className="text-xs text-gray-500 italic">
-                    💡 Tip: This detailed medical history is typically collected during the first consultation.
-                    You can skip this section for repeat visits.
+                {pastSurgeries.length === 0 && (
+                  <p className="text-sm text-gray-500 text-center py-3 bg-gray-50 rounded-xl">
+                    No past surgeries recorded.
                   </p>
+                )}
+
+                {pastSurgeries.map((surgery, index) => (
+                  <div key={surgery.id || index} className="p-4 mb-3 border border-gray-200 rounded-xl bg-gray-50">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-700 text-sm">Surgery #{index + 1}</span>
+                        {surgery.isExisting ? (
+                          <span className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-lg border border-blue-200">From patient records</span>
+                        ) : (
+                          <span className="text-xs bg-green-50 text-green-700 px-1.5 py-0.5 rounded-lg border border-green-200">New</span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removePastSurgery(index)}
+                        className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <XMarkIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="col-span-2">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Surgery Name <span className="text-red-500">*</span></label>
+                        <input type="text" placeholder="e.g., Appendectomy, Cesarean Section" value={surgery.surgeryName}
+                          onChange={(e) => updatePastSurgery(index, 'surgeryName', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Date <span className="text-red-500">*</span></label>
+                        <input type="date" value={surgery.surgeryDate}
+                          onChange={(e) => updatePastSurgery(index, 'surgeryDate', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Hospital Name <span className="text-red-500">*</span></label>
+                        <input type="text" placeholder="Hospital name" value={surgery.hospitalName}
+                          onChange={(e) => updatePastSurgery(index, 'hospitalName', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Location (City/Country)</label>
+                        <input type="text" placeholder="e.g., Dubai, UAE" value={surgery.hospitalLocation}
+                          onChange={(e) => updatePastSurgery(index, 'hospitalLocation', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Surgeon Name</label>
+                        <input type="text" placeholder="Dr. name" value={surgery.surgeonName}
+                          onChange={(e) => updatePastSurgery(index, 'surgeonName', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500" />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Complications / Outcome</label>
+                        <input type="text" placeholder="e.g., Successful, no complications" value={surgery.complications}
+                          onChange={(e) => updatePastSurgery(index, 'complications', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Immunization Records */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="block text-xs font-medium text-gray-700">
+                    Immunization Records <span className="text-gray-400">(optional)</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addImmunization}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-medium hover:bg-emerald-700 transition-colors"
+                  >
+                    <PlusIcon className="h-3.5 w-3.5" />
+                    Add Vaccine
+                  </button>
+                </div>
+
+                {immunizations.length === 0 && (
+                  <p className="text-sm text-gray-500 text-center py-3 bg-gray-50 rounded-xl">
+                    No immunizations recorded.
+                  </p>
+                )}
+
+                {immunizations.map((immunization, index) => (
+                  <div key={immunization.id || index} className="p-4 mb-3 border border-gray-200 rounded-xl bg-gray-50">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-700 text-sm">Vaccine #{index + 1}</span>
+                        {immunization.isExisting ? (
+                          <span className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-lg border border-blue-200">From patient records</span>
+                        ) : (
+                          <span className="text-xs bg-green-50 text-green-700 px-1.5 py-0.5 rounded-lg border border-green-200">New</span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeImmunization(index)}
+                        className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <XMarkIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Vaccine Name <span className="text-red-500">*</span></label>
+                        <input type="text" placeholder="e.g., COVID-19, MMR, Hepatitis B" value={immunization.vaccineName}
+                          onChange={(e) => updateImmunization(index, 'vaccineName', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Brand/Type</label>
+                        <input type="text" placeholder="e.g., Pfizer-BioNTech" value={immunization.vaccineType}
+                          onChange={(e) => updateImmunization(index, 'vaccineType', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Date Administered <span className="text-red-500">*</span></label>
+                        <input type="date" value={immunization.dateAdministered}
+                          onChange={(e) => updateImmunization(index, 'dateAdministered', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Dose Number</label>
+                        <input type="number" placeholder="1, 2, 3..." value={immunization.doseNumber}
+                          onChange={(e) => updateImmunization(index, 'doseNumber', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500" />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Healthcare Provider/Clinic</label>
+                        <input type="text" placeholder="e.g., City Health Clinic" value={immunization.administeredBy}
+                          onChange={(e) => updateImmunization(index, 'administeredBy', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Lot Number</label>
+                        <input type="text" placeholder="For tracking" value={immunization.lotNumber}
+                          onChange={(e) => updateImmunization(index, 'lotNumber', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Next Due Date</label>
+                        <input type="date" value={immunization.nextDueDate}
+                          onChange={(e) => updateImmunization(index, 'nextDueDate', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Booking Notes (Read-only) */}
+              {patientBookingNotes && (
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Patient's Notes from Booking
+                  </label>
+                  <div className="text-sm text-gray-800 whitespace-pre-wrap">
+                    {patientBookingNotes}
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Nurse Notes */}
+            {/* 4. Nurse Notes */}
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                Nurse Notes (Optional)
-              </label>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <span className="w-2 h-2 bg-gray-400 rounded-full" />
+                Nurse Notes <span className="text-gray-400 font-normal text-xs">(Optional)</span>
+              </h3>
               <textarea
                 name="notes"
                 value={vitals.notes}
@@ -1676,7 +1497,6 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                 className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500/50 focus:border-gray-500 resize-none"
               />
             </div>
-
             {/* Actions */}
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
               <button
