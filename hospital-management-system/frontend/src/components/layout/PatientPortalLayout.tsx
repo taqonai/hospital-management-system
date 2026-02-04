@@ -177,13 +177,13 @@ const AICheckerIcon = ({ className }: { className?: string }) => (
   />
 );
 
-// Health Insights icon (from PNG, scaled up for visibility)
+// Health Insights icon (from PNG)
 const HealthInsightsIcon = ({ className }: { className?: string }) => (
   <img
     src="/images/aihealth.png"
     alt=""
     className={className}
-    style={{ objectFit: 'contain', width: '28px', height: '28px', margin: '-4px' }}
+    style={{ objectFit: 'contain' }}
   />
 );
 
