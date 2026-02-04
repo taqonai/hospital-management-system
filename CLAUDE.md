@@ -76,7 +76,7 @@ npx playwright codegen                 # Generate test code
 ```
 
 Configuration: `playwright.config.ts` (baseURL: https://spetaar.ai, Chromium only, single worker)
-Test files: `tests/ipd-e2e.spec.ts`, `tests/ipd-review.spec.ts`, `tests/lab-diagnostics.spec.ts`, `tests/laboratory-e2e.spec.ts`
+Test files in `tests/`: `ipd-e2e.spec.ts`, `ipd-review.spec.ts`, `lab-diagnostics.spec.ts`, `laboratory-e2e.spec.ts`, `insurance-finance-e2e.spec.ts`, `finance-insurance-e2e.spec.ts`, `advanced-insurance-e2e.spec.ts`, `advanced-insurance-e2e-fixed.spec.ts`, `uae-insurance-compliance.spec.ts`, `uae-insurance-deep.spec.ts`, `radiology-patient-fix.spec.ts`, `bug-fixes-verification.spec.ts`, `setup-test-data.spec.ts`
 
 ### Mobile App (React Native/Expo)
 ```bash
@@ -187,13 +187,13 @@ All services implement graceful degradation to rule-based fallbacks when OpenAI 
 
 | Metric | Value |
 |--------|-------|
-| Prisma Models | 209 (~8400 lines in `backend/prisma/schema.prisma`) |
+| Prisma Models | 209 (~8450 lines in `backend/prisma/schema.prisma`) |
 | API Endpoints | 1,031+ |
 | Frontend Pages | 63 page directories |
 | Mobile Screens | 12 screen modules |
 | AI Services | 20 |
 | Backend Route Files | 66 |
-| Backend Service Files | 95 |
+| Backend Service Files | 96 |
 
 ### Multi-Tenant Data Model
 
