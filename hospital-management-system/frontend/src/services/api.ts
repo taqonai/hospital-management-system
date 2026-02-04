@@ -2507,6 +2507,32 @@ export const insuranceCodingApi = {
   getPatientInsurance: (patientId: string) =>
     api.get(`/insurance-coding/eligibility/${patientId}`),
 
+  // ==================== GAP 7: Insurance Verification Audit ====================
+  logInsuranceAudit: (data: {
+    patientId?: string;
+    appointmentId?: string;
+    action: string;
+    previousData?: Record<string, any>;
+    newData?: Record<string, any>;
+    reason?: string;
+  }) => api.post('/insurance-coding/audit/log', data).catch(() => {}), // Fire-and-forget
+
+  getInsuranceAuditList: (params?: {
+    page?: number;
+    limit?: number;
+    patientId?: string;
+    action?: string;
+    startDate?: string;
+    endDate?: string;
+  }) => api.get('/insurance-coding/audit/list', { params }),
+
+  exportInsuranceAudit: (params?: {
+    patientId?: string;
+    action?: string;
+    startDate?: string;
+    endDate?: string;
+  }) => api.get('/insurance-coding/audit/export', { params, responseType: 'blob' }),
+
   // ==================== Pre-Authorization ====================
   // Create a pre-authorization request
   createPreAuth: (data: {

@@ -138,6 +138,9 @@ model Hospital {
   // Deductible Tracking
   deductibleLedgers DeductibleLedger[]
 
+  // Insurance Verification Audits (GAP 7)
+  insuranceVerificationAudits InsuranceVerificationAudit[]
+
   // Payment Reminders
   paymentReminders PaymentReminder[]
 
@@ -861,6 +864,9 @@ model Patient {
 
   // Deductible Tracking
   deductibleLedgers DeductibleLedger[]
+
+  // Insurance Verification Audits (GAP 7)
+  insuranceVerificationAudits InsuranceVerificationAudit[] @relation("PatientInsuranceAudits")
 
   // Payment Reminders
   paymentReminders PaymentReminder[]
@@ -8405,6 +8411,32 @@ model DeductibleLedger {
 
   @@unique([hospitalId, patientId, fiscalYear])
   @@map("deductible_ledgers")
+}
+
+// ==================== INSURANCE VERIFICATION AUDIT (GAP 7) ====================
+
+model InsuranceVerificationAudit {
+  id            String   @id @default(uuid())
+  hospitalId    String
+  patientId     String?
+  appointmentId String?
+  action        String   // DHA_VERIFIED, DHA_MISMATCH_USE_DB, DHA_MISMATCH_SELFPAY, DHA_MISMATCH_UPDATE, DHA_UNAVAILABLE_USE_CACHE, MANUAL_VERIFY, MANUAL_REJECT, PREAUTH_OVERRIDE, EID_VERIFIED, COVERAGE_CHANGE_ACCEPTED, COVERAGE_CHANGE_REJECTED, COPAY_COLLECTED, COPAY_WAIVED, COPAY_DEFERRED, CONVERT_TO_SELFPAY
+  previousData  Json?    // Snapshot of state before action
+  newData       Json?    // Snapshot of state after action
+  dhaResponse   Json?    // Raw DHA response if applicable
+  reason        String?  // Required for override actions
+  performedBy   String   // User ID who performed the action
+  performedAt   DateTime @default(now())
+  ipAddress     String?
+
+  hospital Hospital @relation(fields: [hospitalId], references: [id])
+  patient  Patient? @relation("PatientInsuranceAudits", fields: [patientId], references: [id])
+
+  @@index([hospitalId, performedAt])
+  @@index([patientId])
+  @@index([appointmentId])
+  @@index([action])
+  @@map("insurance_verification_audits")
 }
 
 // ==================== PAYMENT REMINDERS ====================

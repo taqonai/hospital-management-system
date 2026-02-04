@@ -12,7 +12,7 @@ import {
   PrinterIcon,
   EnvelopeIcon,
 } from '@heroicons/react/24/outline';
-import { billingApi } from '../../services/api';
+import { billingApi, insuranceCodingApi } from '../../services/api';
 import toast from 'react-hot-toast';
 
 interface CopayCollectionModalProps {
@@ -157,6 +157,21 @@ export default function CopayCollectionModal({
         notes: notes || undefined,
       });
       toast.success('Copay collected successfully');
+      // GAP 7: Audit log — fire-and-forget
+      insuranceCodingApi.logInsuranceAudit({
+        patientId: patient.id,
+        appointmentId,
+        action: 'COPAY_COLLECTED',
+        newData: {
+          amount: copayInfo.patientAmount,
+          paymentMethod,
+          insuranceProvider: copayInfo.insuranceProvider,
+          policyNumber: copayInfo.policyNumber,
+          cobApplied: copayInfo.cobApplied,
+          noInsurance: copayInfo.noInsurance,
+        },
+        reason: notes || undefined,
+      });
       // GAP 3: Capture receipt info if available
       const data = response?.data?.data;
       if (data?.receiptNumber) {
@@ -173,11 +188,33 @@ export default function CopayCollectionModal({
   };
 
   const handleWaive = () => {
+    // GAP 7: Audit log — fire-and-forget
+    insuranceCodingApi.logInsuranceAudit({
+      patientId: patient.id,
+      appointmentId,
+      action: 'COPAY_WAIVED',
+      previousData: copayInfo ? {
+        copayAmount: copayInfo.patientAmount,
+        insuranceProvider: copayInfo.insuranceProvider,
+      } : undefined,
+      reason: notes || 'Copay waived at check-in',
+    });
     toast.success('Copay waived');
     onSuccess('waived');
   };
 
   const handleDefer = () => {
+    // GAP 7: Audit log — fire-and-forget
+    insuranceCodingApi.logInsuranceAudit({
+      patientId: patient.id,
+      appointmentId,
+      action: 'COPAY_DEFERRED',
+      previousData: copayInfo ? {
+        copayAmount: copayInfo.patientAmount,
+        insuranceProvider: copayInfo.insuranceProvider,
+      } : undefined,
+      reason: notes || 'Payment deferred to later',
+    });
     toast.success('Copay deferred');
     onSuccess('deferred');
   };
@@ -573,14 +610,41 @@ export default function CopayCollectionModal({
                             )}
                             <button
                               type="button"
-                              onClick={handleCollectPayment}
+                              onClick={() => {
+                                // GAP 7: Audit pre-auth override
+                                insuranceCodingApi.logInsuranceAudit({
+                                  patientId: patient.id,
+                                  appointmentId,
+                                  action: 'PREAUTH_OVERRIDE',
+                                  previousData: {
+                                    preAuthStatus: copayInfo.preAuthStatus,
+                                    preAuthNumber: copayInfo.preAuthNumber,
+                                  },
+                                  reason: notes || 'Pre-auth overridden by admin at check-in',
+                                });
+                                handleCollectPayment();
+                              }}
                               className="px-3 py-1.5 bg-gray-600 text-white text-xs font-medium rounded-lg hover:bg-gray-700 transition-colors"
                             >
                               Override (Admin)
                             </button>
                             <button
                               type="button"
-                              onClick={handleDefer}
+                              onClick={() => {
+                                // GAP 7: Audit convert to self-pay
+                                insuranceCodingApi.logInsuranceAudit({
+                                  patientId: patient.id,
+                                  appointmentId,
+                                  action: 'CONVERT_TO_SELFPAY',
+                                  previousData: {
+                                    insuranceProvider: copayInfo.insuranceProvider,
+                                    policyNumber: copayInfo.policyNumber,
+                                    preAuthStatus: copayInfo.preAuthStatus,
+                                  },
+                                  reason: notes || 'Converted to self-pay due to pre-auth issue',
+                                });
+                                handleDefer();
+                              }}
                               className="px-3 py-1.5 bg-orange-100 text-orange-700 text-xs font-medium rounded-lg hover:bg-orange-200 transition-colors"
                             >
                               Convert to Self-Pay

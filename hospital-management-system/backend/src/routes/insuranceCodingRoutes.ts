@@ -16,6 +16,7 @@ import { sendSuccess, sendCreated, sendPaginated, sendError, calculatePagination
 import { AuthenticatedRequest } from '../types';
 import logger from '../utils/logger';
 import { DischargeCodingStatus } from '@prisma/client';
+import { insuranceAuditService } from '../services/insuranceAuditService';
 
 // Configure multer for CSV file uploads
 const upload = multer({
@@ -1981,6 +1982,91 @@ router.post(
     logger.info(`[Insurance] Verification reset: ${insuranceId} by ${req.user!.email}`);
 
     sendSuccess(res, { id: updated.id, verificationStatus: 'PENDING' }, 'Verification status reset to pending');
+  })
+);
+
+// ==================== GAP 7: Insurance Verification Audit ====================
+
+/**
+ * POST /api/v1/insurance-coding/audit/log
+ * Log an insurance verification audit entry (fire-and-forget from frontend)
+ */
+router.post(
+  '/audit/log',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { patientId, appointmentId, action, previousData, newData, dhaResponse, reason } = req.body;
+
+    if (!action) {
+      return sendError(res, 'action is required', 400);
+    }
+
+    // Fire-and-forget: respond immediately, log asynchronously
+    insuranceAuditService.logAudit({
+      hospitalId: req.user!.hospitalId,
+      patientId,
+      appointmentId,
+      action,
+      previousData,
+      newData,
+      dhaResponse,
+      reason,
+      performedBy: req.user!.userId,
+      ipAddress: (req.headers['x-forwarded-for'] as string) || req.socket?.remoteAddress || undefined,
+    });
+
+    sendSuccess(res, { logged: true }, 'Audit entry queued');
+  })
+);
+
+/**
+ * GET /api/v1/insurance-coding/audit/list
+ * Get audit entries with filters (admin view)
+ */
+router.get(
+  '/audit/list',
+  authenticate,
+  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN', 'ACCOUNTANT'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { page, limit, patientId, appointmentId, action, startDate, endDate, performedBy } = req.query;
+
+    const result = await insuranceAuditService.getAuditList(req.user!.hospitalId, {
+      page: Number(page) || 1,
+      limit: Number(limit) || 20,
+      patientId: patientId as string,
+      appointmentId: appointmentId as string,
+      action: action as string,
+      startDate: startDate as string,
+      endDate: endDate as string,
+      performedBy: performedBy as string,
+    });
+
+    const pagination = calculatePagination(result.page, result.limit, result.total);
+    sendPaginated(res, result.entries, pagination);
+  })
+);
+
+/**
+ * GET /api/v1/insurance-coding/audit/export
+ * Export audit entries as CSV
+ */
+router.get(
+  '/audit/export',
+  authenticate,
+  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { patientId, action, startDate, endDate } = req.query;
+
+    const csv = await insuranceAuditService.getAuditExport(req.user!.hospitalId, {
+      patientId: patientId as string,
+      action: action as string,
+      startDate: startDate as string,
+      endDate: endDate as string,
+    });
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="insurance-audit-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(csv);
   })
 );
 
