@@ -44,7 +44,7 @@ describe('AccountingService', () => {
         expect.objectContaining({
           data: expect.arrayContaining([
             expect.objectContaining({ accountCode: '1000', accountName: 'Cash/Bank', accountType: 'ASSET' }),
-            expect.objectContaining({ accountCode: '1100', accountName: 'Accounts Receivable', accountType: 'ASSET' }),
+            expect.objectContaining({ accountCode: '1100', accountName: 'Patient Receivable', accountType: 'ASSET' }),
             expect.objectContaining({ accountCode: '4000', accountName: 'Patient Service Revenue', accountType: 'REVENUE' }),
             expect.objectContaining({ accountCode: '5100', accountName: 'Bad Debt Expense', accountType: 'EXPENSE' }),
           ]),
