@@ -3287,7 +3287,6 @@ export class BillingService {
       };
     }
   }
-}
 
   // ==================== Pharmacy Copay ====================
 
