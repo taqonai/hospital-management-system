@@ -29,7 +29,7 @@ router.get(
   authenticate,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const isConfigured = await dhaEClaimService.isConfigured(req.user!.hospitalId);
-    const mode = dhaEClaimService.getMode();
+    const mode = await dhaEClaimService.getMode(req.user!.hospitalId);
 
     sendSuccess(res, {
       configured: isConfigured,

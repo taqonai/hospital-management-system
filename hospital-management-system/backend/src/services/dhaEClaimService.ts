@@ -166,10 +166,8 @@ export interface RemittanceAdvice {
 }
 
 class DHAEClaimService {
-  private mode: 'sandbox' | 'production' = 'sandbox';
   private xmlBuilder: XMLBuilder;
   private xmlParser: XMLParser;
-  private credentials: DHACredentials | null = null;
 
   constructor() {
     // Initialize XML builder/parser with DHA-specific options
@@ -183,18 +181,13 @@ class DHAEClaimService {
       ignoreAttributes: false,
       attributeNamePrefix: '@_',
     });
-
-    // Get mode from environment
-    const envMode = process.env.DHA_ECLAIM_MODE;
-    if (envMode === 'production') {
-      this.mode = 'production';
-    }
   }
 
   /**
-   * Get DHA credentials from hospital settings
+   * Get DHA config from hospital settings (credentials + mode)
+   * All settings come from Admin UI - no hardcoded values
    */
-  private async getCredentials(hospitalId: string): Promise<DHACredentials | null> {
+  private async getConfig(hospitalId: string): Promise<{ credentials: DHACredentials; mode: 'sandbox' | 'production' } | null> {
     const settings = await prisma.hospitalSetting.findFirst({
       where: {
         hospitalId,
@@ -213,24 +206,27 @@ class DHAEClaimService {
       
       if (config.enabled && config.facilityId && config.facilityLicense && config.apiKey) {
         return {
-          facilityId: config.facilityId,
-          facilityLicense: config.facilityLicense,
-          apiKey: config.apiKey,
-          apiSecret: config.apiSecret,
+          credentials: {
+            facilityId: config.facilityId,
+            facilityLicense: config.facilityLicense,
+            apiKey: config.apiKey,
+            apiSecret: config.apiSecret,
+          },
+          mode: config.mode === 'production' ? 'production' : 'sandbox',
         };
       }
     } catch (error) {
-      logger.error('[DHA] Failed to parse credentials:', error);
+      logger.error('[DHA] Failed to parse config:', error);
     }
 
     return null;
   }
 
   /**
-   * Get API URLs based on current mode
+   * Get API URLs based on mode from settings
    */
-  private getUrls() {
-    return DHA_CONFIG[this.mode];
+  private getUrls(mode: 'sandbox' | 'production') {
+    return DHA_CONFIG[mode];
   }
 
   /**
@@ -292,15 +288,16 @@ class DHAEClaimService {
     hospitalId: string,
     request: EligibilityRequest
   ): Promise<EligibilityResponse> {
-    const credentials = await this.getCredentials(hospitalId);
+    const config = await this.getConfig(hospitalId);
 
-    // If no credentials, return mock/cached data
-    if (!credentials) {
+    // If no config, return mock/cached data
+    if (!config) {
       logger.warn('[DHA] No credentials configured, using mock response');
       return this.getMockEligibilityResponse(request);
     }
 
-    const urls = this.getUrls();
+    const { credentials, mode } = config;
+    const urls = this.getUrls(mode);
 
     const body = {
       'dha:EligibilityRequest': {
@@ -403,14 +400,15 @@ class DHAEClaimService {
     hospitalId: string,
     claim: ClaimSubmissionRequest
   ): Promise<ClaimSubmissionResponse> {
-    const credentials = await this.getCredentials(hospitalId);
+    const config = await this.getConfig(hospitalId);
 
-    if (!credentials) {
+    if (!config) {
       logger.warn('[DHA] No credentials configured, using mock submission');
       return this.getMockClaimSubmissionResponse(claim);
     }
 
-    const urls = this.getUrls();
+    const { credentials, mode } = config;
+    const urls = this.getUrls(mode);
 
     // Build activities XML
     const activities = claim.activities.map(act => ({
@@ -525,13 +523,14 @@ class DHAEClaimService {
     hospitalId: string,
     claimReference: string
   ): Promise<ClaimStatusResponse> {
-    const credentials = await this.getCredentials(hospitalId);
+    const config = await this.getConfig(hospitalId);
 
-    if (!credentials) {
+    if (!config) {
       return this.getMockClaimStatusResponse(claimReference);
     }
 
-    const urls = this.getUrls();
+    const { credentials, mode } = config;
+    const urls = this.getUrls(mode);
 
     const body = {
       'dha:ClaimStatusRequest': {
@@ -599,13 +598,14 @@ class DHAEClaimService {
     hospitalId: string,
     remittanceId: string
   ): Promise<RemittanceAdvice | null> {
-    const credentials = await this.getCredentials(hospitalId);
+    const config = await this.getConfig(hospitalId);
 
-    if (!credentials) {
+    if (!config) {
       return this.getMockRemittanceAdvice(remittanceId);
     }
 
-    const urls = this.getUrls();
+    const { credentials, mode } = config;
+    const urls = this.getUrls(mode);
 
     const body = {
       'dha:RemittanceRequest': {
@@ -811,15 +811,16 @@ class DHAEClaimService {
    * Check if DHA integration is configured for a hospital
    */
   async isConfigured(hospitalId: string): Promise<boolean> {
-    const credentials = await this.getCredentials(hospitalId);
-    return credentials !== null;
+    const config = await this.getConfig(hospitalId);
+    return config !== null;
   }
 
   /**
-   * Get current mode (sandbox/production)
+   * Get current mode (sandbox/production) from hospital settings
    */
-  getMode(): 'sandbox' | 'production' {
-    return this.mode;
+  async getMode(hospitalId: string): Promise<'sandbox' | 'production'> {
+    const config = await this.getConfig(hospitalId);
+    return config?.mode || 'sandbox';
   }
 }
 
