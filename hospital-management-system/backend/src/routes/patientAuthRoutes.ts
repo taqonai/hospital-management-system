@@ -46,6 +46,7 @@ const patientRegisterSchema = z.object({
     state: z.string().optional().default('Not provided'),
     zipCode: z.string().optional().default('00000'),
     hospitalId: z.string().uuid('Invalid hospital ID').optional(),
+    emiratesId: z.string().regex(/^784[-\s]?\d{4}[-\s]?\d{7}[-\s]?\d$/, 'Invalid Emirates ID format (784-YYYY-NNNNNNN-C)').optional().or(z.literal('')),
   }),
 });
 
@@ -105,6 +106,7 @@ const updateProfileSchema = z.object({
     bloodGroup: z.string().optional().nullable(),
     language: z.string().optional().nullable(),
     timezone: z.string().optional().nullable(),
+    emiratesId: z.string().regex(/^784[-\s]?\d{4}[-\s]?\d{7}[-\s]?\d$/, 'Invalid Emirates ID format (784-YYYY-NNNNNNN-C)').optional().or(z.literal('')).nullable(),
   }),
 });
 
@@ -129,7 +131,7 @@ router.post(
   '/register',
   validate(patientRegisterSchema),
   asyncHandler(async (req: Request, res: Response) => {
-    const { mobile, hospitalId, address, city, state, zipCode, ...rest } = req.body;
+    const { mobile, hospitalId, address, city, state, zipCode, emiratesId, ...rest } = req.body;
 
     // Use provided hospitalId or get default hospital
     let resolvedHospitalId = hospitalId;
@@ -155,6 +157,7 @@ router.post(
       city: city || 'Not provided',
       state: state || 'Not provided',
       zipCode: zipCode || '00000',
+      ...(emiratesId ? { emiratesId: emiratesId.replace(/[-\s]/g, '') } : {}),
     });
     // Transform response to match expected format
     sendCreated(res, {

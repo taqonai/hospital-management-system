@@ -54,6 +54,8 @@ export interface PatientUser {
   city?: string;
   state?: string;
   zipCode?: string;
+  bloodGroup?: string;
+  emiratesId?: string;
   // Backend field names (emergencyContact, emergencyPhone)
   emergencyContact?: string;
   emergencyPhone?: string;

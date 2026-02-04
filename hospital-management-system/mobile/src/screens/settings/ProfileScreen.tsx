@@ -72,6 +72,7 @@ interface ProfileFormData {
   dateOfBirth: string;
   gender: 'MALE' | 'FEMALE' | '';
   bloodGroup: string;
+  emiratesId: string;
   address: string;
   city: string;
   state: string;
@@ -86,6 +87,7 @@ interface ValidationErrors {
   lastName?: string;
   phone?: string;
   dateOfBirth?: string;
+  emiratesId?: string;
   address?: string;
   city?: string;
   state?: string;
@@ -93,6 +95,15 @@ interface ValidationErrors {
   emergencyContactName?: string;
   emergencyContactPhone?: string;
 }
+
+// Format Emirates ID: 784-XXXX-XXXXXXX-X
+const formatEmiratesId = (value: string): string => {
+  const digits = value.replace(/\D/g, '').slice(0, 15);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  if (digits.length <= 14) return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 14)}-${digits.slice(14)}`;
+};
 
 // Helper to extract country code from phone number
 const extractCountryCode = (phone: string): { code: string; number: string } => {
@@ -146,6 +157,7 @@ const ProfileScreen: React.FC = () => {
     dateOfBirth: '',
     gender: '',
     bloodGroup: '',
+    emiratesId: '',
     address: '',
     city: '',
     state: '',
@@ -173,6 +185,7 @@ const ProfileScreen: React.FC = () => {
         dateOfBirth: user.dateOfBirth ? user.dateOfBirth.split('T')[0] : '',
         gender: user.gender || '',
         bloodGroup: user.bloodGroup || '',
+        emiratesId: user.emiratesId ? formatEmiratesId(user.emiratesId) : '',
         address: user.address || '',
         city: user.city || '',
         state: user.state || '',
@@ -290,6 +303,13 @@ const ProfileScreen: React.FC = () => {
     const dobError = validateDateOfBirth(formData.dateOfBirth);
     if (dobError) newErrors.dateOfBirth = dobError;
 
+    if (formData.emiratesId) {
+      const eidDigits = formData.emiratesId.replace(/\D/g, '');
+      if (eidDigits.length !== 15 || !eidDigits.startsWith('784')) {
+        newErrors.emiratesId = 'Emirates ID must be 15 digits starting with 784';
+      }
+    }
+
     const zipError = validateZipCode(formData.zipCode);
     if (zipError) newErrors.zipCode = zipError;
 
@@ -347,6 +367,7 @@ const ProfileScreen: React.FC = () => {
         bloodGroup: formData.bloodGroup || undefined,
         dateOfBirth: formData.dateOfBirth || undefined,
         gender: formData.gender || undefined,
+        emiratesId: formData.emiratesId ? formData.emiratesId.replace(/-/g, '') : undefined,
       };
 
       // Remove undefined values
@@ -386,6 +407,8 @@ const ProfileScreen: React.FC = () => {
         phoneCountryCode: phoneData.code,
         dateOfBirth: user.dateOfBirth ? user.dateOfBirth.split('T')[0] : '',
         gender: user.gender || '',
+        bloodGroup: user.bloodGroup || '',
+        emiratesId: user.emiratesId ? formatEmiratesId(user.emiratesId) : '',
         address: user.address || '',
         city: user.city || '',
         state: user.state || '',
@@ -914,6 +937,34 @@ const ProfileScreen: React.FC = () => {
                 </Text>
               )}
             </View>
+
+            {/* Emirates ID */}
+            <View style={styles.fieldContainer}>
+              <Text style={styles.fieldLabel}>Emirates ID</Text>
+              {isEditing ? (
+                <>
+                  <View style={[styles.inputWrapper, errors.emiratesId && styles.inputErrorStyle]}>
+                    <Ionicons name="card-outline" size={20} color={colors.gray[400]} style={{ marginRight: spacing.sm }} />
+                    <TextInput
+                      style={[styles.eidInput]}
+                      value={formData.emiratesId}
+                      onChangeText={(value) => handleChange('emiratesId', formatEmiratesId(value))}
+                      placeholder="784-XXXX-XXXXXXX-X"
+                      placeholderTextColor={colors.gray[400]}
+                      keyboardType="number-pad"
+                      editable={!isSaving}
+                      maxLength={18}
+                    />
+                  </View>
+                  {errors.emiratesId && <Text style={styles.errorText}>{errors.emiratesId}</Text>}
+                  <Text style={styles.eidHelpText}>UAE Emirates ID for insurance verification</Text>
+                </>
+              ) : (
+                <Text style={styles.fieldValue}>
+                  {formData.emiratesId ? formatEmiratesId(formData.emiratesId) : '-'}
+                </Text>
+              )}
+            </View>
           </View>
         </View>
 
@@ -1286,6 +1337,31 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: colors.border,
     marginHorizontal: spacing.lg,
+  },
+  // Emirates ID styles
+  inputWrapper: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: colors.gray[50],
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.md,
+  },
+  inputErrorStyle: {
+    borderColor: colors.error[500],
+  },
+  eidInput: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    fontSize: typography.fontSize.base,
+    color: colors.text.primary,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  eidHelpText: {
+    fontSize: typography.fontSize.xs,
+    color: colors.gray[400],
+    marginTop: spacing.xs,
   },
   // Action button styles
   actionsContainer: {

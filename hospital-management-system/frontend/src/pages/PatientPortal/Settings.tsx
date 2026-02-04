@@ -44,6 +44,7 @@ interface UserProfile {
   emergencyPhone?: string;
   occupation?: string;
   bloodGroup?: string;
+  emiratesId?: string;
   avatarUrl?: string;
   photo?: string;
   language?: string;
@@ -86,6 +87,7 @@ const emptyProfile: UserProfile = {
   emergencyContact: '',
   emergencyPhone: '',
   bloodGroup: '',
+  emiratesId: '',
   language: '',
   timezone: '',
 };
@@ -107,6 +109,15 @@ const mockCommunicationPrefs: CommunicationPreferences = {
   preferredLanguage: 'en',
   preferredTimeForCalls: 'MORNING',
   allowMarketingCommunications: false,
+};
+
+// Format Emirates ID: 784-XXXX-XXXXXXX-X
+const formatEmiratesId = (value: string): string => {
+  const digits = value.replace(/\D/g, '').slice(0, 15);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  if (digits.length <= 14) return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 14)}-${digits.slice(14)}`;
 };
 
 export default function Settings() {
@@ -268,6 +279,13 @@ export default function Settings() {
       errors.push('Emergency contact phone is required');
     }
 
+    if (profileForm.emiratesId) {
+      const eidDigits = profileForm.emiratesId.replace(/\D/g, '');
+      if (eidDigits.length !== 15 || !eidDigits.startsWith('784')) {
+        errors.push('Emirates ID must be 15 digits starting with 784');
+      }
+    }
+
     if (errors.length > 0) {
       errors.forEach(err => toast.error(err));
       return;
@@ -290,6 +308,7 @@ export default function Settings() {
       emergencyPhone: profileForm.emergencyPhone || null,
       occupation: profileForm.occupation || null,
       nationality: profileForm.nationality || null,
+      emiratesId: profileForm.emiratesId ? profileForm.emiratesId.replace(/-/g, '') : null,
     } as any;
 
     updateProfileMutation.mutate(updateData);
@@ -544,6 +563,22 @@ export default function Settings() {
                             <option value="O_POSITIVE">O+</option>
                             <option value="O_NEGATIVE">O-</option>
                           </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Emirates ID</label>
+                          <div className="relative">
+                            <IdentificationIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                            <input
+                              type="text"
+                              value={profileForm.emiratesId ? formatEmiratesId(profileForm.emiratesId) : ''}
+                              onChange={(e) => setProfileForm({ ...profileForm, emiratesId: formatEmiratesId(e.target.value) })}
+                              disabled={!isEditing}
+                              placeholder="784-XXXX-XXXXXXX-X"
+                              maxLength={18}
+                              className="w-full pl-11 pr-4 py-3 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-slate-500 focus:border-slate-500 disabled:bg-gray-50 disabled:text-gray-500 font-mono"
+                            />
+                          </div>
+                          <p className="mt-1 text-xs text-gray-400">UAE Emirates ID for insurance verification</p>
                         </div>
                       </div>
                     </div>
