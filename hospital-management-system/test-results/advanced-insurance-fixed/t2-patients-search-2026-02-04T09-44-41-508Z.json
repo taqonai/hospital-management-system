@@ -1,0 +1,49 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": "8d86603e-04ea-4c9e-a841-bfaf645ecfd4",
+      "oderId": "81f9de70-0194-48ca-ba6a-645399aa27e6",
+      "hospitalId": "a2a67081-2b5d-41ec-88aa-c75c96476054",
+      "mrn": "MRN26890529",
+      "firstName": "Md",
+      "lastName": "Kamil",
+      "dateOfBirth": "1996-02-13T00:00:00.000Z",
+      "gender": "MALE",
+      "bloodGroup": null,
+      "phone": "+971585220125",
+      "email": "kamil@taqon.ai",
+      "emiratesId": "784-1996-1234567-1",
+      "address": "Discovery garden",
+      "city": "Dubai",
+      "state": "Dubai",
+      "zipCode": "000000",
+      "emergencyContact": "Roy",
+      "emergencyPhone": "+971585220125",
+      "occupation": null,
+      "maritalStatus": null,
+      "nationality": null,
+      "photo": "https://hms-profile-images.s3.us-east-1.amazonaws.com/patient-photos/e74f1e3c-b3a3-4a59-99c3-5da564d4688a.jpeg",
+      "isActive": true,
+      "status": "BLOCKED",
+      "noShowCount": 14,
+      "lastNoShowAt": "2026-02-04T07:00:00.129Z",
+      "blockedAt": "2026-02-02T13:39:52.146Z",
+      "blockedReason": "Blocked due to 3 no-show appointments",
+      "createdAt": "2026-01-04T21:48:02.157Z",
+      "updatedAt": "2026-02-04T07:00:00.130Z",
+      "_count": {
+        "appointments": 50,
+        "admissions": 1
+      }
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 1,
+    "total": 1,
+    "totalPages": 1,
+    "hasNext": false,
+    "hasPrev": false
+  }
+}

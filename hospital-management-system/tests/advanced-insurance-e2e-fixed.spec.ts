@@ -44,7 +44,7 @@ async function loginAndGetToken(page: any, email: string, password: string, role
   // Get token from localStorage (where React apps typically store it)
   const token = await page.evaluate(() => {
     // Check common storage locations
-    const possibleKeys = ['token', 'authToken', 'jwt', 'accessToken', 'access_token'];
+    const possibleKeys = ['accessToken', 'token', 'authToken', 'jwt', 'access_token'];
     for (const key of possibleKeys) {
       const val = localStorage.getItem(key) || sessionStorage.getItem(key);
       if (val && val.length > 20) return val;
@@ -56,6 +56,7 @@ async function loginAndGetToken(page: any, email: string, password: string, role
         const state = JSON.parse(persistRoot);
         if (state.auth) {
           const authState = typeof state.auth === 'string' ? JSON.parse(state.auth) : state.auth;
+          if (authState.accessToken) return authState.accessToken;
           if (authState.token) return authState.token;
         }
       } catch {}

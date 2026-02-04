@@ -1,0 +1,29 @@
+{
+  "request": {
+    "patientId": "8d86603e-04ea-4c9e-a841-bfaf645ecfd4",
+    "totalAmount": 5000,
+    "serviceCategory": "OUTPATIENT"
+  },
+  "response": {
+    "success": true,
+    "data": {
+      "success": true,
+      "primaryCoverage": 3480,
+      "secondaryCoverage": 0,
+      "patientCopay": 1520,
+      "totalAmount": 5000,
+      "insurances": [
+        {
+          "priority": 1,
+          "providerName": "Daman (National Health Insurance Company)",
+          "policyNumber": "TEST-POL-001",
+          "coveragePercentage": 80,
+          "coverageAmount": 3480,
+          "remainingAfter": 1520
+        }
+      ],
+      "message": "Single insurance policy applied"
+    }
+  },
+  "status": 200
+}

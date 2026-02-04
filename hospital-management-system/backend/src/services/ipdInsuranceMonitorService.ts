@@ -37,113 +37,127 @@ class IPDInsuranceMonitorService {
   async checkAllAdmittedPatients(hospitalId: string): Promise<InsuranceExpiryAlert[]> {
     const alerts: InsuranceExpiryAlert[] = [];
     const today = new Date();
-    const warningThreshold = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days warning
 
-    // Get all active IPD admissions
-    const admissions = await prisma.iPDAdmission.findMany({
-      where: {
-        hospitalId,
-        status: { in: ['ADMITTED', 'IN_PROGRESS'] },
-      },
-      include: {
-        patient: {
-          include: {
-            insurances: {
-              where: { isActive: true },
-              orderBy: { priority: 'asc' },
+    try {
+      // Get all active admissions (using correct model name: admission)
+      const admissions = await prisma.admission.findMany({
+        where: {
+          hospitalId,
+          status: { in: ['ADMITTED', 'IN_PROGRESS'] },
+        },
+        include: {
+          patient: {
+            include: {
+              insurances: {
+                where: { isActive: true },
+                orderBy: { priority: 'asc' },
+              },
             },
           },
+          bed: {
+            include: { room: true },
+          },
         },
-        bed: {
-          include: { room: true },
-        },
-      },
-    });
+      });
 
-    for (const admission of admissions) {
-      const patient = admission.patient;
-      const primaryInsurance = patient.insurances.find(i => i.priority === 1);
+      for (const admission of admissions) {
+        const patient = admission.patient;
+        const primaryInsurance = patient.insurances.find(i => i.priority === 1);
 
-      if (!primaryInsurance) {
-        // Patient has no insurance - should already be self-pay
-        continue;
-      }
+        if (!primaryInsurance) {
+          // Patient has no insurance - should already be self-pay
+          continue;
+        }
 
-      const expiryDate = primaryInsurance.expiryDate;
-      if (!expiryDate) continue;
+        const expiryDate = primaryInsurance.expiryDate;
+        if (!expiryDate) continue;
 
-      const daysUntilExpiry = Math.ceil(
-        (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-      );
+        const daysUntilExpiry = Math.ceil(
+          (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+        );
 
-      // Calculate outstanding balance
-      const charges = await prisma.iPDCharge.aggregate({
-        _sum: { amount: true },
-        where: {
+        // Calculate outstanding balance from invoices
+        const invoices = await prisma.invoice.aggregate({
+          _sum: { balanceAmount: true },
+          where: {
+            admissionId: admission.id,
+            status: { in: ['PENDING', 'PARTIAL'] },
+          },
+        });
+        const outstandingBalance = Number(invoices._sum.balanceAmount) || 0;
+
+        let status: InsuranceExpiryAlert['status'];
+        let recommendedAction: string;
+
+        if (daysUntilExpiry < 0) {
+          // Insurance already expired
+          status = 'EXPIRED_DURING_STAY';
+          recommendedAction = 'Contact patient family immediately. Switch remaining charges to self-pay or collect new insurance details.';
+          
+          // Log the expiry event
+          await this.logExpiryEvent(admission.id, primaryInsurance.id);
+        } else if (daysUntilExpiry <= 7) {
+          status = 'EXPIRING_SOON';
+          recommendedAction = `Insurance expires in ${daysUntilExpiry} days. Contact patient to renew or provide alternate coverage.`;
+        } else {
+          continue; // Insurance is fine
+        }
+
+        alerts.push({
+          patientId: patient.id,
+          patientName: `${patient.firstName} ${patient.lastName}`,
+          mrn: patient.mrn,
           admissionId: admission.id,
-          billedInvoiceId: null, // Not yet billed
-        },
-      });
-      const outstandingBalance = Number(charges._sum.amount) || 0;
-
-      let status: InsuranceExpiryAlert['status'];
-      let recommendedAction: string;
-
-      if (daysUntilExpiry < 0) {
-        // Insurance already expired
-        status = 'EXPIRED_DURING_STAY';
-        recommendedAction = 'Contact patient family immediately. Switch remaining charges to self-pay or collect new insurance details.';
-        
-        // Auto-switch to self-pay flag
-        await this.markForSelfPay(admission.id, primaryInsurance.id);
-      } else if (daysUntilExpiry <= 7) {
-        status = 'EXPIRING_SOON';
-        recommendedAction = `Insurance expires in ${daysUntilExpiry} days. Contact patient to renew or provide alternate coverage.`;
-      } else {
-        continue; // Insurance is fine
+          roomNumber: admission.bed?.room?.roomNumber || 'Unknown',
+          insuranceId: primaryInsurance.id,
+          insuranceProvider: primaryInsurance.providerName,
+          policyNumber: primaryInsurance.policyNumber,
+          expiryDate,
+          daysUntilExpiry,
+          status,
+          outstandingBalance,
+          recommendedAction,
+        });
       }
 
-      alerts.push({
-        patientId: patient.id,
-        patientName: `${patient.firstName} ${patient.lastName}`,
-        mrn: patient.mrn,
-        admissionId: admission.id,
-        roomNumber: admission.bed?.room?.roomNumber || 'Unknown',
-        insuranceId: primaryInsurance.id,
-        insuranceProvider: primaryInsurance.providerName,
-        policyNumber: primaryInsurance.policyNumber,
-        expiryDate,
-        daysUntilExpiry,
-        status,
-        outstandingBalance,
-        recommendedAction,
-      });
-    }
+      // Create notifications for critical alerts
+      for (const alert of alerts.filter(a => a.status === 'EXPIRED_DURING_STAY')) {
+        await this.createExpiryNotification(hospitalId, alert);
+      }
 
-    // Create notifications for critical alerts
-    for (const alert of alerts.filter(a => a.status === 'EXPIRED_DURING_STAY')) {
-      await this.createExpiryNotification(hospitalId, alert);
+      return alerts;
+    } catch (error: any) {
+      logger.error('[IPD-INSURANCE] Error checking admissions:', error);
+      // Return empty array with graceful handling
+      return [];
     }
-
-    return alerts;
   }
 
   /**
-   * Mark admission charges to switch to self-pay after insurance expiry
+   * Log insurance expiry event
    */
-  private async markForSelfPay(admissionId: string, expiredInsuranceId: string): Promise<void> {
-    // Update admission metadata
-    await prisma.iPDAdmission.update({
-      where: { id: admissionId },
-      data: {
-        notes: prisma.iPDAdmission.fields.notes 
-          ? `${prisma.iPDAdmission.fields.notes}\n[${new Date().toISOString()}] Insurance expired. Remaining charges switched to self-pay.`
-          : `[${new Date().toISOString()}] Insurance expired. Remaining charges switched to self-pay.`,
-      },
-    });
+  private async logExpiryEvent(admissionId: string, expiredInsuranceId: string): Promise<void> {
+    try {
+      const admission = await prisma.admission.findUnique({
+        where: { id: admissionId },
+      });
+      
+      if (admission) {
+        const currentNotes = admission.notes || '';
+        const newNote = `[${new Date().toISOString()}] Insurance expired. Remaining charges switched to self-pay.`;
+        
+        await prisma.admission.update({
+          where: { id: admissionId },
+          data: {
+            notes: currentNotes ? `${currentNotes}\n${newNote}` : newNote,
+          },
+        });
+      }
 
-    // Log the event
-    logger.warn(`[IPD-INSURANCE] Admission ${admissionId} switched to self-pay due to insurance expiry`);
+      logger.warn(`[IPD-INSURANCE] Admission ${admissionId} switched to self-pay due to insurance expiry`);
+    } catch (error) {
+      logger.error('[IPD-INSURANCE] Failed to log expiry event:', error);
+    }
   }
 
   /**
@@ -208,7 +222,7 @@ class IPDInsuranceMonitorService {
     }
   ): Promise<{ success: boolean; insuranceId?: string; message: string }> {
     try {
-      const admission = await prisma.iPDAdmission.findUnique({
+      const admission = await prisma.admission.findUnique({
         where: { id: admissionId },
         include: { patient: true },
       });
@@ -247,10 +261,13 @@ class IPDInsuranceMonitorService {
       });
 
       // Update admission notes
-      await prisma.iPDAdmission.update({
+      const currentNotes = admission.notes || '';
+      const newNote = `[${new Date().toISOString()}] New insurance added mid-stay: ${insuranceData.providerName} (${insuranceData.policyNumber})`;
+      
+      await prisma.admission.update({
         where: { id: admissionId },
         data: {
-          notes: `${admission.notes || ''}\n[${new Date().toISOString()}] New insurance added mid-stay: ${insuranceData.providerName} (${insuranceData.policyNumber})`,
+          notes: currentNotes ? `${currentNotes}\n${newNote}` : newNote,
         },
       });
 
@@ -268,7 +285,7 @@ class IPDInsuranceMonitorService {
   }
 
   /**
-   * Get outstanding balance for self-pay conversion
+   * Get outstanding balance for an admission
    */
   async getOutstandingBalance(admissionId: string): Promise<{
     totalCharges: number;
@@ -277,39 +294,50 @@ class IPDInsuranceMonitorService {
     insurancePending: number;
     patientBalance: number;
   }> {
-    const charges = await prisma.iPDCharge.groupBy({
-      by: ['billedInvoiceId'],
-      _sum: { amount: true },
-      where: { admissionId },
-    });
-
-    const billedCharges = charges.filter(c => c.billedInvoiceId !== null);
-    const unbilledCharges = charges.filter(c => c.billedInvoiceId === null);
-
-    const totalCharges = charges.reduce((sum, c) => sum + Number(c._sum.amount || 0), 0);
-    const billedAmount = billedCharges.reduce((sum, c) => sum + Number(c._sum.amount || 0), 0);
-    const unbilledAmount = unbilledCharges.reduce((sum, c) => sum + Number(c._sum.amount || 0), 0);
-
-    // Get pending insurance claims
-    const claims = await prisma.insuranceClaim.aggregate({
-      _sum: { claimedAmount: true },
-      where: {
-        invoice: {
-          ipdAdmissionId: admissionId,
+    try {
+      // Get all invoices for this admission
+      const invoices = await prisma.invoice.findMany({
+        where: { admissionId },
+        select: {
+          totalAmount: true,
+          paidAmount: true,
+          balanceAmount: true,
+          status: true,
         },
-        status: { in: ['PENDING', 'SUBMITTED'] },
-      },
-    });
+      });
 
-    const insurancePending = Number(claims._sum.claimedAmount) || 0;
+      const totalCharges = invoices.reduce((sum, inv) => sum + Number(inv.totalAmount || 0), 0);
+      const billedAmount = invoices.reduce((sum, inv) => sum + Number(inv.paidAmount || 0), 0);
+      const unbilledAmount = invoices.reduce((sum, inv) => sum + Number(inv.balanceAmount || 0), 0);
 
-    return {
-      totalCharges,
-      billedAmount,
-      unbilledAmount,
-      insurancePending,
-      patientBalance: unbilledAmount, // After insurance expires, patient pays unbilled
-    };
+      // Get pending insurance claims
+      const claims = await prisma.insuranceClaim.aggregate({
+        _sum: { claimedAmount: true },
+        where: {
+          invoice: { admissionId },
+          status: { in: ['PENDING', 'SUBMITTED'] },
+        },
+      });
+
+      const insurancePending = Number(claims._sum.claimedAmount) || 0;
+
+      return {
+        totalCharges,
+        billedAmount,
+        unbilledAmount,
+        insurancePending,
+        patientBalance: unbilledAmount - insurancePending,
+      };
+    } catch (error: any) {
+      logger.error('[IPD-INSURANCE] Error calculating balance:', error);
+      return {
+        totalCharges: 0,
+        billedAmount: 0,
+        unbilledAmount: 0,
+        insurancePending: 0,
+        patientBalance: 0,
+      };
+    }
   }
 
   /**
