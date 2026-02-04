@@ -807,6 +807,114 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
               </div>
             )}
 
+            {/* Primary Vitals */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <span className="w-2 h-2 bg-rose-500 rounded-full" />
+                Primary Vitals
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Temperature (°C) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    name="temperature"
+                    value={vitals.temperature}
+                    onChange={handleChange}
+                    step="0.1"
+                    min="32"
+                    max="42"
+                    placeholder="37.0"
+                    required
+                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    BP Systolic (mmHg) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    name="bloodPressureSys"
+                    value={vitals.bloodPressureSys}
+                    onChange={handleChange}
+                    min="60"
+                    max="250"
+                    placeholder="120"
+                    required
+                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    BP Diastolic (mmHg) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    name="bloodPressureDia"
+                    value={vitals.bloodPressureDia}
+                    onChange={handleChange}
+                    min="40"
+                    max="150"
+                    placeholder="80"
+                    required
+                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Heart Rate (bpm) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    name="heartRate"
+                    value={vitals.heartRate}
+                    onChange={handleChange}
+                    min="30"
+                    max="220"
+                    placeholder="72"
+                    required
+                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Resp. Rate (/min) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    name="respiratoryRate"
+                    value={vitals.respiratoryRate}
+                    onChange={handleChange}
+                    min="8"
+                    max="40"
+                    placeholder="16"
+                    required
+                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    SpO2 (%) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    name="oxygenSaturation"
+                    value={vitals.oxygenSaturation}
+                    onChange={handleChange}
+                    step="0.1"
+                    min="70"
+                    max="100"
+                    placeholder="98"
+                    required
+                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Patient Medical Records (Editable) */}
             {!loadingMedicalSummary && medicalSummary && (
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
@@ -1021,114 +1129,6 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                 )}
               </div>
             )}
-
-            {/* Primary Vitals */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                <span className="w-2 h-2 bg-rose-500 rounded-full" />
-                Primary Vitals
-              </h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Temperature (°C) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    name="temperature"
-                    value={vitals.temperature}
-                    onChange={handleChange}
-                    step="0.1"
-                    min="32"
-                    max="42"
-                    placeholder="37.0"
-                    required
-                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    BP Systolic (mmHg) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    name="bloodPressureSys"
-                    value={vitals.bloodPressureSys}
-                    onChange={handleChange}
-                    min="60"
-                    max="250"
-                    placeholder="120"
-                    required
-                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    BP Diastolic (mmHg) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    name="bloodPressureDia"
-                    value={vitals.bloodPressureDia}
-                    onChange={handleChange}
-                    min="40"
-                    max="150"
-                    placeholder="80"
-                    required
-                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Heart Rate (bpm) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    name="heartRate"
-                    value={vitals.heartRate}
-                    onChange={handleChange}
-                    min="30"
-                    max="220"
-                    placeholder="72"
-                    required
-                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Resp. Rate (/min) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    name="respiratoryRate"
-                    value={vitals.respiratoryRate}
-                    onChange={handleChange}
-                    min="8"
-                    max="40"
-                    placeholder="16"
-                    required
-                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    SpO2 (%) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    name="oxygenSaturation"
-                    value={vitals.oxygenSaturation}
-                    onChange={handleChange}
-                    step="0.1"
-                    min="70"
-                    max="100"
-                    placeholder="98"
-                    required
-                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
-                  />
-                </div>
-              </div>
-            </div>
 
             {/* Body Measurements */}
             <div>
