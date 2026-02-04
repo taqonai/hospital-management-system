@@ -1030,6 +1030,16 @@ export const billingApi = {
   }) => api.post('/billing/copay-collect', data),
   getDepositBalance: (patientId: string) =>
     api.get(`/billing/patients/${patientId}/deposit-balance`),
+  // Pharmacy Copay
+  getPharmacyCopay: (prescriptionId: string) =>
+    api.get(`/billing/pharmacy-copay/${prescriptionId}`),
+  collectPharmacyCopay: (data: {
+    prescriptionId: string;
+    amount: number;
+    paymentMethod: 'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD';
+    waived?: boolean;
+    waiverReason?: string;
+  }) => api.post('/billing/pharmacy-copay-collect', data),
   // AI Auto Charge Capture
   extractCharges: (notes: string) =>
     api.post('/billing/extract-charges', { notes }),
@@ -2420,6 +2430,15 @@ export const insuranceCodingApi = {
 
   getDischargeCodingAnalytics: (params?: { startDate?: string; endDate?: string }) =>
     api.get('/insurance-coding/analytics/discharge', { params }),
+
+  // ==================== Insurance Eligibility ====================
+  // Verify patient insurance eligibility (for IPD admissions, check-ins, etc.)
+  verifyEligibility: (data: { patientId?: string; emiratesId?: string }) =>
+    api.post('/insurance-coding/eligibility/verify-patient', data),
+
+  // Get patient insurance summary (from DB, not real-time DHA)
+  getPatientInsurance: (patientId: string) =>
+    api.get(`/insurance-coding/eligibility/${patientId}`),
 };
 
 // =============================================================================

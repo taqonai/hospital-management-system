@@ -1355,6 +1355,11 @@ model Prescription {
   prescriptionDate DateTime           @default(now())
   status           PrescriptionStatus @default(ACTIVE)
   notes            String?
+  // Pharmacy copay fields
+  copayCollected    Boolean   @default(false)
+  copayAmount       Decimal?  @db.Decimal(10, 2)
+  copayWaived       Boolean   @default(false)
+  copayWaiverReason String?
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 

@@ -3289,4 +3289,231 @@ export class BillingService {
   }
 }
 
+  // ==================== Pharmacy Copay ====================
+
+  /**
+   * Calculate copay for pharmacy prescription
+   * Takes into account patient insurance, drug costs, and coverage
+   */
+  async calculatePharmacyCopay(prescriptionId: string, hospitalId: string): Promise<{
+    hasCopay: boolean;
+    prescriptionId: string;
+    medications: Array<{
+      name: string;
+      quantity: number;
+      unitPrice: number;
+      totalPrice: number;
+      insuranceCoverage: number;
+      patientPays: number;
+    }>;
+    totalCost: number;
+    insuranceCovers: number;
+    patientPays: number;
+    coveragePercentage: number;
+    insuranceProvider: string | null;
+    policyNumber: string | null;
+    networkStatus: string;
+    copayCollected: boolean;
+    noInsurance: boolean;
+  }> {
+    // Fetch prescription with medications
+    const prescription = await prisma.prescription.findUnique({
+      where: { id: prescriptionId },
+      include: {
+        patient: {
+          include: {
+            insurances: {
+              where: { isActive: true, isPrimary: true },
+              take: 1,
+            },
+          },
+        },
+        medications: true,
+      },
+    });
+
+    if (!prescription) {
+      throw new Error('Prescription not found');
+    }
+
+    // Calculate total medication cost
+    const medications = prescription.medications.map((med: any) => {
+      const unitPrice = Number(med.unitPrice) || 0;
+      const quantity = med.quantity || 1;
+      const totalPrice = unitPrice * quantity;
+      return {
+        name: med.drugName,
+        quantity,
+        unitPrice,
+        totalPrice,
+        insuranceCoverage: 0,
+        patientPays: totalPrice,
+      };
+    });
+
+    const totalCost = medications.reduce((sum: number, m: any) => sum + m.totalPrice, 0);
+
+    // Check if patient has insurance
+    const insurance = prescription.patient.insurances[0];
+
+    if (!insurance) {
+      // No insurance - patient pays full amount
+      return {
+        hasCopay: true,
+        prescriptionId,
+        medications,
+        totalCost,
+        insuranceCovers: 0,
+        patientPays: totalCost,
+        coveragePercentage: 0,
+        insuranceProvider: null,
+        policyNumber: null,
+        networkStatus: 'NONE',
+        copayCollected: prescription.copayCollected || false,
+        noInsurance: true,
+      };
+    }
+
+    // Get coverage percentage based on network status
+    // UAE typical: In-network 80%, Out-of-network 50%
+    const networkStatus = insurance.networkTier || 'IN_NETWORK';
+    let coveragePercentage = networkStatus === 'IN_NETWORK' ? 80 : 50;
+
+    // Check if there's a pharmacy-specific copay in insurance (some plans have fixed drug copay)
+    const fixedCopay = insurance.copay ? Number(insurance.copay) : null;
+
+    // Calculate coverage for each medication
+    const medicationsWithCoverage = medications.map((med: any) => {
+      if (fixedCopay !== null && fixedCopay > 0) {
+        // Fixed copay per prescription line
+        const patientPays = Math.min(fixedCopay, med.totalPrice);
+        return {
+          ...med,
+          insuranceCoverage: med.totalPrice - patientPays,
+          patientPays,
+        };
+      } else {
+        // Percentage-based coverage
+        const insuranceCoverage = (med.totalPrice * coveragePercentage) / 100;
+        const patientPays = med.totalPrice - insuranceCoverage;
+        return {
+          ...med,
+          insuranceCoverage,
+          patientPays,
+        };
+      }
+    });
+
+    const insuranceCovers = medicationsWithCoverage.reduce((sum: number, m: any) => sum + m.insuranceCoverage, 0);
+    const patientPays = medicationsWithCoverage.reduce((sum: number, m: any) => sum + m.patientPays, 0);
+
+    return {
+      hasCopay: patientPays > 0,
+      prescriptionId,
+      medications: medicationsWithCoverage,
+      totalCost,
+      insuranceCovers,
+      patientPays,
+      coveragePercentage,
+      insuranceProvider: insurance.providerName,
+      policyNumber: insurance.policyNumber,
+      networkStatus,
+      copayCollected: prescription.copayCollected || false,
+      noInsurance: false,
+    };
+  }
+
+  /**
+   * Collect pharmacy copay before dispensing
+   */
+  async collectPharmacyCopay(params: {
+    prescriptionId: string;
+    hospitalId: string;
+    amount: number;
+    paymentMethod: 'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD';
+    collectedBy: string;
+    waived?: boolean;
+    waiverReason?: string;
+  }): Promise<{ success: boolean; message: string; payment?: any }> {
+    try {
+      const prescription = await prisma.prescription.findUnique({
+        where: { id: params.prescriptionId },
+        include: { patient: true },
+      });
+
+      if (!prescription) {
+        return { success: false, message: 'Prescription not found' };
+      }
+
+      if (params.waived) {
+        // Mark as waived without payment
+        await prisma.prescription.update({
+          where: { id: params.prescriptionId },
+          data: {
+            copayCollected: true,
+            copayAmount: new Decimal(0),
+            copayWaived: true,
+            copayWaiverReason: params.waiverReason || 'Waived by pharmacy staff',
+          },
+        });
+
+        return {
+          success: true,
+          message: 'Pharmacy copay waived',
+        };
+      }
+
+      // Record payment
+      const payment = await prisma.payment.create({
+        data: {
+          hospitalId: params.hospitalId,
+          patientId: prescription.patientId,
+          amount: new Decimal(params.amount),
+          paymentMethod: params.paymentMethod,
+          paymentType: 'PHARMACY_COPAY',
+          status: 'COMPLETED',
+          referenceNumber: `PHARM-${Date.now()}`,
+          notes: `Pharmacy copay for prescription ${params.prescriptionId}`,
+          receivedBy: params.collectedBy,
+        },
+      });
+
+      // Update prescription with copay collected flag
+      await prisma.prescription.update({
+        where: { id: params.prescriptionId },
+        data: {
+          copayCollected: true,
+          copayAmount: new Decimal(params.amount),
+        },
+      });
+
+      // Post to GL
+      try {
+        await accountingService.recordCopayGL({
+          hospitalId: params.hospitalId,
+          paymentId: payment.id,
+          amount: params.amount,
+          paymentMethod: params.paymentMethod,
+          description: `Pharmacy copay for prescription ${params.prescriptionId}`,
+          createdBy: params.collectedBy,
+        });
+      } catch (glError) {
+        console.error('[GL] Failed to post pharmacy copay GL entry:', glError);
+      }
+
+      return {
+        success: true,
+        payment,
+        message: 'Pharmacy copay collected successfully',
+      };
+    } catch (error) {
+      console.error('[PHARMACY COPAY] Collection failed:', error);
+      return {
+        success: false,
+        message: `Collection failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
+  }
+}
+
 export const billingService = new BillingService();

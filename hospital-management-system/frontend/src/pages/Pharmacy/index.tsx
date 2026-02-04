@@ -32,6 +32,7 @@ import IVCompatibility from '../../components/pharmacy/IVCompatibility';
 import AddDrugModal from './AddDrugModal';
 import DrugCSVImportModal from './DrugCSVImportModal';
 import DrugManagement from './DrugManagement';
+import PharmacyCopayModal from '../../components/billing/PharmacyCopayModal';
 
 interface Prescription {
   id: string;
@@ -137,6 +138,10 @@ export default function Pharmacy() {
   // Modal states
   const [showAddDrugModal, setShowAddDrugModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  
+  // Pharmacy Copay Modal State
+  const [showCopayModal, setShowCopayModal] = useState(false);
+  const [selectedPrescription, setSelectedPrescription] = useState<Prescription | null>(null);
 
   const { data: healthStatus } = useAIHealth();
   const isAIOnline = healthStatus?.status === 'connected';
@@ -227,13 +232,34 @@ export default function Pharmacy() {
     } catch (error) { toast.error('Failed to calculate dosage'); } finally { setCalculatingDosage(false); }
   };
 
-  const handleDispense = async (prescriptionId: string) => {
+  // Show copay modal before dispensing
+  const handleDispenseClick = (prescription: Prescription) => {
+    setSelectedPrescription(prescription);
+    setShowCopayModal(true);
+  };
+
+  // Actually dispense after copay collected/waived
+  const handleDispenseAfterCopay = async (action: 'collected' | 'waived') => {
+    if (!selectedPrescription) return;
+    
     try {
-      await pharmacyApi.dispensePrescription(prescriptionId);
-      toast.success('Prescription dispensed successfully');
+      await pharmacyApi.dispensePrescription(selectedPrescription.id);
+      toast.success(`Prescription dispensed successfully (copay ${action})`);
       const response = await pharmacyApi.getPendingPrescriptions();
       setPrescriptions(response.data.data || []);
-    } catch (error) { toast.error('Failed to dispense prescription'); }
+    } catch (error) { 
+      toast.error('Failed to dispense prescription'); 
+    } finally {
+      setSelectedPrescription(null);
+    }
+  };
+
+  // Legacy direct dispense (for backwards compat if needed)
+  const handleDispense = async (prescriptionId: string) => {
+    const rx = prescriptions.find(p => p.id === prescriptionId);
+    if (rx) {
+      handleDispenseClick(rx);
+    }
   };
 
   const filteredPrescriptions = prescriptions.filter(rx => {
@@ -509,6 +535,20 @@ export default function Pharmacy() {
         onClose={() => setShowImportModal(false)}
         onSuccess={refreshData}
       />
+
+      {/* Pharmacy Copay Modal */}
+      {selectedPrescription && (
+        <PharmacyCopayModal
+          isOpen={showCopayModal}
+          onClose={() => {
+            setShowCopayModal(false);
+            setSelectedPrescription(null);
+          }}
+          onSuccess={handleDispenseAfterCopay}
+          prescriptionId={selectedPrescription.id}
+          patientName={`${selectedPrescription.patient?.firstName || ''} ${selectedPrescription.patient?.lastName || ''}`}
+        />
+      )}
     </div>
   );
 }

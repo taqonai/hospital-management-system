@@ -21,6 +21,7 @@ import {
   DocumentTextIcon,
   BeakerIcon,
   Cog6ToothIcon,
+  CheckCircleIcon,
 } from '@heroicons/react/24/outline';
 import { useAIHealth } from '../../hooks/useAI';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -125,6 +126,9 @@ interface Bed {
   };
 }
 
+// Import IPD Insurance Verification
+import IPDInsuranceVerification from '../../components/ipd/IPDInsuranceVerification';
+
 // New Admission Modal Component
 function NewAdmissionModal({ onClose, onSuccess, wards }: { onClose: () => void; onSuccess: () => void; wards: Ward[] }) {
   const [loading, setLoading] = useState(false);
@@ -141,6 +145,16 @@ function NewAdmissionModal({ onClose, onSuccess, wards }: { onClose: () => void;
   const [diagnosis, setDiagnosis] = useState('');
   const [loadingDoctors, setLoadingDoctors] = useState(true);
   const [loadingBeds, setLoadingBeds] = useState(true);
+
+  // Insurance verification state
+  const [insuranceVerified, setInsuranceVerified] = useState(false);
+  const [insuranceResult, setInsuranceResult] = useState<{
+    hasInsurance: boolean;
+    insuranceId?: string;
+    preAuthRequired: boolean;
+    proceedAsSelfPay: boolean;
+    eligibility?: any;
+  } | null>(null);
 
   // Patient mode: search existing or register new
   const [patientMode, setPatientMode] = useState<'search' | 'register'>('search');
@@ -222,6 +236,12 @@ function NewAdmissionModal({ onClose, onSuccess, wards }: { onClose: () => void;
     return () => clearTimeout(debounce);
   }, [searchQuery]);
 
+  // Reset insurance verification when patient changes
+  useEffect(() => {
+    setInsuranceVerified(false);
+    setInsuranceResult(null);
+  }, [selectedPatient?.id]);
+
   // Handle inline patient registration
   const handleRegisterPatient = async () => {
     const { firstName, lastName, dateOfBirth, gender, phone, address, city, state, zipCode } = regForm;
@@ -269,10 +289,26 @@ function NewAdmissionModal({ onClose, onSuccess, wards }: { onClose: () => void;
     }
   };
 
+  // Handle insurance verification completion
+  const handleInsuranceVerified = (result: {
+    hasInsurance: boolean;
+    insuranceId?: string;
+    preAuthRequired: boolean;
+    proceedAsSelfPay: boolean;
+    eligibility?: any;
+  }) => {
+    setInsuranceResult(result);
+    setInsuranceVerified(true);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPatient) {
       toast.error('Please select a patient');
+      return;
+    }
+    if (!insuranceVerified) {
+      toast.error('Please complete insurance verification');
       return;
     }
     if (!selectedDoctor) {
@@ -297,6 +333,10 @@ function NewAdmissionModal({ onClose, onSuccess, wards }: { onClose: () => void;
         admissionType,
         chiefComplaint: admissionReason,
         diagnosis: diagnosis ? [diagnosis] : undefined,
+        // Include insurance info
+        insuranceId: insuranceResult?.insuranceId,
+        selfPay: insuranceResult?.proceedAsSelfPay || false,
+        preAuthRequired: insuranceResult?.preAuthRequired || false,
       });
       toast.success('Patient admitted successfully');
       onSuccess();
@@ -614,7 +654,14 @@ function NewAdmissionModal({ onClose, onSuccess, wards }: { onClose: () => void;
                   <button
                     key={type}
                     type="button"
-                    onClick={() => setAdmissionType(type as typeof admissionType)}
+                    onClick={() => {
+                      setAdmissionType(type as typeof admissionType);
+                      // Reset insurance verification when admission type changes
+                      if (insuranceVerified) {
+                        setInsuranceVerified(false);
+                        setInsuranceResult(null);
+                      }
+                    }}
                     className={clsx(
                       'flex-1 py-2.5 px-4 rounded-xl font-medium text-sm transition-all border',
                       admissionType === type
@@ -627,6 +674,55 @@ function NewAdmissionModal({ onClose, onSuccess, wards }: { onClose: () => void;
                 ))}
               </div>
             </div>
+
+            {/* Insurance Verification - Show when patient is selected */}
+            {selectedPatient && (
+              <div className="border-t border-b border-gray-200 py-4 my-2">
+                {insuranceVerified && insuranceResult ? (
+                  <div className={`rounded-xl p-4 ${insuranceResult.proceedAsSelfPay ? 'bg-orange-50 border border-orange-200' : 'bg-green-50 border border-green-200'}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {insuranceResult.proceedAsSelfPay ? (
+                          <>
+                            <ExclamationTriangleIcon className="h-5 w-5 text-orange-500" />
+                            <span className="font-medium text-orange-800">Self-Pay Selected</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircleIcon className="h-5 w-5 text-green-500" />
+                            <span className="font-medium text-green-800">
+                              Insurance Verified: {insuranceResult.eligibility?.insuranceProvider || 'Unknown'}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInsuranceVerified(false);
+                          setInsuranceResult(null);
+                        }}
+                        className="text-sm text-gray-500 hover:text-gray-700 underline"
+                      >
+                        Change
+                      </button>
+                    </div>
+                    {insuranceResult.preAuthRequired && !insuranceResult.proceedAsSelfPay && (
+                      <p className="text-sm text-blue-600 mt-2">
+                        ⚡ Pre-authorization request will be submitted automatically
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <IPDInsuranceVerification
+                    patientId={selectedPatient.id}
+                    patientName={`${selectedPatient.firstName} ${selectedPatient.lastName}`}
+                    admissionType={admissionType}
+                    onVerificationComplete={handleInsuranceVerified}
+                  />
+                )}
+              </div>
+            )}
 
             {/* Admission Reason */}
             <div>

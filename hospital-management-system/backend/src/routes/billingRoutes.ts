@@ -123,6 +123,36 @@ router.post(
   })
 );
 
+// ==================== Pharmacy Copay ====================
+
+// Calculate pharmacy copay for a prescription
+router.get(
+  '/pharmacy-copay/:prescriptionId',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const copayInfo = await billingService.calculatePharmacyCopay(
+      req.params.prescriptionId,
+      req.user!.hospitalId
+    );
+    sendSuccess(res, copayInfo);
+  })
+);
+
+// Collect pharmacy copay before dispensing
+router.post(
+  '/pharmacy-copay-collect',
+  authenticate,
+  authorizeWithPermission('billing:write', ['PHARMACIST', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const result = await billingService.collectPharmacyCopay({
+      ...req.body,
+      hospitalId: req.user!.hospitalId,
+      collectedBy: req.user!.userId,
+    });
+    sendCreated(res, result, 'Pharmacy copay collected successfully');
+  })
+);
+
 // ==================== Insurance Claims ====================
 
 // Get all claims
