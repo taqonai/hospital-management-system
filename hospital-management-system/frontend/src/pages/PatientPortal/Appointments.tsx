@@ -280,6 +280,8 @@ export default function Appointments() {
   };
 
   // Fetch slots for all visible doctors when in Emergency/Quick mode
+  // Combined reset + fetch into a single effect to avoid race condition where
+  // the reset effect clears doctorSlotsMap but the fetch effect reads stale closure data.
   useEffect(() => {
     if (!showBookModal) return;
     if (bookingMode !== 'emergency' && bookingMode !== 'quick') return;
@@ -288,22 +290,12 @@ export default function Appointments() {
     const dateToUse = bookingMode === 'emergency' ? getTodayInUAE() : selectedDate;
     if (!dateToUse) return;
 
-    // Fetch slots for each doctor
+    // Clear previous slots and fetch fresh for all doctors
+    setDoctorSlotsMap({});
     doctors.forEach((doctor: Doctor) => {
-      const existingEntry = doctorSlotsMap[doctor.id];
-      // Only fetch if we don't have slots for this doctor+date combo or if date changed
-      if (!existingEntry || existingEntry.loading === undefined) {
-        fetchDoctorSlots(doctor.id, dateToUse);
-      }
+      fetchDoctorSlots(doctor.id, dateToUse);
     });
   }, [showBookModal, bookingMode, doctors, selectedDate]);
-
-  // Reset doctor slots map when date changes in Quick mode
-  useEffect(() => {
-    if (bookingMode === 'quick' && selectedDate) {
-      setDoctorSlotsMap({});
-    }
-  }, [selectedDate, bookingMode]);
 
   // Fetch available slots for selected doctor and date (handles both booking and rescheduling)
   const slotsDoctorId = showRescheduleModal ? selectedAppointment?.doctorId : selectedDoctor;
@@ -424,7 +416,7 @@ export default function Appointments() {
     setBookingMode('emergency');
     setAppointmentType('EMERGENCY');
     setAppointmentReason('Emergency consultation');
-    setSelectedDate(format(new Date(), 'yyyy-MM-dd'));
+    setSelectedDate(getTodayInUAE());
     // Find Emergency department
     const emergencyDept = (departments || []).find((d: Department) =>
       d.name.toLowerCase().includes('emergency')
@@ -440,7 +432,7 @@ export default function Appointments() {
     setShowBookingChoice(false);
     resetBookingForm();
     setBookingMode('quick');
-    setSelectedDate(format(new Date(), 'yyyy-MM-dd')); // Default to today
+    setSelectedDate(getTodayInUAE());
     setShowBookModal(true);
   };
 
@@ -1262,7 +1254,7 @@ export default function Appointments() {
                               type="date"
                               value={selectedDate}
                               onChange={(e) => setSelectedDate(e.target.value)}
-                              min={format(new Date(), 'yyyy-MM-dd')}
+                              min={getTodayInUAE()}
                               max={format(addDays(new Date(), 30), 'yyyy-MM-dd')}
                               className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm"
                             />
@@ -1485,7 +1477,7 @@ export default function Appointments() {
                             type="date"
                             value={selectedDate}
                             onChange={(e) => setSelectedDate(e.target.value)}
-                            min={format(new Date(), 'yyyy-MM-dd')}
+                            min={getTodayInUAE()}
                             max={format(addDays(new Date(), 30), 'yyyy-MM-dd')}
                             className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           />
@@ -1777,7 +1769,7 @@ export default function Appointments() {
                           type="date"
                           value={rescheduleDate}
                           onChange={(e) => setRescheduleDate(e.target.value)}
-                          min={format(new Date(), 'yyyy-MM-dd')}
+                          min={getTodayInUAE()}
                           className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         />
                       </div>
