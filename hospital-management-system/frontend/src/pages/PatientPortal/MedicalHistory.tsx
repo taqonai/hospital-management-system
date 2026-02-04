@@ -52,6 +52,33 @@ interface Allergy {
   createdAt: string;
 }
 
+interface ImmunizationRecord {
+  id: string;
+  vaccineName: string;
+  vaccineType?: string | null;
+  doseNumber?: number | null;
+  dateAdministered: string;
+  administeredBy?: string | null;
+  lotNumber?: string | null;
+  nextDueDate?: string | null;
+  notes?: string | null;
+  verificationStatus?: string;
+}
+
+interface PastSurgeryRecord {
+  id: string;
+  surgeryName: string;
+  surgeryDate: string;
+  hospitalName: string;
+  hospitalLocation?: string | null;
+  surgeonName?: string | null;
+  indication?: string | null;
+  complications?: string | null;
+  outcome?: string | null;
+  notes?: string | null;
+  verificationStatus?: string;
+}
+
 interface AIAnalysis {
   summary: {
     totalConditions: number;
@@ -95,16 +122,28 @@ const COMMON_CONDITIONS = [
   'Depression', 'Migraine', 'Epilepsy', 'Cancer', 'Kidney Disease'
 ];
 
-const COMMON_SURGERIES = [
-  'Appendectomy', 'Tonsillectomy', 'Cesarean Section', 'Knee Replacement',
-  'Hip Replacement', 'Gallbladder Removal', 'Heart Bypass', 'Cataract Surgery',
-  'Hernia Repair', 'Spinal Surgery'
-];
-
 const COMMON_ALLERGIES = {
   DRUG: ['Penicillin', 'Aspirin', 'Ibuprofen', 'Sulfa drugs', 'Codeine', 'Morphine'],
   FOOD: ['Peanuts', 'Tree nuts', 'Shellfish', 'Eggs', 'Milk', 'Wheat', 'Soy', 'Fish'],
   ENVIRONMENTAL: ['Pollen', 'Dust mites', 'Pet dander', 'Mold', 'Latex', 'Bee stings'],
+};
+
+const formatDate = (dateStr: string | null | undefined) => {
+  if (!dateStr) return '';
+  try {
+    return new Date(dateStr).toISOString().split('T')[0];
+  } catch {
+    return '';
+  }
+};
+
+const formatDisplayDate = (dateStr: string | null | undefined) => {
+  if (!dateStr) return '-';
+  try {
+    return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  } catch {
+    return '-';
+  }
 };
 
 export default function MedicalHistory() {
@@ -113,6 +152,35 @@ export default function MedicalHistory() {
   const [showAllergyModal, setShowAllergyModal] = useState(false);
   const [editingAllergy, setEditingAllergy] = useState<Allergy | null>(null);
   const [showAnalysis, setShowAnalysis] = useState(false);
+
+  // Immunization modal state
+  const [showImmunizationModal, setShowImmunizationModal] = useState(false);
+  const [editingImmunization, setEditingImmunization] = useState<ImmunizationRecord | null>(null);
+  const [immunizationForm, setImmunizationForm] = useState({
+    vaccineName: '',
+    vaccineType: '',
+    doseNumber: '',
+    dateAdministered: '',
+    administeredBy: '',
+    lotNumber: '',
+    nextDueDate: '',
+    notes: '',
+  });
+
+  // Surgery modal state
+  const [showSurgeryModal, setShowSurgeryModal] = useState(false);
+  const [editingSurgery, setEditingSurgery] = useState<PastSurgeryRecord | null>(null);
+  const [surgeryForm, setSurgeryForm] = useState({
+    surgeryName: '',
+    surgeryDate: '',
+    hospitalName: '',
+    hospitalLocation: '',
+    surgeonName: '',
+    indication: '',
+    complications: '',
+    outcome: '',
+    notes: '',
+  });
 
   // Form states
   const [formData, setFormData] = useState<Partial<MedicalHistory>>({
@@ -141,10 +209,8 @@ export default function MedicalHistory() {
   } | null>(null);
 
   const [newCondition, setNewCondition] = useState('');
-  const [newSurgery, setNewSurgery] = useState('');
   const [newFamilyHistory, setNewFamilyHistory] = useState('');
-  const [newMedication, setNewMedication] = useState('');
-  const [newImmunization, setNewImmunization] = useState('');
+  const [newMedication, setNewMedication] = useState({ name: '', dosage: '', frequency: '' });
 
   // Allergy form
   const [allergyForm, setAllergyForm] = useState({
@@ -199,11 +265,28 @@ export default function MedicalHistory() {
     },
   });
 
+  // Fetch structured immunizations
+  const { data: immunizationsData, isLoading: loadingImmunizations } = useQuery({
+    queryKey: ['patient-immunizations'],
+    queryFn: async () => {
+      const response = await patientPortalApi.getImmunizations();
+      return response.data?.data || response.data || [];
+    },
+  });
+
+  // Fetch structured past surgeries
+  const { data: surgeriesData, isLoading: loadingSurgeries } = useQuery({
+    queryKey: ['patient-past-surgeries'],
+    queryFn: async () => {
+      const response = await patientPortalApi.getPastSurgeries();
+      return response.data?.data || response.data || [];
+    },
+  });
+
   // Track if initial data has been loaded
   const [initialLoadDone, setInitialLoadDone] = useState(false);
 
   // Sync form data on initial load and after mutation refetch
-  // This ensures display is always up to date with server data
   useEffect(() => {
     if (historyData && !isEditing) {
       setFormData({
@@ -237,7 +320,6 @@ export default function MedicalHistory() {
   const updateHistoryMutation = useMutation({
     mutationFn: (data: any) => patientPortalApi.updateMedicalHistory(data),
     onSuccess: async (response) => {
-      // Update formData directly from response to ensure immediate display
       const responseData = response.data?.data || response.data;
       if (responseData) {
         const newFormData = {
@@ -254,7 +336,6 @@ export default function MedicalHistory() {
         };
         setFormData(newFormData);
       }
-      // Invalidate and refetch to ensure cache is updated
       await queryClient.invalidateQueries({ queryKey: ['patient-medical-history'] });
       await queryClient.refetchQueries({ queryKey: ['patient-medical-history'] });
       toast.success('Medical history updated successfully');
@@ -262,6 +343,86 @@ export default function MedicalHistory() {
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.message || 'Failed to update medical history');
+    },
+  });
+
+  // Immunization mutations
+  const addImmunizationMutation = useMutation({
+    mutationFn: (data: any) => patientPortalApi.addImmunization(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['patient-immunizations'] });
+      toast.success('Immunization added successfully');
+      setShowImmunizationModal(false);
+      resetImmunizationForm();
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to add immunization');
+    },
+  });
+
+  const updateImmunizationMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) =>
+      patientPortalApi.updateImmunization(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['patient-immunizations'] });
+      toast.success('Immunization updated successfully');
+      setShowImmunizationModal(false);
+      setEditingImmunization(null);
+      resetImmunizationForm();
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update immunization');
+    },
+  });
+
+  const deleteImmunizationMutation = useMutation({
+    mutationFn: (id: string) => patientPortalApi.deleteImmunization(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['patient-immunizations'] });
+      toast.success('Immunization removed');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to remove immunization');
+    },
+  });
+
+  // Past surgery mutations
+  const addSurgeryMutation = useMutation({
+    mutationFn: (data: any) => patientPortalApi.addPastSurgery(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['patient-past-surgeries'] });
+      toast.success('Past surgery added successfully');
+      setShowSurgeryModal(false);
+      resetSurgeryForm();
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to add past surgery');
+    },
+  });
+
+  const updateSurgeryMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) =>
+      patientPortalApi.updatePastSurgery(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['patient-past-surgeries'] });
+      toast.success('Past surgery updated successfully');
+      setShowSurgeryModal(false);
+      setEditingSurgery(null);
+      resetSurgeryForm();
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update past surgery');
+    },
+  });
+
+  const deleteSurgeryMutation = useMutation({
+    mutationFn: (id: string) => patientPortalApi.deletePastSurgery(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['patient-past-surgeries'] });
+      toast.success('Past surgery removed');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to remove past surgery');
     },
   });
 
@@ -330,6 +491,33 @@ export default function MedicalHistory() {
     });
   };
 
+  const resetImmunizationForm = () => {
+    setImmunizationForm({
+      vaccineName: '',
+      vaccineType: '',
+      doseNumber: '',
+      dateAdministered: '',
+      administeredBy: '',
+      lotNumber: '',
+      nextDueDate: '',
+      notes: '',
+    });
+  };
+
+  const resetSurgeryForm = () => {
+    setSurgeryForm({
+      surgeryName: '',
+      surgeryDate: '',
+      hospitalName: '',
+      hospitalLocation: '',
+      surgeonName: '',
+      indication: '',
+      complications: '',
+      outcome: '',
+      notes: '',
+    });
+  };
+
   // Reset form data from historyData (used when Cancel is clicked)
   const handleCancelEdit = () => {
     if (historyData) {
@@ -351,41 +539,27 @@ export default function MedicalHistory() {
 
   const handleAddItem = (field: keyof MedicalHistory, value: string, setter: (val: string) => void) => {
     if (!value.trim()) return;
-
-    // Get current data from ref (always most up-to-date)
     const currentFormData = { ...formDataRef.current };
     const currentItems = (currentFormData[field] as string[]) || [];
-
     if (!currentItems.includes(value.trim())) {
       const newData = {
         ...currentFormData,
         [field]: [...currentItems, value.trim()],
       };
-
-      // Update ref FIRST (synchronous)
       formDataRef.current = newData;
-
-      // Then update state for UI
       setFormData(newData);
     }
-
     setter('');
   };
 
   const handleRemoveItem = (field: keyof MedicalHistory, value: string) => {
-    // Get current data from ref
     const currentFormData = { ...formDataRef.current };
     const currentItems = (currentFormData[field] as string[]) || [];
-
     const newData = {
       ...currentFormData,
       [field]: currentItems.filter((item) => item !== value),
     };
-
-    // Update ref FIRST
     formDataRef.current = newData;
-
-    // Then update state for UI
     setFormData(newData);
   };
 
@@ -393,19 +567,92 @@ export default function MedicalHistory() {
     updateHistoryMutation.mutate(formDataRef.current);
   };
 
+  // Medication add (structured: name + dosage + frequency)
+  const addMedication = () => {
+    if (!newMedication.name.trim()) return;
+    const medString = [
+      newMedication.name.trim(),
+      newMedication.dosage.trim(),
+      newMedication.frequency.trim() ? `(${newMedication.frequency.trim()})` : '',
+    ].filter(Boolean).join(' ');
+
+    const currentFormData = { ...formDataRef.current };
+    const currentMeds = (currentFormData.currentMedications as string[]) || [];
+    const newData = {
+      ...currentFormData,
+      currentMedications: [...currentMeds, medString],
+    };
+    formDataRef.current = newData;
+    setFormData(newData);
+    setNewMedication({ name: '', dosage: '', frequency: '' });
+  };
+
   const handleSaveAllergy = () => {
     if (!allergyForm.allergen.trim()) {
       toast.error('Allergen name is required');
       return;
     }
-
     if (editingAllergy) {
-      updateAllergyMutation.mutate({
-        id: editingAllergy.id,
-        data: allergyForm,
-      });
+      updateAllergyMutation.mutate({ id: editingAllergy.id, data: allergyForm });
     } else {
       addAllergyMutation.mutate(allergyForm);
+    }
+  };
+
+  const handleSaveImmunization = () => {
+    if (!immunizationForm.vaccineName.trim()) {
+      toast.error('Vaccine name is required');
+      return;
+    }
+    if (!immunizationForm.dateAdministered) {
+      toast.error('Date administered is required');
+      return;
+    }
+    const data = {
+      vaccineName: immunizationForm.vaccineName,
+      vaccineType: immunizationForm.vaccineType || undefined,
+      doseNumber: immunizationForm.doseNumber ? parseInt(immunizationForm.doseNumber) : undefined,
+      dateAdministered: immunizationForm.dateAdministered,
+      administeredBy: immunizationForm.administeredBy || undefined,
+      lotNumber: immunizationForm.lotNumber || undefined,
+      nextDueDate: immunizationForm.nextDueDate || undefined,
+      notes: immunizationForm.notes || undefined,
+    };
+    if (editingImmunization) {
+      updateImmunizationMutation.mutate({ id: editingImmunization.id, data });
+    } else {
+      addImmunizationMutation.mutate(data);
+    }
+  };
+
+  const handleSaveSurgery = () => {
+    if (!surgeryForm.surgeryName.trim()) {
+      toast.error('Surgery name is required');
+      return;
+    }
+    if (!surgeryForm.surgeryDate) {
+      toast.error('Surgery date is required');
+      return;
+    }
+    if (!surgeryForm.hospitalName.trim()) {
+      toast.error('Hospital name is required');
+      return;
+    }
+    const data = {
+      surgeryName: surgeryForm.surgeryName,
+      surgeryDate: surgeryForm.surgeryDate,
+      hospitalName: surgeryForm.hospitalName,
+      hospitalLocation: surgeryForm.hospitalLocation || undefined,
+      surgeonName: surgeryForm.surgeonName || undefined,
+      indication: surgeryForm.indication || undefined,
+      complications: surgeryForm.complications || undefined,
+      outcome: surgeryForm.outcome || undefined,
+      notes: surgeryForm.notes || undefined,
+    };
+    if (editingSurgery) {
+      updateSurgeryMutation.mutate({ id: editingSurgery.id, data });
+    } else {
+      addSurgeryMutation.mutate(data);
     }
   };
 
@@ -421,7 +668,40 @@ export default function MedicalHistory() {
     setShowAllergyModal(true);
   };
 
+  const openEditImmunization = (imm: ImmunizationRecord) => {
+    setEditingImmunization(imm);
+    setImmunizationForm({
+      vaccineName: imm.vaccineName || '',
+      vaccineType: imm.vaccineType || '',
+      doseNumber: imm.doseNumber ? String(imm.doseNumber) : '',
+      dateAdministered: formatDate(imm.dateAdministered),
+      administeredBy: imm.administeredBy || '',
+      lotNumber: imm.lotNumber || '',
+      nextDueDate: formatDate(imm.nextDueDate),
+      notes: imm.notes || '',
+    });
+    setShowImmunizationModal(true);
+  };
+
+  const openEditSurgery = (surgery: PastSurgeryRecord) => {
+    setEditingSurgery(surgery);
+    setSurgeryForm({
+      surgeryName: surgery.surgeryName || '',
+      surgeryDate: formatDate(surgery.surgeryDate),
+      hospitalName: surgery.hospitalName || '',
+      hospitalLocation: surgery.hospitalLocation || '',
+      surgeonName: surgery.surgeonName || '',
+      indication: surgery.indication || '',
+      complications: surgery.complications || '',
+      outcome: surgery.outcome || '',
+      notes: surgery.notes || '',
+    });
+    setShowSurgeryModal(true);
+  };
+
   const allergies: Allergy[] = allergiesData || [];
+  const immunizations: ImmunizationRecord[] = immunizationsData || [];
+  const pastSurgeries: PastSurgeryRecord[] = surgeriesData || [];
   const analysis: AIAnalysis | null = analysisMutation.data?.data?.data || analysisMutation.data?.data || null;
 
   return (
@@ -489,7 +769,6 @@ export default function MedicalHistory() {
               </div>
             </div>
 
-            {/* Recommendations */}
             {analysis.recommendations.length > 0 && (
               <div className="mb-6">
                 <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -510,7 +789,6 @@ export default function MedicalHistory() {
               </div>
             )}
 
-            {/* Preventive Care */}
             {analysis.preventiveCare.length > 0 && (
               <div>
                 <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -605,7 +883,7 @@ export default function MedicalHistory() {
             <Tab.Panel>
               <div className="bg-white/70 backdrop-blur-xl rounded-2xl border border-white/20 shadow-lg p-6">
                 <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-xl font-bold text-gray-900">Chronic Conditions & Past Surgeries</h2>
+                  <h2 className="text-xl font-bold text-gray-900">Chronic Conditions & Ongoing Treatment</h2>
                   {!isEditing ? (
                     <button
                       onClick={() => setIsEditing(true)}
@@ -698,57 +976,78 @@ export default function MedicalHistory() {
                       </div>
                     </div>
 
-                    {/* Past Surgeries */}
+                    {/* Past Surgeries - now structured with modal */}
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Past Surgeries</h3>
-                      {isEditing && (
-                        <div className="flex gap-2 mb-4">
-                          <input
-                            type="text"
-                            value={newSurgery}
-                            onChange={(e) => setNewSurgery(e.target.value)}
-                            placeholder="Add a surgery..."
-                            list="surgeries-list"
-                            className="flex-1 px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-rose-500"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                handleAddItem('pastSurgeries', newSurgery, setNewSurgery);
-                              }
-                            }}
-                          />
-                          <datalist id="surgeries-list">
-                            {COMMON_SURGERIES.map((s) => <option key={s} value={s} />)}
-                          </datalist>
-                          <button
-                            onClick={() => handleAddItem('pastSurgeries', newSurgery, setNewSurgery)}
-                            className="px-4 py-2 rounded-xl bg-rose-100 text-rose-700 hover:bg-rose-200"
-                          >
-                            <PlusIcon className="h-5 w-5" />
-                          </button>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-gray-900">Past Surgeries</h3>
+                        <button
+                          onClick={() => {
+                            resetSurgeryForm();
+                            setEditingSurgery(null);
+                            setShowSurgeryModal(true);
+                          }}
+                          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-rose-500 to-pink-600 text-white font-medium hover:from-rose-600 hover:to-pink-700 shadow text-sm"
+                        >
+                          <PlusIcon className="h-4 w-4" />
+                          Add Surgery
+                        </button>
+                      </div>
+                      {loadingSurgeries ? (
+                        <div className="text-center py-6">
+                          <ArrowPathIcon className="h-6 w-6 animate-spin mx-auto text-rose-500" />
+                        </div>
+                      ) : pastSurgeries.length === 0 ? (
+                        <p className="text-gray-500 italic text-center py-4 bg-gray-50 rounded-xl">No past surgeries recorded</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {pastSurgeries.map((surgery) => (
+                            <div key={surgery.id} className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow">
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <h4 className="font-semibold text-gray-900">{surgery.surgeryName}</h4>
+                                    {surgery.verificationStatus && (
+                                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                        surgery.verificationStatus === 'NURSE_VERIFIED' || surgery.verificationStatus === 'DOCTOR_VALIDATED'
+                                          ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                                      }`}>
+                                        {surgery.verificationStatus === 'PATIENT_REPORTED' ? 'Self-reported' :
+                                         surgery.verificationStatus === 'NURSE_VERIFIED' ? 'Verified' : 'Validated'}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1 text-sm text-gray-600 mt-2">
+                                    <span>Date: {formatDisplayDate(surgery.surgeryDate)}</span>
+                                    <span>Hospital: {surgery.hospitalName}</span>
+                                    {surgery.hospitalLocation && <span>Location: {surgery.hospitalLocation}</span>}
+                                    {surgery.surgeonName && <span>Surgeon: {surgery.surgeonName}</span>}
+                                    {surgery.complications && <span>Complications: {surgery.complications}</span>}
+                                    {surgery.outcome && <span>Outcome: {surgery.outcome}</span>}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 ml-2">
+                                  <button
+                                    onClick={() => openEditSurgery(surgery)}
+                                    className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                                  >
+                                    <PencilSquareIcon className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      if (confirm('Are you sure you want to remove this surgery record?')) {
+                                        deleteSurgeryMutation.mutate(surgery.id);
+                                      }
+                                    }}
+                                    className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                                  >
+                                    <TrashIcon className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       )}
-                      <div className="flex flex-wrap gap-2">
-                        {(formData.pastSurgeries || []).length === 0 ? (
-                          <p className="text-gray-500 italic">No past surgeries recorded</p>
-                        ) : (
-                          formData.pastSurgeries?.map((surgery, idx) => (
-                            <span
-                              key={idx}
-                              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-100 text-blue-800"
-                            >
-                              {surgery}
-                              {isEditing && (
-                                <button
-                                  onClick={() => handleRemoveItem('pastSurgeries', surgery)}
-                                  className="text-blue-600 hover:text-blue-800"
-                                >
-                                  <XMarkIcon className="h-4 w-4" />
-                                </button>
-                              )}
-                            </span>
-                          ))
-                        )}
-                      </div>
                     </div>
 
                     {/* Ongoing Treatment */}
@@ -832,7 +1131,6 @@ export default function MedicalHistory() {
                           <div className="p-3 bg-white rounded-lg">
                             {formData.isPregnant === true ? (
                               <div className="flex items-center gap-2 text-pink-800">
-                                <span className="text-xl">🤰</span>
                                 <span className="font-medium">Currently Pregnant</span>
                                 {formData.expectedDueDate && (
                                   <span className="text-sm text-pink-600 ml-2">
@@ -959,145 +1257,216 @@ export default function MedicalHistory() {
             {/* Medications & Immunizations Tab */}
             <Tab.Panel>
               <div className="bg-white/70 backdrop-blur-xl rounded-2xl border border-white/20 shadow-lg p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-xl font-bold text-gray-900">Medications & Immunizations</h2>
-                  {!isEditing ? (
-                    <button
-                      onClick={() => setIsEditing(true)}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-medium hover:bg-slate-200"
-                    >
-                      <PencilSquareIcon className="h-5 w-5" />
-                      Edit
-                    </button>
-                  ) : (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleCancelEdit}
-                        className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleSaveHistory}
-                        disabled={updateHistoryMutation.isPending}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600 text-white font-medium hover:bg-rose-700 disabled:opacity-50"
-                      >
-                        {updateHistoryMutation.isPending ? (
-                          <ArrowPathIcon className="h-5 w-5 animate-spin" />
-                        ) : (
-                          <CheckCircleIcon className="h-5 w-5" />
+                <div className="space-y-8">
+                  {/* Current Medications */}
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-xl font-bold text-gray-900">Current Medications</h2>
+                      {!isEditing ? (
+                        <button
+                          onClick={() => setIsEditing(true)}
+                          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-medium hover:bg-slate-200 text-sm"
+                        >
+                          <PencilSquareIcon className="h-4 w-4" />
+                          Edit
+                        </button>
+                      ) : (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleCancelEdit}
+                            className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 text-sm"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={handleSaveHistory}
+                            disabled={updateHistoryMutation.isPending}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600 text-white font-medium hover:bg-rose-700 disabled:opacity-50 text-sm"
+                          >
+                            {updateHistoryMutation.isPending ? (
+                              <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <CheckCircleIcon className="h-4 w-4" />
+                            )}
+                            Save
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {loadingHistory ? (
+                      <div className="text-center py-8">
+                        <ArrowPathIcon className="h-6 w-6 animate-spin mx-auto text-rose-500" />
+                      </div>
+                    ) : (
+                      <>
+                        {isEditing && (
+                          <div className="mb-4">
+                            <p className="text-sm text-gray-500 mb-3">Add medications with name, dosage, and frequency (matching nurse portal format).</p>
+                            <div className="flex gap-2 items-end flex-wrap">
+                              <div className="flex-1 min-w-[140px]">
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Medication Name</label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g., Metformin"
+                                  value={newMedication.name}
+                                  onChange={(e) => setNewMedication({ ...newMedication, name: e.target.value })}
+                                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-rose-500"
+                                  onKeyDown={(e) => { if (e.key === 'Enter') addMedication(); }}
+                                />
+                              </div>
+                              <div className="w-24">
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Dosage</label>
+                                <input
+                                  type="text"
+                                  placeholder="500mg"
+                                  value={newMedication.dosage}
+                                  onChange={(e) => setNewMedication({ ...newMedication, dosage: e.target.value })}
+                                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-rose-500"
+                                  onKeyDown={(e) => { if (e.key === 'Enter') addMedication(); }}
+                                />
+                              </div>
+                              <div className="w-28">
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Frequency</label>
+                                <input
+                                  type="text"
+                                  placeholder="Twice daily"
+                                  value={newMedication.frequency}
+                                  onChange={(e) => setNewMedication({ ...newMedication, frequency: e.target.value })}
+                                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-rose-500"
+                                  onKeyDown={(e) => { if (e.key === 'Enter') addMedication(); }}
+                                />
+                              </div>
+                              <button
+                                onClick={addMedication}
+                                disabled={!newMedication.name.trim()}
+                                className="px-4 py-2 rounded-xl bg-rose-600 text-white text-sm font-medium hover:bg-rose-700 disabled:opacity-50"
+                              >
+                                <PlusIcon className="h-5 w-5" />
+                              </button>
+                            </div>
+                          </div>
                         )}
-                        Save
+                        <div className="flex flex-wrap gap-2">
+                          {(formData.currentMedications || []).length === 0 ? (
+                            <p className="text-gray-500 italic">No current medications recorded</p>
+                          ) : (
+                            formData.currentMedications?.map((medication, idx) => (
+                              <span
+                                key={idx}
+                                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-100 text-green-800"
+                              >
+                                {medication}
+                                {isEditing && (
+                                  <button
+                                    onClick={() => handleRemoveItem('currentMedications', medication)}
+                                    className="text-green-600 hover:text-green-800"
+                                  >
+                                    <XMarkIcon className="h-4 w-4" />
+                                  </button>
+                                )}
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Divider */}
+                  <div className="border-t border-gray-200" />
+
+                  {/* Immunization Records - structured with modal (matching nurse portal) */}
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-xl font-bold text-gray-900">Immunization Records</h2>
+                      <button
+                        onClick={() => {
+                          resetImmunizationForm();
+                          setEditingImmunization(null);
+                          setShowImmunizationModal(true);
+                        }}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-rose-500 to-pink-600 text-white font-medium hover:from-rose-600 hover:to-pink-700 shadow text-sm"
+                      >
+                        <PlusIcon className="h-4 w-4" />
+                        Add Vaccine
                       </button>
                     </div>
-                  )}
+
+                    {loadingImmunizations ? (
+                      <div className="text-center py-8">
+                        <ArrowPathIcon className="h-6 w-6 animate-spin mx-auto text-rose-500" />
+                      </div>
+                    ) : immunizations.length === 0 ? (
+                      <div className="text-center py-8 bg-gray-50 rounded-xl">
+                        <ShieldExclamationIcon className="h-10 w-10 text-gray-300 mx-auto" />
+                        <p className="mt-2 text-gray-500">No immunizations recorded</p>
+                        <p className="text-sm text-gray-400 mt-1">Add your vaccination history to keep your records complete.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {immunizations.map((imm) => (
+                          <div key={imm.id} className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h4 className="font-semibold text-gray-900">{imm.vaccineName}</h4>
+                                  {imm.vaccineType && (
+                                    <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                                      {imm.vaccineType}
+                                    </span>
+                                  )}
+                                  {imm.doseNumber && (
+                                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                                      Dose {imm.doseNumber}
+                                    </span>
+                                  )}
+                                  {imm.verificationStatus && (
+                                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                      imm.verificationStatus === 'NURSE_VERIFIED' || imm.verificationStatus === 'DOCTOR_VALIDATED'
+                                        ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                                    }`}>
+                                      {imm.verificationStatus === 'PATIENT_REPORTED' ? 'Self-reported' :
+                                       imm.verificationStatus === 'NURSE_VERIFIED' ? 'Verified' : 'Validated'}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1 text-sm text-gray-600 mt-2">
+                                  <span>Date: {formatDisplayDate(imm.dateAdministered)}</span>
+                                  {imm.administeredBy && <span>Provider: {imm.administeredBy}</span>}
+                                  {imm.lotNumber && <span>Lot #: {imm.lotNumber}</span>}
+                                  {imm.nextDueDate && (
+                                    <span className="text-blue-600 font-medium">
+                                      Next due: {formatDisplayDate(imm.nextDueDate)}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 ml-2">
+                                <button
+                                  onClick={() => openEditImmunization(imm)}
+                                  className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                                >
+                                  <PencilSquareIcon className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (confirm('Are you sure you want to remove this immunization record?')) {
+                                      deleteImmunizationMutation.mutate(imm.id);
+                                    }
+                                  }}
+                                  className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                                >
+                                  <TrashIcon className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-
-                {loadingHistory ? (
-                  <div className="text-center py-12">
-                    <ArrowPathIcon className="h-8 w-8 animate-spin mx-auto text-rose-500" />
-                  </div>
-                ) : (
-                  <div className="space-y-8">
-                    {/* Current Medications */}
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Current Medications</h3>
-                      {isEditing && (
-                        <div className="flex gap-2 mb-4">
-                          <input
-                            type="text"
-                            value={newMedication}
-                            onChange={(e) => setNewMedication(e.target.value)}
-                            placeholder="Add a medication (e.g., Metformin 500mg)"
-                            className="flex-1 px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-rose-500"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                handleAddItem('currentMedications', newMedication, setNewMedication);
-                              }
-                            }}
-                          />
-                          <button
-                            onClick={() => handleAddItem('currentMedications', newMedication, setNewMedication)}
-                            className="px-4 py-2 rounded-xl bg-rose-100 text-rose-700 hover:bg-rose-200"
-                          >
-                            <PlusIcon className="h-5 w-5" />
-                          </button>
-                        </div>
-                      )}
-                      <div className="flex flex-wrap gap-2">
-                        {(formData.currentMedications || []).length === 0 ? (
-                          <p className="text-gray-500 italic">No current medications recorded</p>
-                        ) : (
-                          formData.currentMedications?.map((medication, idx) => (
-                            <span
-                              key={idx}
-                              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-100 text-green-800"
-                            >
-                              {medication}
-                              {isEditing && (
-                                <button
-                                  onClick={() => handleRemoveItem('currentMedications', medication)}
-                                  className="text-green-600 hover:text-green-800"
-                                >
-                                  <XMarkIcon className="h-4 w-4" />
-                                </button>
-                              )}
-                            </span>
-                          ))
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Immunizations */}
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Immunizations</h3>
-                      {isEditing && (
-                        <div className="flex gap-2 mb-4">
-                          <input
-                            type="text"
-                            value={newImmunization}
-                            onChange={(e) => setNewImmunization(e.target.value)}
-                            placeholder="Add an immunization (e.g., COVID-19 Vaccine 2023)"
-                            className="flex-1 px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-rose-500"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                handleAddItem('immunizations', newImmunization, setNewImmunization);
-                              }
-                            }}
-                          />
-                          <button
-                            onClick={() => handleAddItem('immunizations', newImmunization, setNewImmunization)}
-                            className="px-4 py-2 rounded-xl bg-rose-100 text-rose-700 hover:bg-rose-200"
-                          >
-                            <PlusIcon className="h-5 w-5" />
-                          </button>
-                        </div>
-                      )}
-                      <div className="flex flex-wrap gap-2">
-                        {(formData.immunizations || []).length === 0 ? (
-                          <p className="text-gray-500 italic">No immunizations recorded</p>
-                        ) : (
-                          formData.immunizations?.map((immunization, idx) => (
-                            <span
-                              key={idx}
-                              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-100 text-purple-800"
-                            >
-                              {immunization}
-                              {isEditing && (
-                                <button
-                                  onClick={() => handleRemoveItem('immunizations', immunization)}
-                                  className="text-purple-600 hover:text-purple-800"
-                                >
-                                  <XMarkIcon className="h-4 w-4" />
-                                </button>
-                              )}
-                            </span>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             </Tab.Panel>
 
@@ -1318,6 +1687,267 @@ export default function MedicalHistory() {
                       className="flex-1 px-4 py-2 rounded-xl bg-rose-600 text-white font-medium hover:bg-rose-700 disabled:opacity-50"
                     >
                       {(addAllergyMutation.isPending || updateAllergyMutation.isPending) ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
+
+      {/* Add/Edit Immunization Modal - matches nurse portal fields exactly */}
+      <Transition appear show={showImmunizationModal} as={Fragment}>
+        <Dialog as="div" className="relative z-50" onClose={() => setShowImmunizationModal(false)}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/30 backdrop-blur-sm" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-lg transform overflow-hidden rounded-2xl bg-white p-6 shadow-xl transition-all">
+                  <Dialog.Title className="text-xl font-bold text-gray-900 mb-4">
+                    {editingImmunization ? 'Edit Immunization' : 'Add Immunization Record'}
+                  </Dialog.Title>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Vaccine Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={immunizationForm.vaccineName}
+                        onChange={(e) => setImmunizationForm({ ...immunizationForm, vaccineName: e.target.value })}
+                        placeholder="e.g., COVID-19, MMR, Hepatitis B"
+                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-rose-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Brand/Type</label>
+                      <input
+                        type="text"
+                        value={immunizationForm.vaccineType}
+                        onChange={(e) => setImmunizationForm({ ...immunizationForm, vaccineType: e.target.value })}
+                        placeholder="e.g., Pfizer-BioNTech"
+                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-rose-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Date Administered <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={immunizationForm.dateAdministered}
+                        onChange={(e) => setImmunizationForm({ ...immunizationForm, dateAdministered: e.target.value })}
+                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-rose-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Dose Number</label>
+                      <input
+                        type="number"
+                        value={immunizationForm.doseNumber}
+                        onChange={(e) => setImmunizationForm({ ...immunizationForm, doseNumber: e.target.value })}
+                        placeholder="1, 2, 3..."
+                        min="1"
+                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-rose-500"
+                      />
+                    </div>
+
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Healthcare Provider/Clinic</label>
+                      <input
+                        type="text"
+                        value={immunizationForm.administeredBy}
+                        onChange={(e) => setImmunizationForm({ ...immunizationForm, administeredBy: e.target.value })}
+                        placeholder="e.g., City Health Clinic"
+                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-rose-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Lot Number</label>
+                      <input
+                        type="text"
+                        value={immunizationForm.lotNumber}
+                        onChange={(e) => setImmunizationForm({ ...immunizationForm, lotNumber: e.target.value })}
+                        placeholder="For tracking"
+                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-rose-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Next Due Date</label>
+                      <input
+                        type="date"
+                        value={immunizationForm.nextDueDate}
+                        onChange={(e) => setImmunizationForm({ ...immunizationForm, nextDueDate: e.target.value })}
+                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-rose-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex gap-3">
+                    <button
+                      onClick={() => setShowImmunizationModal(false)}
+                      className="flex-1 px-4 py-2 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveImmunization}
+                      disabled={addImmunizationMutation.isPending || updateImmunizationMutation.isPending}
+                      className="flex-1 px-4 py-2 rounded-xl bg-rose-600 text-white font-medium hover:bg-rose-700 disabled:opacity-50"
+                    >
+                      {(addImmunizationMutation.isPending || updateImmunizationMutation.isPending) ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
+
+      {/* Add/Edit Past Surgery Modal - matches nurse portal fields exactly */}
+      <Transition appear show={showSurgeryModal} as={Fragment}>
+        <Dialog as="div" className="relative z-50" onClose={() => setShowSurgeryModal(false)}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/30 backdrop-blur-sm" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-lg transform overflow-hidden rounded-2xl bg-white p-6 shadow-xl transition-all">
+                  <Dialog.Title className="text-xl font-bold text-gray-900 mb-4">
+                    {editingSurgery ? 'Edit Past Surgery' : 'Add Past Surgery'}
+                  </Dialog.Title>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Surgery Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={surgeryForm.surgeryName}
+                        onChange={(e) => setSurgeryForm({ ...surgeryForm, surgeryName: e.target.value })}
+                        placeholder="e.g., Appendectomy, Cesarean Section"
+                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-rose-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Date <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={surgeryForm.surgeryDate}
+                        onChange={(e) => setSurgeryForm({ ...surgeryForm, surgeryDate: e.target.value })}
+                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-rose-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Hospital Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={surgeryForm.hospitalName}
+                        onChange={(e) => setSurgeryForm({ ...surgeryForm, hospitalName: e.target.value })}
+                        placeholder="Hospital name"
+                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-rose-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Location (City/Country)</label>
+                      <input
+                        type="text"
+                        value={surgeryForm.hospitalLocation}
+                        onChange={(e) => setSurgeryForm({ ...surgeryForm, hospitalLocation: e.target.value })}
+                        placeholder="e.g., Dubai, UAE"
+                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-rose-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Surgeon Name</label>
+                      <input
+                        type="text"
+                        value={surgeryForm.surgeonName}
+                        onChange={(e) => setSurgeryForm({ ...surgeryForm, surgeonName: e.target.value })}
+                        placeholder="Dr. name"
+                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-rose-500"
+                      />
+                    </div>
+
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Complications / Outcome</label>
+                      <input
+                        type="text"
+                        value={surgeryForm.complications}
+                        onChange={(e) => setSurgeryForm({ ...surgeryForm, complications: e.target.value })}
+                        placeholder="e.g., Successful, no complications"
+                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-rose-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex gap-3">
+                    <button
+                      onClick={() => setShowSurgeryModal(false)}
+                      className="flex-1 px-4 py-2 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveSurgery}
+                      disabled={addSurgeryMutation.isPending || updateSurgeryMutation.isPending}
+                      className="flex-1 px-4 py-2 rounded-xl bg-rose-600 text-white font-medium hover:bg-rose-700 disabled:opacity-50"
+                    >
+                      {(addSurgeryMutation.isPending || updateSurgeryMutation.isPending) ? 'Saving...' : 'Save'}
                     </button>
                   </div>
                 </Dialog.Panel>

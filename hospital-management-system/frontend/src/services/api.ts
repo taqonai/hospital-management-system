@@ -1675,6 +1675,56 @@ export const patientPortalApi = {
     foods?: string[];
   }) => api.post('/patient-portal/allergies/ai-suggest', data),
 
+  // Immunizations (structured CRUD - matches nurse portal)
+  getImmunizations: () => api.get('/patient-portal/immunizations'),
+  addImmunization: (data: {
+    vaccineName: string;
+    vaccineType?: string;
+    doseNumber?: number;
+    dateAdministered: string;
+    administeredBy?: string;
+    lotNumber?: string;
+    nextDueDate?: string;
+    notes?: string;
+  }) => api.post('/patient-portal/immunizations', data),
+  updateImmunization: (id: string, data: {
+    vaccineName?: string;
+    vaccineType?: string;
+    doseNumber?: number;
+    dateAdministered?: string;
+    administeredBy?: string;
+    lotNumber?: string;
+    nextDueDate?: string;
+    notes?: string;
+  }) => api.put(`/patient-portal/immunizations/${id}`, data),
+  deleteImmunization: (id: string) => api.delete(`/patient-portal/immunizations/${id}`),
+
+  // Past Surgeries (structured CRUD - matches nurse portal)
+  getPastSurgeries: () => api.get('/patient-portal/past-surgeries'),
+  addPastSurgery: (data: {
+    surgeryName: string;
+    surgeryDate: string;
+    hospitalName: string;
+    hospitalLocation?: string;
+    surgeonName?: string;
+    indication?: string;
+    complications?: string;
+    outcome?: string;
+    notes?: string;
+  }) => api.post('/patient-portal/past-surgeries', data),
+  updatePastSurgery: (id: string, data: {
+    surgeryName?: string;
+    surgeryDate?: string;
+    hospitalName?: string;
+    hospitalLocation?: string;
+    surgeonName?: string;
+    indication?: string;
+    complications?: string;
+    outcome?: string;
+    notes?: string;
+  }) => api.put(`/patient-portal/past-surgeries/${id}`, data),
+  deletePastSurgery: (id: string) => api.delete(`/patient-portal/past-surgeries/${id}`),
+
   // Vitals
   getVitals: (params?: { limit?: number }) =>
     api.get('/patient-portal/vitals', { params }),

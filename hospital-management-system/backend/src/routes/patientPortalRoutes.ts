@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { patientPortalService } from '../services/patientPortalService';
 import { patientAuthenticate, PatientAuthenticatedRequest } from '../middleware/patientAuth';
 import { asyncHandler } from '../middleware/errorHandler';
-import { sendSuccess, sendNotFound, calculatePagination, sendPaginated } from '../utils/response';
+import { sendSuccess, sendError, sendNotFound, calculatePagination, sendPaginated } from '../utils/response';
 import prisma from '../config/database';
 
 const router = Router();
@@ -1508,6 +1508,288 @@ router.delete(
     });
 
     sendSuccess(res, null, 'Allergy deleted successfully');
+  })
+);
+
+// =============================================================================
+// Immunization Records CRUD (structured data matching nurse portal)
+// =============================================================================
+
+/**
+ * Get patient immunizations
+ * GET /api/v1/patient-portal/immunizations
+ */
+router.get(
+  '/immunizations',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const immunizations = await prisma.immunization.findMany({
+      where: { patientId },
+      orderBy: { dateAdministered: 'desc' },
+    });
+    sendSuccess(res, immunizations, 'Immunizations retrieved');
+  })
+);
+
+/**
+ * Add immunization record
+ * POST /api/v1/patient-portal/immunizations
+ */
+router.post(
+  '/immunizations',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const {
+      vaccineName,
+      vaccineType,
+      doseNumber,
+      dateAdministered,
+      administeredBy,
+      lotNumber,
+      nextDueDate,
+      notes,
+    } = req.body;
+
+    if (!vaccineName || !dateAdministered) {
+      sendError(res, 'Vaccine name and date administered are required', 400);
+      return;
+    }
+
+    const immunization = await prisma.immunization.create({
+      data: {
+        patientId,
+        vaccineName: vaccineName.trim(),
+        vaccineType: vaccineType?.trim() || null,
+        doseNumber: doseNumber ? parseInt(doseNumber) : null,
+        dateAdministered: new Date(dateAdministered),
+        administeredBy: administeredBy?.trim() || null,
+        lotNumber: lotNumber?.trim() || null,
+        nextDueDate: nextDueDate ? new Date(nextDueDate) : null,
+        notes: notes?.trim() || null,
+        verificationStatus: 'PATIENT_REPORTED',
+      },
+    });
+
+    sendSuccess(res, immunization, 'Immunization added successfully');
+  })
+);
+
+/**
+ * Update immunization record
+ * PUT /api/v1/patient-portal/immunizations/:id
+ */
+router.put(
+  '/immunizations/:id',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const { id } = req.params;
+
+    const existing = await prisma.immunization.findFirst({
+      where: { id, patientId },
+    });
+
+    if (!existing) {
+      sendError(res, 'Immunization record not found', 404);
+      return;
+    }
+
+    const {
+      vaccineName,
+      vaccineType,
+      doseNumber,
+      dateAdministered,
+      administeredBy,
+      lotNumber,
+      nextDueDate,
+      notes,
+    } = req.body;
+
+    const immunization = await prisma.immunization.update({
+      where: { id },
+      data: {
+        ...(vaccineName !== undefined && { vaccineName: vaccineName.trim() }),
+        ...(vaccineType !== undefined && { vaccineType: vaccineType?.trim() || null }),
+        ...(doseNumber !== undefined && { doseNumber: doseNumber ? parseInt(doseNumber) : null }),
+        ...(dateAdministered !== undefined && { dateAdministered: new Date(dateAdministered) }),
+        ...(administeredBy !== undefined && { administeredBy: administeredBy?.trim() || null }),
+        ...(lotNumber !== undefined && { lotNumber: lotNumber?.trim() || null }),
+        ...(nextDueDate !== undefined && { nextDueDate: nextDueDate ? new Date(nextDueDate) : null }),
+        ...(notes !== undefined && { notes: notes?.trim() || null }),
+      },
+    });
+
+    sendSuccess(res, immunization, 'Immunization updated successfully');
+  })
+);
+
+/**
+ * Delete immunization record
+ * DELETE /api/v1/patient-portal/immunizations/:id
+ */
+router.delete(
+  '/immunizations/:id',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const { id } = req.params;
+
+    const existing = await prisma.immunization.findFirst({
+      where: { id, patientId },
+    });
+
+    if (!existing) {
+      sendError(res, 'Immunization record not found', 404);
+      return;
+    }
+
+    await prisma.immunization.delete({ where: { id } });
+    sendSuccess(res, null, 'Immunization deleted successfully');
+  })
+);
+
+// =============================================================================
+// Past Surgery Records CRUD (structured data matching nurse portal)
+// =============================================================================
+
+/**
+ * Get patient past surgeries
+ * GET /api/v1/patient-portal/past-surgeries
+ */
+router.get(
+  '/past-surgeries',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const surgeries = await prisma.pastSurgery.findMany({
+      where: { patientId },
+      orderBy: { surgeryDate: 'desc' },
+    });
+    sendSuccess(res, surgeries, 'Past surgeries retrieved');
+  })
+);
+
+/**
+ * Add past surgery record
+ * POST /api/v1/patient-portal/past-surgeries
+ */
+router.post(
+  '/past-surgeries',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const {
+      surgeryName,
+      surgeryDate,
+      hospitalName,
+      hospitalLocation,
+      surgeonName,
+      indication,
+      complications,
+      outcome,
+      notes,
+    } = req.body;
+
+    if (!surgeryName || !surgeryDate || !hospitalName) {
+      sendError(res, 'Surgery name, date, and hospital name are required', 400);
+      return;
+    }
+
+    const surgery = await prisma.pastSurgery.create({
+      data: {
+        patientId,
+        surgeryName: surgeryName.trim(),
+        surgeryDate: new Date(surgeryDate),
+        hospitalName: hospitalName.trim(),
+        hospitalLocation: hospitalLocation?.trim() || null,
+        surgeonName: surgeonName?.trim() || null,
+        indication: indication?.trim() || null,
+        complications: complications?.trim() || null,
+        outcome: outcome?.trim() || null,
+        notes: notes?.trim() || null,
+        verificationStatus: 'PATIENT_REPORTED',
+      },
+    });
+
+    sendSuccess(res, surgery, 'Past surgery added successfully');
+  })
+);
+
+/**
+ * Update past surgery record
+ * PUT /api/v1/patient-portal/past-surgeries/:id
+ */
+router.put(
+  '/past-surgeries/:id',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const { id } = req.params;
+
+    const existing = await prisma.pastSurgery.findFirst({
+      where: { id, patientId },
+    });
+
+    if (!existing) {
+      sendError(res, 'Past surgery record not found', 404);
+      return;
+    }
+
+    const {
+      surgeryName,
+      surgeryDate,
+      hospitalName,
+      hospitalLocation,
+      surgeonName,
+      indication,
+      complications,
+      outcome,
+      notes,
+    } = req.body;
+
+    const surgery = await prisma.pastSurgery.update({
+      where: { id },
+      data: {
+        ...(surgeryName !== undefined && { surgeryName: surgeryName.trim() }),
+        ...(surgeryDate !== undefined && { surgeryDate: new Date(surgeryDate) }),
+        ...(hospitalName !== undefined && { hospitalName: hospitalName.trim() }),
+        ...(hospitalLocation !== undefined && { hospitalLocation: hospitalLocation?.trim() || null }),
+        ...(surgeonName !== undefined && { surgeonName: surgeonName?.trim() || null }),
+        ...(indication !== undefined && { indication: indication?.trim() || null }),
+        ...(complications !== undefined && { complications: complications?.trim() || null }),
+        ...(outcome !== undefined && { outcome: outcome?.trim() || null }),
+        ...(notes !== undefined && { notes: notes?.trim() || null }),
+      },
+    });
+
+    sendSuccess(res, surgery, 'Past surgery updated successfully');
+  })
+);
+
+/**
+ * Delete past surgery record
+ * DELETE /api/v1/patient-portal/past-surgeries/:id
+ */
+router.delete(
+  '/past-surgeries/:id',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const { id } = req.params;
+
+    const existing = await prisma.pastSurgery.findFirst({
+      where: { id, patientId },
+    });
+
+    if (!existing) {
+      sendError(res, 'Past surgery record not found', 404);
+      return;
+    }
+
+    await prisma.pastSurgery.delete({ where: { id } });
+    sendSuccess(res, null, 'Past surgery deleted successfully');
   })
 );
 
