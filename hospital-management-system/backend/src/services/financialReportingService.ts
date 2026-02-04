@@ -342,11 +342,12 @@ export class FinancialReportingService {
         SUM("totalAmount") as billed,
         SUM("paidAmount") as collected
       FROM invoices
-      WHERE "hospitalId" = ${hospitalId}        AND "invoiceDate" >= ${startDate}
+      WHERE "hospitalId" = ${hospitalId}
+        AND "invoiceDate" >= ${startDate}
         AND "invoiceDate" <= ${endDate}
         AND status NOT IN ('CANCELLED', 'REFUNDED')
-      GROUP BY TO_CHAR("invoiceDate", ${dateFormat})
-      ORDER BY period ASC
+      GROUP BY 1
+      ORDER BY 1 ASC
     `;
 
     const trend: CollectionRateData[] = trendData.map((item) => {
