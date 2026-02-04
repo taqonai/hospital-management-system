@@ -1,0 +1,114 @@
+{"version":8,"type":"context-options","origin":"library","browserName":"","playwrightVersion":"1.58.0","options":{},"platform":"linux","wallTime":1770195046877,"monotonicTime":81277.405,"sdkLanguage":"javascript","contextId":"request-context@b925ce7d2512dc7f3611ecccbc5f494f","title":"advanced-insurance-e2e-fixed.spec.ts:295 › Advanced Insurance E2E Tests - FIXED › Test 3 — Bilingual Receipts (Fixed Auth)"}
+{"type":"before","callId":"call@57","startTime":88676.621,"class":"APIRequestContext","method":"fetch","params":{"url":"https://spetaar.ai/api/v1/billing/invoices?limit=5","method":"GET","headers":[{"name":"Authorization","value":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNTMxZDYwOS03ZWNjLTRlNWUtOTlkYy0wMzFmMjMxYTU0ZDYiLCJob3NwaXRhbElkIjoiYTJhNjcwODEtMmI1ZC00MWVjLTg4YWEtYzc1Yzk2NDc2MDU0IiwiZW1haWwiOiJyZWNlcHRpb25pc3RAaG9zcGl0YWwuY29tIiwicm9sZSI6IlJFQ0VQVElPTklTVCIsImZpcnN0TmFtZSI6IlNhcmFoIiwibGFzdE5hbWUiOiJKb2huc29uIiwiaWF0IjoxNzcwMTk1MDQ5LCJleHAiOjE3NzAxOTU5NDl9.4hCp9_tcxfRK_0s2Nts8c2kfJlgI7WPc9SNKN06NWco"}],"timeout":15000},"stepId":"pw:api@53"}
+{"type":"log","callId":"call@57","time":88681.154,"message":"→ GET https://spetaar.ai/api/v1/billing/invoices?limit=5"}
+{"type":"log","callId":"call@57","time":88681.163,"message":"  user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36"}
+{"type":"log","callId":"call@57","time":88681.166,"message":"  accept: */*"}
+{"type":"log","callId":"call@57","time":88681.168,"message":"  accept-encoding: gzip,deflate,br"}
+{"type":"log","callId":"call@57","time":88681.171,"message":"  Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNTMxZDYwOS03ZWNjLTRlNWUtOTlkYy0wMzFmMjMxYTU0ZDYiLCJob3NwaXRhbElkIjoiYTJhNjcwODEtMmI1ZC00MWVjLTg4YWEtYzc1Yzk2NDc2MDU0IiwiZW1haWwiOiJyZWNlcHRpb25pc3RAaG9zcGl0YWwuY29tIiwicm9sZSI6IlJFQ0VQVElPTklTVCIsImZpcnN0TmFtZSI6IlNhcmFoIiwibGFzdE5hbWUiOiJKb2huc29uIiwiaWF0IjoxNzcwMTk1MDQ5LCJleHAiOjE3NzAxOTU5NDl9.4hCp9_tcxfRK_0s2Nts8c2kfJlgI7WPc9SNKN06NWco"}
+{"type":"log","callId":"call@57","time":89740.199,"message":"← 200 OK"}
+{"type":"log","callId":"call@57","time":89740.21,"message":"  date: Wed, 04 Feb 2026 08:50:55 GMT"}
+{"type":"log","callId":"call@57","time":89740.214,"message":"  content-type: application/json; charset=utf-8"}
+{"type":"log","callId":"call@57","time":89740.217,"message":"  transfer-encoding: chunked"}
+{"type":"log","callId":"call@57","time":89740.219,"message":"  connection: keep-alive"}
+{"type":"log","callId":"call@57","time":89740.221,"message":"  server: cloudflare"}
+{"type":"log","callId":"call@57","time":89740.223,"message":"  nel: {\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"}
+{"type":"log","callId":"call@57","time":89740.225,"message":"  content-security-policy: default-src 'self';base-uri 'self';font-src 'self' https: data:;form-action 'self';frame-ancestors 'self';img-src 'self' data:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' https: 'unsafe-inline';upgrade-insecure-requests"}
+{"type":"log","callId":"call@57","time":89740.228,"message":"  cross-origin-opener-policy: same-origin"}
+{"type":"log","callId":"call@57","time":89740.23,"message":"  cross-origin-resource-policy: same-origin"}
+{"type":"log","callId":"call@57","time":89740.232,"message":"  origin-agent-cluster: ?1"}
+{"type":"log","callId":"call@57","time":89740.234,"message":"  referrer-policy: no-referrer"}
+{"type":"log","callId":"call@57","time":89740.236,"message":"  strict-transport-security: max-age=15552000; includeSubDomains"}
+{"type":"log","callId":"call@57","time":89740.239,"message":"  x-content-type-options: nosniff"}
+{"type":"log","callId":"call@57","time":89740.241,"message":"  x-dns-prefetch-control: off"}
+{"type":"log","callId":"call@57","time":89740.243,"message":"  x-download-options: noopen"}
+{"type":"log","callId":"call@57","time":89740.245,"message":"  x-frame-options: SAMEORIGIN"}
+{"type":"log","callId":"call@57","time":89740.248,"message":"  x-permitted-cross-domain-policies: none"}
+{"type":"log","callId":"call@57","time":89740.25,"message":"  x-xss-protection: 0"}
+{"type":"log","callId":"call@57","time":89740.252,"message":"  vary: Origin"}
+{"type":"log","callId":"call@57","time":89740.254,"message":"  access-control-allow-credentials: true"}
+{"type":"log","callId":"call@57","time":89740.256,"message":"  ratelimit-policy: 500;w=60"}
+{"type":"log","callId":"call@57","time":89740.258,"message":"  ratelimit-limit: 500"}
+{"type":"log","callId":"call@57","time":89740.26,"message":"  ratelimit-remaining: 486"}
+{"type":"log","callId":"call@57","time":89740.262,"message":"  ratelimit-reset: 54"}
+{"type":"log","callId":"call@57","time":89740.264,"message":"  etag: W/\"1b49-d+sf2x1IQaVSJ6nplNi5pjEm8Io\""}
+{"type":"log","callId":"call@57","time":89740.266,"message":"  cf-cache-status: DYNAMIC"}
+{"type":"log","callId":"call@57","time":89740.268,"message":"  report-to: {\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=RQG8gwSVywUVh1%2FtXbqQNeibVAy7CMLlB6AVba1Tg8jmgeCXfso0XwZilT7j9Dsj9JpPMC4G%2FDUtj4XPGrYCe4cvpOUI9Qz1\"}]}"}
+{"type":"log","callId":"call@57","time":89740.27,"message":"  content-encoding: br"}
+{"type":"log","callId":"call@57","time":89740.272,"message":"  cf-ray: 9c88ec52bc7e3413-SIN"}
+{"type":"log","callId":"call@57","time":89740.275,"message":"  alt-svc: h3=\":443\"; ma=86400"}
+{"type":"after","callId":"call@57","endTime":89742.668,"result":{"response":{"url":"https://spetaar.ai/api/v1/billing/invoices?limit=5","status":200,"statusText":"OK","headers":[{"name":"Date","value":"Wed, 04 Feb 2026 08:50:55 GMT"},{"name":"Content-Type","value":"application/json; charset=utf-8"},{"name":"Transfer-Encoding","value":"chunked"},{"name":"Connection","value":"keep-alive"},{"name":"Server","value":"cloudflare"},{"name":"Nel","value":"{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"},{"name":"Content-Security-Policy","value":"default-src 'self';base-uri 'self';font-src 'self' https: data:;form-action 'self';frame-ancestors 'self';img-src 'self' data:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' https: 'unsafe-inline';upgrade-insecure-requests"},{"name":"Cross-Origin-Opener-Policy","value":"same-origin"},{"name":"Cross-Origin-Resource-Policy","value":"same-origin"},{"name":"Origin-Agent-Cluster","value":"?1"},{"name":"Referrer-Policy","value":"no-referrer"},{"name":"Strict-Transport-Security","value":"max-age=15552000; includeSubDomains"},{"name":"X-Content-Type-Options","value":"nosniff"},{"name":"X-DNS-Prefetch-Control","value":"off"},{"name":"X-Download-Options","value":"noopen"},{"name":"X-Frame-Options","value":"SAMEORIGIN"},{"name":"X-Permitted-Cross-Domain-Policies","value":"none"},{"name":"X-XSS-Protection","value":"0"},{"name":"Vary","value":"Origin"},{"name":"Access-Control-Allow-Credentials","value":"true"},{"name":"RateLimit-Policy","value":"500;w=60"},{"name":"RateLimit-Limit","value":"500"},{"name":"RateLimit-Remaining","value":"486"},{"name":"RateLimit-Reset","value":"54"},{"name":"ETag","value":"W/\"1b49-d+sf2x1IQaVSJ6nplNi5pjEm8Io\""},{"name":"cf-cache-status","value":"DYNAMIC"},{"name":"Report-To","value":"{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=RQG8gwSVywUVh1%2FtXbqQNeibVAy7CMLlB6AVba1Tg8jmgeCXfso0XwZilT7j9Dsj9JpPMC4G%2FDUtj4XPGrYCe4cvpOUI9Qz1\"}]}"},{"name":"Content-Encoding","value":"br"},{"name":"CF-RAY","value":"9c88ec52bc7e3413-SIN"},{"name":"alt-svc","value":"h3=\":443\"; ma=86400"}],"fetchUid":"33f8ed39adc1a262fda52098e9d471f5"}}}
+{"type":"before","callId":"call@60","startTime":89744.215,"class":"APIRequestContext","method":"fetch","params":{"url":"https://spetaar.ai/api/v1/billing/invoices/1581e690-0353-4eb9-b8b1-566b9db1632e/bilingual","method":"GET","headers":[{"name":"Authorization","value":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNTMxZDYwOS03ZWNjLTRlNWUtOTlkYy0wMzFmMjMxYTU0ZDYiLCJob3NwaXRhbElkIjoiYTJhNjcwODEtMmI1ZC00MWVjLTg4YWEtYzc1Yzk2NDc2MDU0IiwiZW1haWwiOiJyZWNlcHRpb25pc3RAaG9zcGl0YWwuY29tIiwicm9sZSI6IlJFQ0VQVElPTklTVCIsImZpcnN0TmFtZSI6IlNhcmFoIiwibGFzdE5hbWUiOiJKb2huc29uIiwiaWF0IjoxNzcwMTk1MDQ5LCJleHAiOjE3NzAxOTU5NDl9.4hCp9_tcxfRK_0s2Nts8c2kfJlgI7WPc9SNKN06NWco"}],"timeout":15000},"stepId":"pw:api@54"}
+{"type":"log","callId":"call@60","time":89744.619,"message":"→ GET https://spetaar.ai/api/v1/billing/invoices/1581e690-0353-4eb9-b8b1-566b9db1632e/bilingual"}
+{"type":"log","callId":"call@60","time":89744.626,"message":"  user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36"}
+{"type":"log","callId":"call@60","time":89744.63,"message":"  accept: */*"}
+{"type":"log","callId":"call@60","time":89744.632,"message":"  accept-encoding: gzip,deflate,br"}
+{"type":"log","callId":"call@60","time":89744.634,"message":"  Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNTMxZDYwOS03ZWNjLTRlNWUtOTlkYy0wMzFmMjMxYTU0ZDYiLCJob3NwaXRhbElkIjoiYTJhNjcwODEtMmI1ZC00MWVjLTg4YWEtYzc1Yzk2NDc2MDU0IiwiZW1haWwiOiJyZWNlcHRpb25pc3RAaG9zcGl0YWwuY29tIiwicm9sZSI6IlJFQ0VQVElPTklTVCIsImZpcnN0TmFtZSI6IlNhcmFoIiwibGFzdE5hbWUiOiJKb2huc29uIiwiaWF0IjoxNzcwMTk1MDQ5LCJleHAiOjE3NzAxOTU5NDl9.4hCp9_tcxfRK_0s2Nts8c2kfJlgI7WPc9SNKN06NWco"}
+{"type":"log","callId":"call@60","time":90096.59,"message":"← 400 Bad Request"}
+{"type":"log","callId":"call@60","time":90096.596,"message":"  date: Wed, 04 Feb 2026 08:50:55 GMT"}
+{"type":"log","callId":"call@60","time":90096.598,"message":"  content-type: application/json; charset=utf-8"}
+{"type":"log","callId":"call@60","time":90096.601,"message":"  content-length: 51"}
+{"type":"log","callId":"call@60","time":90096.603,"message":"  connection: keep-alive"}
+{"type":"log","callId":"call@60","time":90096.605,"message":"  server: cloudflare"}
+{"type":"log","callId":"call@60","time":90096.608,"message":"  nel: {\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"}
+{"type":"log","callId":"call@60","time":90096.61,"message":"  content-security-policy: default-src 'self';base-uri 'self';font-src 'self' https: data:;form-action 'self';frame-ancestors 'self';img-src 'self' data:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' https: 'unsafe-inline';upgrade-insecure-requests"}
+{"type":"log","callId":"call@60","time":90096.612,"message":"  cross-origin-opener-policy: same-origin"}
+{"type":"log","callId":"call@60","time":90096.614,"message":"  cross-origin-resource-policy: same-origin"}
+{"type":"log","callId":"call@60","time":90096.616,"message":"  origin-agent-cluster: ?1"}
+{"type":"log","callId":"call@60","time":90096.619,"message":"  referrer-policy: no-referrer"}
+{"type":"log","callId":"call@60","time":90096.621,"message":"  strict-transport-security: max-age=15552000; includeSubDomains"}
+{"type":"log","callId":"call@60","time":90096.623,"message":"  x-content-type-options: nosniff"}
+{"type":"log","callId":"call@60","time":90096.625,"message":"  x-dns-prefetch-control: off"}
+{"type":"log","callId":"call@60","time":90096.627,"message":"  x-download-options: noopen"}
+{"type":"log","callId":"call@60","time":90096.629,"message":"  x-frame-options: SAMEORIGIN"}
+{"type":"log","callId":"call@60","time":90096.631,"message":"  x-permitted-cross-domain-policies: none"}
+{"type":"log","callId":"call@60","time":90096.633,"message":"  x-xss-protection: 0"}
+{"type":"log","callId":"call@60","time":90096.635,"message":"  vary: Origin"}
+{"type":"log","callId":"call@60","time":90096.637,"message":"  access-control-allow-credentials: true"}
+{"type":"log","callId":"call@60","time":90096.639,"message":"  ratelimit-policy: 500;w=60"}
+{"type":"log","callId":"call@60","time":90096.641,"message":"  ratelimit-limit: 500"}
+{"type":"log","callId":"call@60","time":90096.643,"message":"  ratelimit-remaining: 485"}
+{"type":"log","callId":"call@60","time":90096.646,"message":"  ratelimit-reset: 54"}
+{"type":"log","callId":"call@60","time":90096.648,"message":"  etag: W/\"33-sXqf6hmtC4y9iBG/VrpPSNdaeCs\""}
+{"type":"log","callId":"call@60","time":90096.652,"message":"  cf-cache-status: DYNAMIC"}
+{"type":"log","callId":"call@60","time":90096.655,"message":"  report-to: {\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=fTm3%2Brfv15GMnip%2BqUDevjSBL8G8fHlxGTZO2HJmJmL9fqsLbGvEYXkOtHb8t%2B6vTQMFbfjhoSdu86iVlNz4NT88yfUBlML8\"}]}"}
+{"type":"log","callId":"call@60","time":90096.659,"message":"  cf-ray: 9c88ec583bfe3413-SIN"}
+{"type":"log","callId":"call@60","time":90096.662,"message":"  alt-svc: h3=\":443\"; ma=86400"}
+{"type":"after","callId":"call@60","endTime":90096.717,"result":{"response":{"url":"https://spetaar.ai/api/v1/billing/invoices/1581e690-0353-4eb9-b8b1-566b9db1632e/bilingual","status":400,"statusText":"Bad Request","headers":[{"name":"Date","value":"Wed, 04 Feb 2026 08:50:55 GMT"},{"name":"Content-Type","value":"application/json; charset=utf-8"},{"name":"Content-Length","value":"51"},{"name":"Connection","value":"keep-alive"},{"name":"Server","value":"cloudflare"},{"name":"Nel","value":"{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"},{"name":"Content-Security-Policy","value":"default-src 'self';base-uri 'self';font-src 'self' https: data:;form-action 'self';frame-ancestors 'self';img-src 'self' data:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' https: 'unsafe-inline';upgrade-insecure-requests"},{"name":"Cross-Origin-Opener-Policy","value":"same-origin"},{"name":"Cross-Origin-Resource-Policy","value":"same-origin"},{"name":"Origin-Agent-Cluster","value":"?1"},{"name":"Referrer-Policy","value":"no-referrer"},{"name":"Strict-Transport-Security","value":"max-age=15552000; includeSubDomains"},{"name":"X-Content-Type-Options","value":"nosniff"},{"name":"X-DNS-Prefetch-Control","value":"off"},{"name":"X-Download-Options","value":"noopen"},{"name":"X-Frame-Options","value":"SAMEORIGIN"},{"name":"X-Permitted-Cross-Domain-Policies","value":"none"},{"name":"X-XSS-Protection","value":"0"},{"name":"Vary","value":"Origin"},{"name":"Access-Control-Allow-Credentials","value":"true"},{"name":"RateLimit-Policy","value":"500;w=60"},{"name":"RateLimit-Limit","value":"500"},{"name":"RateLimit-Remaining","value":"485"},{"name":"RateLimit-Reset","value":"54"},{"name":"ETag","value":"W/\"33-sXqf6hmtC4y9iBG/VrpPSNdaeCs\""},{"name":"cf-cache-status","value":"DYNAMIC"},{"name":"Report-To","value":"{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=fTm3%2Brfv15GMnip%2BqUDevjSBL8G8fHlxGTZO2HJmJmL9fqsLbGvEYXkOtHb8t%2B6vTQMFbfjhoSdu86iVlNz4NT88yfUBlML8\"}]}"},{"name":"CF-RAY","value":"9c88ec583bfe3413-SIN"},{"name":"alt-svc","value":"h3=\":443\"; ma=86400"}],"fetchUid":"543e0c7642af00067f892b70bc8509d6"}}}
+{"type":"before","callId":"call@63","startTime":90098.446,"class":"APIRequestContext","method":"fetch","params":{"url":"https://spetaar.ai/api/v1/billing/receipts?invoiceId=1581e690-0353-4eb9-b8b1-566b9db1632e","method":"GET","headers":[{"name":"Authorization","value":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNTMxZDYwOS03ZWNjLTRlNWUtOTlkYy0wMzFmMjMxYTU0ZDYiLCJob3NwaXRhbElkIjoiYTJhNjcwODEtMmI1ZC00MWVjLTg4YWEtYzc1Yzk2NDc2MDU0IiwiZW1haWwiOiJyZWNlcHRpb25pc3RAaG9zcGl0YWwuY29tIiwicm9sZSI6IlJFQ0VQVElPTklTVCIsImZpcnN0TmFtZSI6IlNhcmFoIiwibGFzdE5hbWUiOiJKb2huc29uIiwiaWF0IjoxNzcwMTk1MDQ5LCJleHAiOjE3NzAxOTU5NDl9.4hCp9_tcxfRK_0s2Nts8c2kfJlgI7WPc9SNKN06NWco"}],"timeout":15000},"stepId":"pw:api@55"}
+{"type":"log","callId":"call@63","time":90098.819,"message":"→ GET https://spetaar.ai/api/v1/billing/receipts?invoiceId=1581e690-0353-4eb9-b8b1-566b9db1632e"}
+{"type":"log","callId":"call@63","time":90098.826,"message":"  user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36"}
+{"type":"log","callId":"call@63","time":90098.828,"message":"  accept: */*"}
+{"type":"log","callId":"call@63","time":90098.831,"message":"  accept-encoding: gzip,deflate,br"}
+{"type":"log","callId":"call@63","time":90098.833,"message":"  Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNTMxZDYwOS03ZWNjLTRlNWUtOTlkYy0wMzFmMjMxYTU0ZDYiLCJob3NwaXRhbElkIjoiYTJhNjcwODEtMmI1ZC00MWVjLTg4YWEtYzc1Yzk2NDc2MDU0IiwiZW1haWwiOiJyZWNlcHRpb25pc3RAaG9zcGl0YWwuY29tIiwicm9sZSI6IlJFQ0VQVElPTklTVCIsImZpcnN0TmFtZSI6IlNhcmFoIiwibGFzdE5hbWUiOiJKb2huc29uIiwiaWF0IjoxNzcwMTk1MDQ5LCJleHAiOjE3NzAxOTU5NDl9.4hCp9_tcxfRK_0s2Nts8c2kfJlgI7WPc9SNKN06NWco"}
+{"type":"log","callId":"call@63","time":90441.758,"message":"← 404 Not Found"}
+{"type":"log","callId":"call@63","time":90441.77,"message":"  date: Wed, 04 Feb 2026 08:50:56 GMT"}
+{"type":"log","callId":"call@63","time":90441.773,"message":"  content-type: application/json; charset=utf-8"}
+{"type":"log","callId":"call@63","time":90441.776,"message":"  transfer-encoding: chunked"}
+{"type":"log","callId":"call@63","time":90441.778,"message":"  connection: keep-alive"}
+{"type":"log","callId":"call@63","time":90441.78,"message":"  server: cloudflare"}
+{"type":"log","callId":"call@63","time":90441.782,"message":"  nel: {\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"}
+{"type":"log","callId":"call@63","time":90441.784,"message":"  content-security-policy: default-src 'self';base-uri 'self';font-src 'self' https: data:;form-action 'self';frame-ancestors 'self';img-src 'self' data:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' https: 'unsafe-inline';upgrade-insecure-requests"}
+{"type":"log","callId":"call@63","time":90441.787,"message":"  cross-origin-opener-policy: same-origin"}
+{"type":"log","callId":"call@63","time":90441.79,"message":"  cross-origin-resource-policy: same-origin"}
+{"type":"log","callId":"call@63","time":90441.792,"message":"  origin-agent-cluster: ?1"}
+{"type":"log","callId":"call@63","time":90441.794,"message":"  referrer-policy: no-referrer"}
+{"type":"log","callId":"call@63","time":90441.796,"message":"  strict-transport-security: max-age=15552000; includeSubDomains"}
+{"type":"log","callId":"call@63","time":90441.798,"message":"  x-content-type-options: nosniff"}
+{"type":"log","callId":"call@63","time":90441.8,"message":"  x-dns-prefetch-control: off"}
+{"type":"log","callId":"call@63","time":90441.802,"message":"  x-download-options: noopen"}
+{"type":"log","callId":"call@63","time":90441.804,"message":"  x-frame-options: SAMEORIGIN"}
+{"type":"log","callId":"call@63","time":90441.806,"message":"  x-permitted-cross-domain-policies: none"}
+{"type":"log","callId":"call@63","time":90441.809,"message":"  x-xss-protection: 0"}
+{"type":"log","callId":"call@63","time":90441.811,"message":"  vary: Origin"}
+{"type":"log","callId":"call@63","time":90441.813,"message":"  access-control-allow-credentials: true"}
+{"type":"log","callId":"call@63","time":90441.815,"message":"  ratelimit-policy: 500;w=60"}
+{"type":"log","callId":"call@63","time":90441.817,"message":"  ratelimit-limit: 500"}
+{"type":"log","callId":"call@63","time":90441.819,"message":"  ratelimit-remaining: 484"}
+{"type":"log","callId":"call@63","time":90441.821,"message":"  ratelimit-reset: 54"}
+{"type":"log","callId":"call@63","time":90441.823,"message":"  etag: W/\"75-MMXL6EQwHXB/yN8kcWNZ5tzEMYo\""}
+{"type":"log","callId":"call@63","time":90441.825,"message":"  cf-cache-status: DYNAMIC"}
+{"type":"log","callId":"call@63","time":90441.827,"message":"  report-to: {\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=KXSr95QrwRcBvml8GoGqd62qDGxA%2BasryUIhbPonFo%2BKsmTl6Yxp7r6M5f3DdjdItnQzupcEgVcIhvoz3rR1CW6LcDSutotx\"}]}"}
+{"type":"log","callId":"call@63","time":90441.83,"message":"  content-encoding: br"}
+{"type":"log","callId":"call@63","time":90441.832,"message":"  cf-ray: 9c88ec5a69dd3413-SIN"}
+{"type":"log","callId":"call@63","time":90441.834,"message":"  alt-svc: h3=\":443\"; ma=86400"}
+{"type":"after","callId":"call@63","endTime":90442.403,"result":{"response":{"url":"https://spetaar.ai/api/v1/billing/receipts?invoiceId=1581e690-0353-4eb9-b8b1-566b9db1632e","status":404,"statusText":"Not Found","headers":[{"name":"Date","value":"Wed, 04 Feb 2026 08:50:56 GMT"},{"name":"Content-Type","value":"application/json; charset=utf-8"},{"name":"Transfer-Encoding","value":"chunked"},{"name":"Connection","value":"keep-alive"},{"name":"Server","value":"cloudflare"},{"name":"Nel","value":"{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"},{"name":"Content-Security-Policy","value":"default-src 'self';base-uri 'self';font-src 'self' https: data:;form-action 'self';frame-ancestors 'self';img-src 'self' data:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' https: 'unsafe-inline';upgrade-insecure-requests"},{"name":"Cross-Origin-Opener-Policy","value":"same-origin"},{"name":"Cross-Origin-Resource-Policy","value":"same-origin"},{"name":"Origin-Agent-Cluster","value":"?1"},{"name":"Referrer-Policy","value":"no-referrer"},{"name":"Strict-Transport-Security","value":"max-age=15552000; includeSubDomains"},{"name":"X-Content-Type-Options","value":"nosniff"},{"name":"X-DNS-Prefetch-Control","value":"off"},{"name":"X-Download-Options","value":"noopen"},{"name":"X-Frame-Options","value":"SAMEORIGIN"},{"name":"X-Permitted-Cross-Domain-Policies","value":"none"},{"name":"X-XSS-Protection","value":"0"},{"name":"Vary","value":"Origin"},{"name":"Access-Control-Allow-Credentials","value":"true"},{"name":"RateLimit-Policy","value":"500;w=60"},{"name":"RateLimit-Limit","value":"500"},{"name":"RateLimit-Remaining","value":"484"},{"name":"RateLimit-Reset","value":"54"},{"name":"ETag","value":"W/\"75-MMXL6EQwHXB/yN8kcWNZ5tzEMYo\""},{"name":"cf-cache-status","value":"DYNAMIC"},{"name":"Report-To","value":"{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=KXSr95QrwRcBvml8GoGqd62qDGxA%2BasryUIhbPonFo%2BKsmTl6Yxp7r6M5f3DdjdItnQzupcEgVcIhvoz3rR1CW6LcDSutotx\"}]}"},{"name":"Content-Encoding","value":"br"},{"name":"CF-RAY","value":"9c88ec5a69dd3413-SIN"},{"name":"alt-svc","value":"h3=\":443\"; ma=86400"}],"fetchUid":"eb842866b54114b7a5e307507ea2c10f"}}}

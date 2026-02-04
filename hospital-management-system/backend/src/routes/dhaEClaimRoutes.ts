@@ -54,7 +54,7 @@ router.get(
 router.post(
   '/eligibility/verify',
   authenticate,
-  authorize(['RECEPTIONIST', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']),
+  authorize('RECEPTIONIST', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { emiratesId, payerId } = req.body;
 
@@ -99,7 +99,7 @@ router.post(
 router.get(
   '/eligibility/patient/:patientId',
   authenticate,
-  authorize(['RECEPTIONIST', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']),
+  authorize('RECEPTIONIST', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId } = req.params;
 
@@ -136,7 +136,7 @@ router.get(
 router.post(
   '/claims/submit',
   authenticate,
-  authorizeWithPermission('billing:claims:submit', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
+  authorizeWithPermission('billing:claims:submit', ['HOSPITAL_ADMIN', 'ACCOUNTANT'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { invoiceId } = req.body;
 
@@ -238,7 +238,7 @@ router.post(
 router.post(
   '/claims/batch-submit',
   authenticate,
-  authorizeWithPermission('billing:claims:submit', ['HOSPITAL_ADMIN']),
+  authorizeWithPermission('billing:claims:submit', ['HOSPITAL_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { invoiceIds } = req.body;
 
@@ -283,7 +283,7 @@ router.post(
 router.get(
   '/claims/:claimReference/status',
   authenticate,
-  authorize(['RECEPTIONIST', 'ACCOUNTANT', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']),
+  authorize('RECEPTIONIST', 'ACCOUNTANT', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { claimReference } = req.params;
 
@@ -320,7 +320,7 @@ router.get(
 router.post(
   '/claims/refresh-statuses',
   authenticate,
-  authorizeWithPermission('billing:claims:manage', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
+  authorizeWithPermission('billing:claims:manage', ['HOSPITAL_ADMIN', 'ACCOUNTANT'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     // Get all submitted claims pending status update
     const pendingClaims = await prisma.insuranceClaim.findMany({
@@ -366,7 +366,7 @@ router.post(
 router.get(
   '/remittance/:remittanceId',
   authenticate,
-  authorizeWithPermission('billing:remittance:view', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
+  authorizeWithPermission('billing:remittance:view', ['HOSPITAL_ADMIN', 'ACCOUNTANT'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { remittanceId } = req.params;
 

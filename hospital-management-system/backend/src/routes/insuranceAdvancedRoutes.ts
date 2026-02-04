@@ -27,7 +27,7 @@ const router = Router();
 router.post(
   '/cob/calculate',
   authenticate,
-  authorize(['RECEPTIONIST', 'ACCOUNTANT', 'HOSPITAL_ADMIN']),
+  authorize('RECEPTIONIST', 'ACCOUNTANT', 'HOSPITAL_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId, totalAmount, serviceCategory } = req.body;
 
@@ -79,7 +79,7 @@ router.get(
 router.get(
   '/ipd/expiry-alerts',
   authenticate,
-  authorize(['RECEPTIONIST', 'ACCOUNTANT', 'HOSPITAL_ADMIN', 'NURSE']),
+  authorize('RECEPTIONIST', 'ACCOUNTANT', 'HOSPITAL_ADMIN', 'NURSE'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const alerts = await ipdInsuranceMonitorService.checkAllAdmittedPatients(req.user!.hospitalId);
     
@@ -112,7 +112,7 @@ router.get(
 router.post(
   '/ipd/:admissionId/add-insurance',
   authenticate,
-  authorize(['RECEPTIONIST', 'HOSPITAL_ADMIN']),
+  authorize('RECEPTIONIST', 'HOSPITAL_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { admissionId } = req.params;
     const insuranceData = req.body;
