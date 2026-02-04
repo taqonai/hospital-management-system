@@ -70,6 +70,7 @@ import ChangePasswordScreen from '../screens/settings/ChangePasswordScreen';
 import AboutScreen from '../screens/settings/AboutScreen';
 import BillingScreen from '../screens/billing/BillingScreen';
 import BillDetailScreen from '../screens/billing/BillDetailScreen';
+import InsuranceScreen from '../screens/settings/InsuranceScreen';
 
 // Create navigators
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -374,6 +375,11 @@ const SettingsStackNavigator = () => (
       name="BillDetail"
       component={BillDetailScreen}
       options={{ title: 'Bill Details' }}
+    />
+    <SettingsStack.Screen
+      name="Insurance"
+      component={InsuranceScreen}
+      options={{ title: 'Insurance' }}
     />
   </SettingsStack.Navigator>
 );

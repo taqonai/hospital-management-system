@@ -53,7 +53,7 @@ export type HealthStackParamList = {
   HealthInsights: undefined;
   SymptomChecker: { fromBooking?: boolean } | undefined;
   HealthAssistant: undefined;
-  MedicalRecords: { source?: 'home' | 'healthHub' } | undefined;
+  MedicalRecords: { source?: 'home' | 'healthHub'; initialTab?: 'visits' | 'allergies' | 'immunizations' | 'surgeries' | 'profile' } | undefined;
   RecordDetail: { recordId: string };
   Prescriptions: undefined;
   PrescriptionDetail: { prescriptionId: string };
@@ -100,6 +100,7 @@ export type SettingsStackParamList = {
   ChangePassword: undefined;
   Billing: undefined;
   BillDetail: { billId: string };
+  Insurance: undefined;
   About: undefined;
 };
 

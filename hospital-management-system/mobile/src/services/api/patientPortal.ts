@@ -10,6 +10,11 @@ import {
   HealthInsight,
   MedicalHistory,
   Allergy,
+  ImmunizationRecord,
+  PastSurgeryRecord,
+  InsurancePolicy,
+  InsuranceFormData,
+  InsuranceClaim,
   Doctor,
   Department,
   TimeSlot,
@@ -185,6 +190,52 @@ export const patientPortalApi = {
       confidence: number;
       reason: string;
     }> }>>('/patient-portal/allergies/ai-suggest', { symptoms }),
+
+  // Immunizations
+  getImmunizations: () =>
+    api.get<ApiResponse<ImmunizationRecord[]>>('/patient-portal/immunizations'),
+
+  addImmunization: (data: Omit<ImmunizationRecord, 'id'>) =>
+    api.post<ApiResponse<ImmunizationRecord>>('/patient-portal/immunizations', data),
+
+  updateImmunization: (id: string, data: Partial<ImmunizationRecord>) =>
+    api.put<ApiResponse<ImmunizationRecord>>(`/patient-portal/immunizations/${id}`, data),
+
+  deleteImmunization: (id: string) =>
+    api.delete<ApiResponse<{ message: string }>>(`/patient-portal/immunizations/${id}`),
+
+  // Past Surgeries
+  getPastSurgeries: () =>
+    api.get<ApiResponse<PastSurgeryRecord[]>>('/patient-portal/past-surgeries'),
+
+  addPastSurgery: (data: Omit<PastSurgeryRecord, 'id'>) =>
+    api.post<ApiResponse<PastSurgeryRecord>>('/patient-portal/past-surgeries', data),
+
+  updatePastSurgery: (id: string, data: Partial<PastSurgeryRecord>) =>
+    api.put<ApiResponse<PastSurgeryRecord>>(`/patient-portal/past-surgeries/${id}`, data),
+
+  deletePastSurgery: (id: string) =>
+    api.delete<ApiResponse<{ message: string }>>(`/patient-portal/past-surgeries/${id}`),
+
+  // Insurance
+  getInsurance: () =>
+    api.get<ApiResponse<InsurancePolicy[]>>('/patient-portal/insurance'),
+
+  addInsurance: (data: InsuranceFormData) =>
+    api.post<ApiResponse<InsurancePolicy>>('/patient-portal/insurance', data),
+
+  updateInsurance: (id: string, data: InsuranceFormData) =>
+    api.put<ApiResponse<InsurancePolicy>>(`/patient-portal/insurance/${id}`, data),
+
+  deleteInsurance: (id: string) =>
+    api.delete<ApiResponse<{ message: string }>>(`/patient-portal/insurance/${id}`),
+
+  setPrimaryInsurance: (id: string) =>
+    api.put<ApiResponse<InsurancePolicy>>(`/patient-portal/insurance/${id}/primary`),
+
+  // Insurance Claims
+  getInsuranceClaims: (params?: { status?: string; page?: number; limit?: number }) =>
+    api.get<ApiResponse<InsuranceClaim[]>>('/patient-portal/insurance/claims', { params }),
 
   // Settings
   getNotificationPreferences: () =>
