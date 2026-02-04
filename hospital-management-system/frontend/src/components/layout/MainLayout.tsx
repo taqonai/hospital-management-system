@@ -12,7 +12,6 @@ import {
   Bars3Icon,
   XMarkIcon,
   BellIcon,
-  ClipboardDocumentListIcon,
   BuildingOffice2Icon,
   ExclamationTriangleIcon,
   PhotoIcon,
@@ -45,6 +44,11 @@ import { useAuth } from '../../hooks/useAuth';
 import { usePermissions } from '../../hooks/usePermissions';
 import AICreationAssistant from '../ai/AICreationAssistant';
 import NotificationDropdown from '../notifications/NotificationDropdown';
+import opdIconPng from '../../assets/opd-icon.png';
+
+const OpdIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <img src={opdIconPng} alt="" className={className} />
+);
 
 // Role-based access configuration
 type UserRole = 'SUPER_ADMIN' | 'HOSPITAL_ADMIN' | 'DOCTOR' | 'NURSE' | 'RECEPTIONIST' |
@@ -89,7 +93,7 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
       { name: 'Precision Health', href: '/clinician', icon: HeartIcon, color: 'from-rose-500 to-pink-600',
         permission: 'opd:consultations',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE'] },
-      { name: 'OPD', href: '/opd', icon: ClipboardDocumentListIcon, color: 'from-indigo-500 to-indigo-600',
+      { name: 'OPD', href: '/opd', icon: OpdIcon, color: 'from-indigo-500 to-indigo-600',
         permission: 'opd:visits:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'] },
       { name: 'IPD', href: '/ipd', icon: BuildingOffice2Icon, color: 'from-violet-500 to-violet-600',
