@@ -37,6 +37,8 @@ npm-debug.log*
 coverage/
 .nyc_output/
 .pytest_cache/
+test-results/
+playwright-report/
 
 # Database
 *.sqlite
