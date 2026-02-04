@@ -123,6 +123,36 @@ router.post(
   })
 );
 
+// GAP 3: Get copay receipt HTML by receipt number
+router.get(
+  '/copay-receipt/:receiptNumber',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { receiptNumber } = req.params;
+    const hospitalId = req.user!.hospitalId;
+
+    // Look up the copay payment by receipt number
+    const payment = await (await import('../config/database')).default.copayPayment.findFirst({
+      where: { receiptNumber },
+    });
+
+    if (!payment) {
+      return res.status(404).json({ success: false, message: 'Receipt not found' });
+    }
+
+    // Regenerate receipt HTML
+    try {
+      const { receiptService } = await import('../services/receiptService');
+      const receipt = await receiptService.generateCopayReceipt(payment.id, hospitalId);
+      res.setHeader('Content-Type', 'text/html');
+      res.send(receipt.receiptHtml);
+    } catch (error) {
+      console.error('[RECEIPT] Failed to generate receipt:', error);
+      return res.status(500).json({ success: false, message: 'Failed to generate receipt' });
+    }
+  })
+);
+
 // ==================== Pharmacy Copay ====================
 
 // Calculate pharmacy copay for a prescription

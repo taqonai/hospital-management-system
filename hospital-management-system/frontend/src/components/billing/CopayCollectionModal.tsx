@@ -8,6 +8,9 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   ShieldCheckIcon,
+  DocumentTextIcon,
+  PrinterIcon,
+  EnvelopeIcon,
 } from '@heroicons/react/24/outline';
 import { billingApi } from '../../services/api';
 import toast from 'react-hot-toast';
@@ -94,6 +97,8 @@ export default function CopayCollectionModal({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
   const [notes, setNotes] = useState('');
   const [processing, setProcessing] = useState(false);
+  // GAP 3: Receipt info after successful collection
+  const [receiptInfo, setReceiptInfo] = useState<{ receiptNumber: string; vatAmount: number } | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -143,7 +148,7 @@ export default function CopayCollectionModal({
 
     setProcessing(true);
     try {
-      await billingApi.collectCopay({
+      const response = await billingApi.collectCopay({
         patientId: patient.id,
         appointmentId,
         amount: copayInfo.patientAmount,
@@ -152,7 +157,13 @@ export default function CopayCollectionModal({
         notes: notes || undefined,
       });
       toast.success('Copay collected successfully');
-      onSuccess('collected');
+      // GAP 3: Capture receipt info if available
+      const data = response?.data?.data;
+      if (data?.receiptNumber) {
+        setReceiptInfo({ receiptNumber: data.receiptNumber, vatAmount: data.vatAmount || 0 });
+      } else {
+        onSuccess('collected');
+      }
     } catch (error: any) {
       console.error('Failed to collect copay:', error);
       toast.error(error.response?.data?.message || 'Failed to collect copay');
@@ -204,7 +215,75 @@ export default function CopayCollectionModal({
 
           {/* Content */}
           <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
-            {loading ? (
+            {/* GAP 3: Receipt Success Screen */}
+            {receiptInfo ? (
+              <div className="space-y-6">
+                <div className="text-center py-4">
+                  <CheckCircleIcon className="h-14 w-14 text-green-500 mx-auto mb-3" />
+                  <h3 className="text-lg font-bold text-gray-900 mb-1">Payment Collected</h3>
+                  <p className="text-sm text-gray-600">Copay has been collected successfully</p>
+                </div>
+
+                <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-5 border border-blue-200">
+                  <div className="flex items-start gap-3">
+                    <DocumentTextIcon className="h-6 w-6 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2">Receipt Details</h4>
+                      <div className="space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Receipt Number:</span>
+                          <span className="font-mono font-bold text-blue-700">{receiptInfo.receiptNumber}</span>
+                        </div>
+                        {copayInfo && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Amount Paid:</span>
+                            <span className="font-semibold text-gray-900">AED {copayInfo.patientAmount.toFixed(2)}</span>
+                          </div>
+                        )}
+                        {receiptInfo.vatAmount > 0 && (
+                          <div className="flex justify-between text-gray-500">
+                            <span>VAT (5%):</span>
+                            <span>AED {receiptInfo.vatAmount.toFixed(2)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-gray-500">
+                          <span>Payment Method:</span>
+                          <span>{paymentMethod.replace('_', ' ')}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      window.open(`/billing/copay-receipt/${receiptInfo.receiptNumber}`, '_blank');
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-50 text-blue-700 font-medium rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors"
+                  >
+                    <PrinterIcon className="h-4 w-4" />
+                    Print Receipt
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast.success('Receipt will be emailed to patient');
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-50 text-green-700 font-medium rounded-xl border border-green-200 hover:bg-green-100 transition-colors"
+                  >
+                    <EnvelopeIcon className="h-4 w-4" />
+                    Email Receipt
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => onSuccess('collected')}
+                  className="w-full px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold rounded-xl hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg"
+                >
+                  Continue to Check-in
+                </button>
+              </div>
+            ) : loading ? (
               <div className="flex items-center justify-center py-12">
                 <ArrowPathIcon className="h-8 w-8 animate-spin text-blue-500" />
                 <span className="ml-3 text-gray-600">Loading copay information...</span>

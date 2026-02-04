@@ -3490,6 +3490,8 @@ export class BillingService {
     payment?: any;
     depositUtilization?: any;
     message: string;
+    receiptNumber?: string | null;
+    vatAmount?: number | null;
   }> {
     // Validate insurance and copay amount
     const copayInfo = await this.calculateCopay(params.patientId, params.hospitalId, params.appointmentId);
@@ -3559,9 +3561,51 @@ export class BillingService {
           // Non-blocking — copay was collected, ledger update is best-effort
         }
 
+        // GAP 3: Generate receipt for deposit payment
+        // Deposit path doesn't create a CopayPayment record, so we create one for receipt tracking
+        let receiptInfo: any = null;
+        try {
+          // Create a CopayPayment record for deposit path so we can attach receipt
+          const depositPayment = await prisma.copayPayment.create({
+            data: {
+              patientId: params.patientId,
+              appointmentId: params.appointmentId,
+              amount: params.amount,
+              paymentMethod: 'DEPOSIT' as any,
+              insuranceProvider: copayInfo.insuranceProvider || '',
+              policyNumber: copayInfo.policyNumber || '',
+              notes: params.notes || 'Paid via deposit',
+              collectedBy: params.collectedBy,
+            },
+          });
+
+          const { receiptService } = require('./receiptService');
+          const receipt = await receiptService.generateCopayReceipt(
+            depositPayment.id,
+            params.hospitalId,
+            {
+              consultationFee: copayInfo.consultationFee,
+              coveragePercentage: copayInfo.coveragePercentage,
+              copayPercentage: copayInfo.copayPercentage,
+              insuranceAmount: copayInfo.insuranceAmount,
+              patientAmount: copayInfo.patientAmount,
+              cobApplied: (copayInfo as any).cobApplied,
+              secondaryBreakdown: (copayInfo as any).secondaryBreakdown,
+            }
+          );
+          receiptInfo = {
+            receiptNumber: receipt.receiptNumber,
+            vatAmount: receipt.vatAmount,
+          };
+        } catch (receiptError) {
+          console.error('[COPAY COLLECT] Receipt generation failed for deposit (non-blocking):', receiptError);
+        }
+
         return {
           success: true,
           depositUtilization: utilization,
+          receiptNumber: receiptInfo?.receiptNumber || null,
+          vatAmount: receiptInfo?.vatAmount || null,
           message: 'Copay collected from deposit successfully',
         };
       } catch (error) {
@@ -3638,9 +3682,37 @@ export class BillingService {
         // Non-blocking — copay was collected, ledger update is best-effort
       }
 
+      // GAP 3: Generate receipt after successful payment
+      let receiptInfo: any = null;
+      try {
+        const { receiptService } = require('./receiptService');
+        const receipt = await receiptService.generateCopayReceipt(
+          payment.id,
+          params.hospitalId,
+          {
+            consultationFee: copayInfo.consultationFee,
+            coveragePercentage: copayInfo.coveragePercentage,
+            copayPercentage: copayInfo.copayPercentage,
+            insuranceAmount: copayInfo.insuranceAmount,
+            patientAmount: copayInfo.patientAmount,
+            cobApplied: (copayInfo as any).cobApplied,
+            secondaryBreakdown: (copayInfo as any).secondaryBreakdown,
+          }
+        );
+        receiptInfo = {
+          receiptNumber: receipt.receiptNumber,
+          vatAmount: receipt.vatAmount,
+        };
+      } catch (receiptError) {
+        console.error('[COPAY COLLECT] Receipt generation failed (non-blocking):', receiptError);
+        // Non-blocking — copay was collected, receipt is best-effort
+      }
+
       return {
         success: true,
         payment,
+        receiptNumber: receiptInfo?.receiptNumber || null,
+        vatAmount: receiptInfo?.vatAmount || null,
         message: 'Copay collected successfully',
       };
     } catch (error) {
