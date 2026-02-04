@@ -2553,6 +2553,8 @@ export class BillingService {
         primaryBreakdown: null,
         secondaryBreakdown: null,
         finalPatientAmount: consultationFee,
+        // GAP 6: Pharmacy estimate not applicable for self-pay
+        pharmacyEstimate: null,
       } as any;
     }
 
@@ -2982,6 +2984,67 @@ export class BillingService {
       finalPatientAmount = patientAmount;
     }
 
+    // GAP 6: Combined Copay Estimate — pharmacy estimate for follow-up visits
+    let pharmacyEstimate: any = null;
+    try {
+      if ((visitType === 'FOLLOW_UP' || visitType === 'NEW') && patientId) {
+        // Query active prescriptions for this patient
+        const activePrescriptions = await prisma.prescription.findMany({
+          where: {
+            patientId,
+            status: 'ACTIVE',
+          },
+          include: {
+            medications: {
+              include: {
+                drug: { select: { price: true } },
+              },
+            },
+          },
+          take: 10, // Safety limit
+        });
+
+        if (activePrescriptions.length > 0) {
+          let totalMedCost = 0;
+          const prescriptionSummaries: Array<{
+            prescriptionId: string;
+            medicationCount: number;
+            estimatedCost: number;
+          }> = [];
+
+          for (const rx of activePrescriptions) {
+            let rxCost = 0;
+            for (const med of rx.medications) {
+              const unitPrice = med.drug ? Number(med.drug.price || 0) : 0;
+              rxCost += unitPrice * (med.quantity || 1);
+            }
+            totalMedCost += rxCost;
+            prescriptionSummaries.push({
+              prescriptionId: rx.id,
+              medicationCount: rx.medications.length,
+              estimatedCost: Math.round(rxCost * 100) / 100,
+            });
+          }
+
+          // Apply same insurance coverage % to pharmacy estimate
+          const pharmInsuranceAmount = Math.round((totalMedCost * coveragePercentage) / 100 * 100) / 100;
+          const pharmPatientAmount = Math.round((totalMedCost - pharmInsuranceAmount) * 100) / 100;
+
+          pharmacyEstimate = {
+            estimated: true,
+            estimatedAmount: Math.round(pharmPatientAmount * 100) / 100,
+            totalMedicationCost: Math.round(totalMedCost * 100) / 100,
+            insuranceCovers: pharmInsuranceAmount,
+            activePrescriptions: prescriptionSummaries.length,
+            prescriptions: prescriptionSummaries,
+          };
+        }
+      }
+    } catch (pharmError) {
+      console.warn('[COPAY] Pharmacy estimate failed, skipping:', pharmError);
+      pharmacyEstimate = null;
+    }
+
     return {
       hasCopay: patientAmount > 0,
       consultationFee,
@@ -3022,6 +3085,8 @@ export class BillingService {
       primaryBreakdown,
       secondaryBreakdown,
       finalPatientAmount,
+      // GAP 6: Pharmacy estimate (informational only)
+      pharmacyEstimate,
     } as any;
   }
 

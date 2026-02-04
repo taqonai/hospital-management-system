@@ -1057,6 +1057,22 @@ export const billingApi = {
     waived?: boolean;
     waiverReason?: string;
   }) => api.post('/billing/pharmacy-copay-collect', data),
+  // GAP 9: Copay Refunds
+  requestCopayRefund: (data: {
+    copayPaymentId: string;
+    refundAmount: number;
+    refundReason: string;
+    reasonDetails?: string;
+    refundMethod?: string;
+  }) => api.post('/billing/copay-refund', data),
+  listCopayRefunds: (params?: { page?: number; limit?: number; status?: string; patientId?: string }) =>
+    api.get('/billing/copay-refunds', { params }),
+  getCopayRefund: (id: string) => api.get(`/billing/copay-refund/${id}`),
+  approveCopayRefund: (id: string) => api.patch(`/billing/copay-refund/${id}/approve`),
+  rejectCopayRefund: (id: string, rejectionReason: string) =>
+    api.patch(`/billing/copay-refund/${id}/reject`, { rejectionReason }),
+  processCopayRefund: (id: string, refundMethod?: string) =>
+    api.patch(`/billing/copay-refund/${id}/process`, { refundMethod }),
   // AI Auto Charge Capture
   extractCharges: (notes: string) =>
     api.post('/billing/extract-charges', { notes }),

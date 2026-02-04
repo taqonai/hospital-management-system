@@ -141,6 +141,9 @@ model Hospital {
   // Insurance Verification Audits (GAP 7)
   insuranceVerificationAudits InsuranceVerificationAudit[]
 
+  // Copay Refunds (GAP 9)
+  copayRefunds CopayRefund[]
+
   // Payment Reminders
   paymentReminders PaymentReminder[]
 
@@ -2124,7 +2127,43 @@ model CopayPayment {
   patient     Patient     @relation(fields: [patientId], references: [id])
   appointment Appointment @relation(fields: [appointmentId], references: [id])
 
+  // GAP 9: Refunds
+  refunds CopayRefund[]
+
   @@map("copay_payments")
+}
+
+// GAP 9: Copay Refund Flow
+model CopayRefund {
+  id               String   @id @default(uuid())
+  hospitalId       String
+  copayPaymentId   String
+  patientId        String
+  appointmentId    String?
+  refundAmount     Decimal  @db.Decimal(10, 2)
+  refundMethod     String?  // CASH, CREDIT_CARD, BANK_TRANSFER, DEPOSIT_CREDIT
+  refundReason     String   // APPOINTMENT_CANCELLED, INSURANCE_UPDATED, OVERCHARGE, DOCTOR_WAIVED, OTHER
+  reasonDetails    String?  // Free-text explanation
+  status           String   @default("PENDING") // PENDING, APPROVED, PROCESSED, REJECTED
+  requestedBy      String   // User who requested the refund
+  requestedAt      DateTime @default(now())
+  approvedBy       String?  // Admin who approved
+  approvedAt       DateTime?
+  processedBy      String?  // User who processed payment
+  processedAt      DateTime?
+  rejectedBy       String?
+  rejectedAt       DateTime?
+  rejectionReason  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  hospital     Hospital     @relation(fields: [hospitalId], references: [id])
+  copayPayment CopayPayment @relation(fields: [copayPaymentId], references: [id])
+
+  @@index([hospitalId, status])
+  @@index([patientId])
+  @@index([copayPaymentId])
+  @@map("copay_refunds")
 }
 
 model PaymentTransaction {

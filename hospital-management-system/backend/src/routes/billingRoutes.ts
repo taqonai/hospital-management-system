@@ -520,4 +520,117 @@ router.get(
   })
 );
 
+// ==================== GAP 9: COPAY REFUNDS ====================
+
+import { copayRefundService } from '../services/copayRefundService';
+
+/**
+ * POST /api/v1/billing/copay-refund
+ * Request a copay refund
+ */
+router.post(
+  '/copay-refund',
+  authenticate,
+  authorizeWithPermission('billing:write', ['RECEPTIONIST', 'ACCOUNTANT', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const refund = await copayRefundService.requestRefund(req.user!.hospitalId, {
+      ...req.body,
+      requestedBy: req.user!.userId,
+    });
+    sendCreated(res, refund, 'Refund request submitted');
+  })
+);
+
+/**
+ * GET /api/v1/billing/copay-refunds
+ * List copay refunds with filters
+ */
+router.get(
+  '/copay-refunds',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { page, limit, status, patientId, copayPaymentId } = req.query;
+    const result = await copayRefundService.listRefunds(req.user!.hospitalId, {
+      page: Number(page) || 1,
+      limit: Number(limit) || 20,
+      status: status as string,
+      patientId: patientId as string,
+      copayPaymentId: copayPaymentId as string,
+    });
+    const pagination = calculatePagination(result.page, result.limit, result.total);
+    sendPaginated(res, result.refunds, pagination);
+  })
+);
+
+/**
+ * GET /api/v1/billing/copay-refund/:id
+ * Get refund details
+ */
+router.get(
+  '/copay-refund/:id',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const refund = await copayRefundService.getRefundById(req.params.id, req.user!.hospitalId);
+    sendSuccess(res, refund);
+  })
+);
+
+/**
+ * PATCH /api/v1/billing/copay-refund/:id/approve
+ * Approve a pending refund
+ */
+router.patch(
+  '/copay-refund/:id/approve',
+  authenticate,
+  authorizeWithPermission('billing:approve', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const refund = await copayRefundService.approveRefund(
+      req.params.id,
+      req.user!.hospitalId,
+      req.user!.userId
+    );
+    sendSuccess(res, refund, 'Refund approved');
+  })
+);
+
+/**
+ * PATCH /api/v1/billing/copay-refund/:id/reject
+ * Reject a pending refund
+ */
+router.patch(
+  '/copay-refund/:id/reject',
+  authenticate,
+  authorizeWithPermission('billing:approve', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { rejectionReason } = req.body;
+    const refund = await copayRefundService.rejectRefund(
+      req.params.id,
+      req.user!.hospitalId,
+      req.user!.userId,
+      rejectionReason || ''
+    );
+    sendSuccess(res, refund, 'Refund rejected');
+  })
+);
+
+/**
+ * PATCH /api/v1/billing/copay-refund/:id/process
+ * Process an approved refund (disburse payment)
+ */
+router.patch(
+  '/copay-refund/:id/process',
+  authenticate,
+  authorizeWithPermission('billing:write', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { refundMethod } = req.body;
+    const refund = await copayRefundService.processRefund(
+      req.params.id,
+      req.user!.hospitalId,
+      req.user!.userId,
+      refundMethod
+    );
+    sendSuccess(res, refund, 'Refund processed successfully');
+  })
+);
+
 export default router;

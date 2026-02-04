@@ -11,6 +11,7 @@ import {
   DocumentTextIcon,
   PrinterIcon,
   EnvelopeIcon,
+  ChevronDownIcon,
 } from '@heroicons/react/24/outline';
 import { billingApi, insuranceCodingApi } from '../../services/api';
 import toast from 'react-hot-toast';
@@ -74,6 +75,14 @@ interface CopayInfo {
     appliedToRemaining: number;
   } | null;
   finalPatientAmount?: number;
+  // GAP 6: Pharmacy estimate (informational only)
+  pharmacyEstimate?: {
+    estimated: boolean;
+    estimatedAmount: number;
+    totalMedicationCost: number;
+    insuranceCovers: number;
+    activePrescriptions: number;
+  } | null;
 }
 
 interface DepositBalance {
@@ -99,6 +108,8 @@ export default function CopayCollectionModal({
   const [processing, setProcessing] = useState(false);
   // GAP 3: Receipt info after successful collection
   const [receiptInfo, setReceiptInfo] = useState<{ receiptNumber: string; vatAmount: number } | null>(null);
+  // GAP 6: Pharmacy estimate expanded/collapsed
+  const [showPharmacyEstimate, setShowPharmacyEstimate] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -798,6 +809,44 @@ export default function CopayCollectionModal({
                     </p>
                   </div>
                 </div>
+
+                {/* GAP 6: Pharmacy Estimate (informational, collapsible) */}
+                {copayInfo.pharmacyEstimate && copayInfo.pharmacyEstimate.activePrescriptions > 0 && (
+                  <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-xl border border-amber-200 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setShowPharmacyEstimate(!showPharmacyEstimate)}
+                      className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-amber-100/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-amber-800">Estimated Total Visit Cost</span>
+                        <span className="text-xs bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full font-medium">
+                          {copayInfo.pharmacyEstimate.activePrescriptions} Rx
+                        </span>
+                      </div>
+                      <ChevronDownIcon className={`h-4 w-4 text-amber-600 transition-transform ${showPharmacyEstimate ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showPharmacyEstimate && (
+                      <div className="px-4 pb-4 space-y-2 text-sm border-t border-amber-200">
+                        <div className="flex justify-between pt-3">
+                          <span className="text-gray-600">Consultation Copay:</span>
+                          <span className="font-semibold text-gray-900">AED {copayInfo.patientAmount.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-gray-600">
+                          <span>Pharmacy Estimate ({copayInfo.pharmacyEstimate.activePrescriptions} prescriptions):</span>
+                          <span className="font-medium">~AED {copayInfo.pharmacyEstimate.estimatedAmount.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-amber-800 border-t border-amber-200 pt-2 font-bold">
+                          <span>Est. Total Patient Cost:</span>
+                          <span>~AED {(copayInfo.patientAmount + copayInfo.pharmacyEstimate.estimatedAmount).toFixed(2)}</span>
+                        </div>
+                        <p className="text-xs text-amber-600 italic mt-1">
+                          Pharmacy copay is estimated and collected separately at the pharmacy.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Payment Method Selection */}
                 <div>
