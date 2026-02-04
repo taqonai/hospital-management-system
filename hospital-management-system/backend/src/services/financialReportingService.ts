@@ -174,20 +174,20 @@ export class FinancialReportingService {
     const result = await prisma.$queryRaw<
       Array<{ departmentId: string; name: string; code: string; revenue: Prisma.Decimal; invoiceCount: bigint }>
     >`
-      SELECT 
+      SELECT
         d.id as "departmentId",
         d.name,
         d.code,
-        SUM(i.total_amount) as revenue,
+        SUM(i."totalAmount") as revenue,
         COUNT(DISTINCT i.id) as "invoiceCount"
       FROM invoices i
-      INNER JOIN appointments a ON i.patient_id = a.patient_id 
-        AND DATE(i.invoice_date) = DATE(a.appointment_date)
-      INNER JOIN doctors doc ON a.doctor_id = doc.id
-      INNER JOIN departments d ON doc.department_id = d.id
-      WHERE i.hospital_id = ${hospitalId}::uuid
-        AND i.invoice_date >= ${startDate}
-        AND i.invoice_date <= ${endDate}
+      INNER JOIN appointments a ON i."patientId" = a."patientId"
+        AND DATE(i."invoiceDate") = DATE(a."appointmentDate")
+      INNER JOIN doctors doc ON a."doctorId" = doc.id
+      INNER JOIN departments d ON doc."departmentId" = d.id
+      WHERE i."hospitalId" = ${hospitalId}::uuid
+        AND i."invoiceDate" >= ${startDate}
+        AND i."invoiceDate" <= ${endDate}
         AND i.status != 'CANCELLED'
       GROUP BY d.id, d.name, d.code
       ORDER BY revenue DESC
@@ -223,23 +223,23 @@ export class FinancialReportingService {
         invoiceCount: bigint;
       }>
     >`
-      SELECT 
+      SELECT
         doc.id as "doctorId",
-        u.first_name as "firstName",
-        u.last_name as "lastName",
+        u."firstName",
+        u."lastName",
         doc.specialization,
-        SUM(i.total_amount) as revenue,
+        SUM(i."totalAmount") as revenue,
         COUNT(DISTINCT i.id) as "invoiceCount"
       FROM invoices i
-      INNER JOIN appointments a ON i.patient_id = a.patient_id 
-        AND DATE(i.invoice_date) = DATE(a.appointment_date)
-      INNER JOIN doctors doc ON a.doctor_id = doc.id
-      INNER JOIN users u ON doc.user_id = u.id
-      WHERE i.hospital_id = ${hospitalId}::uuid
-        AND i.invoice_date >= ${startDate}
-        AND i.invoice_date <= ${endDate}
+      INNER JOIN appointments a ON i."patientId" = a."patientId"
+        AND DATE(i."invoiceDate") = DATE(a."appointmentDate")
+      INNER JOIN doctors doc ON a."doctorId" = doc.id
+      INNER JOIN users u ON doc."userId" = u.id
+      WHERE i."hospitalId" = ${hospitalId}::uuid
+        AND i."invoiceDate" >= ${startDate}
+        AND i."invoiceDate" <= ${endDate}
         AND i.status != 'CANCELLED'
-      GROUP BY doc.id, u.first_name, u.last_name, doc.specialization
+      GROUP BY doc.id, u."firstName", u."lastName", doc.specialization
       ORDER BY revenue DESC
       LIMIT ${limit}
     `;
@@ -339,16 +339,16 @@ export class FinancialReportingService {
     const trendData = await prisma.$queryRaw<
       Array<{ period: string; billed: Prisma.Decimal; collected: Prisma.Decimal }>
     >`
-      SELECT 
-        TO_CHAR(invoice_date, ${dateFormat}) as period,
-        SUM(total_amount) as billed,
-        SUM(paid_amount) as collected
+      SELECT
+        TO_CHAR("invoiceDate", ${dateFormat}) as period,
+        SUM("totalAmount") as billed,
+        SUM("paidAmount") as collected
       FROM invoices
-      WHERE hospital_id = ${hospitalId}::uuid
-        AND invoice_date >= ${startDate}
-        AND invoice_date <= ${endDate}
+      WHERE "hospitalId" = ${hospitalId}::uuid
+        AND "invoiceDate" >= ${startDate}
+        AND "invoiceDate" <= ${endDate}
         AND status NOT IN ('CANCELLED', 'REFUNDED')
-      GROUP BY TO_CHAR(invoice_date, ${dateFormat})
+      GROUP BY TO_CHAR("invoiceDate", ${dateFormat})
       ORDER BY period ASC
     `;
 
@@ -689,20 +689,20 @@ export class FinancialReportingService {
         totalCredits: Prisma.Decimal;
       }>
     >`
-      SELECT 
-        ga.account_code as "accountCode",
-        ga.account_name as "accountName",
-        ga.account_type as "accountType",
-        COALESCE(SUM(ge.debit_amount), 0) as "totalDebits",
-        COALESCE(SUM(ge.credit_amount), 0) as "totalCredits"
+      SELECT
+        ga."accountCode",
+        ga."accountName",
+        ga."accountType",
+        COALESCE(SUM(ge."debitAmount"), 0) as "totalDebits",
+        COALESCE(SUM(ge."creditAmount"), 0) as "totalCredits"
       FROM gl_entries ge
-      INNER JOIN gl_accounts ga ON ge.gl_account_id = ga.id
-      WHERE ge.hospital_id = ${hospitalId}::uuid
-        AND ge.transaction_date >= ${startDate}
-        AND ge.transaction_date <= ${endDate}
-        AND ga.account_type IN ('REVENUE', 'EXPENSE')
-      GROUP BY ga.id, ga.account_code, ga.account_name, ga.account_type
-      ORDER BY ga.account_code ASC
+      INNER JOIN gl_accounts ga ON ge."glAccountId" = ga.id
+      WHERE ge."hospitalId" = ${hospitalId}::uuid
+        AND ge."transactionDate" >= ${startDate}
+        AND ge."transactionDate" <= ${endDate}
+        AND ga."accountType" IN ('REVENUE', 'EXPENSE')
+      GROUP BY ga.id, ga."accountCode", ga."accountName", ga."accountType"
+      ORDER BY ga."accountCode" ASC
     `;
 
     const revenue: Array<{ accountCode: string; accountName: string; amount: number }> = [];
@@ -748,19 +748,19 @@ export class FinancialReportingService {
         totalCredits: Prisma.Decimal;
       }>
     >`
-      SELECT 
-        ga.account_code as "accountCode",
-        ga.account_name as "accountName",
-        ga.account_type as "accountType",
-        COALESCE(SUM(ge.debit_amount), 0) as "totalDebits",
-        COALESCE(SUM(ge.credit_amount), 0) as "totalCredits"
+      SELECT
+        ga."accountCode",
+        ga."accountName",
+        ga."accountType",
+        COALESCE(SUM(ge."debitAmount"), 0) as "totalDebits",
+        COALESCE(SUM(ge."creditAmount"), 0) as "totalCredits"
       FROM gl_entries ge
-      INNER JOIN gl_accounts ga ON ge.gl_account_id = ga.id
-      WHERE ge.hospital_id = ${hospitalId}::uuid
-        AND ge.transaction_date <= ${asOfDate}
-        AND ga.account_type IN ('ASSET', 'LIABILITY', 'EQUITY')
-      GROUP BY ga.id, ga.account_code, ga.account_name, ga.account_type
-      ORDER BY ga.account_code ASC
+      INNER JOIN gl_accounts ga ON ge."glAccountId" = ga.id
+      WHERE ge."hospitalId" = ${hospitalId}::uuid
+        AND ge."transactionDate" <= ${asOfDate}
+        AND ga."accountType" IN ('ASSET', 'LIABILITY', 'EQUITY')
+      GROUP BY ga.id, ga."accountCode", ga."accountName", ga."accountType"
+      ORDER BY ga."accountCode" ASC
     `;
 
     const assets: Array<{ accountCode: string; accountName: string; balance: number }> = [];
@@ -828,18 +828,18 @@ export class FinancialReportingService {
         totalCredits: Prisma.Decimal;
       }>
     >`
-      SELECT 
-        COALESCE(ge.cost_center, 'Unassigned') as "costCenter",
-        ga.account_type as "accountType",
-        SUM(ge.debit_amount) as "totalDebits",
-        SUM(ge.credit_amount) as "totalCredits"
+      SELECT
+        COALESCE(ge."costCenter", 'Unassigned') as "costCenter",
+        ga."accountType",
+        SUM(ge."debitAmount") as "totalDebits",
+        SUM(ge."creditAmount") as "totalCredits"
       FROM gl_entries ge
-      INNER JOIN gl_accounts ga ON ge.gl_account_id = ga.id
-      WHERE ge.hospital_id = ${hospitalId}::uuid
-        AND ge.transaction_date >= ${startDate}
-        AND ge.transaction_date <= ${endDate}
-        AND ga.account_type IN ('REVENUE', 'EXPENSE')
-      GROUP BY ge.cost_center, ga.account_type
+      INNER JOIN gl_accounts ga ON ge."glAccountId" = ga.id
+      WHERE ge."hospitalId" = ${hospitalId}::uuid
+        AND ge."transactionDate" >= ${startDate}
+        AND ge."transactionDate" <= ${endDate}
+        AND ga."accountType" IN ('REVENUE', 'EXPENSE')
+      GROUP BY ge."costCenter", ga."accountType"
       ORDER BY "costCenter" ASC
     `;
 
