@@ -10,7 +10,7 @@
     - generic [ref=e11]:
       - generic [ref=e12]:
         - generic [ref=e13]: Email address
-        - textbox "Email address" [ref=e14]: receptionist@hospital.com
+        - textbox "Email address" [ref=e14]: idiamin@hospital.com
       - generic [ref=e15]:
         - generic [ref=e16]: Password
         - generic [ref=e17]:

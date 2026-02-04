@@ -29,96 +29,46 @@ async function saveApiResponse(name: string, data: any) {
   console.log(`💾 API Response saved: ${name}`);
 }
 
-// Login helper with token capture - multiple fallback methods
+// Login helper - simplified, just get token from localStorage after login
 async function loginAndGetToken(page: any, email: string, password: string, role: string): Promise<string> {
-  let capturedToken = '';
-  
   await page.goto(`${BASE_URL}/login`);
   await page.waitForLoadState('networkidle');
   await page.fill('input[type="email"]', email);
   await page.fill('input[type="password"]', password);
-  
-  // Click and wait for response
-  const responsePromise = page.waitForResponse(
-    resp => resp.url().includes('/api/v1/auth/login') && resp.status() === 200,
-    { timeout: 30000 }
-  );
-  
   await page.click('button[type="submit"]');
   
-  try {
-    const response = await responsePromise;
-    // Clone the response before reading to avoid consumption issues
-    const responseText = await response.text();
-    const responseData = JSON.parse(responseText);
-    
-    if (responseData.data?.token) {
-      capturedToken = responseData.data.token;
-      console.log(`🔑 Token from response: ${capturedToken.substring(0, 30)}...`);
-    }
-  } catch (e) {
-    console.log(`⚠️ Response parsing failed: ${e}`);
-  }
-  
-  // Wait for navigation
+  // Wait for navigation to dashboard
   await page.waitForURL('**/dashboard**', { timeout: 30000 });
+  await page.waitForTimeout(1500); // Let state settle
   
-  // Fallback: try localStorage
-  if (!capturedToken) {
-    await page.waitForTimeout(1000);
-    capturedToken = await page.evaluate(() => {
-      return localStorage.getItem('token') || 
-             localStorage.getItem('authToken') ||
-             sessionStorage.getItem('token') ||
-             '';
-    });
-    if (capturedToken) {
-      console.log(`🔑 Token from storage: ${capturedToken.substring(0, 30)}...`);
+  // Get token from localStorage (where React apps typically store it)
+  const token = await page.evaluate(() => {
+    // Check common storage locations
+    const possibleKeys = ['token', 'authToken', 'jwt', 'accessToken', 'access_token'];
+    for (const key of possibleKeys) {
+      const val = localStorage.getItem(key) || sessionStorage.getItem(key);
+      if (val && val.length > 20) return val;
     }
-  }
-  
-  // Fallback: extract from cookie
-  if (!capturedToken) {
-    const cookies = await page.context().cookies();
-    const tokenCookie = cookies.find((c: any) => c.name === 'token' || c.name === 'authToken' || c.name === 'jwt');
-    if (tokenCookie) {
-      capturedToken = tokenCookie.value;
-      console.log(`🔑 Token from cookie: ${capturedToken.substring(0, 30)}...`);
+    // Check Redux persist
+    const persistRoot = localStorage.getItem('persist:root');
+    if (persistRoot) {
+      try {
+        const state = JSON.parse(persistRoot);
+        if (state.auth) {
+          const authState = typeof state.auth === 'string' ? JSON.parse(state.auth) : state.auth;
+          if (authState.token) return authState.token;
+        }
+      } catch {}
     }
+    return '';
+  });
+  
+  if (token) {
+    console.log(`🔑 Token: ${token.substring(0, 30)}...`);
   }
+  console.log(`✅ Logged in as ${role}`);
   
-  // Fallback: make a test API call to verify auth state
-  if (!capturedToken) {
-    // Check if browser has the token stored somewhere else
-    capturedToken = await page.evaluate(() => {
-      // Try to find token in various locations
-      const possibleKeys = ['token', 'authToken', 'jwt', 'accessToken', 'access_token'];
-      for (const key of possibleKeys) {
-        const val = localStorage.getItem(key) || sessionStorage.getItem(key);
-        if (val && val.length > 20) return val;
-      }
-      // Check if it's stored in a state object
-      const stateStr = localStorage.getItem('persist:root') || localStorage.getItem('auth');
-      if (stateStr) {
-        try {
-          const state = JSON.parse(stateStr);
-          if (state.token) return state.token;
-          if (state.auth) {
-            const authState = typeof state.auth === 'string' ? JSON.parse(state.auth) : state.auth;
-            if (authState.token) return authState.token;
-          }
-        } catch {}
-      }
-      return '';
-    });
-    if (capturedToken) {
-      console.log(`🔑 Token from state: ${capturedToken.substring(0, 30)}...`);
-    }
-  }
-  
-  console.log(`✅ Logged in as ${role}${capturedToken ? '' : ' (no token captured)'}`);
-  
-  return capturedToken;
+  return token;
 }
 
 test.describe('Advanced Insurance E2E Tests - FIXED', () => {
@@ -225,8 +175,8 @@ test.describe('Advanced Insurance E2E Tests - FIXED', () => {
     test.setTimeout(60000);
     console.log('\n💳 TEST 2: COB Calculation (FIXED AUTH)\n');
     
-    // Login as HOSPITAL_ADMIN for higher permissions
-    const token = await loginAndGetToken(page, 'admin@hospital.com', 'MedInt2026SecureAdmin', 'Hospital Admin');
+    // Login as Receptionist (RECEPTIONIST role with password123)
+    const token = await loginAndGetToken(page, 'receptionist@hospital.com', 'password123', 'Receptionist');
     await screenshot(page, 't2-01-logged-in');
     
     if (!token) {
@@ -451,8 +401,8 @@ test.describe('Advanced Insurance E2E Tests - FIXED', () => {
     test.setTimeout(60000);
     console.log('\n⚠️ TEST 5: Insurance Underpayment (FIXED AUTH)\n');
     
-    // Login as HOSPITAL_ADMIN for claims management permission
-    const token = await loginAndGetToken(page, 'admin@hospital.com', 'MedInt2026SecureAdmin', 'Hospital Admin');
+    // Login as Receptionist 
+    const token = await loginAndGetToken(page, 'receptionist@hospital.com', 'password123', 'Receptionist');
     await screenshot(page, 't5-01-logged-in');
     
     if (!token) {
@@ -525,8 +475,8 @@ test.describe('Advanced Insurance E2E Tests - FIXED', () => {
     test.setTimeout(90000);
     console.log('\n🏛️ TEST 6: DHA eClaimLink Sandbox (CORRECT ENDPOINTS)\n');
     
-    // Login as HOSPITAL_ADMIN for DHA endpoints
-    const token = await loginAndGetToken(page, 'admin@hospital.com', 'MedInt2026SecureAdmin', 'Hospital Admin');
+    // Login as Receptionist for DHA endpoints
+    const token = await loginAndGetToken(page, 'receptionist@hospital.com', 'password123', 'Receptionist');
     await screenshot(page, 't6-01-logged-in');
     
     if (!token) {
@@ -646,8 +596,8 @@ test.describe('Advanced Insurance E2E Tests - FIXED', () => {
     test.setTimeout(60000);
     console.log('\n⏰ TEST 7: IPD Insurance Expiry Monitor (FIXED AUTH)\n');
     
-    // Login as HOSPITAL_ADMIN for IPD monitoring
-    const token = await loginAndGetToken(page, 'admin@hospital.com', 'MedInt2026SecureAdmin', 'Hospital Admin');
+    // Login as Receptionist for IPD monitoring  
+    const token = await loginAndGetToken(page, 'receptionist@hospital.com', 'password123', 'Receptionist');
     await screenshot(page, 't7-01-logged-in');
     
     if (!token) {
