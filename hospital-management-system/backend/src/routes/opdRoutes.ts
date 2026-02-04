@@ -200,6 +200,9 @@ router.post(
       expectedDueDate,
       currentMedications,
       currentTreatment,
+      // Medical history records
+      pastSurgeries,
+      immunizations,
     } = req.body;
 
     const result = await opdService.recordVitals(
@@ -222,6 +225,9 @@ router.post(
         expectedDueDate,
         currentMedications,
         currentTreatment,
+        // Medical history records
+        pastSurgeries,
+        immunizations,
       },
       req.user!.userId,
       req.user!.role, // Pass role for tracking
