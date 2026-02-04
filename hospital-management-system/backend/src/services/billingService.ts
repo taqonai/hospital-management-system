@@ -28,26 +28,45 @@ export class BillingService {
       quantity: number;
       unitPrice: number;
       discount?: number;
+      vatExempt?: boolean;
     }>;
     discount?: number;
     tax?: number;
     dueDate?: Date;
     notes?: string;
     createdBy: string;
+    skipVatCalculation?: boolean;
   }) {
     const invoiceNumber = this.generateInvoiceNumber();
 
+    // UAE VAT rate: 5%
+    const UAE_VAT_RATE = 0.05;
+
     // Calculate totals
     let subtotal = 0;
+    let taxableAmount = 0;
     const itemsWithTotal = data.items.map(item => {
       const itemDiscount = item.discount || 0;
       const totalPrice = (item.unitPrice * item.quantity) - itemDiscount;
       subtotal += totalPrice;
+      
+      // Add to taxable amount if not VAT exempt
+      if (!item.vatExempt) {
+        taxableAmount += totalPrice;
+      }
+      
       return { ...item, totalPrice, discount: itemDiscount };
     });
 
     const discount = data.discount || 0;
-    const tax = data.tax || 0;
+    
+    // Auto-calculate VAT at 5% for taxable services (unless explicitly provided or skipped)
+    let tax = data.tax || 0;
+    if (!data.skipVatCalculation && data.tax === undefined) {
+      tax = Math.round((taxableAmount - discount) * UAE_VAT_RATE * 100) / 100;
+      if (tax < 0) tax = 0;
+    }
+    
     const totalAmount = subtotal - discount + tax;
 
     const invoice = await prisma.invoice.create({

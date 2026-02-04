@@ -177,7 +177,7 @@ export class BilingualDocumentService {
             patient: true,
             items: true,
             hospital: true,
-            insuranceClaims: true,
+            claims: true,
           },
         },
       },
@@ -205,7 +205,7 @@ export class BilingualDocumentService {
     const balanceDue = Number(invoice.balanceAmount);
 
     // Insurance info
-    const insuranceClaim = invoice.insuranceClaims?.[0];
+    const insuranceClaim = invoice.claims?.[0];
     const insuranceCoverage = insuranceClaim ? Number(insuranceClaim.approvedAmount || insuranceClaim.claimedAmount || 0) : 0;
     const patientCopay = totalAmount - insuranceCoverage;
 
@@ -746,7 +746,7 @@ export class BilingualDocumentService {
         patient: true,
         items: true,
         hospital: true,
-        insuranceClaims: true,
+        claims: true,
         payments: true,
       },
     });
