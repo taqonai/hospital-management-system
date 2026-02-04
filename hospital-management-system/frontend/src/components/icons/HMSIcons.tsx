@@ -413,6 +413,86 @@ export const AIDocClipboardIcon: React.FC<IconProps> = ({ className = 'h-6 w-6' 
   </svg>
 );
 
+// ── Admin Dashboard KPI Icons ─────────────────────────────────────
+
+// Patient Community - overlapping people with AI sparkle
+export const PatientCommunityIcon: React.FC<IconProps> = ({ className = 'h-6 w-6' }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    {/* Back person */}
+    <circle cx="7" cy="6.5" r="2.5" strokeLinecap="round" strokeLinejoin="round" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3 20v-1.5a4 4 0 014-4h0" />
+    {/* Front person */}
+    <circle cx="14" cy="5.5" r="3" strokeLinecap="round" strokeLinejoin="round" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 20v-2a5 5 0 0110 0v2" />
+    {/* AI sparkle */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M20.5 3l.5 1.5.5-1.5M21 3l1.5.5-1.5.5M21 3l-1.5.5 1.5.5" strokeWidth={1.2} />
+    <circle cx="21" cy="3.5" r="0.4" fill="currentColor" />
+    {/* Plus indicator */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M20 9v3m-1.5-1.5h3" strokeWidth={1.8} />
+  </svg>
+);
+
+// Smart Calendar - calendar with clock for appointments
+export const SmartCalendarIcon: React.FC<IconProps> = ({ className = 'h-6 w-6' }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    {/* Calendar body */}
+    <rect x="3" y="5" width="14" height="14" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3 9h14" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7 3v4m6-4v4" />
+    {/* Calendar dots */}
+    <circle cx="7" cy="12.5" r="0.8" fill="currentColor" />
+    <circle cx="10" cy="12.5" r="0.8" fill="currentColor" />
+    <circle cx="7" cy="15.5" r="0.8" fill="currentColor" />
+    <circle cx="10" cy="15.5" r="0.8" fill="currentColor" />
+    {/* Clock overlay */}
+    <circle cx="18" cy="16" r="4.5" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M18 13.5v2.5l1.8 1.2" strokeWidth={1.8} />
+    {/* AI dot */}
+    <circle cx="18" cy="10" r="0.6" fill="currentColor" />
+  </svg>
+);
+
+// Smart Bed - modern hospital bed with pulse monitor
+export const SmartBedIcon: React.FC<IconProps> = ({ className = 'h-6 w-6' }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    {/* Bed frame */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16h18" strokeWidth={1.8} />
+    {/* Mattress and headboard */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v-4a2 2 0 012-2h12a2 2 0 012 2v4" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4 10V8a1 1 0 011-1h3a1 1 0 011 1v2" />
+    {/* Pillow */}
+    <rect x="5" y="8.5" width="3" height="1.5" rx="0.5" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} />
+    {/* Legs */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M5 16v2.5M19 16v2.5" strokeWidth={1.8} />
+    <circle cx="5" cy="19" r="0.7" fill="currentColor" />
+    <circle cx="19" cy="19" r="0.7" fill="currentColor" />
+    {/* Pulse line on top */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M11 5h2l1-2.5 1.5 5 1-2.5h2" strokeWidth={1.5} />
+    {/* Availability check */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M20 3.5l1 1 2-2.5" strokeWidth={1.5} />
+  </svg>
+);
+
+// Doctor Stethoscope - clean stethoscope with AI badge
+export const DoctorScopeIcon: React.FC<IconProps> = ({ className = 'h-6 w-6' }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    {/* Stethoscope ear tubes */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7 3v5a5 5 0 005 5 5 5 0 005-5V3" />
+    {/* Ear tips */}
+    <circle cx="7" cy="2.5" r="0.8" fill="currentColor" />
+    <circle cx="17" cy="2.5" r="0.8" fill="currentColor" />
+    {/* Chest piece tube */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 13v3a4 4 0 01-4 4h-1" />
+    {/* Chest piece */}
+    <circle cx="6" cy="20" r="1.5" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} />
+    {/* AI badge */}
+    <rect x="16" y="14" width="6" height="5" rx="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <text x="17.2" y="18" fill="currentColor" stroke="none" fontSize="3.5" fontWeight="bold" fontFamily="Arial, sans-serif">AI</text>
+    {/* Chip pins */}
+    <path strokeLinecap="round" strokeLinejoin="round" d="M18 14v-.8M20 14v-.8M22 16h.5M22 17.5h.5" strokeWidth={1} />
+  </svg>
+);
+
 // Export all icons as a collection
 export const HMSIcons = {
   AIDocClipboard: AIDocClipboardIcon,
@@ -439,6 +519,10 @@ export const HMSIcons = {
   Heartbeat: HeartbeatIcon,
   MedicalShield: MedicalShieldIcon,
   VitalsClipboardAI: VitalsClipboardAIIcon,
+  PatientCommunity: PatientCommunityIcon,
+  SmartCalendar: SmartCalendarIcon,
+  SmartBed: SmartBedIcon,
+  DoctorScope: DoctorScopeIcon,
 };
 
 export default HMSIcons;

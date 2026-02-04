@@ -1,10 +1,10 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { ClockIcon, ArrowRightIcon, ExclamationTriangleIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
 import {
-  CalendarBillingIcon,
-  HospitalBedIcon,
-  HeartbeatIcon,
-  PatientIcon,
+  PatientCommunityIcon,
+  SmartCalendarIcon,
+  SmartBedIcon,
+  DoctorScopeIcon,
 } from '../../../icons/HMSIcons';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import { useAdminDashboard } from '../../../../hooks/useAdminDashboard';
@@ -43,7 +43,7 @@ export default function AdminDashboard() {
       subtitle: newThisPeriod > 0 ? `+${newThisPeriod} new this month` : 'No new this month',
       subtitleColor: newThisPeriod > 0 ? 'text-emerald-600' : 'text-gray-400',
       description: 'Total registered patients in the hospital. The subtitle shows how many new patients were registered in the current month.',
-      icon: PatientIcon,
+      icon: PatientCommunityIcon,
       iconBg: 'bg-blue-500',
     },
     {
@@ -52,7 +52,7 @@ export default function AdminDashboard() {
       subtitle: `Avg ${dailyAvg7d}/day this week`,
       subtitleColor: 'text-gray-500',
       description: 'Number of appointments scheduled for today. The subtitle shows the average daily appointments over the past 7 days for comparison.',
-      icon: CalendarBillingIcon,
+      icon: SmartCalendarIcon,
       iconBg: 'bg-emerald-500',
     },
     {
@@ -61,7 +61,7 @@ export default function AdminDashboard() {
       subtitle: `${occupancyRate}% occupied`,
       subtitleColor: occupancyRate >= 90 ? 'text-red-500' : occupancyRate >= 70 ? 'text-amber-500' : 'text-emerald-600',
       description: 'Available beds out of total beds in the hospital. The subtitle shows the current occupancy rate — green means low occupancy, amber means moderate, and red means the hospital is near full capacity.',
-      icon: HospitalBedIcon,
+      icon: SmartBedIcon,
       iconBg: 'bg-purple-500',
     },
     {
@@ -70,7 +70,7 @@ export default function AdminDashboard() {
       subtitle: `${totalDoctors} total on staff`,
       subtitleColor: 'text-gray-500',
       description: 'Number of doctors currently marked as available. The subtitle shows the total number of doctors registered in the hospital.',
-      icon: HeartbeatIcon,
+      icon: DoctorScopeIcon,
       iconBg: 'bg-orange-500',
     },
   ];
