@@ -7,6 +7,7 @@ import {
   ArrowPathIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
+  ShieldCheckIcon,
 } from '@heroicons/react/24/outline';
 import { billingApi } from '../../services/api';
 import toast from 'react-hot-toast';
@@ -42,6 +43,13 @@ interface CopayInfo {
   visitType: string;
   paymentRequired: boolean;
   noInsurance?: boolean; // Flag for self-pay patients without insurance
+  // GAP 1: Pre-auth check
+  preAuthRequired?: boolean;
+  preAuthStatus?: string; // NOT_REQUIRED | REQUIRED_NOT_SUBMITTED | APPROVED | PENDING | DENIED
+  preAuthNumber?: string | null;
+  preAuthMessage?: string | null;
+  // GAP 5: Data source indicator
+  dataSource?: 'DHA_LIVE' | 'DHA_SANDBOX' | 'MOCK_DATA' | 'CACHED_DB' | 'NOT_CONFIGURED';
 }
 
 interface DepositBalance {
@@ -390,6 +398,96 @@ export default function CopayCollectionModal({
                           <><span className="text-orange-600 font-medium">Out-of-Network</span> ⚠️</>
                         )}
                       </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* GAP 5: Data Source Banner */}
+                {copayInfo.dataSource && (
+                  <div className={`rounded-lg px-4 py-2 text-sm font-medium flex items-center gap-2 ${
+                    copayInfo.dataSource === 'DHA_LIVE' ? 'bg-green-100 text-green-800 border border-green-200' :
+                    copayInfo.dataSource === 'MOCK_DATA' ? 'bg-red-100 text-red-800 border border-red-200' :
+                    copayInfo.dataSource === 'NOT_CONFIGURED' ? 'bg-red-100 text-red-800 border border-red-200' :
+                    copayInfo.dataSource === 'CACHED_DB' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' :
+                    copayInfo.dataSource === 'DHA_SANDBOX' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                    'bg-gray-100 text-gray-800 border border-gray-200'
+                  }`}>
+                    {copayInfo.dataSource === 'DHA_LIVE' && (
+                      <><CheckCircleIcon className="h-4 w-4 text-green-600" /> Insurance verified via DHA eClaimLink</>
+                    )}
+                    {copayInfo.dataSource === 'MOCK_DATA' && (
+                      <><ExclamationTriangleIcon className="h-4 w-4 text-red-600" /> Insurance data is SIMULATED (not verified with DHA)</>
+                    )}
+                    {copayInfo.dataSource === 'NOT_CONFIGURED' && (
+                      <><ExclamationTriangleIcon className="h-4 w-4 text-red-600" /> DHA not configured — manual verification required</>
+                    )}
+                    {copayInfo.dataSource === 'CACHED_DB' && (
+                      <><ExclamationTriangleIcon className="h-4 w-4 text-yellow-600" /> Using cached insurance data (not real-time verified)</>
+                    )}
+                    {copayInfo.dataSource === 'DHA_SANDBOX' && (
+                      <><ShieldCheckIcon className="h-4 w-4 text-blue-600" /> DHA Sandbox Mode — test environment</>
+                    )}
+                  </div>
+                )}
+
+                {/* GAP 1: Pre-Authorization Warning */}
+                {copayInfo.preAuthRequired && (
+                  <div className={`rounded-xl p-4 border-2 ${
+                    copayInfo.preAuthStatus === 'APPROVED' ? 'bg-green-50 border-green-300' :
+                    copayInfo.preAuthStatus === 'PENDING' ? 'bg-yellow-50 border-yellow-300' :
+                    'bg-red-50 border-red-300'
+                  }`}>
+                    <div className="flex items-start gap-3">
+                      <ShieldCheckIcon className={`h-6 w-6 flex-shrink-0 mt-0.5 ${
+                        copayInfo.preAuthStatus === 'APPROVED' ? 'text-green-600' :
+                        copayInfo.preAuthStatus === 'PENDING' ? 'text-yellow-600' :
+                        'text-red-600'
+                      }`} />
+                      <div className="flex-1">
+                        <h3 className={`text-base font-semibold mb-1 ${
+                          copayInfo.preAuthStatus === 'APPROVED' ? 'text-green-800' :
+                          copayInfo.preAuthStatus === 'PENDING' ? 'text-yellow-800' :
+                          'text-red-800'
+                        }`}>
+                          {copayInfo.preAuthStatus === 'APPROVED' ? 'Pre-Authorization Approved' :
+                           copayInfo.preAuthStatus === 'PENDING' ? 'Pre-Authorization Pending' :
+                           copayInfo.preAuthStatus === 'DENIED' ? 'Pre-Authorization Denied' :
+                           'Pre-Authorization Required'}
+                        </h3>
+                        <p className="text-sm text-gray-700 mb-1">
+                          {copayInfo.preAuthMessage || 'Pre-authorization is required for this visit.'}
+                        </p>
+                        {copayInfo.preAuthNumber && (
+                          <p className="text-xs text-gray-500">Ref: {copayInfo.preAuthNumber}</p>
+                        )}
+                        {copayInfo.preAuthStatus !== 'APPROVED' && (
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            {(copayInfo.preAuthStatus === 'REQUIRED_NOT_SUBMITTED' || copayInfo.preAuthStatus === 'DENIED') && (
+                              <button
+                                type="button"
+                                onClick={() => window.open('/insurance/pre-auth/new', '_blank')}
+                                className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                              >
+                                Request Pre-Auth Now
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={handleCollectPayment}
+                              className="px-3 py-1.5 bg-gray-600 text-white text-xs font-medium rounded-lg hover:bg-gray-700 transition-colors"
+                            >
+                              Override (Admin)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleDefer}
+                              className="px-3 py-1.5 bg-orange-100 text-orange-700 text-xs font-medium rounded-lg hover:bg-orange-200 transition-colors"
+                            >
+                              Convert to Self-Pay
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}

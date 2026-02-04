@@ -79,6 +79,8 @@ export interface EligibilityResponse {
   errorCode?: string;
   errorMessage?: string;
   rawResponse?: string;
+  // GAP 5: Data source indicator for UI banners
+  dataSource?: 'DHA_LIVE' | 'DHA_SANDBOX' | 'MOCK_DATA' | 'CACHED_DB' | 'NOT_CONFIGURED';
 }
 
 export interface ClaimHeader {
@@ -291,8 +293,22 @@ class DHAEClaimService {
 
     // If no config, return mock/cached data
     if (!config) {
+      // GAP 5: In production, do NOT return mock data — force manual verification
+      if (process.env.NODE_ENV === 'production') {
+        logger.warn('[DHA] No credentials configured in production, returning NOT_CONFIGURED');
+        return {
+          success: false,
+          policyStatus: 'NOT_FOUND',
+          networkStatus: 'UNKNOWN',
+          dataSource: 'NOT_CONFIGURED',
+          errorCode: 'DHA_NOT_CONFIGURED',
+          errorMessage: 'DHA eClaimLink is not configured for this hospital. Manual verification or self-pay required.',
+        };
+      }
       logger.warn('[DHA] No credentials configured, using mock response');
-      return this.getMockEligibilityResponse(request);
+      const mockResponse = this.getMockEligibilityResponse(request);
+      mockResponse.dataSource = 'MOCK_DATA';
+      return mockResponse;
     }
 
     const { credentials, mode } = config;
@@ -310,13 +326,17 @@ class DHAEClaimService {
 
     try {
       const response = await this.sendRequest(urls.eligibilityUrl, xmlRequest);
-      return this.parseEligibilityResponse(response);
+      const parsed = this.parseEligibilityResponse(response);
+      // GAP 5: Tag with data source based on configured mode
+      parsed.dataSource = mode === 'production' ? 'DHA_LIVE' : 'DHA_SANDBOX';
+      return parsed;
     } catch (error: any) {
       logger.error('[DHA] Eligibility check failed:', error.message);
       return {
         success: false,
         policyStatus: 'NOT_FOUND',
         networkStatus: 'UNKNOWN',
+        dataSource: mode === 'production' ? 'DHA_LIVE' : 'DHA_SANDBOX',
         errorCode: 'CONNECTION_ERROR',
         errorMessage: error.message,
       };

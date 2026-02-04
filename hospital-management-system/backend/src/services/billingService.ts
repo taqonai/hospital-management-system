@@ -2540,6 +2540,13 @@ export class BillingService {
         annualCopay: { total: 0, used: 0, remaining: 0 },
         visitType,
         paymentRequired: true, // Payment required for self-pay
+        // GAP 1: Pre-auth not applicable for self-pay
+        preAuthRequired: false,
+        preAuthStatus: 'NOT_REQUIRED',
+        preAuthNumber: null,
+        preAuthMessage: null,
+        // GAP 5: Data source
+        dataSource: 'CACHED_DB',
       } as any;
     }
 
@@ -2695,6 +2702,132 @@ export class BillingService {
     // If deductible not met, patient typically pays full amount until deductible is met
     // (For simplicity, we're treating copay as part of deductible here)
 
+    // === GAP 1: Pre-Auth Check at Check-In ===
+    // Wrapped in try-catch so failure never blocks the check-in flow
+    let preAuthRequired = false;
+    let preAuthStatus = 'NOT_REQUIRED';
+    let preAuthNumber: string | null = null;
+    let preAuthMessage: string | null = null;
+
+    try {
+      // Skip pre-auth for EMERGENCY appointments (UAE regulation)
+      if (visitType !== 'EMERGENCY') {
+        // Check if payer requires pre-auth globally
+        let payerRequiresPreAuth = false;
+        let payerId: string | null = null;
+
+        const payer = await prisma.insurancePayer.findFirst({
+          where: {
+            hospitalId,
+            OR: [
+              { name: { contains: patientInsurance.providerName, mode: 'insensitive' } },
+              { code: { contains: patientInsurance.providerName, mode: 'insensitive' } },
+            ],
+            isActive: true,
+          },
+        });
+
+        if (payer) {
+          payerRequiresPreAuth = (payer as any).preAuthRequired || false;
+          payerId = payer.id;
+        }
+
+        // Check if consultation CPT codes require pre-auth
+        let cptRequiresPreAuth = false;
+        const consultationCPT = await prisma.cPTCode.findFirst({
+          where: {
+            hospitalId,
+            OR: [
+              { code: { startsWith: '992' } },
+              { description: { contains: 'consultation', mode: 'insensitive' } },
+            ],
+            requiresPreAuth: true,
+            isActive: true,
+          },
+        });
+
+        if (consultationCPT) {
+          cptRequiresPreAuth = true;
+        }
+
+        // Check payer-specific CPT rules for pre-auth
+        if (!cptRequiresPreAuth && payerId) {
+          try {
+            const payerCPTRule = await (prisma.cPTPayerRule as any).findFirst({
+              where: {
+                payerId,
+                requiresPreAuth: true,
+                isActive: true,
+              },
+            });
+            if (payerCPTRule) {
+              cptRequiresPreAuth = true;
+            }
+          } catch (ruleErr) {
+            // Payer rule lookup failed, continue without
+          }
+        }
+
+        if (payerRequiresPreAuth || cptRequiresPreAuth) {
+          preAuthRequired = true;
+
+          // Look for existing pre-auth request for this patient and policy
+          const existingPreAuth = await prisma.preAuthRequest.findFirst({
+            where: {
+              hospitalId,
+              patientId,
+              insurancePolicyId: patientInsurance.id,
+              status: { in: ['APPROVED', 'PARTIALLY_APPROVED', 'PENDING', 'SUBMITTED', 'DENIED'] },
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+
+          if (existingPreAuth) {
+            const statusMap: Record<string, string> = {
+              APPROVED: 'APPROVED',
+              PARTIALLY_APPROVED: 'APPROVED',
+              PENDING: 'PENDING',
+              SUBMITTED: 'PENDING',
+              DENIED: 'DENIED',
+            };
+            preAuthStatus = statusMap[existingPreAuth.status] || 'REQUIRED_NOT_SUBMITTED';
+            preAuthNumber = (existingPreAuth as any).authorizationNumber || existingPreAuth.requestNumber;
+            preAuthMessage = existingPreAuth.status === 'DENIED'
+              ? `Pre-authorization denied: ${(existingPreAuth as any).denialReason || 'No reason provided'}`
+              : existingPreAuth.status === 'APPROVED' || existingPreAuth.status === 'PARTIALLY_APPROVED'
+              ? `Pre-authorization approved (${(existingPreAuth as any).authorizationNumber || existingPreAuth.requestNumber})`
+              : `Pre-authorization ${existingPreAuth.status.toLowerCase()}`;
+          } else {
+            preAuthStatus = 'REQUIRED_NOT_SUBMITTED';
+            preAuthMessage = 'Pre-authorization required but not yet submitted';
+          }
+        }
+      }
+    } catch (preAuthErr) {
+      console.warn('[COPAY] Pre-auth check failed, continuing without:', preAuthErr);
+    }
+
+    // === GAP 5: Determine Data Source ===
+    // Wrapped in try-catch so failure never blocks the check-in flow
+    let dataSource: string = 'CACHED_DB';
+    try {
+      const { dhaEClaimService } = require('./dhaEClaimService');
+      const dhaConfigured = await dhaEClaimService.isConfigured(hospitalId);
+
+      if (!dhaConfigured) {
+        dataSource = process.env.NODE_ENV === 'production' ? 'NOT_CONFIGURED' : 'MOCK_DATA';
+      } else {
+        const mode = await dhaEClaimService.getMode(hospitalId);
+        if ((patientInsurance as any).verificationSource === 'DHA_ECLAIM') {
+          dataSource = mode === 'production' ? 'DHA_LIVE' : 'DHA_SANDBOX';
+        } else {
+          dataSource = 'CACHED_DB';
+        }
+      }
+    } catch (dsErr) {
+      console.warn('[COPAY] Failed to determine data source, defaulting to CACHED_DB:', dsErr);
+    }
+
     return {
       hasCopay: patientAmount > 0,
       consultationFee,
@@ -2720,7 +2853,14 @@ export class BillingService {
       },
       visitType,
       paymentRequired: patientAmount > 0,
-    };
+      // GAP 1: Pre-auth check results
+      preAuthRequired,
+      preAuthStatus,
+      preAuthNumber,
+      preAuthMessage,
+      // GAP 5: Data source indicator
+      dataSource,
+    } as any;
   }
 
   // ==================== CREDIT NOTES ====================

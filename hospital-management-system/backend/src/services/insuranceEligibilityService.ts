@@ -119,6 +119,9 @@ export interface EligibilityResponse {
   verifiedAt?: Date;
   verificationSource: 'CACHED' | 'DHA_ECLAIM' | 'PAYER_API' | 'MANUAL';
   transactionId?: string;
+
+  // GAP 5: Data source indicator for UI banners
+  dataSource?: 'DHA_LIVE' | 'DHA_SANDBOX' | 'MOCK_DATA' | 'CACHED_DB' | 'NOT_CONFIGURED';
 }
 
 export interface DHAEClaimLinkConfig {
@@ -184,7 +187,10 @@ class InsuranceEligibilityService {
     if (dhaConfig?.enabled) {
       try {
         const dhaResponse = await this.callDHAEligibilityAPI(dhaConfig, normalizedEid, serviceDate);
-        
+
+        // GAP 5: Mark data source as DHA verified
+        dhaResponse.dataSource = 'DHA_LIVE';
+
         // CROSS-VERIFICATION: Compare DHA vs DB
         if (patient && dbInsurance) {
           const crossVerification = await this.crossVerifyInsurance(
@@ -480,6 +486,7 @@ class InsuranceEligibilityService {
       policyStatus: 'NOT_FOUND',
       networkStatus: 'UNKNOWN',
       verificationSource: 'CACHED',
+      dataSource: 'CACHED_DB',
       message: 'No active insurance found. Patient will be treated as self-pay.',
       verifiedAt: new Date(),
     };
@@ -518,6 +525,7 @@ class InsuranceEligibilityService {
         coveragePercentage: 100 - Number(primaryInsurance.copayPercentage || 20),
         copayPercentage: Number(primaryInsurance.copayPercentage || 20),
         verificationSource: 'CACHED',
+        dataSource: 'CACHED_DB',
         message: 'Insurance policy has expired. Please update insurance or treat as self-pay.',
         alerts: [{
           type: 'EID_VERIFICATION_NEEDED',
@@ -576,6 +584,7 @@ class InsuranceEligibilityService {
         remaining: Math.max(0, annualCopayMax - annualCopayUsed),
       } : undefined,
       verificationSource: 'CACHED',
+      dataSource: 'CACHED_DB',
       message: 'Insurance verified from cached records. For real-time verification, use Emirates ID lookup.',
       verifiedAt: new Date(),
     };
