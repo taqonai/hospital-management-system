@@ -107,6 +107,13 @@ const SettingsScreen: React.FC = () => {
           screen: 'Billing',
           showArrow: true,
         },
+        {
+          id: 'insurance',
+          title: 'Insurance',
+          icon: 'shield-checkmark-outline',
+          screen: 'Insurance',
+          showArrow: true,
+        },
       ],
     },
     {

@@ -143,7 +143,7 @@ const menuItems: MenuItem[] = [
     icon: 'time-outline',
     color: colors.error[500],
     bgColor: colors.error[50],
-    screen: 'MedicalHistory',
+    screen: 'MedicalRecords',
   },
   // Messages feature - hidden but code preserved for future use
   {
@@ -173,7 +173,10 @@ const HealthHubScreen: React.FC = () => {
           <TouchableOpacity
             key={item.id}
             style={styles.menuItem}
-            onPress={() => navigation.navigate(item.screen, { source: 'healthHub' })}
+            onPress={() => navigation.navigate(item.screen, {
+              source: 'healthHub',
+              ...(item.id === 'history' ? { initialTab: 'profile' } : {}),
+            })}
           >
             <View style={[styles.iconContainer, { backgroundColor: item.bgColor }]}>
               <Ionicons name={item.icon} size={28} color={item.color} />

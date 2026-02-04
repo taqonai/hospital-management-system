@@ -138,6 +138,12 @@ model Hospital {
   // Deductible Tracking
   deductibleLedgers DeductibleLedger[]
 
+  // Insurance Verification Audits (GAP 7)
+  insuranceVerificationAudits InsuranceVerificationAudit[]
+
+  // Copay Refunds (GAP 9)
+  copayRefunds CopayRefund[]
+
   // Payment Reminders
   paymentReminders PaymentReminder[]
 
@@ -861,6 +867,9 @@ model Patient {
 
   // Deductible Tracking
   deductibleLedgers DeductibleLedger[]
+
+  // Insurance Verification Audits (GAP 7)
+  insuranceVerificationAudits InsuranceVerificationAudit[] @relation("PatientInsuranceAudits")
 
   // Payment Reminders
   paymentReminders PaymentReminder[]
@@ -2106,11 +2115,55 @@ model CopayPayment {
   collectedBy        String
   paymentDate        DateTime      @default(now())
   createdAt          DateTime      @default(now())
+  // GAP 2: COB (Coordination of Benefits)
+  secondaryInsuranceProvider String?  // Secondary insurer name (if COB applied)
+  secondaryPolicyNumber      String?  // Secondary policy number
+  cobApplied                 Boolean? @default(false) // Whether COB was applied
+  // GAP 3: Receipt Generation
+  receiptNumber              String?  @unique // RCP-{hospitalCode}-{YYYYMMDD}-{seq}
+  receiptUrl                 String?  // URL/path to receipt HTML
+  vatAmount                  Decimal? @db.Decimal(10, 2) // UAE VAT amount (5%)
 
   patient     Patient     @relation(fields: [patientId], references: [id])
   appointment Appointment @relation(fields: [appointmentId], references: [id])
 
+  // GAP 9: Refunds
+  refunds CopayRefund[]
+
   @@map("copay_payments")
+}
+
+// GAP 9: Copay Refund Flow
+model CopayRefund {
+  id               String   @id @default(uuid())
+  hospitalId       String
+  copayPaymentId   String
+  patientId        String
+  appointmentId    String?
+  refundAmount     Decimal  @db.Decimal(10, 2)
+  refundMethod     String?  // CASH, CREDIT_CARD, BANK_TRANSFER, DEPOSIT_CREDIT
+  refundReason     String   // APPOINTMENT_CANCELLED, INSURANCE_UPDATED, OVERCHARGE, DOCTOR_WAIVED, OTHER
+  reasonDetails    String?  // Free-text explanation
+  status           String   @default("PENDING") // PENDING, APPROVED, PROCESSED, REJECTED
+  requestedBy      String   // User who requested the refund
+  requestedAt      DateTime @default(now())
+  approvedBy       String?  // Admin who approved
+  approvedAt       DateTime?
+  processedBy      String?  // User who processed payment
+  processedAt      DateTime?
+  rejectedBy       String?
+  rejectedAt       DateTime?
+  rejectionReason  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  hospital     Hospital     @relation(fields: [hospitalId], references: [id])
+  copayPayment CopayPayment @relation(fields: [copayPaymentId], references: [id])
+
+  @@index([hospitalId, status])
+  @@index([patientId])
+  @@index([copayPaymentId])
+  @@map("copay_refunds")
 }
 
 model PaymentTransaction {
@@ -8386,6 +8439,8 @@ model DeductibleLedger {
   fiscalYear          Int      // e.g., 2026
   accumulatedAmount   Decimal  @default(0) @db.Decimal(10, 2)
   maxDeductible       Decimal  @db.Decimal(10, 2)
+  copayAccumulated    Decimal? @default(0) @db.Decimal(10, 2) // GAP 4: Total copay paid YTD
+  maxCopay            Decimal? @db.Decimal(10, 2)              // GAP 4: Annual copay cap from insurance
   lastUpdated         DateTime @default(now())
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -8395,6 +8450,32 @@ model DeductibleLedger {
 
   @@unique([hospitalId, patientId, fiscalYear])
   @@map("deductible_ledgers")
+}
+
+// ==================== INSURANCE VERIFICATION AUDIT (GAP 7) ====================
+
+model InsuranceVerificationAudit {
+  id            String   @id @default(uuid())
+  hospitalId    String
+  patientId     String?
+  appointmentId String?
+  action        String   // DHA_VERIFIED, DHA_MISMATCH_USE_DB, DHA_MISMATCH_SELFPAY, DHA_MISMATCH_UPDATE, DHA_UNAVAILABLE_USE_CACHE, MANUAL_VERIFY, MANUAL_REJECT, PREAUTH_OVERRIDE, EID_VERIFIED, COVERAGE_CHANGE_ACCEPTED, COVERAGE_CHANGE_REJECTED, COPAY_COLLECTED, COPAY_WAIVED, COPAY_DEFERRED, CONVERT_TO_SELFPAY
+  previousData  Json?    // Snapshot of state before action
+  newData       Json?    // Snapshot of state after action
+  dhaResponse   Json?    // Raw DHA response if applicable
+  reason        String?  // Required for override actions
+  performedBy   String   // User ID who performed the action
+  performedAt   DateTime @default(now())
+  ipAddress     String?
+
+  hospital Hospital @relation(fields: [hospitalId], references: [id])
+  patient  Patient? @relation("PatientInsuranceAudits", fields: [patientId], references: [id])
+
+  @@index([hospitalId, performedAt])
+  @@index([patientId])
+  @@index([appointmentId])
+  @@index([action])
+  @@map("insurance_verification_audits")
 }
 
 // ==================== PAYMENT REMINDERS ====================

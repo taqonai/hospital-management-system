@@ -209,6 +209,80 @@ export interface Allergy {
   notes?: string;
 }
 
+export interface ImmunizationRecord {
+  id: string;
+  vaccineName: string;
+  vaccineType?: string;
+  doseNumber?: number;
+  dateAdministered: string;
+  administeredBy?: string;
+  lotNumber?: string;
+  nextDueDate?: string;
+  notes?: string;
+  verificationStatus?: 'PATIENT_REPORTED' | 'NURSE_VERIFIED' | 'DOCTOR_VALIDATED';
+}
+
+export interface PastSurgeryRecord {
+  id: string;
+  surgeryName: string;
+  surgeryDate: string;
+  hospitalName: string;
+  hospitalLocation?: string;
+  surgeonName?: string;
+  indication?: string;
+  complications?: string;
+  outcome?: string;
+  notes?: string;
+  verificationStatus?: 'PATIENT_REPORTED' | 'NURSE_VERIFIED' | 'DOCTOR_VALIDATED';
+}
+
+export interface InsurancePolicy {
+  id: string;
+  providerName: string;
+  policyNumber: string;
+  groupNumber?: string;
+  subscriberName: string;
+  subscriberId: string;
+  relationship: string;
+  effectiveDate: string;
+  expiryDate?: string;
+  coverageType: string;
+  copay?: number;
+  copayPercentage?: number;
+  networkTier?: string;
+  isPrimary: boolean;
+  isActive: boolean;
+  cardFrontUrl?: string;
+  cardBackUrl?: string;
+  verificationStatus?: 'PENDING' | 'VERIFIED' | 'REJECTED';
+}
+
+export interface InsuranceFormData {
+  providerName: string;
+  policyNumber: string;
+  groupNumber: string;
+  subscriberName: string;
+  subscriberId: string;
+  relationship: string;
+  effectiveDate: string;
+  expiryDate: string;
+  coverageType: string;
+  isPrimary: boolean;
+}
+
+export interface InsuranceClaim {
+  id: string;
+  claimNumber: string;
+  invoiceNumber?: string;
+  submittedDate: string;
+  status: 'SUBMITTED' | 'PROCESSING' | 'APPROVED' | 'DENIED' | 'PARTIAL';
+  claimedAmount: number;
+  approvedAmount?: number;
+  insuranceProvider: string;
+  policyNumber?: string;
+  notes?: string;
+}
+
 export interface Prescription {
   id: string;
   medication: string;
@@ -520,7 +594,7 @@ export type HealthStackParamList = {
   HealthInsights: undefined;
   SymptomChecker: undefined;
   HealthAssistant: undefined;
-  MedicalRecords: undefined;
+  MedicalRecords: { source?: string; initialTab?: 'visits' | 'allergies' | 'immunizations' | 'surgeries' | 'profile' } | undefined;
   RecordDetail: { recordId: string };
   Prescriptions: undefined;
   PrescriptionDetail: { prescriptionId: string };
@@ -572,5 +646,6 @@ export type SettingsStackParamList = {
   ChangePassword: undefined;
   Billing: undefined;
   BillDetail: { billId: string };
+  Insurance: undefined;
   About: undefined;
 };

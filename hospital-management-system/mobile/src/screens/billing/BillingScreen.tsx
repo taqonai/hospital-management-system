@@ -1,13 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import * as SecureStore from 'expo-secure-store';
+import { colors, spacing, borderRadius, typography, shadows } from '../../theme';
+import { patientPortalApi } from '../../services/api/patientPortal';
+import { InsuranceClaim } from '../../types';
 
-var API_URL = 'https://spetaar.ai/api/v1';
-var TOKEN_KEY = 'patientPortalToken';
+type SettingsStackParamList = {
+  Billing: undefined;
+  BillDetail: { billId: string };
+};
 
 interface BillRecord {
   id?: string;
@@ -24,98 +28,87 @@ interface BillRecord {
   serviceName?: string;
 }
 
-type SettingsStackParamList = {
-  Billing: undefined;
-  BillDetail: { billId: string };
-};
+type TabKey = 'all' | 'pending' | 'paid' | 'claims';
 
 function BillingScreen() {
-  var navigation = useNavigation<NativeStackNavigationProp<SettingsStackParamList>>();
-  var [activeTab, setActiveTab] = useState('all');
-  var [isLoading, setIsLoading] = useState(true);
-  var [isRefreshing, setIsRefreshing] = useState(false);
-  var [bills, setBills] = useState<BillRecord[]>([]);
-  var [summary, setSummary] = useState({ totalDue: 0, pendingBills: 0 });
-  var [error, setError] = useState<string | null>(null);
+  const navigation = useNavigation<NativeStackNavigationProp<SettingsStackParamList>>();
+  const [activeTab, setActiveTab] = useState<TabKey>('all');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [bills, setBills] = useState<BillRecord[]>([]);
+  const [claims, setClaims] = useState<InsuranceClaim[]>([]);
+  const [claimsLoading, setClaimsLoading] = useState(false);
+  const [claimsError, setClaimsError] = useState(false);
+  const [summary, setSummary] = useState({ totalDue: 0, pendingBills: 0 });
+  const [error, setError] = useState<string | null>(null);
 
-  function loadData() {
+  const loadBills = useCallback(async () => {
     setError(null);
-
-    SecureStore.getItemAsync(TOKEN_KEY).then(function(token) {
-      if (!token) {
-        setError('Not logged in');
-        setIsLoading(false);
-        setIsRefreshing(false);
-        return;
-      }
-
-      var headers = {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + token
-      };
-
-      // Fetch summary
-      fetch(API_URL + '/patient-portal/billing/summary', {
-        method: 'GET',
-        headers: headers
-      })
-      .then(function(res) { return res.json(); })
-      .then(function(data) {
-        if (data.success && data.data) {
+    try {
+      // Load summary
+      try {
+        const summaryRes = await patientPortalApi.getBillingSummary();
+        if (summaryRes.data?.data) {
           setSummary({
-            totalDue: Number(data.data.totalDue || 0),
-            pendingBills: Number(data.data.pendingBills || 0)
+            totalDue: Number(summaryRes.data.data.totalDue || 0),
+            pendingBills: Number(summaryRes.data.data.pendingBills || 0),
           });
         }
-      })
-      .catch(function(err) {
+      } catch (err) {
         console.log('Summary error:', err);
-      });
+      }
 
-      // Fetch bills
-      var statusParam = activeTab === 'all' ? '' : '?status=' + activeTab.toUpperCase();
-      fetch(API_URL + '/patient-portal/billing/bills' + statusParam, {
-        method: 'GET',
-        headers: headers
-      })
-      .then(function(res) { return res.json(); })
-      .then(function(data) {
-        if (data.success && data.data) {
-          setBills(data.data || []);
-        } else {
-          setBills([]);
-        }
-        setIsLoading(false);
-        setIsRefreshing(false);
-      })
-      .catch(function(err) {
-        console.log('Bills error:', err);
-        setError('Failed to load bills');
-        setBills([]);
-        setIsLoading(false);
-        setIsRefreshing(false);
-      });
-    }).catch(function(err) {
-      console.log('Token error:', err);
-      setError('Failed to get token');
+      // Load bills
+      const type = activeTab === 'all' || activeTab === 'claims' ? 'all' as const : activeTab as 'pending';
+      const billsRes = await patientPortalApi.getBills({ type });
+      setBills(billsRes.data?.data || []);
+    } catch (err) {
+      console.log('Bills error:', err);
+      setError('Failed to load bills');
+      setBills([]);
+    } finally {
       setIsLoading(false);
       setIsRefreshing(false);
-    });
-  }
-
-  useEffect(function() {
-    setIsLoading(true);
-    loadData();
+    }
   }, [activeTab]);
 
-  function onRefresh() {
+  const loadClaims = useCallback(async () => {
+    setClaimsLoading(true);
+    setClaimsError(false);
+    try {
+      const res = await patientPortalApi.getInsuranceClaims();
+      setClaims(res.data?.data || []);
+    } catch (err) {
+      console.log('Claims error:', err);
+      setClaimsError(true);
+      setClaims([]);
+    } finally {
+      setClaimsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    setIsLoading(true);
+    if (activeTab === 'claims') {
+      loadClaims();
+      setIsLoading(false);
+    } else {
+      loadBills();
+    }
+  }, [activeTab, loadBills, loadClaims]);
+
+  const onRefresh = () => {
     setIsRefreshing(true);
-    loadData();
-  }
+    if (activeTab === 'claims') {
+      loadClaims().then(() => setIsRefreshing(false));
+    } else {
+      loadBills();
+    }
+  };
 
   function formatMoney(val: number | string | null | undefined): string {
     if (val == null) return 'AED 0.00';
-    var n = Number(val);
+    const n = Number(val);
     if (isNaN(n)) return 'AED 0.00';
     return 'AED ' + n.toFixed(2);
   }
@@ -123,7 +116,7 @@ function BillingScreen() {
   function formatDate(dateStr: string | undefined): string {
     if (!dateStr) return '';
     try {
-      var d = new Date(dateStr);
+      const d = new Date(dateStr);
       return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     } catch (e) {
       return dateStr;
@@ -131,28 +124,171 @@ function BillingScreen() {
   }
 
   function getStatusColor(status: string | undefined): string {
-    if (!status) return '#6B7280';
-    var s = status.toLowerCase();
-    if (s === 'paid') return '#10B981';
-    if (s === 'pending') return '#F59E0B';
-    if (s === 'overdue') return '#EF4444';
-    return '#6B7280';
+    if (!status) return colors.gray[500];
+    const s = status.toLowerCase();
+    if (s === 'paid' || s === 'approved') return colors.success[600];
+    if (s === 'pending' || s === 'processing') return colors.warning[600];
+    if (s === 'overdue' || s === 'denied') return colors.error[600];
+    if (s === 'submitted') return colors.info[600];
+    if (s === 'partial') return colors.warning[700];
+    return colors.gray[500];
   }
 
   function goToDetail(billId: string) {
-    navigation.navigate('BillDetail', { billId: billId });
+    navigation.navigate('BillDetail', { billId });
   }
 
-  if (isLoading && !isRefreshing) {
+  const tabs: { key: TabKey; label: string }[] = [
+    { key: 'all', label: 'All' },
+    { key: 'pending', label: 'Pending' },
+    { key: 'paid', label: 'Paid' },
+    { key: 'claims', label: 'Claims' },
+  ];
+
+  if (isLoading && !isRefreshing && activeTab !== 'claims') {
     return (
       <View style={styles.loading}>
-        <ActivityIndicator size="large" color="#2563EB" />
+        <ActivityIndicator size="large" color={colors.primary[600]} />
         <Text style={styles.loadingText}>Loading billing...</Text>
       </View>
     );
   }
 
-  var filteredBills = bills;
+  const renderClaimsContent = () => {
+    if (claimsLoading) {
+      return (
+        <View style={styles.empty}>
+          <ActivityIndicator size="large" color={colors.primary[600]} />
+          <Text style={styles.emptyText}>Loading claims...</Text>
+        </View>
+      );
+    }
+
+    if (claimsError) {
+      return (
+        <View style={styles.empty}>
+          <Ionicons name="document-text-outline" size={60} color={colors.gray[300]} />
+          <Text style={styles.emptyTitle}>No Claims Data</Text>
+          <Text style={styles.emptyText}>Insurance claims information is not available yet.</Text>
+        </View>
+      );
+    }
+
+    if (claims.length === 0) {
+      return (
+        <View style={styles.empty}>
+          <Ionicons name="shield-outline" size={60} color={colors.gray[300]} />
+          <Text style={styles.emptyTitle}>No Claims</Text>
+          <Text style={styles.emptyText}>No insurance claims have been submitted.</Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.billsList}>
+        {claims.map((claim) => (
+          <View key={claim.id} style={styles.billCard}>
+            <View style={styles.billHeader}>
+              <View style={styles.billInfo}>
+                <Text style={styles.billNumber}>{claim.claimNumber}</Text>
+                <Text style={styles.billDate}>{formatDate(claim.submittedDate)}</Text>
+              </View>
+              <View style={[styles.statusBadge, { backgroundColor: getStatusColor(claim.status) + '20' }]}>
+                <Text style={[styles.statusText, { color: getStatusColor(claim.status) }]}>
+                  {(claim.status || '').toUpperCase()}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.billDescription} numberOfLines={1}>
+              {claim.insuranceProvider} - {claim.policyNumber}
+            </Text>
+            {claim.invoiceNumber && (
+              <Text style={styles.claimInvoice}>Invoice: {claim.invoiceNumber}</Text>
+            )}
+            <View style={styles.claimAmounts}>
+              <View style={styles.claimAmountCol}>
+                <Text style={styles.claimAmountLabel}>Claimed</Text>
+                <Text style={styles.billAmount}>{formatMoney(claim.claimedAmount)}</Text>
+              </View>
+              {claim.approvedAmount != null && (
+                <View style={styles.claimAmountCol}>
+                  <Text style={styles.claimAmountLabel}>Approved</Text>
+                  <Text style={[styles.billAmount, { color: colors.success[600] }]}>
+                    {formatMoney(claim.approvedAmount)}
+                  </Text>
+                </View>
+              )}
+            </View>
+            {claim.notes && (
+              <Text style={styles.claimNotes} numberOfLines={2}>{claim.notes}</Text>
+            )}
+          </View>
+        ))}
+      </View>
+    );
+  };
+
+  const renderBillsContent = () => {
+    if (error) {
+      return (
+        <View style={styles.empty}>
+          <Ionicons name="alert-circle-outline" size={60} color={colors.error[600]} />
+          <Text style={styles.emptyTitle}>Error</Text>
+          <Text style={styles.emptyText}>{error}</Text>
+        </View>
+      );
+    }
+
+    if (bills.length === 0) {
+      return (
+        <View style={styles.empty}>
+          <Ionicons name="receipt-outline" size={60} color={colors.gray[300]} />
+          <Text style={styles.emptyTitle}>No Bills Found</Text>
+          <Text style={styles.emptyText}>
+            {activeTab === 'pending' ? 'No pending bills' : activeTab === 'paid' ? 'No paid bills' : 'No billing history'}
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.billsList}>
+        {bills.map((bill: BillRecord, index: number) => {
+          const billId = bill.id || bill.billId || String(index);
+          const billNumber = bill.billNumber || bill.invoiceNumber || 'Bill #' + (index + 1);
+          const amount = bill.totalAmount || bill.amount || 0;
+          const status = bill.status || 'pending';
+          const date = bill.billDate || bill.createdAt || bill.date;
+          const description = bill.description || bill.serviceName || 'Medical Services';
+
+          return (
+            <TouchableOpacity
+              key={billId}
+              style={styles.billCard}
+              onPress={() => goToDetail(billId)}
+            >
+              <View style={styles.billHeader}>
+                <View style={styles.billInfo}>
+                  <Text style={styles.billNumber}>{billNumber}</Text>
+                  <Text style={styles.billDate}>{formatDate(date)}</Text>
+                </View>
+                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(status) + '20' }]}>
+                  <Text style={[styles.statusText, { color: getStatusColor(status) }]}>
+                    {(status || '').toUpperCase()}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.billDescription} numberOfLines={1}>{description}</Text>
+              <View style={styles.billFooter}>
+                <Text style={styles.billAmount}>{formatMoney(amount)}</Text>
+                <Ionicons name="chevron-forward" size={20} color={colors.gray[400]} />
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -176,113 +312,85 @@ function BillingScreen() {
         </View>
 
         <View style={styles.tabs}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'all' && styles.tabActive]}
-            onPress={function() { setActiveTab('all'); }}
-          >
-            <Text style={[styles.tabText, activeTab === 'all' && styles.tabTextActive]}>All</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'pending' && styles.tabActive]}
-            onPress={function() { setActiveTab('pending'); }}
-          >
-            <Text style={[styles.tabText, activeTab === 'pending' && styles.tabTextActive]}>Pending</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'paid' && styles.tabActive]}
-            onPress={function() { setActiveTab('paid'); }}
-          >
-            <Text style={[styles.tabText, activeTab === 'paid' && styles.tabTextActive]}>Paid</Text>
-          </TouchableOpacity>
+          {tabs.map((tab) => (
+            <TouchableOpacity
+              key={tab.key}
+              style={[styles.tab, activeTab === tab.key && styles.tabActive]}
+              onPress={() => setActiveTab(tab.key)}
+            >
+              <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
-        {error ? (
-          <View style={styles.empty}>
-            <Ionicons name="alert-circle-outline" size={60} color="#EF4444" />
-            <Text style={styles.emptyTitle}>Error</Text>
-            <Text style={styles.emptyText}>{error}</Text>
-          </View>
-        ) : filteredBills.length === 0 ? (
-          <View style={styles.empty}>
-            <Ionicons name="receipt-outline" size={60} color="#D1D5DB" />
-            <Text style={styles.emptyTitle}>No Bills Found</Text>
-            <Text style={styles.emptyText}>
-              {activeTab === 'pending' ? 'No pending bills' : activeTab === 'paid' ? 'No paid bills' : 'No billing history'}
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.billsList}>
-            {filteredBills.map(function(bill: BillRecord, index: number) {
-              var billId = bill.id || bill.billId || String(index);
-              var billNumber = bill.billNumber || bill.invoiceNumber || 'Bill #' + (index + 1);
-              var amount = bill.totalAmount || bill.amount || 0;
-              var status = bill.status || 'pending';
-              var date = bill.billDate || bill.createdAt || bill.date;
-              var description = bill.description || bill.serviceName || 'Medical Services';
-
-              return (
-                <TouchableOpacity
-                  key={billId}
-                  style={styles.billCard}
-                  onPress={function() { goToDetail(billId); }}
-                >
-                  <View style={styles.billHeader}>
-                    <View style={styles.billInfo}>
-                      <Text style={styles.billNumber}>{billNumber}</Text>
-                      <Text style={styles.billDate}>{formatDate(date)}</Text>
-                    </View>
-                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(status) + '20' }]}>
-                      <Text style={[styles.statusText, { color: getStatusColor(status) }]}>
-                        {(status || '').toUpperCase()}
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={styles.billDescription} numberOfLines={1}>{description}</Text>
-                  <View style={styles.billFooter}>
-                    <Text style={styles.billAmount}>{formatMoney(amount)}</Text>
-                    <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
+        {activeTab === 'claims' ? renderClaimsContent() : renderBillsContent()}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-var styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F9FAFB' },
-  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F9FAFB' },
-  loadingText: { marginTop: 12, fontSize: 16, color: '#6B7280' },
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
+  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
+  loadingText: { marginTop: spacing.md, fontSize: typography.fontSize.base, color: colors.text.secondary },
   scroll: { flex: 1 },
-  content: { padding: 16, paddingBottom: 40 },
-  summaryCard: { backgroundColor: '#2563EB', borderRadius: 16, padding: 20, marginBottom: 16 },
+  content: { padding: spacing.lg, paddingBottom: spacing['3xl'] },
+  summaryCard: {
+    backgroundColor: colors.primary[600],
+    borderRadius: borderRadius.xl,
+    padding: spacing.xl,
+    marginBottom: spacing.lg,
+    ...shadows.md,
+  },
   summaryRow: { flexDirection: 'row', alignItems: 'center' },
   summaryCol: { flex: 1, alignItems: 'center' },
-  summaryDivider: { width: 1, height: 36, backgroundColor: '#60A5FA', marginHorizontal: 12 },
-  summaryLabel: { fontSize: 13, color: '#BFDBFE', marginBottom: 4 },
-  summaryValue: { fontSize: 22, fontWeight: '700', color: '#FFFFFF' },
-  tabs: { flexDirection: 'row', backgroundColor: '#F3F4F6', borderRadius: 10, padding: 4, marginBottom: 16 },
-  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
-  tabActive: { backgroundColor: '#FFFFFF', elevation: 2 },
-  tabText: { fontSize: 14, color: '#6B7280', fontWeight: '500' },
-  tabTextActive: { color: '#2563EB' },
-  empty: { alignItems: 'center', paddingVertical: 48 },
-  emptyTitle: { fontSize: 18, fontWeight: '600', color: '#111827', marginTop: 16 },
-  emptyText: { fontSize: 14, color: '#6B7280', marginTop: 8, textAlign: 'center' },
-  billsList: { gap: 12 },
-  billCard: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, marginBottom: 12 },
-  billHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
+  summaryDivider: { width: 1, height: 36, backgroundColor: colors.primary[400], marginHorizontal: spacing.md },
+  summaryLabel: { fontSize: typography.fontSize.sm, color: colors.primary[100], marginBottom: spacing.xs },
+  summaryValue: { fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold, color: colors.white },
+  tabs: {
+    flexDirection: 'row',
+    backgroundColor: colors.gray[100],
+    borderRadius: borderRadius.lg,
+    padding: 4,
+    marginBottom: spacing.lg,
+  },
+  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: borderRadius.md },
+  tabActive: { backgroundColor: colors.white, ...shadows.sm },
+  tabText: { fontSize: typography.fontSize.sm, color: colors.text.secondary, fontWeight: typography.fontWeight.medium },
+  tabTextActive: { color: colors.primary[600] },
+  empty: { alignItems: 'center', paddingVertical: spacing['3xl'] },
+  emptyTitle: { fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold, color: colors.text.primary, marginTop: spacing.lg },
+  emptyText: { fontSize: typography.fontSize.sm, color: colors.text.secondary, marginTop: spacing.sm, textAlign: 'center' },
+  billsList: { gap: spacing.md },
+  billCard: {
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    ...shadows.sm,
+  },
+  billHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.sm },
   billInfo: { flex: 1 },
-  billNumber: { fontSize: 16, fontWeight: '600', color: '#111827' },
-  billDate: { fontSize: 13, color: '#6B7280', marginTop: 2 },
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  statusText: { fontSize: 11, fontWeight: '600' },
-  billDescription: { fontSize: 14, color: '#4B5563', marginBottom: 12 },
-  billFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 12 },
-  billAmount: { fontSize: 18, fontWeight: '700', color: '#111827' },
+  billNumber: { fontSize: typography.fontSize.base, fontWeight: typography.fontWeight.semibold, color: colors.text.primary },
+  billDate: { fontSize: typography.fontSize.sm, color: colors.text.secondary, marginTop: 2 },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: borderRadius.full },
+  statusText: { fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.semibold },
+  billDescription: { fontSize: typography.fontSize.sm, color: colors.gray[600], marginBottom: spacing.md },
+  billFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.gray[100], paddingTop: spacing.md },
+  billAmount: { fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.bold, color: colors.text.primary },
+  claimInvoice: { fontSize: typography.fontSize.xs, color: colors.text.secondary, marginBottom: spacing.sm },
+  claimAmounts: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: colors.gray[100],
+    paddingTop: spacing.md,
+    gap: spacing.xl,
+  },
+  claimAmountCol: { flex: 1 },
+  claimAmountLabel: { fontSize: typography.fontSize.xs, color: colors.text.secondary, marginBottom: 2 },
+  claimNotes: { fontSize: typography.fontSize.xs, color: colors.text.secondary, marginTop: spacing.sm, fontStyle: 'italic' },
 });
 
 export default BillingScreen;

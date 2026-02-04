@@ -1057,6 +1057,22 @@ export const billingApi = {
     waived?: boolean;
     waiverReason?: string;
   }) => api.post('/billing/pharmacy-copay-collect', data),
+  // GAP 9: Copay Refunds
+  requestCopayRefund: (data: {
+    copayPaymentId: string;
+    refundAmount: number;
+    refundReason: string;
+    reasonDetails?: string;
+    refundMethod?: string;
+  }) => api.post('/billing/copay-refund', data),
+  listCopayRefunds: (params?: { page?: number; limit?: number; status?: string; patientId?: string }) =>
+    api.get('/billing/copay-refunds', { params }),
+  getCopayRefund: (id: string) => api.get(`/billing/copay-refund/${id}`),
+  approveCopayRefund: (id: string) => api.patch(`/billing/copay-refund/${id}/approve`),
+  rejectCopayRefund: (id: string, rejectionReason: string) =>
+    api.patch(`/billing/copay-refund/${id}/reject`, { rejectionReason }),
+  processCopayRefund: (id: string, refundMethod?: string) =>
+    api.patch(`/billing/copay-refund/${id}/process`, { refundMethod }),
   // AI Auto Charge Capture
   extractCharges: (notes: string) =>
     api.post('/billing/extract-charges', { notes }),
@@ -2506,6 +2522,32 @@ export const insuranceCodingApi = {
   // Get patient insurance summary (from DB, not real-time DHA)
   getPatientInsurance: (patientId: string) =>
     api.get(`/insurance-coding/eligibility/${patientId}`),
+
+  // ==================== GAP 7: Insurance Verification Audit ====================
+  logInsuranceAudit: (data: {
+    patientId?: string;
+    appointmentId?: string;
+    action: string;
+    previousData?: Record<string, any>;
+    newData?: Record<string, any>;
+    reason?: string;
+  }) => api.post('/insurance-coding/audit/log', data).catch(() => {}), // Fire-and-forget
+
+  getInsuranceAuditList: (params?: {
+    page?: number;
+    limit?: number;
+    patientId?: string;
+    action?: string;
+    startDate?: string;
+    endDate?: string;
+  }) => api.get('/insurance-coding/audit/list', { params }),
+
+  exportInsuranceAudit: (params?: {
+    patientId?: string;
+    action?: string;
+    startDate?: string;
+    endDate?: string;
+  }) => api.get('/insurance-coding/audit/export', { params, responseType: 'blob' }),
 
   // ==================== Pre-Authorization ====================
   // Create a pre-authorization request

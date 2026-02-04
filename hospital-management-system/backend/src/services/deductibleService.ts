@@ -234,6 +234,169 @@ class DeductibleService {
     };
   }
 
+  // === GAP 4: New methods for ledger-based deductible & copay tracking ===
+
+  /**
+   * Get or create a DeductibleLedger for a patient in the current fiscal year.
+   * Populates maxDeductible and maxCopay from insurance if creating new.
+   */
+  async getOrCreateLedger(
+    hospitalId: string,
+    patientId: string,
+    insuranceId?: string
+  ): Promise<{
+    ledger: any;
+    deductible: { annual: number; used: number; remaining: number; metForYear: boolean };
+    copay: { limit: number; used: number; remaining: number; metForYear: boolean };
+  }> {
+    const currentYear = new Date().getFullYear();
+
+    // Get insurance plan limits
+    let maxDeductible = 500; // Default AED 500
+    let maxCopay = 0; // 0 = no cap
+    if (insuranceId) {
+      const insurance = await prisma.patientInsurance.findUnique({
+        where: { id: insuranceId },
+      });
+      if (insurance?.annualDeductible) {
+        maxDeductible = Number(insurance.annualDeductible);
+      }
+      if (insurance?.annualCopayMax) {
+        maxCopay = Number(insurance.annualCopayMax);
+      }
+    }
+
+    let ledger = await prisma.deductibleLedger.findUnique({
+      where: {
+        hospitalId_patientId_fiscalYear: {
+          hospitalId,
+          patientId,
+          fiscalYear: currentYear,
+        },
+      },
+    });
+
+    if (!ledger) {
+      ledger = await prisma.deductibleLedger.create({
+        data: {
+          hospitalId,
+          patientId,
+          insurancePolicyId: insuranceId,
+          fiscalYear: currentYear,
+          maxDeductible: new Decimal(maxDeductible),
+          accumulatedAmount: new Decimal(0),
+          copayAccumulated: new Decimal(0),
+          maxCopay: maxCopay > 0 ? new Decimal(maxCopay) : null,
+        },
+      });
+    }
+
+    const deductibleUsed = Number(ledger.accumulatedAmount);
+    const deductibleMax = Number(ledger.maxDeductible);
+    const copayUsed = Number(ledger.copayAccumulated || 0);
+    const copayMax = Number(ledger.maxCopay || maxCopay);
+
+    return {
+      ledger,
+      deductible: {
+        annual: deductibleMax,
+        used: deductibleUsed,
+        remaining: Math.max(0, deductibleMax - deductibleUsed),
+        metForYear: deductibleUsed >= deductibleMax,
+      },
+      copay: {
+        limit: copayMax,
+        used: copayUsed,
+        remaining: copayMax > 0 ? Math.max(0, copayMax - copayUsed) : Number.MAX_SAFE_INTEGER,
+        metForYear: copayMax > 0 && copayUsed >= copayMax,
+      },
+    };
+  }
+
+  /**
+   * Record a copay payment against the ledger (called after CopayPayment creation).
+   * Atomically increments both accumulatedAmount (deductible) and copayAccumulated.
+   */
+  async recordPayment(
+    hospitalId: string,
+    patientId: string,
+    amount: number,
+    insuranceId?: string
+  ): Promise<void> {
+    const currentYear = new Date().getFullYear();
+
+    // Ensure ledger exists
+    await this.getOrCreateLedger(hospitalId, patientId, insuranceId);
+
+    await prisma.deductibleLedger.update({
+      where: {
+        hospitalId_patientId_fiscalYear: {
+          hospitalId,
+          patientId,
+          fiscalYear: currentYear,
+        },
+      },
+      data: {
+        accumulatedAmount: { increment: new Decimal(amount) },
+        copayAccumulated: { increment: new Decimal(amount) },
+        lastUpdated: new Date(),
+      },
+    });
+  }
+
+  /**
+   * Record a charge applied to the deductible (separate from copay payment).
+   * Use when a charge is applied to deductible but copay tracking is separate.
+   */
+  async recordCharge(
+    hospitalId: string,
+    patientId: string,
+    amount: number,
+    insuranceId?: string
+  ): Promise<void> {
+    const currentYear = new Date().getFullYear();
+
+    await this.getOrCreateLedger(hospitalId, patientId, insuranceId);
+
+    await prisma.deductibleLedger.update({
+      where: {
+        hospitalId_patientId_fiscalYear: {
+          hospitalId,
+          patientId,
+          fiscalYear: currentYear,
+        },
+      },
+      data: {
+        accumulatedAmount: { increment: new Decimal(amount) },
+        lastUpdated: new Date(),
+      },
+    });
+  }
+
+  /**
+   * Get remaining deductible from ledger for current year.
+   */
+  async getRemainingDeductible(
+    hospitalId: string,
+    patientId: string,
+    insuranceId?: string
+  ): Promise<{ annual: number; used: number; remaining: number; metForYear: boolean }> {
+    const result = await this.getOrCreateLedger(hospitalId, patientId, insuranceId);
+    return result.deductible;
+  }
+
+  /**
+   * Get remaining copay max from ledger for current year.
+   */
+  async getRemainingCopayMax(
+    hospitalId: string,
+    patientId: string,
+    insuranceId?: string
+  ): Promise<{ limit: number; used: number; remaining: number; metForYear: boolean }> {
+    const result = await this.getOrCreateLedger(hospitalId, patientId, insuranceId);
+    return result.copay;
+  }
+
   /**
    * Reset deductible for new fiscal year (called by cron job or policy renewal)
    */

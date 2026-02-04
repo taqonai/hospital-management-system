@@ -2536,8 +2536,8 @@ export class BillingService {
         policyNumber: null,
         planType: 'SELF_PAY',
         networkStatus: 'NONE',
-        deductible: { total: 0, used: 0, remaining: 0 },
-        annualCopay: { total: 0, used: 0, remaining: 0 },
+        deductible: { total: 0, used: 0, remaining: 0, metForYear: false },
+        annualCopay: { total: 0, used: 0, remaining: 0, metForYear: false },
         visitType,
         paymentRequired: true, // Payment required for self-pay
         // GAP 1: Pre-auth not applicable for self-pay
@@ -2547,6 +2547,14 @@ export class BillingService {
         preAuthMessage: null,
         // GAP 5: Data source
         dataSource: 'CACHED_DB',
+        // GAP 2: COB not applicable for self-pay
+        hasSecondaryInsurance: false,
+        cobApplied: false,
+        primaryBreakdown: null,
+        secondaryBreakdown: null,
+        finalPatientAmount: consultationFee,
+        // GAP 6: Pharmacy estimate not applicable for self-pay
+        pharmacyEstimate: null,
       } as any;
     }
 
@@ -2660,30 +2668,56 @@ export class BillingService {
       insuranceAmount = consultationFee - patientAmount;
     }
 
-    // 6. Calculate deductible (query past CopayPayments for this patient in current year)
-    const currentYear = new Date().getFullYear();
-    const yearStart = new Date(currentYear, 0, 1);
-    const yearEnd = new Date(currentYear, 11, 31, 23, 59, 59);
+    // 6. GAP 4: Use DeductibleLedger for deductible & copay cap tracking (with CopayPayment fallback)
+    let annualCopayUsed = 0;
+    let annualDeductible = Number(patientInsurance.annualDeductible || 0);
+    let annualCopayMax = Number(patientInsurance.annualCopayMax || 0);
+    let deductibleRemaining = 0;
+    let annualCopayRemaining = annualCopayMax > 0 ? annualCopayMax : Number.MAX_SAFE_INTEGER;
+    let deductibleMetForYear = false;
+    let copayMaxMetForYear = false;
 
-    const copayPayments = await prisma.copayPayment.findMany({
-      where: {
+    try {
+      // Primary: Use DeductibleLedger for atomic YTD tracking
+      const ledgerData = await deductibleService.getOrCreateLedger(
+        hospitalId,
         patientId,
-        paymentDate: {
-          gte: yearStart,
-          lte: yearEnd,
-        },
-      },
-      select: {
-        amount: true,
-      },
-    });
+        patientInsurance.id
+      );
 
-    const annualCopayUsed = copayPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-    const annualDeductible = Number(patientInsurance.annualDeductible || 0);
-    const annualCopayMax = Number(patientInsurance.annualCopayMax || 0);
+      annualDeductible = ledgerData.deductible.annual;
+      annualCopayUsed = ledgerData.copay.used;
+      deductibleRemaining = ledgerData.deductible.remaining;
+      deductibleMetForYear = ledgerData.deductible.metForYear;
+      annualCopayMax = ledgerData.copay.limit || annualCopayMax;
+      annualCopayRemaining = ledgerData.copay.remaining;
+      copayMaxMetForYear = ledgerData.copay.metForYear;
+    } catch (ledgerError) {
+      // Fallback: Use CopayPayment YTD aggregation (original approach)
+      console.warn('[COPAY] DeductibleLedger lookup failed, falling back to CopayPayment aggregation:', ledgerError);
+      try {
+        const currentYear = new Date().getFullYear();
+        const yearStart = new Date(currentYear, 0, 1);
+        const yearEnd = new Date(currentYear, 11, 31, 23, 59, 59);
 
-    const deductibleRemaining = Math.max(0, annualDeductible - annualCopayUsed);
-    const annualCopayRemaining = annualCopayMax > 0 ? Math.max(0, annualCopayMax - annualCopayUsed) : Number.MAX_SAFE_INTEGER;
+        const copayPayments = await prisma.copayPayment.findMany({
+          where: {
+            patientId,
+            paymentDate: { gte: yearStart, lte: yearEnd },
+          },
+          select: { amount: true },
+        });
+
+        annualCopayUsed = copayPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+        deductibleRemaining = Math.max(0, annualDeductible - annualCopayUsed);
+        annualCopayRemaining = annualCopayMax > 0 ? Math.max(0, annualCopayMax - annualCopayUsed) : Number.MAX_SAFE_INTEGER;
+        deductibleMetForYear = annualDeductible > 0 && annualCopayUsed >= annualDeductible;
+        copayMaxMetForYear = annualCopayMax > 0 && annualCopayUsed >= annualCopayMax;
+      } catch (fallbackError) {
+        console.error('[COPAY] CopayPayment fallback also failed:', fallbackError);
+        // Continue with defaults (0 used) — don't block check-in
+      }
+    }
 
     // 7. Check annual copay cap
     if (annualCopayMax > 0) {
@@ -2828,6 +2862,189 @@ export class BillingService {
       console.warn('[COPAY] Failed to determine data source, defaulting to CACHED_DB:', dsErr);
     }
 
+    // === GAP 2: COB (Coordination of Benefits) — Secondary Insurance ===
+    // Added AFTER primary calculation. If COB fails, primary-only result is returned.
+    let hasSecondaryInsurance = false;
+    let cobApplied = false;
+    let primaryBreakdown: any = null;
+    let secondaryBreakdown: any = null;
+    let finalPatientAmount = patientAmount;
+
+    try {
+      // Query secondary insurance (isPrimary: false, isActive: true)
+      const secondaryInsurance = await prisma.patientInsurance.findFirst({
+        where: {
+          patientId,
+          isActive: true,
+          isPrimary: false,
+          OR: [
+            { priority: 2 },
+            { coordinationOfBenefits: 'COB_SECONDARY' },
+          ],
+        },
+      });
+
+      if (secondaryInsurance && patientAmount > 0) {
+        hasSecondaryInsurance = true;
+
+        // Save primary breakdown before COB adjustment
+        primaryBreakdown = {
+          insuranceProvider: patientInsurance.providerName,
+          policyNumber: patientInsurance.policyNumber,
+          coveragePercentage,
+          copayPercentage,
+          insuranceAmount,
+          patientResponsibility: patientAmount,
+        };
+
+        // Determine secondary coverage percentage using payer rules
+        let secondaryCoverage = 80; // Default 80% coverage
+        let secondaryCopay = 20;
+
+        try {
+          const secondaryPayer = await prisma.insurancePayer.findFirst({
+            where: {
+              hospitalId,
+              OR: [
+                { name: { contains: secondaryInsurance.providerName, mode: 'insensitive' } },
+                { code: { contains: secondaryInsurance.providerName, mode: 'insensitive' } },
+              ],
+              isActive: true,
+            },
+          });
+
+          if (secondaryPayer) {
+            const consultationICD = await prisma.iCD10Code.findFirst({
+              where: {
+                hospitalId,
+                code: { startsWith: 'Z00' },
+                isActive: true,
+              },
+            });
+
+            if (consultationICD) {
+              const icdPayerRule = await prisma.iCD10PayerRule.findFirst({
+                where: {
+                  payerId: secondaryPayer.id,
+                  icd10CodeId: consultationICD.id,
+                  isActive: true,
+                  isCovered: true,
+                },
+              });
+
+              if (icdPayerRule) {
+                if (icdPayerRule.copayPercentage) {
+                  secondaryCopay = Number(icdPayerRule.copayPercentage);
+                  secondaryCoverage = 100 - secondaryCopay;
+                }
+              }
+            }
+          }
+        } catch (payerErr) {
+          console.warn('[COB] Secondary payer rule lookup failed, using default 80/20:', payerErr);
+        }
+
+        // Apply secondary network penalty if out-of-network
+        const secondaryNetworkStatus = secondaryInsurance.networkTier || 'IN_NETWORK';
+        if (secondaryNetworkStatus === 'OUT_OF_NETWORK') {
+          secondaryCopay = Math.min(40, secondaryCopay * 2);
+          secondaryCoverage = 100 - secondaryCopay;
+        }
+
+        // COB calculation: secondary covers its portion of the remaining patient amount
+        // "Remaining" = what patient owes after primary
+        const remainingAfterPrimary = patientAmount;
+        const secondaryInsuranceAmount = Math.round(((remainingAfterPrimary * secondaryCoverage) / 100) * 100) / 100;
+        finalPatientAmount = Math.round((remainingAfterPrimary - secondaryInsuranceAmount) * 100) / 100;
+
+        // Ensure patient amount doesn't go negative
+        if (finalPatientAmount < 0) finalPatientAmount = 0;
+
+        secondaryBreakdown = {
+          insuranceProvider: secondaryInsurance.providerName,
+          policyNumber: secondaryInsurance.policyNumber,
+          coveragePercentage: secondaryCoverage,
+          copayPercentage: secondaryCopay,
+          networkStatus: secondaryNetworkStatus,
+          insuranceAmount: secondaryInsuranceAmount,
+          appliedToRemaining: remainingAfterPrimary,
+        };
+
+        // Apply COB — update final amounts
+        cobApplied = true;
+        patientAmount = finalPatientAmount;
+      }
+    } catch (cobError) {
+      console.warn('[COB] Secondary insurance lookup failed, returning primary-only result:', cobError);
+      // Reset COB fields — fall back to primary-only
+      hasSecondaryInsurance = false;
+      cobApplied = false;
+      primaryBreakdown = null;
+      secondaryBreakdown = null;
+      finalPatientAmount = patientAmount;
+    }
+
+    // GAP 6: Combined Copay Estimate — pharmacy estimate for follow-up visits
+    let pharmacyEstimate: any = null;
+    try {
+      if ((visitType === 'FOLLOW_UP' || visitType === 'NEW') && patientId) {
+        // Query active prescriptions for this patient
+        const activePrescriptions = await prisma.prescription.findMany({
+          where: {
+            patientId,
+            status: 'ACTIVE',
+          },
+          include: {
+            medications: {
+              include: {
+                drug: { select: { price: true } },
+              },
+            },
+          },
+          take: 10, // Safety limit
+        });
+
+        if (activePrescriptions.length > 0) {
+          let totalMedCost = 0;
+          const prescriptionSummaries: Array<{
+            prescriptionId: string;
+            medicationCount: number;
+            estimatedCost: number;
+          }> = [];
+
+          for (const rx of activePrescriptions) {
+            let rxCost = 0;
+            for (const med of rx.medications) {
+              const unitPrice = med.drug ? Number(med.drug.price || 0) : 0;
+              rxCost += unitPrice * (med.quantity || 1);
+            }
+            totalMedCost += rxCost;
+            prescriptionSummaries.push({
+              prescriptionId: rx.id,
+              medicationCount: rx.medications.length,
+              estimatedCost: Math.round(rxCost * 100) / 100,
+            });
+          }
+
+          // Apply same insurance coverage % to pharmacy estimate
+          const pharmInsuranceAmount = Math.round((totalMedCost * coveragePercentage) / 100 * 100) / 100;
+          const pharmPatientAmount = Math.round((totalMedCost - pharmInsuranceAmount) * 100) / 100;
+
+          pharmacyEstimate = {
+            estimated: true,
+            estimatedAmount: Math.round(pharmPatientAmount * 100) / 100,
+            totalMedicationCost: Math.round(totalMedCost * 100) / 100,
+            insuranceCovers: pharmInsuranceAmount,
+            activePrescriptions: prescriptionSummaries.length,
+            prescriptions: prescriptionSummaries,
+          };
+        }
+      }
+    } catch (pharmError) {
+      console.warn('[COPAY] Pharmacy estimate failed, skipping:', pharmError);
+      pharmacyEstimate = null;
+    }
+
     return {
       hasCopay: patientAmount > 0,
       consultationFee,
@@ -2845,11 +3062,13 @@ export class BillingService {
         total: annualDeductible,
         used: Math.min(annualCopayUsed, annualDeductible),
         remaining: deductibleRemaining,
+        metForYear: deductibleMetForYear,
       },
       annualCopay: {
         total: annualCopayMax,
         used: annualCopayUsed,
         remaining: annualCopayRemaining === Number.MAX_SAFE_INTEGER ? annualCopayMax : annualCopayRemaining,
+        metForYear: copayMaxMetForYear,
       },
       visitType,
       paymentRequired: patientAmount > 0,
@@ -2860,6 +3079,14 @@ export class BillingService {
       preAuthMessage,
       // GAP 5: Data source indicator
       dataSource,
+      // GAP 2: COB (Coordination of Benefits)
+      hasSecondaryInsurance,
+      cobApplied,
+      primaryBreakdown,
+      secondaryBreakdown,
+      finalPatientAmount,
+      // GAP 6: Pharmacy estimate (informational only)
+      pharmacyEstimate,
     } as any;
   }
 
@@ -3328,6 +3555,8 @@ export class BillingService {
     payment?: any;
     depositUtilization?: any;
     message: string;
+    receiptNumber?: string | null;
+    vatAmount?: number | null;
   }> {
     // Validate insurance and copay amount
     const copayInfo = await this.calculateCopay(params.patientId, params.hospitalId, params.appointmentId);
@@ -3380,9 +3609,68 @@ export class BillingService {
           },
         });
 
+        // GAP 4: Update DeductibleLedger with copay payment
+        try {
+          const insurance = await prisma.patientInsurance.findFirst({
+            where: { patientId: params.patientId, isActive: true, isPrimary: true },
+            select: { id: true },
+          });
+          await deductibleService.recordPayment(
+            params.hospitalId,
+            params.patientId,
+            params.amount,
+            insurance?.id
+          );
+        } catch (ledgerError) {
+          console.error('[COPAY COLLECT] DeductibleLedger update failed (deposit path):', ledgerError);
+          // Non-blocking — copay was collected, ledger update is best-effort
+        }
+
+        // GAP 3: Generate receipt for deposit payment
+        // Deposit path doesn't create a CopayPayment record, so we create one for receipt tracking
+        let receiptInfo: any = null;
+        try {
+          // Create a CopayPayment record for deposit path so we can attach receipt
+          const depositPayment = await prisma.copayPayment.create({
+            data: {
+              patientId: params.patientId,
+              appointmentId: params.appointmentId,
+              amount: params.amount,
+              paymentMethod: 'DEPOSIT' as any,
+              insuranceProvider: copayInfo.insuranceProvider || '',
+              policyNumber: copayInfo.policyNumber || '',
+              notes: params.notes || 'Paid via deposit',
+              collectedBy: params.collectedBy,
+            },
+          });
+
+          const { receiptService } = require('./receiptService');
+          const receipt = await receiptService.generateCopayReceipt(
+            depositPayment.id,
+            params.hospitalId,
+            {
+              consultationFee: copayInfo.consultationFee,
+              coveragePercentage: copayInfo.coveragePercentage,
+              copayPercentage: copayInfo.copayPercentage,
+              insuranceAmount: copayInfo.insuranceAmount,
+              patientAmount: copayInfo.patientAmount,
+              cobApplied: (copayInfo as any).cobApplied,
+              secondaryBreakdown: (copayInfo as any).secondaryBreakdown,
+            }
+          );
+          receiptInfo = {
+            receiptNumber: receipt.receiptNumber,
+            vatAmount: receipt.vatAmount,
+          };
+        } catch (receiptError) {
+          console.error('[COPAY COLLECT] Receipt generation failed for deposit (non-blocking):', receiptError);
+        }
+
         return {
           success: true,
           depositUtilization: utilization,
+          receiptNumber: receiptInfo?.receiptNumber || null,
+          vatAmount: receiptInfo?.vatAmount || null,
           message: 'Copay collected from deposit successfully',
         };
       } catch (error) {
@@ -3397,6 +3685,14 @@ export class BillingService {
     // Handle direct payment methods (Cash/Card)
     try {
       // Create a copay payment record
+      // GAP 2: Include COB fields if applicable
+      const cobFields: any = {};
+      if ((copayInfo as any).cobApplied && (copayInfo as any).secondaryBreakdown) {
+        cobFields.secondaryInsuranceProvider = (copayInfo as any).secondaryBreakdown.insuranceProvider || null;
+        cobFields.secondaryPolicyNumber = (copayInfo as any).secondaryBreakdown.policyNumber || null;
+        cobFields.cobApplied = true;
+      }
+
       const payment = await prisma.copayPayment.create({
         data: {
           patientId: params.patientId,
@@ -3407,6 +3703,7 @@ export class BillingService {
           policyNumber: copayInfo.policyNumber || '',
           notes: params.notes,
           collectedBy: params.collectedBy,
+          ...cobFields,
         },
       });
 
@@ -3433,9 +3730,54 @@ export class BillingService {
         console.error('[GL] Failed to post copay GL entry:', glError);
       }
 
+      // GAP 4: Update DeductibleLedger with copay payment
+      try {
+        const insurance = await prisma.patientInsurance.findFirst({
+          where: { patientId: params.patientId, isActive: true, isPrimary: true },
+          select: { id: true },
+        });
+        await deductibleService.recordPayment(
+          params.hospitalId,
+          params.patientId,
+          params.amount,
+          insurance?.id
+        );
+      } catch (ledgerError) {
+        console.error('[COPAY COLLECT] DeductibleLedger update failed (direct payment):', ledgerError);
+        // Non-blocking — copay was collected, ledger update is best-effort
+      }
+
+      // GAP 3: Generate receipt after successful payment
+      let receiptInfo: any = null;
+      try {
+        const { receiptService } = require('./receiptService');
+        const receipt = await receiptService.generateCopayReceipt(
+          payment.id,
+          params.hospitalId,
+          {
+            consultationFee: copayInfo.consultationFee,
+            coveragePercentage: copayInfo.coveragePercentage,
+            copayPercentage: copayInfo.copayPercentage,
+            insuranceAmount: copayInfo.insuranceAmount,
+            patientAmount: copayInfo.patientAmount,
+            cobApplied: (copayInfo as any).cobApplied,
+            secondaryBreakdown: (copayInfo as any).secondaryBreakdown,
+          }
+        );
+        receiptInfo = {
+          receiptNumber: receipt.receiptNumber,
+          vatAmount: receipt.vatAmount,
+        };
+      } catch (receiptError) {
+        console.error('[COPAY COLLECT] Receipt generation failed (non-blocking):', receiptError);
+        // Non-blocking — copay was collected, receipt is best-effort
+      }
+
       return {
         success: true,
         payment,
+        receiptNumber: receiptInfo?.receiptNumber || null,
+        vatAmount: receiptInfo?.vatAmount || null,
         message: 'Copay collected successfully',
       };
     } catch (error) {
