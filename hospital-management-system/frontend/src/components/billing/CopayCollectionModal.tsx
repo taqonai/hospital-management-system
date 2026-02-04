@@ -38,8 +38,8 @@ interface CopayInfo {
   policyNumber: string | null;
   planType: string;
   networkStatus: string;
-  deductible: { total: number; used: number; remaining: number };
-  annualCopay: { total: number; used: number; remaining: number };
+  deductible: { total: number; used: number; remaining: number; metForYear?: boolean };
+  annualCopay: { total: number; used: number; remaining: number; metForYear?: boolean };
   visitType: string;
   paymentRequired: boolean;
   noInsurance?: boolean; // Flag for self-pay patients without insurance
@@ -532,12 +532,19 @@ export default function CopayCollectionModal({
                           </div>
                           <div className="w-full bg-gray-200 rounded-full h-2">
                             <div
-                              className="bg-blue-500 h-2 rounded-full transition-all"
+                              className={`h-2 rounded-full transition-all ${
+                                copayInfo.deductible.metForYear ? 'bg-green-500' : 'bg-blue-500'
+                              }`}
                               style={{
                                 width: `${Math.min(100, (copayInfo.deductible.used / copayInfo.deductible.total) * 100)}%`,
                               }}
                             />
                           </div>
+                          {copayInfo.deductible.metForYear && (
+                            <p className="text-xs text-green-600 mt-1 font-medium">
+                              Deductible met for this year
+                            </p>
+                          )}
                         </div>
                       )}
                       {copayInfo.annualCopay.total > 0 && (

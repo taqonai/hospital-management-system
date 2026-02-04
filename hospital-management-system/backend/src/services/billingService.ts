@@ -2536,8 +2536,8 @@ export class BillingService {
         policyNumber: null,
         planType: 'SELF_PAY',
         networkStatus: 'NONE',
-        deductible: { total: 0, used: 0, remaining: 0 },
-        annualCopay: { total: 0, used: 0, remaining: 0 },
+        deductible: { total: 0, used: 0, remaining: 0, metForYear: false },
+        annualCopay: { total: 0, used: 0, remaining: 0, metForYear: false },
         visitType,
         paymentRequired: true, // Payment required for self-pay
         // GAP 1: Pre-auth not applicable for self-pay
@@ -2660,30 +2660,56 @@ export class BillingService {
       insuranceAmount = consultationFee - patientAmount;
     }
 
-    // 6. Calculate deductible (query past CopayPayments for this patient in current year)
-    const currentYear = new Date().getFullYear();
-    const yearStart = new Date(currentYear, 0, 1);
-    const yearEnd = new Date(currentYear, 11, 31, 23, 59, 59);
+    // 6. GAP 4: Use DeductibleLedger for deductible & copay cap tracking (with CopayPayment fallback)
+    let annualCopayUsed = 0;
+    let annualDeductible = Number(patientInsurance.annualDeductible || 0);
+    let annualCopayMax = Number(patientInsurance.annualCopayMax || 0);
+    let deductibleRemaining = 0;
+    let annualCopayRemaining = annualCopayMax > 0 ? annualCopayMax : Number.MAX_SAFE_INTEGER;
+    let deductibleMetForYear = false;
+    let copayMaxMetForYear = false;
 
-    const copayPayments = await prisma.copayPayment.findMany({
-      where: {
+    try {
+      // Primary: Use DeductibleLedger for atomic YTD tracking
+      const ledgerData = await deductibleService.getOrCreateLedger(
+        hospitalId,
         patientId,
-        paymentDate: {
-          gte: yearStart,
-          lte: yearEnd,
-        },
-      },
-      select: {
-        amount: true,
-      },
-    });
+        patientInsurance.id
+      );
 
-    const annualCopayUsed = copayPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-    const annualDeductible = Number(patientInsurance.annualDeductible || 0);
-    const annualCopayMax = Number(patientInsurance.annualCopayMax || 0);
+      annualDeductible = ledgerData.deductible.annual;
+      annualCopayUsed = ledgerData.copay.used;
+      deductibleRemaining = ledgerData.deductible.remaining;
+      deductibleMetForYear = ledgerData.deductible.metForYear;
+      annualCopayMax = ledgerData.copay.limit || annualCopayMax;
+      annualCopayRemaining = ledgerData.copay.remaining;
+      copayMaxMetForYear = ledgerData.copay.metForYear;
+    } catch (ledgerError) {
+      // Fallback: Use CopayPayment YTD aggregation (original approach)
+      console.warn('[COPAY] DeductibleLedger lookup failed, falling back to CopayPayment aggregation:', ledgerError);
+      try {
+        const currentYear = new Date().getFullYear();
+        const yearStart = new Date(currentYear, 0, 1);
+        const yearEnd = new Date(currentYear, 11, 31, 23, 59, 59);
 
-    const deductibleRemaining = Math.max(0, annualDeductible - annualCopayUsed);
-    const annualCopayRemaining = annualCopayMax > 0 ? Math.max(0, annualCopayMax - annualCopayUsed) : Number.MAX_SAFE_INTEGER;
+        const copayPayments = await prisma.copayPayment.findMany({
+          where: {
+            patientId,
+            paymentDate: { gte: yearStart, lte: yearEnd },
+          },
+          select: { amount: true },
+        });
+
+        annualCopayUsed = copayPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+        deductibleRemaining = Math.max(0, annualDeductible - annualCopayUsed);
+        annualCopayRemaining = annualCopayMax > 0 ? Math.max(0, annualCopayMax - annualCopayUsed) : Number.MAX_SAFE_INTEGER;
+        deductibleMetForYear = annualDeductible > 0 && annualCopayUsed >= annualDeductible;
+        copayMaxMetForYear = annualCopayMax > 0 && annualCopayUsed >= annualCopayMax;
+      } catch (fallbackError) {
+        console.error('[COPAY] CopayPayment fallback also failed:', fallbackError);
+        // Continue with defaults (0 used) — don't block check-in
+      }
+    }
 
     // 7. Check annual copay cap
     if (annualCopayMax > 0) {
@@ -2845,11 +2871,13 @@ export class BillingService {
         total: annualDeductible,
         used: Math.min(annualCopayUsed, annualDeductible),
         remaining: deductibleRemaining,
+        metForYear: deductibleMetForYear,
       },
       annualCopay: {
         total: annualCopayMax,
         used: annualCopayUsed,
         remaining: annualCopayRemaining === Number.MAX_SAFE_INTEGER ? annualCopayMax : annualCopayRemaining,
+        metForYear: copayMaxMetForYear,
       },
       visitType,
       paymentRequired: patientAmount > 0,
@@ -3380,6 +3408,23 @@ export class BillingService {
           },
         });
 
+        // GAP 4: Update DeductibleLedger with copay payment
+        try {
+          const insurance = await prisma.patientInsurance.findFirst({
+            where: { patientId: params.patientId, isActive: true, isPrimary: true },
+            select: { id: true },
+          });
+          await deductibleService.recordPayment(
+            params.hospitalId,
+            params.patientId,
+            params.amount,
+            insurance?.id
+          );
+        } catch (ledgerError) {
+          console.error('[COPAY COLLECT] DeductibleLedger update failed (deposit path):', ledgerError);
+          // Non-blocking — copay was collected, ledger update is best-effort
+        }
+
         return {
           success: true,
           depositUtilization: utilization,
@@ -3431,6 +3476,23 @@ export class BillingService {
         });
       } catch (glError) {
         console.error('[GL] Failed to post copay GL entry:', glError);
+      }
+
+      // GAP 4: Update DeductibleLedger with copay payment
+      try {
+        const insurance = await prisma.patientInsurance.findFirst({
+          where: { patientId: params.patientId, isActive: true, isPrimary: true },
+          select: { id: true },
+        });
+        await deductibleService.recordPayment(
+          params.hospitalId,
+          params.patientId,
+          params.amount,
+          insurance?.id
+        );
+      } catch (ledgerError) {
+        console.error('[COPAY COLLECT] DeductibleLedger update failed (direct payment):', ledgerError);
+        // Non-blocking — copay was collected, ledger update is best-effort
       }
 
       return {

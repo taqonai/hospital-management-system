@@ -8386,6 +8386,8 @@ model DeductibleLedger {
   fiscalYear          Int      // e.g., 2026
   accumulatedAmount   Decimal  @default(0) @db.Decimal(10, 2)
   maxDeductible       Decimal  @db.Decimal(10, 2)
+  copayAccumulated    Decimal? @default(0) @db.Decimal(10, 2) // GAP 4: Total copay paid YTD
+  maxCopay            Decimal? @db.Decimal(10, 2)              // GAP 4: Annual copay cap from insurance
   lastUpdated         DateTime @default(now())
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
