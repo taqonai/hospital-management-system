@@ -12,9 +12,11 @@ import {
   PrinterIcon,
   EnvelopeIcon,
   ChevronDownIcon,
+  IdentificationIcon,
 } from '@heroicons/react/24/outline';
 import { billingApi, insuranceCodingApi } from '../../services/api';
 import toast from 'react-hot-toast';
+import EmiratesIdLookup from '../insurance/EmiratesIdLookup';
 
 interface CopayCollectionModalProps {
   isOpen: boolean;
@@ -91,6 +93,15 @@ interface DepositBalance {
   availableBalance: number;
 }
 
+interface VerificationAlert {
+  type: string;
+  severity: 'INFO' | 'WARNING' | 'ERROR';
+  title: string;
+  message: string;
+  details?: { dbValue?: string | number; dhaValue?: string | number; field?: string };
+  actions?: Array<{ label: string; action: string }>;
+}
+
 type PaymentMethod = 'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'DEPOSIT';
 
 export default function CopayCollectionModal({
@@ -110,6 +121,10 @@ export default function CopayCollectionModal({
   const [receiptInfo, setReceiptInfo] = useState<{ receiptNumber: string; vatAmount: number } | null>(null);
   // GAP 6: Pharmacy estimate expanded/collapsed
   const [showPharmacyEstimate, setShowPharmacyEstimate] = useState(false);
+  // Real-time insurance verification
+  const [verifying, setVerifying] = useState(false);
+  const [verificationAlerts, setVerificationAlerts] = useState<VerificationAlert[]>([]);
+  const [showEidLookup, setShowEidLookup] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -145,6 +160,30 @@ export default function CopayCollectionModal({
       console.error('Failed to fetch deposit balance:', error);
       toast.error('Failed to load deposit balance');
     }
+  };
+
+  const handleVerifyInsurance = async () => {
+    setVerifying(true);
+    setVerificationAlerts([]);
+    try {
+      const response = await insuranceCodingApi.verifyEligibility({ patientId: patient.id });
+      const data = response.data?.data;
+      if (data?.alerts?.length) {
+        setVerificationAlerts(data.alerts);
+      }
+      await fetchCopayInfo();
+      toast.success('Insurance verification complete');
+    } catch (error) {
+      toast.error('Failed to verify insurance');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleEidInsuranceFound = async (_patient: any, _eligibility: any) => {
+    setShowEidLookup(false);
+    await fetchCopayInfo();
+    toast.success('Insurance found and verified');
   };
 
   const handleCollectPayment = async () => {
@@ -410,20 +449,26 @@ export default function CopayCollectionModal({
                   </div>
                 </div>
 
-                {/* Add Insurance Option */}
+                {/* Add Insurance Option — Inline Emirates ID Lookup */}
                 <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-sm font-semibold text-green-800">Has Insurance?</h3>
-                      <p className="text-xs text-green-600">Add insurance now to apply coverage</p>
+                      <p className="text-xs text-green-600">Verify via Emirates ID to apply coverage</p>
                     </div>
                     <button
-                      onClick={() => window.open(`/patients/${patient.id}?tab=insurance`, '_blank')}
-                      className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
+                      onClick={() => setShowEidLookup(!showEidLookup)}
+                      className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1.5"
                     >
-                      + Add Insurance
+                      <IdentificationIcon className="h-4 w-4" />
+                      {showEidLookup ? 'Hide' : 'Verify via Emirates ID'}
                     </button>
                   </div>
+                  {showEidLookup && (
+                    <div className="mt-4 border-t border-green-200 pt-4">
+                      <EmiratesIdLookup onPatientFound={handleEidInsuranceFound} />
+                    </div>
+                  )}
                 </div>
 
                 {/* Payment Method Selection */}
@@ -570,11 +615,52 @@ export default function CopayCollectionModal({
                       <><ExclamationTriangleIcon className="h-4 w-4 text-red-600" /> DHA not configured — manual verification required</>
                     )}
                     {copayInfo.dataSource === 'CACHED_DB' && (
-                      <><ExclamationTriangleIcon className="h-4 w-4 text-yellow-600" /> Using cached insurance data (not real-time verified)</>
+                      <>
+                        <ExclamationTriangleIcon className="h-4 w-4 text-yellow-600" />
+                        <span className="flex-1">Using cached insurance data (not real-time verified)</span>
+                        <button
+                          type="button"
+                          onClick={handleVerifyInsurance}
+                          disabled={verifying}
+                          className="ml-2 px-3 py-1 bg-yellow-600 text-white text-xs font-medium rounded-lg hover:bg-yellow-700 disabled:opacity-50 transition-colors flex items-center gap-1"
+                        >
+                          {verifying ? (
+                            <><ArrowPathIcon className="h-3 w-3 animate-spin" /> Verifying...</>
+                          ) : (
+                            <><ShieldCheckIcon className="h-3 w-3" /> Verify Now</>
+                          )}
+                        </button>
+                      </>
                     )}
                     {copayInfo.dataSource === 'DHA_SANDBOX' && (
                       <><ShieldCheckIcon className="h-4 w-4 text-blue-600" /> DHA Sandbox Mode — test environment</>
                     )}
+                  </div>
+                )}
+
+                {/* Verification Alerts */}
+                {verificationAlerts.length > 0 && (
+                  <div className="space-y-2">
+                    {verificationAlerts.map((alert, idx) => (
+                      <div
+                        key={idx}
+                        className={`rounded-lg px-4 py-3 text-sm border ${
+                          alert.severity === 'ERROR' ? 'bg-red-50 border-red-200 text-red-800' :
+                          alert.severity === 'WARNING' ? 'bg-amber-50 border-amber-200 text-amber-800' :
+                          'bg-blue-50 border-blue-200 text-blue-800'
+                        }`}
+                      >
+                        <p className="font-semibold">{alert.title}</p>
+                        <p className="text-xs mt-0.5">{alert.message}</p>
+                        {alert.details && (alert.details.dbValue || alert.details.dhaValue) && (
+                          <div className="mt-1 text-xs opacity-80">
+                            {alert.details.field && <span>Field: {alert.details.field} | </span>}
+                            {alert.details.dbValue != null && <span>Local: {String(alert.details.dbValue)} | </span>}
+                            {alert.details.dhaValue != null && <span>DHA: {String(alert.details.dhaValue)}</span>}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
 
