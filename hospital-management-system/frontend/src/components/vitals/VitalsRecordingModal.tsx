@@ -424,6 +424,20 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate all primary vitals are filled
+    const missingVitals: string[] = [];
+    if (!vitals.temperature) missingVitals.push('Temperature');
+    if (!vitals.bloodPressureSys) missingVitals.push('BP Systolic');
+    if (!vitals.bloodPressureDia) missingVitals.push('BP Diastolic');
+    if (!vitals.heartRate) missingVitals.push('Heart Rate');
+    if (!vitals.respiratoryRate) missingVitals.push('Respiratory Rate');
+    if (!vitals.oxygenSaturation) missingVitals.push('SpO2');
+    if (missingVitals.length > 0) {
+      toast.error(`Please fill all primary vitals: ${missingVitals.join(', ')}`);
+      return;
+    }
+
     setLoading(true);
     try {
       const patientId = appointment.patient?.id;
@@ -1017,7 +1031,7 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Temperature (°C)
+                    Temperature (°C) <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -1028,12 +1042,13 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                     min="32"
                     max="42"
                     placeholder="37.0"
+                    required
                     className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
-                    BP Systolic (mmHg)
+                    BP Systolic (mmHg) <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -1043,12 +1058,13 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                     min="60"
                     max="250"
                     placeholder="120"
+                    required
                     className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
-                    BP Diastolic (mmHg)
+                    BP Diastolic (mmHg) <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -1058,12 +1074,13 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                     min="40"
                     max="150"
                     placeholder="80"
+                    required
                     className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Heart Rate (bpm)
+                    Heart Rate (bpm) <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -1073,12 +1090,13 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                     min="30"
                     max="220"
                     placeholder="72"
+                    required
                     className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Resp. Rate (/min)
+                    Resp. Rate (/min) <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -1088,12 +1106,13 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                     min="8"
                     max="40"
                     placeholder="16"
+                    required
                     className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
-                    SpO2 (%)
+                    SpO2 (%) <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -1104,6 +1123,7 @@ export default function VitalsRecordingModal({ appointment, onClose, onSuccess }
                     min="70"
                     max="100"
                     placeholder="98"
+                    required
                     className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
                   />
                 </div>
