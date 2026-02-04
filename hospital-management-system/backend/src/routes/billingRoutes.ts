@@ -452,4 +452,42 @@ router.get(
   })
 );
 
+// ==================== BILINGUAL DOCUMENTS (DHA COMPLIANT) ====================
+
+import { bilingualDocumentService } from '../services/bilingualDocumentService';
+
+/**
+ * GET /api/v1/billing/receipts/:paymentId/bilingual
+ * Generate DHA-compliant bilingual receipt (Arabic + English)
+ */
+router.get(
+  '/receipts/:paymentId/bilingual',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const html = await bilingualDocumentService.generateBilingualReceipt(
+      req.params.paymentId,
+      req.user!.hospitalId
+    );
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  })
+);
+
+/**
+ * GET /api/v1/billing/invoices/:invoiceId/bilingual
+ * Generate DHA-compliant bilingual tax invoice (Arabic + English)
+ */
+router.get(
+  '/invoices/:invoiceId/bilingual',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const html = await bilingualDocumentService.generateBilingualInvoice(
+      req.params.invoiceId,
+      req.user!.hospitalId
+    );
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  })
+);
+
 export default router;

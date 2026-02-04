@@ -1,6 +1,7 @@
 import { initNoShowCron } from './noShowCron';
 import { initAutoReorderCron } from './autoReorderCron';
 import { initBillingCron } from './billingCron';
+import { ipdInsuranceMonitorService } from '../services/ipdInsuranceMonitorService';
 
 /**
  * Initialize all cron jobs
@@ -17,6 +18,9 @@ export const initCronJobs = () => {
 
   // Initialize billing cron jobs (overdue reminders + IPD daily charges)
   initBillingCron();
+
+  // Initialize IPD insurance expiry monitoring
+  ipdInsuranceMonitorService.initializeCronJob();
 
   console.log('[JOBS] All cron jobs initialized');
 };

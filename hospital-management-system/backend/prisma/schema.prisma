@@ -1059,7 +1059,12 @@ model PatientInsurance {
   networkTier       String?   @default("IN_NETWORK") // IN_NETWORK / OUT_OF_NETWORK
   annualDeductible  Decimal?  @db.Decimal(10, 2) // Total annual deductible
   annualCopayMax    Decimal?  @db.Decimal(10, 2) // Max annual copay cap (e.g., AED 1000)
+  
+  // Primary/Secondary Insurance Support
   isPrimary         Boolean   @default(true)
+  priority          Int       @default(1) // 1 = Primary, 2 = Secondary, etc.
+  coordinationOfBenefits String? @default("COB_PRIMARY") // COB_PRIMARY, COB_SECONDARY, COB_TERTIARY
+  
   isActive          Boolean   @default(true)
   // Verification fields (manual until DHA integration)
   verificationStatus String   @default("PENDING") // PENDING, VERIFIED, REJECTED
@@ -2040,6 +2045,12 @@ model InvoiceItem {
   discount          Decimal  @default(0) @db.Decimal(10, 2)
   totalPrice        Decimal  @db.Decimal(10, 2)
   
+  // VAT fields (UAE 5%)
+  isVatExempt       Boolean  @default(false)
+  vatRate           Decimal  @default(5.0) @db.Decimal(5, 2)
+  vatAmount         Decimal  @default(0) @db.Decimal(10, 2) // Calculated VAT amount
+  priceBeforeVat    Decimal? @db.Decimal(10, 2) // Price excluding VAT
+  
   // Insurance split fields
   insuranceCoverage Decimal? @db.Decimal(5, 2)  // Coverage percentage
   insuranceAmount   Decimal? @db.Decimal(10, 2) // Insurer pays
@@ -2250,6 +2261,11 @@ model ChargeMaster {
   isActive      Boolean   @default(true)
   effectiveFrom DateTime  @default(now())
   effectiveTo   DateTime?
+  
+  // VAT Configuration (UAE 5%)
+  isVatExempt   Boolean   @default(false) // Basic/preventive healthcare exempt
+  vatRate       Decimal   @default(5.0) @db.Decimal(5, 2) // Default 5% UAE VAT
+  
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   createdBy     String
