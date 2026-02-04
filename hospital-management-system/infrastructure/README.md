@@ -7,7 +7,7 @@ AWS Infrastructure as Code for the Hospital Management System.
 Single EC2 instance running all services via Docker Compose:
 
 ```
-Internet → ALB → EC2 (t3.small)
+Internet → ALB → EC2 (t3.xlarge)
                    ├── Nginx (reverse proxy)
                    ├── Frontend (React)
                    ├── Backend (Node.js)
@@ -86,11 +86,11 @@ sudo docker-compose logs -f
 
 | Resource | Monthly Cost |
 |----------|-------------|
-| EC2 t3.small | ~$15 |
+| EC2 t3.xlarge | ~$125 |
 | ALB | ~$20 |
 | EBS 50GB | ~$5 |
 | Data Transfer | ~$5-15 |
-| **Total** | **~$45-55** |
+| **Total** | **~$155-165** |
 
 ## Scaling Up
 

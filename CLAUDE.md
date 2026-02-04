@@ -187,12 +187,13 @@ All services implement graceful degradation to rule-based fallbacks when OpenAI 
 
 | Metric | Value |
 |--------|-------|
-| Prisma Models | 193 (~7800 lines in `backend/prisma/schema.prisma`) |
+| Prisma Models | 209 (~8400 lines in `backend/prisma/schema.prisma`) |
 | API Endpoints | 1,031+ |
-| Frontend Pages | 113 |
-| Mobile Screens | 51 |
+| Frontend Pages | 63 page directories |
+| Mobile Screens | 12 screen modules |
 | AI Services | 20 |
-| Backend Route Files | 68+ |
+| Backend Route Files | 66 |
+| Backend Service Files | 95 |
 
 ### Multi-Tenant Data Model
 
@@ -396,7 +397,7 @@ React crashes (white screen) are usually JavaScript runtime errors. Common cause
 Check route authorization in `backend/src/routes/{module}Routes.ts`. Ensure the user's role is included in the `authorize()` middleware call.
 
 ### Prisma Issues
-The schema is ~7800 lines with 193 models, so `prisma generate` and `prisma migrate dev` can be slow. After schema changes:
+The schema is ~8400 lines with 209 models, so `prisma generate` and `prisma migrate dev` can be slow. After schema changes:
 ```bash
 npx prisma generate          # Regenerate client (required after any schema change)
 npx prisma migrate dev       # Create migration + apply (use for committed changes)
