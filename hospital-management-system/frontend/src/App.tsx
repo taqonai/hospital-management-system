@@ -112,7 +112,6 @@ import PatientPortalSettings from './pages/PatientPortal/Settings';
 import PatientPortalSymptomChecker from './pages/PatientPortal/SymptomChecker';
 import PatientPortalHealthAssistant from './pages/PatientPortal/HealthAssistant';
 import PatientPortalHealthInsights from './pages/PatientPortal/HealthInsights';
-import PatientPortalMedicalHistory from './pages/PatientPortal/MedicalHistory';
 import PatientPortalHealthSync from './pages/PatientPortal/HealthSync';
 import PatientPortalFitnessTracker from './pages/PatientPortal/FitnessTracker';
 import PatientPortalNutritionPlan from './pages/PatientPortal/NutritionPlan';
@@ -413,7 +412,7 @@ function App() {
         <Route path="symptom-checker" element={<PatientPortalSymptomChecker />} />
         <Route path="health-assistant" element={<PatientPortalHealthAssistant />} />
         <Route path="health-insights" element={<PatientPortalHealthInsights />} />
-        <Route path="medical-history" element={<PatientPortalMedicalHistory />} />
+        <Route path="medical-history" element={<Navigate to="/patient-portal/records" replace />} />
         <Route path="health-sync" element={<PatientPortalHealthSync />} />
         <Route path="fitness" element={<PatientPortalFitnessTracker />} />
         <Route path="nutrition" element={<PatientPortalNutritionPlan />} />

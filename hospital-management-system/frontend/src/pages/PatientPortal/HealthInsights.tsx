@@ -548,7 +548,7 @@ export default function HealthInsights() {
                   </table>
                 </div>
                 <button
-                  onClick={() => navigate('/patient-portal/medical-history')}
+                  onClick={() => navigate('/patient-portal/records')}
                   className="w-full mt-4 px-4 py-2 text-sm font-medium text-green-600 hover:bg-green-50 rounded-xl transition-colors"
                 >
                   View Complete Lab History
