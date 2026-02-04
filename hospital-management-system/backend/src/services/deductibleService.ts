@@ -168,10 +168,7 @@ class DeductibleService {
     // Calculate total copay paid this year from payments
     const copayPayments = await prisma.payment.aggregate({
       where: {
-        hospitalId,
-        patientId,
-        paymentType: { in: ['COPAY', 'PHARMACY_COPAY'] },
-        status: 'COMPLETED',
+        invoice: { hospitalId, patientId },
         createdAt: {
           gte: startOfYear,
           lte: endOfYear,

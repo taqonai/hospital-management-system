@@ -77,14 +77,14 @@ router.post(
     await prisma.auditLog.create({
       data: {
         hospitalId: req.user!.hospitalId,
-        userId: req.user!.id,
+        userId: req.user!.userId,
         action: 'DHA_ELIGIBILITY_CHECK',
-        entity: 'Insurance',
-        details: JSON.stringify({
+        entityType: 'Insurance',
+        newValues: {
           emiratesId: cleanEid.slice(0, 3) + '***' + cleanEid.slice(-3), // Mask EID
           success: result.success,
           status: result.policyStatus,
-        }),
+        },
       },
     });
 
@@ -152,8 +152,8 @@ router.post(
       },
       include: {
         patient: true,
-        lineItems: true,
-        insuranceClaims: true,
+        items: true,
+        claims: true,
       },
     });
 
@@ -180,7 +180,7 @@ router.post(
         claimAmount: Number(invoice.totalAmount),
         currency: 'AED' as const,
       },
-      activities: invoice.lineItems.map((item, idx) => ({
+      activities: (invoice as any).items.map((item: any, idx: number) => ({
         activityId: `${invoice.invoiceNumber}-${idx + 1}`,
         activityType: 'CPT' as const,
         activityCode: item.code || `SVC${idx + 1}`,
@@ -199,29 +199,36 @@ router.post(
 
     // Update or create insurance claim record
     if (result.success && result.claimReference) {
-      await prisma.insuranceClaim.upsert({
+      const existingClaim = await prisma.insuranceClaim.findFirst({
         where: {
-          invoiceId_insuranceProvider: {
-            invoiceId: invoice.id,
-            insuranceProvider: 'DHA',
-          },
-        },
-        update: {
-          claimNumber: result.claimReference,
-          status: 'SUBMITTED',
-          submittedDate: new Date(),
-          claimedAmount: invoice.totalAmount,
-        },
-        create: {
-          hospitalId: req.user!.hospitalId,
           invoiceId: invoice.id,
-          claimNumber: result.claimReference,
           insuranceProvider: 'DHA',
-          status: 'SUBMITTED',
-          submittedDate: new Date(),
-          claimedAmount: invoice.totalAmount,
         },
       });
+
+      if (existingClaim) {
+        await prisma.insuranceClaim.update({
+          where: { id: existingClaim.id },
+          data: {
+            claimNumber: result.claimReference,
+            status: 'SUBMITTED',
+            submittedAt: new Date(),
+            claimAmount: invoice.totalAmount,
+          },
+        });
+      } else {
+        await prisma.insuranceClaim.create({
+          data: {
+            invoiceId: invoice.id,
+            claimNumber: result.claimReference,
+            insuranceProvider: 'DHA',
+            policyNumber: '',
+            status: 'SUBMITTED',
+            submittedAt: new Date(),
+            claimAmount: invoice.totalAmount,
+          },
+        });
+      }
     }
 
     // Log submission
@@ -297,7 +304,7 @@ router.get(
       await prisma.insuranceClaim.updateMany({
         where: {
           claimNumber: claimReference,
-          hospitalId: req.user!.hospitalId,
+          invoice: { hospitalId: req.user!.hospitalId },
         },
         data: {
           status: result.status === 'APPROVED' ? 'APPROVED' 
@@ -325,9 +332,9 @@ router.post(
     // Get all submitted claims pending status update
     const pendingClaims = await prisma.insuranceClaim.findMany({
       where: {
-        hospitalId: req.user!.hospitalId,
+        invoice: { hospitalId: req.user!.hospitalId },
         status: 'SUBMITTED',
-        submittedDate: {
+        submittedAt: {
           gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
         },
       },

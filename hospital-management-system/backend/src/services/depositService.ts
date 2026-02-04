@@ -1,5 +1,5 @@
 import prisma from '../config/database';
-import { NotFoundError, BadRequestError } from '../middleware/errorHandler';
+import { NotFoundError, ValidationError } from '../middleware/errorHandler';
 import { Decimal } from '@prisma/client/runtime/library';
 import { accountingService } from './accountingService';
 
@@ -30,7 +30,7 @@ export class DepositService {
   ) {
     // Validate amount
     if (data.amount <= 0) {
-      throw new BadRequestError('Deposit amount must be greater than zero');
+      throw new ValidationError('Deposit amount must be greater than zero');
     }
 
     // Verify patient exists
@@ -251,7 +251,7 @@ export class DepositService {
     createdBy: string
   ) {
     if (amount <= 0) {
-      throw new BadRequestError('Application amount must be greater than zero');
+      throw new ValidationError('Application amount must be greater than zero');
     }
 
     // Verify invoice exists and belongs to patient
@@ -268,7 +268,7 @@ export class DepositService {
     }
 
     if (invoice.status === 'PAID' || invoice.status === 'CANCELLED') {
-      throw new BadRequestError(`Cannot apply deposit to ${invoice.status.toLowerCase()} invoice`);
+      throw new ValidationError(`Cannot apply deposit to ${invoice.status.toLowerCase()} invoice`);
     }
 
     // Get available deposits
@@ -288,7 +288,7 @@ export class DepositService {
     );
 
     if (totalAvailable < amount) {
-      throw new BadRequestError(
+      throw new ValidationError(
         `Insufficient deposit balance. Available: ${totalAvailable}, Requested: ${amount}`
       );
     }
@@ -386,13 +386,13 @@ export class DepositService {
     const balanceAmount = Number(invoice.balanceAmount);
 
     if (balanceAmount <= 0) {
-      throw new BadRequestError('Invoice has no outstanding balance');
+      throw new ValidationError('Invoice has no outstanding balance');
     }
 
     const balance = await this.getDepositBalance(hospitalId, patientId);
 
     if (balance.totalBalance === 0) {
-      throw new BadRequestError('No available deposit balance');
+      throw new ValidationError('No available deposit balance');
     }
 
     const amountToApply = Math.min(balanceAmount, balance.totalBalance);
@@ -420,7 +420,7 @@ export class DepositService {
     createdBy: string
   ) {
     if (data.amount <= 0) {
-      throw new BadRequestError('Credit note amount must be greater than zero');
+      throw new ValidationError('Credit note amount must be greater than zero');
     }
 
     // Verify patient exists
@@ -469,7 +469,7 @@ export class DepositService {
             mrn: true,
           },
         },
-        sourceInvoice: {
+        invoice: {
           select: {
             id: true,
             invoiceNumber: true,
@@ -495,7 +495,7 @@ export class DepositService {
     }
 
     if (creditNote.status !== 'ISSUED') {
-      throw new BadRequestError(`Cannot apply credit note with status: ${creditNote.status}`);
+      throw new ValidationError(`Cannot apply credit note with status: ${creditNote.status}`);
     }
 
     const invoice = await prisma.invoice.findFirst({
@@ -511,7 +511,7 @@ export class DepositService {
     }
 
     if (invoice.status === 'PAID' || invoice.status === 'CANCELLED') {
-      throw new BadRequestError(`Cannot apply credit to ${invoice.status.toLowerCase()} invoice`);
+      throw new ValidationError(`Cannot apply credit to ${invoice.status.toLowerCase()} invoice`);
     }
 
     return await prisma.$transaction(async (tx) => {
@@ -592,7 +592,7 @@ export class DepositService {
               mrn: true,
             },
           },
-          sourceInvoice: {
+          invoice: {
             select: {
               id: true,
               invoiceNumber: true,
@@ -640,7 +640,7 @@ export class DepositService {
     createdBy: string
   ) {
     if (data.amount <= 0) {
-      throw new BadRequestError('Refund amount must be greater than zero');
+      throw new ValidationError('Refund amount must be greater than zero');
     }
 
     // Verify patient exists
@@ -667,7 +667,7 @@ export class DepositService {
       }
 
       if (Number(deposit.remainingBalance) < data.amount) {
-        throw new BadRequestError('Refund amount exceeds deposit balance');
+        throw new ValidationError('Refund amount exceeds deposit balance');
       }
     }
 
@@ -724,7 +724,7 @@ export class DepositService {
     }
 
     if (refund.status !== 'REQUESTED') {
-      throw new BadRequestError(`Cannot approve refund with status: ${refund.status}`);
+      throw new ValidationError(`Cannot approve refund with status: ${refund.status}`);
     }
 
     const updatedRefund = await prisma.refund.update({
@@ -764,7 +764,7 @@ export class DepositService {
     }
 
     if (refund.status !== 'APPROVED') {
-      throw new BadRequestError(`Cannot process refund with status: ${refund.status}`);
+      throw new ValidationError(`Cannot process refund with status: ${refund.status}`);
     }
 
     const updatedRefund = await prisma.$transaction(async (tx) => {
@@ -833,7 +833,7 @@ export class DepositService {
     }
 
     if (refund.status !== 'REQUESTED' && refund.status !== 'APPROVED') {
-      throw new BadRequestError(`Cannot reject refund with status: ${refund.status}`);
+      throw new ValidationError(`Cannot reject refund with status: ${refund.status}`);
     }
 
     const updatedRefund = await prisma.refund.update({

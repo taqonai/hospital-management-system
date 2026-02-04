@@ -2540,8 +2540,7 @@ export class BillingService {
         annualCopay: { total: 0, used: 0, remaining: 0 },
         visitType,
         paymentRequired: true, // Payment required for self-pay
-        noInsurance: true, // Flag to prompt adding insurance
-      };
+      } as any;
     }
 
     // 1. Determine visit type from appointment (if provided)
@@ -3485,15 +3484,12 @@ export class BillingService {
       // Record payment
       const payment = await prisma.payment.create({
         data: {
-          hospitalId: params.hospitalId,
-          patientId: prescription.patientId,
+          invoiceId: (prescription as any).invoiceId || '',
           amount: new Decimal(params.amount),
           paymentMethod: params.paymentMethod,
-          paymentType: 'PHARMACY_COPAY',
-          status: 'COMPLETED',
           referenceNumber: `PHARM-${Date.now()}`,
           notes: `Pharmacy copay for prescription ${params.prescriptionId}`,
-          receivedBy: params.collectedBy,
+          createdBy: params.collectedBy,
         },
       });
 

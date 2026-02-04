@@ -1,8 +1,9 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
 import { preAuthService } from '../services/preAuthService';
 import { authenticate, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendCreated, sendPaginated } from '../utils/response';
+import { AuthenticatedRequest } from '../types';
 
 const router = Router();
 
@@ -14,8 +15,8 @@ const router = Router();
 router.post(
   '/',
   authenticate,
-  authorizeWithPermission('MANAGE_PRE_AUTH'),
-  asyncHandler(async (req, res) => {
+  authorizeWithPermission('MANAGE_PRE_AUTH', []),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { user } = req;
     const preAuth = await preAuthService.createPreAuthRequest(
       user!.hospitalId,
@@ -35,8 +36,8 @@ router.post(
 router.get(
   '/',
   authenticate,
-  authorizeWithPermission('VIEW_PRE_AUTH'),
-  asyncHandler(async (req, res) => {
+  authorizeWithPermission('VIEW_PRE_AUTH', []),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { user } = req;
     const { patientId, status, urgency, page, limit } = req.query;
 
@@ -51,7 +52,11 @@ router.get(
     sendPaginated(
       res,
       result.data,
-      result.pagination,
+      {
+        ...result.pagination,
+        hasNext: result.pagination.page < result.pagination.totalPages,
+        hasPrev: result.pagination.page > 1,
+      },
       'Pre-authorization requests retrieved successfully'
     );
   })
@@ -65,8 +70,8 @@ router.get(
 router.get(
   '/:id',
   authenticate,
-  authorizeWithPermission('VIEW_PRE_AUTH'),
-  asyncHandler(async (req, res) => {
+  authorizeWithPermission('VIEW_PRE_AUTH', []),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { user } = req;
     const preAuth = await preAuthService.getPreAuthById(
       req.params.id,
@@ -85,8 +90,8 @@ router.get(
 router.patch(
   '/:id/status',
   authenticate,
-  authorizeWithPermission('MANAGE_PRE_AUTH'),
-  asyncHandler(async (req, res) => {
+  authorizeWithPermission('MANAGE_PRE_AUTH', []),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { user } = req;
     const updated = await preAuthService.updatePreAuthStatus(
       req.params.id,
@@ -107,8 +112,8 @@ router.patch(
 router.post(
   '/verify-coverage',
   authenticate,
-  authorizeWithPermission('VIEW_PRE_AUTH'),
-  asyncHandler(async (req, res) => {
+  authorizeWithPermission('VIEW_PRE_AUTH', []),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { user } = req;
     const { patientId, procedureCPTCode, diagnosisICDCode } = req.body;
 
@@ -131,8 +136,8 @@ router.post(
 router.post(
   '/calculate-copay',
   authenticate,
-  authorizeWithPermission('VIEW_PRE_AUTH'),
-  asyncHandler(async (req, res) => {
+  authorizeWithPermission('VIEW_PRE_AUTH', []),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { user } = req;
     const { patientId, items } = req.body;
 
@@ -154,8 +159,8 @@ router.post(
 router.post(
   '/check-requirement',
   authenticate,
-  authorizeWithPermission('VIEW_PRE_AUTH'),
-  asyncHandler(async (req, res) => {
+  authorizeWithPermission('VIEW_PRE_AUTH', []),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { user } = req;
     const { cptCode, payerId } = req.body;
 

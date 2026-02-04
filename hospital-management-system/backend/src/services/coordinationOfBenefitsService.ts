@@ -244,13 +244,13 @@ class CoordinationOfBenefitsService {
 
       const claim = await prisma.insuranceClaim.create({
         data: {
-          hospitalId,
           invoiceId,
           claimNumber: `CLM-${Date.now()}-${ins.priority}`,
           insuranceProvider: ins.providerName,
-          status: 'PENDING',
-          claimedAmount: new Decimal(ins.coverageAmount),
-          submittedDate: new Date(),
+          policyNumber: ins.policyNumber || '',
+          status: 'SUBMITTED',
+          claimAmount: new Decimal(ins.coverageAmount),
+          submittedAt: new Date(),
           notes: `COB Priority ${ins.priority} - ${ins.policyNumber}`,
         },
       });
@@ -304,7 +304,7 @@ class CoordinationOfBenefitsService {
     await prisma.insuranceClaim.update({
       where: { id: secondaryClaim.id },
       data: {
-        claimedAmount: new Decimal(Math.max(0, remainingForSecondary)),
+        claimAmount: new Decimal(Math.max(0, remainingForSecondary)),
         notes: `${secondaryClaim.notes} | Adjusted after primary paid ${primaryPaid}`,
       },
     });
@@ -319,7 +319,7 @@ class CoordinationOfBenefitsService {
     const invoice = await prisma.invoice.findUnique({
       where: { id: invoiceId },
       include: {
-        insuranceClaims: true,
+        claims: true,
         patient: {
           include: {
             insurances: {
@@ -336,7 +336,7 @@ class CoordinationOfBenefitsService {
     }
 
     const totalAmount = Number(invoice.totalAmount);
-    const claims = invoice.insuranceClaims || [];
+    const claims = (invoice as any).claims || [];
     
     // Find primary and secondary claims
     const primaryClaim = claims.find(c => c.notes?.includes('Priority 1'));

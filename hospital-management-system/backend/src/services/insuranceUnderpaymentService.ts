@@ -85,7 +85,7 @@ class InsuranceUnderpaymentService {
       throw new Error('Claim not found');
     }
 
-    const claimedAmount = Number(claim.claimedAmount);
+    const claimedAmount = Number(claim.claimAmount);
     const approvedAmount = remittanceData.approvedAmount;
     const shortfall = claimedAmount - approvedAmount;
     const shortfallPercentage = (shortfall / claimedAmount) * 100;
@@ -98,8 +98,8 @@ class InsuranceUnderpaymentService {
         status: approvedAmount === 0 ? 'REJECTED' 
           : approvedAmount < claimedAmount ? 'PARTIALLY_APPROVED'
           : 'APPROVED',
-        processedDate: new Date(),
-        denialReason: remittanceData.denialReasons?.join('; '),
+        processedAt: new Date(),
+        denialReasonCode: remittanceData.denialReasons?.join('; '),
         notes: `${claim.notes || ''}\nRemittance received: Approved ${approvedAmount} of ${claimedAmount}`,
       },
     });
@@ -204,7 +204,6 @@ class InsuranceUnderpaymentService {
         patientId: claim.invoice.patientId,
         invoiceNumber: `${claim.invoice.invoiceNumber}-SH`,
         status: 'PENDING',
-        paymentStatus: 'UNPAID',
         subtotal: new Decimal(shortfall),
         discount: new Decimal(0),
         tax: new Decimal(0),
@@ -243,21 +242,21 @@ class InsuranceUnderpaymentService {
         hospitalId: claim.invoice.hospitalId,
         userId: 'SYSTEM',
         action: 'INSURANCE_UNDERPAYMENT',
-        entity: 'InsuranceClaim',
+        entityType: 'InsuranceClaim',
         entityId: claim.id,
-        details: JSON.stringify({
+        newValues: {
           claimNumber: claim.claimNumber,
           invoiceNumber: claim.invoice.invoiceNumber,
           patientMrn: claim.invoice.patient.mrn,
           insuranceProvider: claim.insuranceProvider,
-          claimedAmount: Number(claim.claimedAmount),
+          claimedAmount: Number(claim.claimAmount),
           approvedAmount,
           shortfall,
-          shortfallPercentage: (shortfall / Number(claim.claimedAmount)) * 100,
+          shortfallPercentage: (shortfall / Number(claim.claimAmount)) * 100,
           denialCodes: remittanceData.denialCodes,
           denialReasons: remittanceData.denialReasons,
           action,
-        }),
+        },
       },
     });
   }
@@ -271,18 +270,32 @@ class InsuranceUnderpaymentService {
     percentage: number,
     action: string
   ): Promise<void> {
-    await prisma.notification.create({
-      data: {
+    // Look up a hospital admin to receive the notification
+    const adminUser = await prisma.user.findFirst({
+      where: {
         hospitalId: claim.invoice.hospitalId,
-        type: 'INSURANCE_UNDERPAYMENT',
-        title: `💰 Insurance Underpayment: ${claim.insuranceProvider}`,
-        message: `Claim ${claim.claimNumber} received ${percentage.toFixed(1)}% less than claimed. Shortfall: AED ${shortfall.toFixed(2)}. Action: ${action}`,
-        priority: percentage > 50 ? 'HIGH' : 'MEDIUM',
-        referenceId: claim.id,
-        referenceType: 'INSURANCE_CLAIM',
-        targetRoles: ['HOSPITAL_ADMIN', 'ACCOUNTANT'],
+        role: 'HOSPITAL_ADMIN',
       },
+      select: { id: true },
     });
+
+    if (adminUser) {
+      await prisma.notification.create({
+        data: {
+          userId: adminUser.id,
+          type: 'BILLING',
+          title: `Insurance Underpayment: ${claim.insuranceProvider}`,
+          message: `Claim ${claim.claimNumber} received ${percentage.toFixed(1)}% less than claimed. Shortfall: AED ${shortfall.toFixed(2)}. Action: ${action}`,
+          data: {
+            hospitalId: claim.invoice.hospitalId,
+            priority: percentage > 50 ? 'HIGH' : 'MEDIUM',
+            relatedEntityType: 'INSURANCE_CLAIM',
+            relatedEntityId: claim.id,
+            targetRoles: ['HOSPITAL_ADMIN', 'ACCOUNTANT'],
+          },
+        },
+      });
+    }
   }
 
   /**
@@ -299,7 +312,7 @@ class InsuranceUnderpaymentService {
         where: { id: invoiceId },
         data: {
           balanceAmount: new Decimal(Math.max(0, newBalance)),
-          paymentStatus: newBalance > 0 ? 'PARTIAL' : 'PAID',
+          status: newBalance > 0 ? 'PARTIALLY_PAID' : 'PAID',
         },
       });
     }
@@ -328,9 +341,9 @@ class InsuranceUnderpaymentService {
     const byReason: Map<string, { count: number; shortfall: number }> = new Map();
 
     for (const record of underpayments) {
-      const details = typeof record.details === 'string' 
-        ? JSON.parse(record.details) 
-        : record.details as any;
+      const details = typeof record.newValues === 'string'
+        ? JSON.parse(record.newValues)
+        : record.newValues as any;
 
       totalClaimed += details.claimedAmount || 0;
       totalApproved += details.approvedAmount || 0;

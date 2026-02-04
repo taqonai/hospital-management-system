@@ -1262,7 +1262,7 @@ export class PatientAuthService {
   /**
    * Reset password with OTP
    */
-  async resetPassword(
+  async resetPasswordWithOtp(
     patientId: string,
     otp: string,
     newPassword: string
@@ -1506,7 +1506,7 @@ export class PatientAuthService {
   /**
    * Reset Password - Verify token and update password
    */
-  async resetPassword(token: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+  async resetPasswordWithToken(token: string, newPassword: string): Promise<{ success: boolean; message: string }> {
     // Find user with valid reset token (patient users only)
     const user = await prisma.user.findFirst({
       where: {

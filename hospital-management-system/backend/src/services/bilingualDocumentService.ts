@@ -199,7 +199,7 @@ export class BilingualDocumentService {
 
     // Insurance info
     const insuranceClaim = invoice.claims?.[0];
-    const insuranceCoverage = insuranceClaim ? Number(insuranceClaim.approvedAmount || insuranceClaim.claimedAmount || 0) : 0;
+    const insuranceCoverage = insuranceClaim ? Number(insuranceClaim.approvedAmount || insuranceClaim.claimAmount || 0) : 0;
     const patientCopay = totalAmount - insuranceCoverage;
 
     const html = `
@@ -542,7 +542,7 @@ export class BilingualDocumentService {
     <div class="info-box info-box-ar">
       <h3>${translate('Patient Information')}</h3>
       <div class="info-row info-row-ar">
-        <span class="info-value">${patient.firstNameAr || ''} ${patient.lastNameAr || ''}</span>
+        <span class="info-value">${(patient as any).firstNameAr ?? patient.firstName} ${(patient as any).lastNameAr ?? patient.lastName}</span>
         <span class="info-label">${translate('Patient Name')}:</span>
       </div>
       <div class="info-row info-row-ar">
@@ -809,7 +809,7 @@ export class BilingualDocumentService {
   
   <!-- Invoice details, items table, amounts - similar to receipt -->
   <p>Invoice #: ${invoice.invoiceNumber} | Date: ${invoiceDate.en} | التاريخ: ${invoiceDate.ar}</p>
-  <p>Patient: ${patient.firstName} ${patient.lastName} | المريض: ${patient.firstNameAr || ''} ${patient.lastNameAr || ''}</p>
+  <p>Patient: ${patient.firstName} ${patient.lastName} | المريض: ${(patient as any).firstNameAr ?? patient.firstName} ${(patient as any).lastNameAr ?? patient.lastName}</p>
   
   <table>
     <tr><th>Description / الوصف</th><th>Qty</th><th>Price</th><th>VAT</th><th>Total</th></tr>

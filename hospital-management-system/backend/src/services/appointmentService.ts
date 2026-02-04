@@ -527,7 +527,7 @@ export class AppointmentService {
     if (data.type) updateData.type = data.type;
     if (data.reason !== undefined) updateData.reason = data.reason;
     if (data.notes !== undefined) updateData.notes = data.notes;
-    if (data.status) updateData.status = data.status;
+    if ((data as any).status) updateData.status = (data as any).status;
     // Handle relations via connect
     if (data.doctorId) updateData.doctor = { connect: { id: data.doctorId } };
     if (data.patientId) updateData.patient = { connect: { id: data.patientId } };

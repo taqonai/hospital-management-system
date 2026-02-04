@@ -169,11 +169,17 @@ export class NurseService {
           orderBy: { recordedAt: 'desc' },
         });
 
-        // Get NEWS2 score from early warning system if available
-        const news2Score = await prisma.earlyWarningScore.findFirst({
-          where: { patientId: assignment.admission.patient.id },
-          orderBy: { recordedAt: 'desc' },
-        });
+        // Get NEWS2 score from the admission record
+        const admissionNews2Score = assignment.admission.news2Score;
+
+        // Derive risk level from NEWS2 score
+        let riskLevel: string | null = null;
+        if (admissionNews2Score != null) {
+          if (admissionNews2Score >= 7) riskLevel = 'HIGH';
+          else if (admissionNews2Score >= 5) riskLevel = 'MEDIUM';
+          else if (admissionNews2Score >= 3) riskLevel = 'LOW_MEDIUM';
+          else riskLevel = 'LOW';
+        }
 
         return {
           assignmentId: assignment.id,
@@ -183,8 +189,8 @@ export class NurseService {
           admissionDate: assignment.admission.admissionDate,
           admission: { id: assignment.admissionId }, // Add admission ID for eMAR
           latestVital,
-          news2Score: news2Score?.totalScore || null,
-          riskLevel: news2Score?.riskLevel || null,
+          news2Score: admissionNews2Score || null,
+          riskLevel,
         };
       })
     );
@@ -384,22 +390,14 @@ export class NurseService {
       else if (score >= 5) riskLevel = 'MEDIUM';
       else if (score >= 3) riskLevel = 'LOW_MEDIUM';
 
-      // Store NEWS2 score
-      await prisma.earlyWarningScore.create({
-        data: {
+      // Store NEWS2 score on the patient's active admission
+      await prisma.admission.updateMany({
+        where: {
           patientId: data.patientId,
-          vitalId: vital.id,
-          totalScore: score,
-          riskLevel: riskLevel as any,
-          respiratoryRate: news2Data.respiratoryRate,
-          oxygenSaturation: news2Data.oxygenSaturation,
-          systolicBP: news2Data.systolicBP,
-          heartRate: news2Data.heartRate,
-          temperature: news2Data.temperature,
-          consciousness: news2Data.consciousness as any,
-          supplementalOxygen: news2Data.supplementalOxygen,
-          recordedAt: new Date(),
-          recordedBy: data.recordedBy,
+          status: 'ADMITTED',
+        },
+        data: {
+          news2Score: score,
         },
       });
     }

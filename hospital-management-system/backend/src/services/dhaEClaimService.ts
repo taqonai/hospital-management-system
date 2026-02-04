@@ -188,21 +188,20 @@ class DHAEClaimService {
    * All settings come from Admin UI - no hardcoded values
    */
   private async getConfig(hospitalId: string): Promise<{ credentials: DHACredentials; mode: 'sandbox' | 'production' } | null> {
-    const settings = await prisma.hospitalSetting.findFirst({
+    const settings = await prisma.hospitalSettings.findFirst({
       where: {
         hospitalId,
-        category: 'DHA_ECLAIM',
       },
     });
 
-    if (!settings?.value) {
+    if (!settings?.dhaSettings) {
       return null;
     }
 
     try {
-      const config = typeof settings.value === 'string' 
-        ? JSON.parse(settings.value) 
-        : settings.value;
+      const config = typeof settings.dhaSettings === 'string'
+        ? JSON.parse(settings.dhaSettings)
+        : settings.dhaSettings as any;
       
       if (config.enabled && config.facilityId && config.facilityLicense && config.apiKey) {
         return {

@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { body, param } from 'express-validator';
-import { authenticate, AuthenticatedRequest } from '../middleware/auth';
-import { validate } from '../middleware/validation';
+import { body, param, validationResult } from 'express-validator';
+import { authenticate } from '../middleware/auth';
+import { AuthenticatedRequest } from '../types';
 import { paymentGatewayService } from '../services/paymentGatewayService';
 import { requirePermission } from '../middleware/rbac';
 
@@ -15,11 +15,9 @@ const router = Router();
 router.post(
   '/create-intent',
   authenticate,
-  validate([
-    body('invoiceId').isString().notEmpty().withMessage('Invoice ID is required'),
-    body('amount').isFloat({ min: 0.01 }).withMessage('Amount must be greater than 0'),
-    body('currency').optional().isString().isLength({ min: 3, max: 3 }),
-  ]),
+  body('invoiceId').isString().notEmpty().withMessage('Invoice ID is required'),
+  body('amount').isFloat({ min: 0.01 }).withMessage('Amount must be greater than 0'),
+  body('currency').optional().isString().isLength({ min: 3, max: 3 }),
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const { invoiceId, amount, currency = 'AED' } = req.body;
@@ -50,13 +48,11 @@ router.post(
 router.post(
   '/confirm',
   authenticate,
-  validate([
-    body('transactionId').isString().notEmpty().withMessage('Transaction ID is required'),
-  ]),
+  body('transactionId').isString().notEmpty().withMessage('Transaction ID is required'),
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const { transactionId } = req.body;
-      const userId = req.user!.id;
+      const userId = req.user!.userId;
 
       const result = await paymentGatewayService.confirmPayment(transactionId, userId);
 
@@ -107,7 +103,7 @@ router.post(
 router.get(
   '/:id/receipt',
   authenticate,
-  validate([param('id').isString().notEmpty()]),
+  param('id').isString().notEmpty(),
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
@@ -132,16 +128,14 @@ router.post(
   '/:id/refund',
   authenticate,
   requirePermission('billing:refund'),
-  validate([
-    param('id').isString().notEmpty(),
-    body('amount').optional().isFloat({ min: 0.01 }),
-    body('reason').optional().isString(),
-  ]),
+  param('id').isString().notEmpty(),
+  body('amount').optional().isFloat({ min: 0.01 }),
+  body('reason').optional().isString(),
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
       const { amount, reason } = req.body;
-      const userId = req.user!.id;
+      const userId = req.user!.userId;
 
       const result = await paymentGatewayService.initiateRefund(id, amount, reason, userId);
 
@@ -163,7 +157,7 @@ router.post(
 router.get(
   '/transactions/:invoiceId',
   authenticate,
-  validate([param('invoiceId').isString().notEmpty()]),
+  param('invoiceId').isString().notEmpty(),
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const { invoiceId } = req.params;

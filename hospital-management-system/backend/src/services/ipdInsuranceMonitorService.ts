@@ -43,7 +43,7 @@ class IPDInsuranceMonitorService {
       const admissions = await prisma.admission.findMany({
         where: {
           hospitalId,
-          status: { in: ['ADMITTED', 'IN_PROGRESS'] },
+          status: 'ADMITTED',
         },
         include: {
           patient: {
@@ -55,7 +55,7 @@ class IPDInsuranceMonitorService {
             },
           },
           bed: {
-            include: { room: true },
+            include: { ward: true },
           },
         },
       });
@@ -81,7 +81,7 @@ class IPDInsuranceMonitorService {
           _sum: { balanceAmount: true },
           where: {
             admissionId: admission.id,
-            status: { in: ['PENDING', 'PARTIAL'] },
+            status: { in: ['PENDING', 'PARTIALLY_PAID'] },
           },
         });
         const outstandingBalance = Number(invoices._sum.balanceAmount) || 0;
@@ -108,7 +108,7 @@ class IPDInsuranceMonitorService {
           patientName: `${patient.firstName} ${patient.lastName}`,
           mrn: patient.mrn,
           admissionId: admission.id,
-          roomNumber: admission.bed?.room?.roomNumber || 'Unknown',
+          roomNumber: admission.bed?.ward?.name || 'Unknown',
           insuranceId: primaryInsurance.id,
           insuranceProvider: primaryInsurance.providerName,
           policyNumber: primaryInsurance.policyNumber,
@@ -165,35 +165,43 @@ class IPDInsuranceMonitorService {
    */
   private async createExpiryNotification(hospitalId: string, alert: InsuranceExpiryAlert): Promise<void> {
     try {
+      // Find a hospital admin to assign the notification to
+      const hospitalAdmin = await prisma.user.findFirst({
+        where: { hospitalId, role: 'HOSPITAL_ADMIN' },
+        select: { id: true },
+      });
+
+      if (!hospitalAdmin) {
+        logger.warn(`[IPD-INSURANCE] No hospital admin found for hospital ${hospitalId}, skipping notification`);
+        return;
+      }
+
       // Check if notification already sent today
       const existingNotification = await prisma.notification.findFirst({
         where: {
-          hospitalId,
-          type: 'INSURANCE_EXPIRY',
-          referenceId: alert.admissionId,
+          userId: hospitalAdmin.id,
+          type: 'ALERT',
           createdAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+          data: { path: ['admissionId'], equals: alert.admissionId },
         },
       });
 
       if (existingNotification) return;
 
-      // Create notification for admins and receptionists
+      // Create notification for hospital admin
       await prisma.notification.create({
         data: {
-          hospitalId,
-          type: 'INSURANCE_EXPIRY',
-          title: `⚠️ Insurance Expired: ${alert.patientName}`,
-          message: `Patient ${alert.patientName} (MRN: ${alert.mrn}) in Room ${alert.roomNumber} has insurance that expired on ${alert.expiryDate.toLocaleDateString()}. Outstanding balance: AED ${alert.outstandingBalance.toFixed(2)}. ${alert.recommendedAction}`,
-          priority: 'HIGH',
-          referenceId: alert.admissionId,
-          referenceType: 'IPD_ADMISSION',
-          targetRoles: ['HOSPITAL_ADMIN', 'RECEPTIONIST', 'ACCOUNTANT'],
-          metadata: JSON.stringify({
+          userId: hospitalAdmin.id,
+          type: 'ALERT',
+          title: `Insurance Expired: ${alert.patientName}`,
+          message: `Patient ${alert.patientName} (MRN: ${alert.mrn}) in ${alert.roomNumber} has insurance that expired on ${alert.expiryDate.toLocaleDateString()}. Outstanding balance: AED ${alert.outstandingBalance.toFixed(2)}. ${alert.recommendedAction}`,
+          data: {
+            admissionId: alert.admissionId,
             patientId: alert.patientId,
             insuranceId: alert.insuranceId,
             expiryDate: alert.expiryDate,
             outstandingBalance: alert.outstandingBalance,
-          }),
+          },
         },
       });
 
@@ -312,14 +320,14 @@ class IPDInsuranceMonitorService {
 
       // Get pending insurance claims
       const claims = await prisma.insuranceClaim.aggregate({
-        _sum: { claimedAmount: true },
+        _sum: { claimAmount: true },
         where: {
           invoice: { admissionId },
-          status: { in: ['PENDING', 'SUBMITTED'] },
+          status: { in: ['SUBMITTED', 'UNDER_REVIEW'] },
         },
       });
 
-      const insurancePending = Number(claims._sum.claimedAmount) || 0;
+      const insurancePending = Number(claims._sum.claimAmount) || 0;
 
       return {
         totalCharges,

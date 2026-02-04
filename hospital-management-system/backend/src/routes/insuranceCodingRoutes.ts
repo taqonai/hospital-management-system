@@ -12,7 +12,7 @@ import { codingAnalyticsService } from '../services/codingAnalyticsService';
 import { eclaimLinkService } from '../services/eclaimLinkService';
 import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
-import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
+import { sendSuccess, sendCreated, sendPaginated, sendError, calculatePagination } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
 import logger from '../utils/logger';
 import { DischargeCodingStatus } from '@prisma/client';
@@ -1837,7 +1837,7 @@ import { insuranceEligibilityService } from '../services/insuranceEligibilitySer
 router.post(
   '/eligibility/verify-eid',
   authenticate,
-  authorize(['RECEPTIONIST', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']),
+  authorize('RECEPTIONIST', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { emiratesId } = req.body;
     
@@ -1865,7 +1865,7 @@ router.post(
 router.post(
   '/eligibility/verify-patient',
   authenticate,
-  authorize(['RECEPTIONIST', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']),
+  authorize('RECEPTIONIST', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { patientId } = req.body;
     
@@ -1892,7 +1892,7 @@ router.post(
 router.get(
   '/eligibility/:patientId',
   authenticate,
-  authorize(['RECEPTIONIST', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'SUPER_ADMIN']),
+  authorize('RECEPTIONIST', 'NURSE', 'DOCTOR', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const eligibility = await insuranceEligibilityService.verifyEligibilityByPatientId(
       req.params.patientId,
@@ -1938,7 +1938,7 @@ router.post(
       data: {
         verificationStatus: status,
         verifiedAt: new Date(),
-        verifiedBy: req.user!.id,
+        verifiedBy: req.user!.userId,
         verificationNotes: notes || (status === 'VERIFIED' ? 'Manually verified by admin' : 'Rejected by admin'),
         verificationSource: 'MANUAL',
       },

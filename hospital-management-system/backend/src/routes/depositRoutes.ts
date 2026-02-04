@@ -1,7 +1,8 @@
-import { Router } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import { authenticate } from '../middleware/auth';
 import { requirePermission } from '../middleware/rbac';
 import { depositService } from '../services/depositService';
+import { AuthenticatedRequest } from '../types';
 
 const router = Router();
 
@@ -12,9 +13,9 @@ router.use(authenticate);
  * POST /api/v1/billing/deposits
  * Record a new deposit
  */
-router.post('/deposits', async (req, res, next) => {
+router.post('/deposits', async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { hospitalId } = req.user;
+    const { hospitalId } = req.user!;
     const { patientId, amount, currency, paymentMethod, referenceNumber, reason } = req.body;
 
     if (!patientId || !amount || !paymentMethod) {
@@ -28,7 +29,7 @@ router.post('/deposits', async (req, res, next) => {
       hospitalId,
       patientId,
       { amount, currency, paymentMethod, referenceNumber, reason },
-      req.user.id
+      req.user!.userId
     );
 
     res.status(201).json({
@@ -45,9 +46,9 @@ router.post('/deposits', async (req, res, next) => {
  * GET /api/v1/billing/deposits
  * List deposits with filtering
  */
-router.get('/deposits', async (req, res, next) => {
+router.get('/deposits', async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { hospitalId } = req.user;
+    const { hospitalId } = req.user!;
     const { patientId, status, startDate, endDate, page, limit } = req.query;
 
     const result = await depositService.getDeposits(hospitalId, {
@@ -73,9 +74,9 @@ router.get('/deposits', async (req, res, next) => {
  * GET /api/v1/billing/patients/:patientId/deposit-balance
  * Get patient deposit balance
  */
-router.get('/patients/:patientId/deposit-balance', async (req, res, next) => {
+router.get('/patients/:patientId/deposit-balance', async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { hospitalId } = req.user;
+    const { hospitalId } = req.user!;
     const { patientId } = req.params;
 
     const balance = await depositService.getDepositBalance(hospitalId, patientId);
@@ -93,7 +94,7 @@ router.get('/patients/:patientId/deposit-balance', async (req, res, next) => {
  * GET /api/v1/billing/deposits/:id/ledger
  * Get deposit ledger entries
  */
-router.get('/deposits/:id/ledger', async (req, res, next) => {
+router.get('/deposits/:id/ledger', async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
 
@@ -112,9 +113,9 @@ router.get('/deposits/:id/ledger', async (req, res, next) => {
  * POST /api/v1/billing/deposits/apply
  * Apply deposit to an invoice
  */
-router.post('/deposits/apply', async (req, res, next) => {
+router.post('/deposits/apply', async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { hospitalId } = req.user;
+    const { hospitalId } = req.user!;
     const { patientId, invoiceId, amount, auto } = req.body;
 
     if (!patientId || !invoiceId) {
@@ -132,7 +133,7 @@ router.post('/deposits/apply', async (req, res, next) => {
         hospitalId,
         patientId,
         invoiceId,
-        req.user.id
+        req.user!.userId
       );
     } else {
       // Manual amount specified
@@ -148,7 +149,7 @@ router.post('/deposits/apply', async (req, res, next) => {
         patientId,
         invoiceId,
         amount,
-        req.user.id
+        req.user!.userId
       );
     }
 
@@ -166,9 +167,9 @@ router.post('/deposits/apply', async (req, res, next) => {
  * POST /api/v1/billing/credit-notes
  * Create a credit note
  */
-router.post('/credit-notes', requirePermission('billing:write'), async (req, res, next) => {
+router.post('/credit-notes', requirePermission('billing:write'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { hospitalId } = req.user;
+    const { hospitalId } = req.user!;
     const { invoiceId, patientId, amount, reason } = req.body;
 
     if (!patientId || !amount || !reason) {
@@ -181,7 +182,7 @@ router.post('/credit-notes', requirePermission('billing:write'), async (req, res
     const creditNote = await depositService.createCreditNote(
       hospitalId,
       { invoiceId, patientId, amount, reason },
-      req.user.id
+      req.user!.userId
     );
 
     res.status(201).json({
@@ -198,7 +199,7 @@ router.post('/credit-notes', requirePermission('billing:write'), async (req, res
  * POST /api/v1/billing/credit-notes/:id/apply
  * Apply credit note to an invoice
  */
-router.post('/credit-notes/:id/apply', requirePermission('billing:write'), async (req, res, next) => {
+router.post('/credit-notes/:id/apply', requirePermission('billing:write'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
     const { invoiceId } = req.body;
@@ -210,7 +211,7 @@ router.post('/credit-notes/:id/apply', requirePermission('billing:write'), async
       });
     }
 
-    const result = await depositService.applyCreditNote(id, invoiceId, req.user.id);
+    const result = await depositService.applyCreditNote(id, invoiceId, req.user!.userId);
 
     res.json({
       success: true,
@@ -226,9 +227,9 @@ router.post('/credit-notes/:id/apply', requirePermission('billing:write'), async
  * GET /api/v1/billing/credit-notes
  * List credit notes
  */
-router.get('/credit-notes', async (req, res, next) => {
+router.get('/credit-notes', async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { hospitalId } = req.user;
+    const { hospitalId } = req.user!;
     const { patientId, status, page, limit } = req.query;
 
     const result = await depositService.getCreditNotes(hospitalId, {
@@ -252,9 +253,9 @@ router.get('/credit-notes', async (req, res, next) => {
  * POST /api/v1/billing/refunds
  * Request a refund
  */
-router.post('/refunds', async (req, res, next) => {
+router.post('/refunds', async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { hospitalId } = req.user;
+    const { hospitalId } = req.user!;
     const {
       patientId,
       depositId,
@@ -287,7 +288,7 @@ router.post('/refunds', async (req, res, next) => {
         bankDetails,
         notes,
       },
-      req.user.id
+      req.user!.userId
     );
 
     res.status(201).json({
@@ -304,9 +305,9 @@ router.post('/refunds', async (req, res, next) => {
  * GET /api/v1/billing/refunds
  * List refunds
  */
-router.get('/refunds', async (req, res, next) => {
+router.get('/refunds', async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { hospitalId } = req.user;
+    const { hospitalId } = req.user!;
     const { patientId, status, page, limit } = req.query;
 
     const result = await depositService.getRefunds(hospitalId, {
@@ -330,11 +331,11 @@ router.get('/refunds', async (req, res, next) => {
  * PATCH /api/v1/billing/refunds/:id/approve
  * Approve a refund (requires billing:approve permission)
  */
-router.patch('/refunds/:id/approve', requirePermission('billing:approve'), async (req, res, next) => {
+router.patch('/refunds/:id/approve', requirePermission('billing:approve'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
 
-    const refund = await depositService.approveRefund(id, req.user.id);
+    const refund = await depositService.approveRefund(id, req.user!.userId);
 
     res.json({
       success: true,
@@ -350,11 +351,11 @@ router.patch('/refunds/:id/approve', requirePermission('billing:approve'), async
  * PATCH /api/v1/billing/refunds/:id/process
  * Process an approved refund
  */
-router.patch('/refunds/:id/process', requirePermission('billing:approve'), async (req, res, next) => {
+router.patch('/refunds/:id/process', requirePermission('billing:approve'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
 
-    const refund = await depositService.processRefund(id, req.user.id);
+    const refund = await depositService.processRefund(id, req.user!.userId);
 
     res.json({
       success: true,
@@ -370,7 +371,7 @@ router.patch('/refunds/:id/process', requirePermission('billing:approve'), async
  * PATCH /api/v1/billing/refunds/:id/reject
  * Reject a refund request
  */
-router.patch('/refunds/:id/reject', requirePermission('billing:approve'), async (req, res, next) => {
+router.patch('/refunds/:id/reject', requirePermission('billing:approve'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
@@ -382,7 +383,7 @@ router.patch('/refunds/:id/reject', requirePermission('billing:approve'), async 
       });
     }
 
-    const refund = await depositService.rejectRefund(id, reason, req.user.id);
+    const refund = await depositService.rejectRefund(id, reason, req.user!.userId);
 
     res.json({
       success: true,

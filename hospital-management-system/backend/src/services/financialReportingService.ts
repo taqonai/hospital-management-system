@@ -1144,7 +1144,8 @@ export class FinancialReportingService {
         submittedAt: { gte: startDate, lte: endDate },
       },
       include: {
-        payer: true,
+        insurancePayer: true,
+        invoice: true,
       },
     });
 
@@ -1165,7 +1166,7 @@ export class FinancialReportingService {
       .filter((c) => c.status === 'REJECTED' && c.denialReasonCode)
       .forEach((claim) => {
         const code = claim.denialReasonCode || 'UNKNOWN';
-        const reason = claim.denialReason || 'Unknown reason';
+        const reason = claim.denialReasonCode || 'Unknown reason';
         const key = `${code}|${reason}`;
         const existing = denialReasonMap.get(key) || { code, count: 0, amount: 0 };
         denialReasonMap.set(key, {
@@ -1196,8 +1197,8 @@ export class FinancialReportingService {
     >();
 
     claims.forEach((claim) => {
-      const payerId = claim.payerId;
-      const payerName = claim.payer?.name || 'Unknown';
+      const payerId = claim.insurancePayerId;
+      const payerName = claim.insurancePayer?.name || 'Unknown';
       const existing = payerMap.get(payerId) || {
         payerName,
         total: 0,
@@ -1290,7 +1291,7 @@ export class FinancialReportingService {
         },
       },
       include: {
-        payer: true,
+        insurancePayer: true,
         invoice: {
           include: {
             payments: true,
@@ -1318,7 +1319,7 @@ export class FinancialReportingService {
     claims.forEach((claim) => {
       const claimAmount = Number(claim.claimAmount);
       const approvedAmount = Number(claim.approvedAmount || 0);
-      const paidAmount = Number(claim.paidAmount || 0);
+      const paidAmount = Number(claim.approvedAmount || 0);
 
       totalBilled += claimAmount;
       totalCollected += paidAmount;
@@ -1334,8 +1335,8 @@ export class FinancialReportingService {
         collectedCount++;
 
         // Update payer stats
-        const payerId = claim.payerId;
-        const payerName = claim.payer?.name || 'Unknown';
+        const payerId = claim.insurancePayerId;
+        const payerName = claim.insurancePayer?.name || 'Unknown';
         const existing = payerMap.get(payerId) || {
           payerName,
           billed: 0,
@@ -1353,8 +1354,8 @@ export class FinancialReportingService {
         });
       } else {
         // Update payer totals even if not collected
-        const payerId = claim.payerId;
-        const payerName = claim.payer?.name || 'Unknown';
+        const payerId = claim.insurancePayerId;
+        const payerName = claim.insurancePayer?.name || 'Unknown';
         const existing = payerMap.get(payerId) || {
           payerName,
           billed: 0,
@@ -1434,7 +1435,8 @@ export class FinancialReportingService {
         processedAt: { not: null },
       },
       include: {
-        payer: true,
+        insurancePayer: true,
+        invoice: true,
       },
     });
 
@@ -1453,8 +1455,8 @@ export class FinancialReportingService {
       turnaroundTimes.push(days);
 
       // By payer
-      const payerId = claim.payerId;
-      const payerName = claim.payer?.name || 'Unknown';
+      const payerId = claim.insurancePayerId;
+      const payerName = claim.insurancePayer?.name || 'Unknown';
       const existing = payerMap.get(payerId) || { payerName, times: [] };
       existing.times.push(days);
       payerMap.set(payerId, existing);

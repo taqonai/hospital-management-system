@@ -457,7 +457,7 @@ router.post(
   '/reset-password',
   asyncHandler(async (req, res: Response) => {
     const { token, newPassword } = req.body;
-    const result = await patientAuthService.resetPassword(token, newPassword);
+    const result = await patientAuthService.resetPasswordWithToken(token, newPassword);
     sendSuccess(res, result, result.message);
   })
 );
