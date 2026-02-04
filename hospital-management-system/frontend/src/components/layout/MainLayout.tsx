@@ -206,7 +206,7 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
       { name: 'Quality', href: '/quality', icon: ClipboardDocumentCheckIcon, color: 'from-emerald-500 to-teal-600',
         permission: 'quality:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN'] },
-      { name: 'Assets', href: '/assets', icon: WrenchScrewdriverIcon, color: 'from-amber-500 to-orange-600',
+      { name: 'Assets', href: '/asset-management', icon: WrenchScrewdriverIcon, color: 'from-amber-500 to-orange-600',
         permission: 'assets:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'MAINTENANCE_STAFF'] },
       { name: 'Dietary', href: '/dietary', icon: CakeIcon, color: 'from-lime-500 to-green-600',

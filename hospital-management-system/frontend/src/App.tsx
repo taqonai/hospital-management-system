@@ -273,7 +273,7 @@ function App() {
         <Route path="/reports" element={<Reports />} />
         <Route path="/telemedicine" element={<Telemedicine />} />
         <Route path="/queue" element={<Queue />} />
-        <Route path="/assets" element={<Assets />} />
+        <Route path="/asset-management" element={<Assets />} />
         <Route
           path="/rbac"
           element={
