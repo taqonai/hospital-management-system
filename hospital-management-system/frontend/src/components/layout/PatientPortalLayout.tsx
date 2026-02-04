@@ -18,7 +18,6 @@ import {
   ShieldCheckIcon,
   DocumentTextIcon,
   ChevronDownIcon,
-  ChartBarIcon,
   ClipboardDocumentListIcon,
   ClockIcon,
   DevicePhoneMobileIcon,
@@ -178,6 +177,16 @@ const AICheckerIcon = ({ className }: { className?: string }) => (
   />
 );
 
+// Health Insights icon (from PNG)
+const HealthInsightsIcon = ({ className }: { className?: string }) => (
+  <img
+    src="/images/aihealth.png"
+    alt=""
+    className={className}
+    style={{ objectFit: 'contain' }}
+  />
+);
+
 // AI Sparkles icon
 const SparklesIcon = ({ className }: { className?: string }) => (
   <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -190,7 +199,7 @@ const navigationItems: NavItem[] = [
   { name: 'Dashboard', href: '/patient-portal/dashboard', icon: HomeIcon },
   { name: 'My Appointments', href: '/patient-portal/appointments', icon: CalendarDaysIcon },
   { name: 'AI Health Assistant', href: '/patient-portal/health-assistant', icon: AICheckerIcon },
-  { name: 'Health Insights', href: '/patient-portal/health-insights', icon: ChartBarIcon },
+  { name: 'Health Insights', href: '/patient-portal/health-insights', icon: HealthInsightsIcon },
   { name: 'Symptom Checker', href: '/patient-portal/symptom-checker', icon: SparklesIcon },
   { name: 'Medical History', href: '/patient-portal/medical-history', icon: ClipboardDocumentListIcon },
   { name: 'Health Timeline', href: '/patient-portal/history', icon: ClockIcon },
