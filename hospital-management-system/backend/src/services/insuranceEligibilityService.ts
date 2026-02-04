@@ -737,6 +737,9 @@ class InsuranceEligibilityService {
       copay: dhaResponse.copayAmount,
       annualCopayMax: dhaResponse.annualCopay?.max,
       annualDeductible: dhaResponse.deductible?.annual,
+      verificationSource: 'DHA_ECLAIM',
+      verificationStatus: 'VERIFIED',
+      verifiedAt: new Date(),
     };
 
     if (existingInsurance) {
