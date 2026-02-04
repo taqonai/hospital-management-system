@@ -15,7 +15,7 @@ import { sendSuccess, sendError, sendCreated } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
 import { dhaEClaimService } from '../services/dhaEClaimService';
 import prisma from '../config/database';
-import { logger } from '../config/logger';
+import logger from '../utils/logger';
 
 const router = Router();
 
