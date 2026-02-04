@@ -132,31 +132,24 @@ interface HospitalSettings {
 }
 
 async function getHospitalSettings(hospitalId: string): Promise<HospitalSettings> {
-  const settings = await prisma.hospitalSetting.findMany({
-    where: {
-      hospitalId,
-      category: { in: ['GENERAL', 'BILLING', 'VAT'] },
-    },
+  // Get hospital settings from the HospitalSettings model
+  const hospitalSettings = await prisma.hospitalSettings.findUnique({
+    where: { hospitalId },
+    include: { hospital: true },
   });
 
   const result: HospitalSettings = {};
   
-  for (const setting of settings) {
-    try {
-      const value = typeof setting.value === 'string' 
-        ? JSON.parse(setting.value) 
-        : setting.value;
-      
-      if (setting.key === 'hospital_name_ar') result.nameAr = value;
-      if (setting.key === 'hospital_address_ar') result.addressAr = value;
-      if (setting.key === 'vat_trn') result.vatTrn = value;
-      if (setting.key === 'logo_url') result.logoUrl = value;
-    } catch {
-      // Use value as-is if not JSON
-      if (setting.key === 'hospital_name_ar') result.nameAr = String(setting.value);
-      if (setting.key === 'hospital_address_ar') result.addressAr = String(setting.value);
-      if (setting.key === 'vat_trn') result.vatTrn = String(setting.value);
-    }
+  if (hospitalSettings) {
+    // Extract settings from JSON fields if available
+    const paymentSettings = hospitalSettings.paymentSettings as any || {};
+    const notificationSettings = hospitalSettings.notificationSettings as any || {};
+    
+    // Try to get Arabic name and address from hospital or settings
+    result.nameAr = paymentSettings.nameAr || hospitalSettings.hospital?.name;
+    result.addressAr = paymentSettings.addressAr || hospitalSettings.hospital?.address;
+    result.vatTrn = paymentSettings.vatTrn || paymentSettings.trn;
+    result.logoUrl = notificationSettings.logoUrl || hospitalSettings.hospital?.logo;
   }
 
   return result;

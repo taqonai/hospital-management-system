@@ -179,4 +179,40 @@ router.get(
   })
 );
 
+/**
+ * GET /api/v1/insurance-advanced/underpayment/analysis
+ * Quick underpayment analysis summary
+ */
+router.get(
+  '/underpayment/analysis',
+  authenticate,
+  authorizeWithPermission('reports:financial:view', ['ACCOUNTANT', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    // Default to last 30 days
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 30);
+
+    const report = await insuranceUnderpaymentService.generateUnderpaymentReport(
+      req.user!.hospitalId,
+      start,
+      end
+    );
+
+    // Return a summary view
+    sendSuccess(res, {
+      summary: {
+        totalClaimsAnalyzed: report.totalClaims,
+        totalClaimedAmount: report.totalClaimedAmount,
+        totalApprovedAmount: report.totalApprovedAmount,
+        totalShortfall: report.totalShortfall,
+        shortfallPercentage: report.shortfallPercentage.toFixed(2) + '%',
+        patientBillsGenerated: report.patientBillsGenerated,
+      },
+      topDenialReasons: report.byDenialReason.slice(0, 5),
+      topPayerShortfalls: report.byPayer.sort((a, b) => b.shortfall - a.shortfall).slice(0, 5),
+    });
+  })
+);
+
 export default router;
