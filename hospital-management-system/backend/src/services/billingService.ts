@@ -5,6 +5,7 @@ import { notificationService } from './notificationService';
 import { chargeManagementService } from './chargeManagementService';
 import { accountingService } from './accountingService';
 import { preAuthService } from './preAuthService';
+import { deductibleService } from './deductibleService';
 
 export class BillingService {
   private generateInvoiceNumber(): string {

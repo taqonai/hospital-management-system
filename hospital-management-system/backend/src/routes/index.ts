@@ -50,6 +50,7 @@ import notificationAdminRoutes from './notificationAdminRoutes';
 import wellnessRoutes from './wellnessRoutes';
 import aiSettingsRoutes from './aiSettingsRoutes';
 import insuranceCodingRoutes from './insuranceCodingRoutes';
+import dhaEClaimRoutes from './dhaEClaimRoutes';
 import preAuthRoutes from './preAuthRoutes';
 // A'mad Precision Health Platform routes
 import healthPlatformRoutes from './healthPlatformRoutes';
@@ -144,6 +145,7 @@ router.use('/ai-settings', aiSettingsRoutes);
 
 // Insurance Coding (ICD-10 / CPT) routes
 router.use('/insurance-coding', insuranceCodingRoutes);
+router.use('/dha-eclaim', dhaEClaimRoutes);
 
 // Pre-Authorization routes
 router.use('/pre-auth', preAuthRoutes);

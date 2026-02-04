@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
-import { MagnifyingGlassIcon, CheckIcon, PlusIcon } from '@heroicons/react/24/outline';
-import { pharmacyApi } from '../../services/api';
+import { MagnifyingGlassIcon, CheckIcon, PlusIcon, CurrencyDollarIcon, ShieldCheckIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { pharmacyApi, insuranceCodingApi } from '../../services/api';
 import clsx from 'clsx';
 
 export interface DrugSelection {
@@ -10,6 +10,7 @@ export interface DrugSelection {
   strength?: string;
   dosageForm?: string;
   category?: string;
+  price?: number;
 }
 
 interface Drug {
@@ -19,7 +20,15 @@ interface Drug {
   strength: string;
   dosageForm: string;
   category: string;
+  price?: number;
   inventory?: Array<{ quantity: number }>;
+}
+
+interface InsuranceInfo {
+  hasInsurance: boolean;
+  coveragePercentage: number;
+  insuranceProvider?: string;
+  formularyStatus?: 'COVERED' | 'NOT_COVERED' | 'PRIOR_AUTH_REQUIRED' | 'UNKNOWN';
 }
 
 export interface DrugPickerRef {
@@ -33,6 +42,8 @@ interface DrugPickerProps {
   className?: string;
   disabled?: boolean;
   autoSearchOnValueChange?: boolean; // Auto-search when value changes externally (e.g., from voice input)
+  patientId?: string; // For cost estimate and formulary check
+  showCostEstimate?: boolean; // Enable cost display
 }
 
 const DrugPicker = forwardRef<DrugPickerRef, DrugPickerProps>(function DrugPicker({
@@ -42,6 +53,8 @@ const DrugPicker = forwardRef<DrugPickerRef, DrugPickerProps>(function DrugPicke
   className,
   disabled = false,
   autoSearchOnValueChange = false,
+  patientId,
+  showCostEstimate = true,
 }, ref) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState(value);
@@ -52,6 +65,35 @@ const DrugPicker = forwardRef<DrugPickerRef, DrugPickerProps>(function DrugPicke
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const prevValueRef = useRef(value);
+  
+  // Insurance info for cost estimate
+  const [insuranceInfo, setInsuranceInfo] = useState<InsuranceInfo>({
+    hasInsurance: false,
+    coveragePercentage: 0,
+  });
+
+  // Fetch patient insurance info
+  useEffect(() => {
+    if (!patientId || !showCostEstimate) return;
+    
+    const fetchInsurance = async () => {
+      try {
+        const response = await insuranceCodingApi.verifyEligibility({ patientId });
+        const data = response.data.data;
+        if (data.eligible && data.insuranceProvider) {
+          setInsuranceInfo({
+            hasInsurance: true,
+            coveragePercentage: data.coveragePercentage || 80,
+            insuranceProvider: data.insuranceProvider,
+            formularyStatus: 'UNKNOWN', // Would need formulary API for accurate status
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch insurance:', error);
+      }
+    };
+    fetchInsurance();
+  }, [patientId, showCostEstimate]);
 
   // Search drugs function - defined early for use in effects
   const searchDrugs = useCallback(async (term: string) => {
@@ -137,6 +179,7 @@ const DrugPicker = forwardRef<DrugPickerRef, DrugPickerProps>(function DrugPicke
       strength: drug.strength,
       dosageForm: drug.dosageForm,
       category: drug.category,
+      price: Number(drug.price) || undefined,
     });
   };
 
@@ -198,6 +241,12 @@ const DrugPicker = forwardRef<DrugPickerRef, DrugPickerProps>(function DrugPicke
             <>
               {drugs.map((drug) => {
                 const stock = getStockStatus(drug);
+                const price = Number(drug.price) || 0;
+                const insuranceCover = insuranceInfo.hasInsurance 
+                  ? (price * insuranceInfo.coveragePercentage / 100) 
+                  : 0;
+                const patientPays = price - insuranceCover;
+                
                 return (
                   <button
                     key={drug.id}
@@ -207,9 +256,11 @@ const DrugPicker = forwardRef<DrugPickerRef, DrugPickerProps>(function DrugPicke
                   >
                     <div className="flex items-center justify-between">
                       <div className="font-medium text-gray-900">{drug.name}</div>
-                      <span className={clsx('text-xs px-2 py-0.5 rounded-full', stock.bg, stock.color)}>
-                        {stock.label}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={clsx('text-xs px-2 py-0.5 rounded-full', stock.bg, stock.color)}>
+                          {stock.label}
+                        </span>
+                      </div>
                     </div>
                     <div className="text-sm text-gray-500 mt-0.5">
                       {drug.genericName}
@@ -222,6 +273,23 @@ const DrugPicker = forwardRef<DrugPickerRef, DrugPickerProps>(function DrugPicke
                         </>
                       )}
                     </div>
+                    {/* Cost Estimate */}
+                    {showCostEstimate && price > 0 && (
+                      <div className="mt-2 flex items-center gap-3 text-xs">
+                        <span className="flex items-center gap-1 text-gray-600">
+                          <CurrencyDollarIcon className="h-3.5 w-3.5" />
+                          AED {price.toFixed(2)}
+                        </span>
+                        {insuranceInfo.hasInsurance ? (
+                          <span className="flex items-center gap-1 text-green-600">
+                            <ShieldCheckIcon className="h-3.5 w-3.5" />
+                            Patient pays: AED {patientPays.toFixed(2)}
+                          </span>
+                        ) : (
+                          <span className="text-orange-600">Self-pay</span>
+                        )}
+                      </div>
+                    )}
                   </button>
                 );
               })}
