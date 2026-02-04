@@ -2547,6 +2547,12 @@ export class BillingService {
         preAuthMessage: null,
         // GAP 5: Data source
         dataSource: 'CACHED_DB',
+        // GAP 2: COB not applicable for self-pay
+        hasSecondaryInsurance: false,
+        cobApplied: false,
+        primaryBreakdown: null,
+        secondaryBreakdown: null,
+        finalPatientAmount: consultationFee,
       } as any;
     }
 
@@ -2854,6 +2860,128 @@ export class BillingService {
       console.warn('[COPAY] Failed to determine data source, defaulting to CACHED_DB:', dsErr);
     }
 
+    // === GAP 2: COB (Coordination of Benefits) — Secondary Insurance ===
+    // Added AFTER primary calculation. If COB fails, primary-only result is returned.
+    let hasSecondaryInsurance = false;
+    let cobApplied = false;
+    let primaryBreakdown: any = null;
+    let secondaryBreakdown: any = null;
+    let finalPatientAmount = patientAmount;
+
+    try {
+      // Query secondary insurance (isPrimary: false, isActive: true)
+      const secondaryInsurance = await prisma.patientInsurance.findFirst({
+        where: {
+          patientId,
+          isActive: true,
+          isPrimary: false,
+          OR: [
+            { priority: 2 },
+            { coordinationOfBenefits: 'COB_SECONDARY' },
+          ],
+        },
+      });
+
+      if (secondaryInsurance && patientAmount > 0) {
+        hasSecondaryInsurance = true;
+
+        // Save primary breakdown before COB adjustment
+        primaryBreakdown = {
+          insuranceProvider: patientInsurance.providerName,
+          policyNumber: patientInsurance.policyNumber,
+          coveragePercentage,
+          copayPercentage,
+          insuranceAmount,
+          patientResponsibility: patientAmount,
+        };
+
+        // Determine secondary coverage percentage using payer rules
+        let secondaryCoverage = 80; // Default 80% coverage
+        let secondaryCopay = 20;
+
+        try {
+          const secondaryPayer = await prisma.insurancePayer.findFirst({
+            where: {
+              hospitalId,
+              OR: [
+                { name: { contains: secondaryInsurance.providerName, mode: 'insensitive' } },
+                { code: { contains: secondaryInsurance.providerName, mode: 'insensitive' } },
+              ],
+              isActive: true,
+            },
+          });
+
+          if (secondaryPayer) {
+            const consultationICD = await prisma.iCD10Code.findFirst({
+              where: {
+                hospitalId,
+                code: { startsWith: 'Z00' },
+                isActive: true,
+              },
+            });
+
+            if (consultationICD) {
+              const icdPayerRule = await prisma.iCD10PayerRule.findFirst({
+                where: {
+                  payerId: secondaryPayer.id,
+                  icd10CodeId: consultationICD.id,
+                  isActive: true,
+                  isCovered: true,
+                },
+              });
+
+              if (icdPayerRule) {
+                if (icdPayerRule.copayPercentage) {
+                  secondaryCopay = Number(icdPayerRule.copayPercentage);
+                  secondaryCoverage = 100 - secondaryCopay;
+                }
+              }
+            }
+          }
+        } catch (payerErr) {
+          console.warn('[COB] Secondary payer rule lookup failed, using default 80/20:', payerErr);
+        }
+
+        // Apply secondary network penalty if out-of-network
+        const secondaryNetworkStatus = secondaryInsurance.networkTier || 'IN_NETWORK';
+        if (secondaryNetworkStatus === 'OUT_OF_NETWORK') {
+          secondaryCopay = Math.min(40, secondaryCopay * 2);
+          secondaryCoverage = 100 - secondaryCopay;
+        }
+
+        // COB calculation: secondary covers its portion of the remaining patient amount
+        // "Remaining" = what patient owes after primary
+        const remainingAfterPrimary = patientAmount;
+        const secondaryInsuranceAmount = Math.round(((remainingAfterPrimary * secondaryCoverage) / 100) * 100) / 100;
+        finalPatientAmount = Math.round((remainingAfterPrimary - secondaryInsuranceAmount) * 100) / 100;
+
+        // Ensure patient amount doesn't go negative
+        if (finalPatientAmount < 0) finalPatientAmount = 0;
+
+        secondaryBreakdown = {
+          insuranceProvider: secondaryInsurance.providerName,
+          policyNumber: secondaryInsurance.policyNumber,
+          coveragePercentage: secondaryCoverage,
+          copayPercentage: secondaryCopay,
+          networkStatus: secondaryNetworkStatus,
+          insuranceAmount: secondaryInsuranceAmount,
+          appliedToRemaining: remainingAfterPrimary,
+        };
+
+        // Apply COB — update final amounts
+        cobApplied = true;
+        patientAmount = finalPatientAmount;
+      }
+    } catch (cobError) {
+      console.warn('[COB] Secondary insurance lookup failed, returning primary-only result:', cobError);
+      // Reset COB fields — fall back to primary-only
+      hasSecondaryInsurance = false;
+      cobApplied = false;
+      primaryBreakdown = null;
+      secondaryBreakdown = null;
+      finalPatientAmount = patientAmount;
+    }
+
     return {
       hasCopay: patientAmount > 0,
       consultationFee,
@@ -2888,6 +3016,12 @@ export class BillingService {
       preAuthMessage,
       // GAP 5: Data source indicator
       dataSource,
+      // GAP 2: COB (Coordination of Benefits)
+      hasSecondaryInsurance,
+      cobApplied,
+      primaryBreakdown,
+      secondaryBreakdown,
+      finalPatientAmount,
     } as any;
   }
 
@@ -3442,6 +3576,14 @@ export class BillingService {
     // Handle direct payment methods (Cash/Card)
     try {
       // Create a copay payment record
+      // GAP 2: Include COB fields if applicable
+      const cobFields: any = {};
+      if ((copayInfo as any).cobApplied && (copayInfo as any).secondaryBreakdown) {
+        cobFields.secondaryInsuranceProvider = (copayInfo as any).secondaryBreakdown.insuranceProvider || null;
+        cobFields.secondaryPolicyNumber = (copayInfo as any).secondaryBreakdown.policyNumber || null;
+        cobFields.cobApplied = true;
+      }
+
       const payment = await prisma.copayPayment.create({
         data: {
           patientId: params.patientId,
@@ -3452,6 +3594,7 @@ export class BillingService {
           policyNumber: copayInfo.policyNumber || '',
           notes: params.notes,
           collectedBy: params.collectedBy,
+          ...cobFields,
         },
       });
 

@@ -50,6 +50,27 @@ interface CopayInfo {
   preAuthMessage?: string | null;
   // GAP 5: Data source indicator
   dataSource?: 'DHA_LIVE' | 'DHA_SANDBOX' | 'MOCK_DATA' | 'CACHED_DB' | 'NOT_CONFIGURED';
+  // GAP 2: COB (Coordination of Benefits)
+  hasSecondaryInsurance?: boolean;
+  cobApplied?: boolean;
+  primaryBreakdown?: {
+    insuranceProvider: string;
+    policyNumber: string;
+    coveragePercentage: number;
+    copayPercentage: number;
+    insuranceAmount: number;
+    patientResponsibility: number;
+  } | null;
+  secondaryBreakdown?: {
+    insuranceProvider: string;
+    policyNumber: string;
+    coveragePercentage: number;
+    copayPercentage: number;
+    networkStatus: string;
+    insuranceAmount: number;
+    appliedToRemaining: number;
+  } | null;
+  finalPatientAmount?: number;
 }
 
 interface DepositBalance {
@@ -494,7 +515,9 @@ export default function CopayCollectionModal({
 
                 {/* Fee Breakdown */}
                 <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-4 border border-blue-100">
-                  <h3 className="text-sm font-medium text-gray-700 mb-3">Fee Breakdown</h3>
+                  <h3 className="text-sm font-medium text-gray-700 mb-3">
+                    {copayInfo.cobApplied ? 'Primary Insurance Breakdown' : 'Fee Breakdown'}
+                  </h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-gray-600">Consultation Fee:</span>
@@ -503,19 +526,64 @@ export default function CopayCollectionModal({
                       </span>
                     </div>
                     <div className="flex justify-between text-green-700">
-                      <span>Insurance Covers ({copayInfo.coveragePercentage}%):</span>
+                      <span>
+                        {copayInfo.cobApplied ? `Primary (${copayInfo.coveragePercentage}%):` : `Insurance Covers (${copayInfo.coveragePercentage}%):`}
+                      </span>
                       <span className="font-semibold">
                         -AED {copayInfo.insuranceAmount.toFixed(2)}
                       </span>
                     </div>
                     <div className="flex justify-between text-blue-700 border-t pt-2">
-                      <span>Patient Copay ({copayInfo.copayPercentage}%):</span>
+                      <span>
+                        {copayInfo.cobApplied ? `Remaining after Primary (${copayInfo.copayPercentage}%):` : `Patient Copay (${copayInfo.copayPercentage}%):`}
+                      </span>
                       <span className="font-bold">
-                        AED {copayInfo.patientAmount.toFixed(2)}
+                        AED {copayInfo.cobApplied && copayInfo.primaryBreakdown
+                          ? copayInfo.primaryBreakdown.patientResponsibility.toFixed(2)
+                          : copayInfo.patientAmount.toFixed(2)
+                        }
                       </span>
                     </div>
                   </div>
                 </div>
+
+                {/* GAP 2: COB — Secondary Insurance Breakdown */}
+                {copayInfo.cobApplied && copayInfo.secondaryBreakdown && (
+                  <div className="bg-gradient-to-br from-indigo-50 to-violet-50 rounded-xl p-4 border border-indigo-200">
+                    <h3 className="text-sm font-medium text-gray-700 mb-2">Secondary Insurance (COB)</h3>
+                    <div className="space-y-1 mb-3">
+                      <p className="text-sm font-semibold text-gray-900">
+                        {copayInfo.secondaryBreakdown.insuranceProvider}
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        Policy #: {copayInfo.secondaryBreakdown.policyNumber || 'N/A'}
+                        {' | '}
+                        {copayInfo.secondaryBreakdown.networkStatus === 'IN_NETWORK'
+                          ? <span className="text-green-600 font-medium">In-Network</span>
+                          : <span className="text-orange-600 font-medium">Out-of-Network</span>
+                        }
+                      </p>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between text-gray-600">
+                        <span>Applied to remaining:</span>
+                        <span className="font-medium">
+                          AED {copayInfo.secondaryBreakdown.appliedToRemaining.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-indigo-700">
+                        <span>Secondary Covers ({copayInfo.secondaryBreakdown.coveragePercentage}%):</span>
+                        <span className="font-semibold">
+                          -AED {copayInfo.secondaryBreakdown.insuranceAmount.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-blue-800 border-t pt-2 font-bold">
+                        <span>Final Patient Amount:</span>
+                        <span>AED {copayInfo.patientAmount.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Deductible & Annual Copay Tracking */}
                 {(copayInfo.deductible.total > 0 || copayInfo.annualCopay.total > 0) && (
