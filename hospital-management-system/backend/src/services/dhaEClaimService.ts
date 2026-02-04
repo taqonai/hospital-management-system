@@ -17,7 +17,7 @@
 import axios from 'axios';
 import { XMLBuilder, XMLParser } from 'fast-xml-parser';
 import prisma from '../config/database';
-import { logger } from '../config/logger';
+import logger from '../utils/logger';
 
 // Configuration
 const DHA_CONFIG = {
