@@ -10,7 +10,8 @@
 
 import { Router, Response } from 'express';
 import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
-import { asyncHandler, sendSuccess, sendError, sendCreated } from '../utils/apiResponse';
+import { asyncHandler } from '../middleware/errorHandler';
+import { sendSuccess, sendError, sendCreated } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
 import { dhaEClaimService } from '../services/dhaEClaimService';
 import prisma from '../config/database';
