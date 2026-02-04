@@ -350,18 +350,21 @@ function NewImagingOrderModal({ onClose, onSuccess }: { onClose: () => void; onS
                       <ArrowPathIcon className="h-5 w-5 animate-spin text-gray-400" />
                     </div>
                   )}
-                  {patients.length > 0 && (
+                  {patients.length > 0 && !selectedPatient && (
                     <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
                       {patients.map((patient) => (
                         <button
                           key={patient.id}
                           type="button"
-                          onClick={() => {
+                          onMouseDown={(e) => {
+                            // Use onMouseDown to ensure selection happens before blur clears dropdown
+                            e.preventDefault();
                             setSelectedPatient(patient);
                             setSearchQuery('');
-                            setPatients([]);
+                            // Clear patients after a short delay to allow state to update
+                            setTimeout(() => setPatients([]), 50);
                           }}
-                          className="w-full text-left px-4 py-2 hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl"
+                          className="w-full text-left px-4 py-2 hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl transition-colors"
                         >
                           <span className="font-medium">{patient.firstName} {patient.lastName}</span>
                           <span className="ml-2 text-sm text-gray-500">MRN: {patient.mrn}</span>

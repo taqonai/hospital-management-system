@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRightIcon,
@@ -7,6 +8,9 @@ import { PrescriptionIcon, MedicalShieldIcon, NotificationBellIcon, IVDripIcon }
 import { usePharmacyDashboard } from '../../../../hooks/usePharmacyDashboard';
 import KPICard from '../shared/KPICard';
 import OccupancyGauge from '../shared/OccupancyGauge';
+import PharmacyCopayModal from '../../../billing/PharmacyCopayModal';
+import { pharmacyApi } from '../../../../services/api';
+import toast from 'react-hot-toast';
 
 export default function PharmacyDashboard() {
   const {
@@ -15,7 +19,34 @@ export default function PharmacyDashboard() {
     lowStock,
     expiring,
     isLoading,
+    refetchAll,
   } = usePharmacyDashboard();
+  
+  // Copay modal state for dispensing
+  const [showCopayModal, setShowCopayModal] = useState(false);
+  const [selectedPrescription, setSelectedPrescription] = useState<any>(null);
+
+  // Handle dispense click - show copay modal first
+  const handleDispenseClick = (prescription: any) => {
+    setSelectedPrescription(prescription);
+    setShowCopayModal(true);
+  };
+
+  // Actually dispense after copay collected/waived
+  const handleDispenseAfterCopay = async (action: 'collected' | 'waived') => {
+    if (!selectedPrescription) return;
+    
+    try {
+      await pharmacyApi.dispensePrescription(selectedPrescription.id);
+      toast.success(`Prescription dispensed successfully (copay ${action})`);
+      // Refresh the dashboard data
+      if (refetchAll) refetchAll();
+    } catch (error) { 
+      toast.error('Failed to dispense prescription'); 
+    } finally {
+      setSelectedPrescription(null);
+    }
+  };
 
   const dispensingRate = pharmacyStats?.dispensedToday && pharmacyStats?.pendingPrescriptions
     ? (pharmacyStats.dispensedToday / (pharmacyStats.dispensedToday + pharmacyStats.pendingPrescriptions)) * 100
@@ -184,12 +215,12 @@ export default function PharmacyDashboard() {
                       Dr. {rx.doctorName}
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <Link
-                        to={`/pharmacy/dispense/${rx.id}`}
-                        className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                      <button
+                        onClick={() => handleDispenseClick(rx)}
+                        className="px-3 py-1.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 text-sm font-medium shadow-sm hover:shadow-md transition-all"
                       >
                         Dispense
-                      </Link>
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -257,6 +288,20 @@ export default function PharmacyDashboard() {
           </div>
         </Link>
       </div>
+
+      {/* Pharmacy Copay Modal for Dispensing */}
+      {selectedPrescription && (
+        <PharmacyCopayModal
+          isOpen={showCopayModal}
+          onClose={() => {
+            setShowCopayModal(false);
+            setSelectedPrescription(null);
+          }}
+          onSuccess={handleDispenseAfterCopay}
+          prescriptionId={selectedPrescription.id}
+          patientName={selectedPrescription.patientName || `${selectedPrescription.patient?.firstName || ''} ${selectedPrescription.patient?.lastName || ''}`}
+        />
+      )}
     </div>
   );
 }
