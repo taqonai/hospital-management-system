@@ -2439,6 +2439,29 @@ export const insuranceCodingApi = {
   // Get patient insurance summary (from DB, not real-time DHA)
   getPatientInsurance: (patientId: string) =>
     api.get(`/insurance-coding/eligibility/${patientId}`),
+
+  // ==================== Pre-Authorization ====================
+  // Create a pre-authorization request
+  createPreAuth: (data: {
+    patientId: string;
+    procedureCode: string;
+    procedureDescription: string;
+    estimatedCost: number;
+    urgency: 'ROUTINE' | 'URGENT' | 'EMERGENT';
+    diagnosisCode?: string;
+    clinicalJustification?: string;
+  }) => api.post('/pre-auth', data),
+
+  // Get pre-auth requests
+  getPreAuthRequests: (params?: { patientId?: string; status?: string }) =>
+    api.get('/pre-auth', { params }),
+
+  // Get pre-auth by ID
+  getPreAuthById: (id: string) => api.get(`/pre-auth/${id}`),
+
+  // Update pre-auth status
+  updatePreAuthStatus: (id: string, data: { status: string; authorizationNumber?: string; denialReason?: string }) =>
+    api.patch(`/pre-auth/${id}/status`, data),
 };
 
 // =============================================================================

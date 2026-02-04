@@ -449,6 +449,10 @@ function ExpandedOrderDetails({
   );
 }
 
+// Import WalkInInsuranceCapture
+import WalkInInsuranceCapture from '../../components/common/WalkInInsuranceCapture';
+import CostEstimate, { useCostEstimate } from '../../components/common/CostEstimate';
+
 function NewLabOrderModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const [loading, setLoading] = useState(false);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -460,6 +464,16 @@ function NewLabOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
   const [priority, setPriority] = useState<'ROUTINE' | 'URGENT' | 'STAT'>('ROUTINE');
   const [clinicalNotes, setClinicalNotes] = useState('');
   const [loadingTests, setLoadingTests] = useState(true);
+  
+  // Walk-in mode state
+  const [orderMode, setOrderMode] = useState<'doctor' | 'walkin'>('doctor');
+  const [showWalkInFlow, setShowWalkInFlow] = useState(false);
+  const [walkInPaymentInfo, setWalkInPaymentInfo] = useState<{
+    copayCollected: boolean;
+    copayAmount: number;
+    paymentMethod?: string;
+    insuranceId?: string;
+  } | null>(null);
 
   // Fetch available tests
   useEffect(() => {
@@ -511,6 +525,35 @@ function NewLabOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
     );
   };
 
+  // Calculate estimated cost for selected tests
+  const estimatedCost = selectedTests.reduce((total, testId) => {
+    const test = availableTests.find(t => t.id === testId);
+    return total + (test?.price || 0);
+  }, 0);
+  
+  // Get patient insurance info for cost estimate
+  const patientInsurance = useCostEstimate(selectedPatient?.id);
+
+  // Handle walk-in flow completion
+  const handleWalkInComplete = (result: {
+    patient: { id: string; firstName: string; lastName: string; mrn?: string };
+    hasInsurance: boolean;
+    insuranceId?: string;
+    copayCollected: boolean;
+    copayAmount: number;
+    paymentMethod?: 'CASH' | 'CREDIT_CARD';
+    proceedAsSelfPay: boolean;
+  }) => {
+    setSelectedPatient(result.patient as Patient);
+    setWalkInPaymentInfo({
+      copayCollected: result.copayCollected,
+      copayAmount: result.copayAmount,
+      paymentMethod: result.paymentMethod,
+      insuranceId: result.insuranceId,
+    });
+    setShowWalkInFlow(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPatient) {
@@ -521,6 +564,12 @@ function NewLabOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
       toast.error('Please select at least one test');
       return;
     }
+    
+    // For walk-in orders without upfront payment, warn
+    if (orderMode === 'walkin' && !walkInPaymentInfo?.copayCollected && estimatedCost > 0) {
+      const proceed = window.confirm('Payment has not been collected. Proceed anyway?');
+      if (!proceed) return;
+    }
 
     setLoading(true);
     try {
@@ -529,6 +578,11 @@ function NewLabOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
         testIds: selectedTests,
         priority,
         clinicalNotes: clinicalNotes || undefined,
+        // Walk-in specific data
+        isWalkIn: orderMode === 'walkin',
+        insuranceId: walkInPaymentInfo?.insuranceId,
+        copayCollected: walkInPaymentInfo?.copayCollected,
+        copayAmount: walkInPaymentInfo?.copayAmount,
       });
       toast.success('Lab order created successfully');
       onSuccess();
@@ -560,7 +614,57 @@ function NewLabOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
           </div>
 
           <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
-            {/* Patient Selection */}
+            {/* Order Mode Toggle */}
+            <div className="flex gap-2 p-1 bg-gray-100 rounded-xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setOrderMode('doctor');
+                  setSelectedPatient(null);
+                  setWalkInPaymentInfo(null);
+                  setShowWalkInFlow(false);
+                }}
+                className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all ${
+                  orderMode === 'doctor' 
+                    ? 'bg-white text-amber-700 shadow-sm' 
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Doctor Ordered
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOrderMode('walkin');
+                  setSelectedPatient(null);
+                  setWalkInPaymentInfo(null);
+                  setShowWalkInFlow(true);
+                }}
+                className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all ${
+                  orderMode === 'walkin' 
+                    ? 'bg-white text-amber-700 shadow-sm' 
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Walk-in Patient
+              </button>
+            </div>
+
+            {/* Walk-in Insurance Capture Flow */}
+            {orderMode === 'walkin' && showWalkInFlow && (
+              <WalkInInsuranceCapture
+                serviceType="LAB"
+                estimatedCost={estimatedCost || 100} // Default estimate if no tests selected
+                onComplete={handleWalkInComplete}
+                onCancel={() => {
+                  setShowWalkInFlow(false);
+                  setOrderMode('doctor');
+                }}
+              />
+            )}
+
+            {/* Patient Selection (only show if not in walk-in flow) */}
+            {!(orderMode === 'walkin' && showWalkInFlow) && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Select Patient <span className="text-red-500">*</span>
@@ -572,10 +676,19 @@ function NewLabOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                       {selectedPatient.firstName} {selectedPatient.lastName}
                     </span>
                     <span className="ml-2 text-sm text-gray-500">MRN: {selectedPatient.mrn}</span>
+                    {walkInPaymentInfo && (
+                      <span className="ml-2 text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
+                        {walkInPaymentInfo.copayCollected ? '✓ Paid' : 'Bill Later'}
+                      </span>
+                    )}
                   </div>
                   <button
                     type="button"
-                    onClick={() => setSelectedPatient(null)}
+                    onClick={() => {
+                      setSelectedPatient(null);
+                      setWalkInPaymentInfo(null);
+                      if (orderMode === 'walkin') setShowWalkInFlow(true);
+                    }}
                     className="text-sm text-red-600 hover:text-red-700"
                   >
                     Change
@@ -617,6 +730,7 @@ function NewLabOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                 </div>
               )}
             </div>
+            )}
 
             {/* Priority */}
             <div>
@@ -709,6 +823,18 @@ function NewLabOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                 className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 resize-none"
               />
             </div>
+
+            {/* Cost Estimate (shown when patient selected and tests selected) */}
+            {selectedPatient && selectedTests.length > 0 && estimatedCost > 0 && (
+              <CostEstimate
+                patientId={selectedPatient.id}
+                totalCost={estimatedCost}
+                coveragePercentage={patientInsurance.coveragePercentage}
+                insuranceProvider={patientInsurance.insuranceProvider}
+                networkStatus={patientInsurance.networkStatus}
+                size="md"
+              />
+            )}
 
             {/* Actions */}
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">

@@ -92,6 +92,23 @@ interface Patient {
 const modalityTypes = ['X_RAY', 'CT', 'MRI', 'ULTRASOUND', 'MAMMOGRAPHY', 'FLUOROSCOPY', 'PET', 'NUCLEAR'];
 const bodyParts = ['HEAD', 'NECK', 'CHEST', 'ABDOMEN', 'PELVIS', 'SPINE', 'UPPER_EXTREMITY', 'LOWER_EXTREMITY', 'WHOLE_BODY'];
 
+// Import WalkInInsuranceCapture
+import WalkInInsuranceCapture from '../../components/common/WalkInInsuranceCapture';
+import PreAuthWarning from '../../components/insurance/PreAuthWarning';
+import CostEstimate, { useCostEstimate } from '../../components/common/CostEstimate';
+
+// Estimated costs for imaging procedures (can be made configurable)
+const modalityCosts: Record<string, number> = {
+  'XRAY': 150,
+  'CT': 800,
+  'MRI': 1500,
+  'ULTRASOUND': 300,
+  'MAMMOGRAPHY': 400,
+  'FLUOROSCOPY': 500,
+  'PET': 3000,
+  'DEXA': 350,
+};
+
 function NewImagingOrderModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const [loading, setLoading] = useState(false);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -103,6 +120,30 @@ function NewImagingOrderModal({ onClose, onSuccess }: { onClose: () => void; onS
   const [priority, setPriority] = useState<'ROUTINE' | 'URGENT' | 'STAT'>('ROUTINE');
   const [clinicalHistory, setClinicalHistory] = useState('');
   const [contrastRequired, setContrastRequired] = useState(false);
+  
+  // Walk-in mode state
+  const [orderMode, setOrderMode] = useState<'doctor' | 'walkin'>('doctor');
+  const [showWalkInFlow, setShowWalkInFlow] = useState(false);
+  const [walkInPaymentInfo, setWalkInPaymentInfo] = useState<{
+    copayCollected: boolean;
+    copayAmount: number;
+    paymentMethod?: string;
+    insuranceId?: string;
+  } | null>(null);
+  
+  // Pre-auth state
+  const [showPreAuthWarning, setShowPreAuthWarning] = useState(false);
+  const [preAuthId, setPreAuthId] = useState<string | null>(null);
+  const [proceedAsSelfPay, setProceedAsSelfPay] = useState(false);
+  
+  // Estimated cost based on modality
+  const estimatedCost = modalityCosts[modalityType] || 500;
+  
+  // Get patient insurance info for cost estimate
+  const patientInsurance = useCostEstimate(selectedPatient?.id);
+  
+  // Check if pre-auth is required
+  const requiresPreAuth = ['MRI', 'CT', 'PET'].includes(modalityType) || estimatedCost >= 500;
 
   // Search patients
   const searchPatients = async (query: string) => {
@@ -128,6 +169,26 @@ function NewImagingOrderModal({ onClose, onSuccess }: { onClose: () => void; onS
     return () => clearTimeout(debounce);
   }, [searchQuery]);
 
+  // Handle walk-in flow completion
+  const handleWalkInComplete = (result: {
+    patient: { id: string; firstName: string; lastName: string; mrn?: string };
+    hasInsurance: boolean;
+    insuranceId?: string;
+    copayCollected: boolean;
+    copayAmount: number;
+    paymentMethod?: 'CASH' | 'CREDIT_CARD';
+    proceedAsSelfPay: boolean;
+  }) => {
+    setSelectedPatient(result.patient as Patient);
+    setWalkInPaymentInfo({
+      copayCollected: result.copayCollected,
+      copayAmount: result.copayAmount,
+      paymentMethod: result.paymentMethod,
+      insuranceId: result.insuranceId,
+    });
+    setShowWalkInFlow(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPatient) {
@@ -142,6 +203,18 @@ function NewImagingOrderModal({ onClose, onSuccess }: { onClose: () => void; onS
       toast.error('Please select a body part');
       return;
     }
+    
+    // Check if pre-auth is required and not yet handled
+    if (requiresPreAuth && !preAuthId && !proceedAsSelfPay && walkInPaymentInfo?.insuranceId) {
+      setShowPreAuthWarning(true);
+      return;
+    }
+    
+    // For walk-in orders without upfront payment, warn
+    if (orderMode === 'walkin' && !walkInPaymentInfo?.copayCollected && estimatedCost > 0) {
+      const proceed = window.confirm('Payment has not been collected. Proceed anyway?');
+      if (!proceed) return;
+    }
 
     setLoading(true);
     try {
@@ -152,6 +225,14 @@ function NewImagingOrderModal({ onClose, onSuccess }: { onClose: () => void; onS
         priority,
         clinicalHistory: clinicalHistory || undefined,
         contrastRequired,
+        // Walk-in specific data
+        isWalkIn: orderMode === 'walkin',
+        insuranceId: walkInPaymentInfo?.insuranceId,
+        copayCollected: walkInPaymentInfo?.copayCollected,
+        copayAmount: walkInPaymentInfo?.copayAmount,
+        // Pre-auth data
+        preAuthId: preAuthId || undefined,
+        selfPay: proceedAsSelfPay,
       });
       toast.success('Imaging order created successfully');
       onSuccess();
@@ -175,7 +256,57 @@ function NewImagingOrderModal({ onClose, onSuccess }: { onClose: () => void; onS
           </div>
 
           <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
-            {/* Patient Selection */}
+            {/* Order Mode Toggle */}
+            <div className="flex gap-2 p-1 bg-gray-100 rounded-xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setOrderMode('doctor');
+                  setSelectedPatient(null);
+                  setWalkInPaymentInfo(null);
+                  setShowWalkInFlow(false);
+                }}
+                className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all ${
+                  orderMode === 'doctor' 
+                    ? 'bg-white text-purple-700 shadow-sm' 
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Doctor Ordered
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOrderMode('walkin');
+                  setSelectedPatient(null);
+                  setWalkInPaymentInfo(null);
+                  setShowWalkInFlow(true);
+                }}
+                className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all ${
+                  orderMode === 'walkin' 
+                    ? 'bg-white text-purple-700 shadow-sm' 
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Walk-in Patient
+              </button>
+            </div>
+
+            {/* Walk-in Insurance Capture Flow */}
+            {orderMode === 'walkin' && showWalkInFlow && (
+              <WalkInInsuranceCapture
+                serviceType="RADIOLOGY"
+                estimatedCost={estimatedCost}
+                onComplete={handleWalkInComplete}
+                onCancel={() => {
+                  setShowWalkInFlow(false);
+                  setOrderMode('doctor');
+                }}
+              />
+            )}
+
+            {/* Patient Selection (only show if not in walk-in flow) */}
+            {!(orderMode === 'walkin' && showWalkInFlow) && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Select Patient <span className="text-red-500">*</span>
@@ -187,10 +318,19 @@ function NewImagingOrderModal({ onClose, onSuccess }: { onClose: () => void; onS
                       {selectedPatient.firstName} {selectedPatient.lastName}
                     </span>
                     <span className="ml-2 text-sm text-gray-500">MRN: {selectedPatient.mrn}</span>
+                    {walkInPaymentInfo && (
+                      <span className="ml-2 text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
+                        {walkInPaymentInfo.copayCollected ? '✓ Paid' : 'Bill Later'}
+                      </span>
+                    )}
                   </div>
                   <button
                     type="button"
-                    onClick={() => setSelectedPatient(null)}
+                    onClick={() => {
+                      setSelectedPatient(null);
+                      setWalkInPaymentInfo(null);
+                      if (orderMode === 'walkin') setShowWalkInFlow(true);
+                    }}
                     className="text-sm text-red-600 hover:text-red-700"
                   >
                     Change
@@ -232,6 +372,7 @@ function NewImagingOrderModal({ onClose, onSuccess }: { onClose: () => void; onS
                 </div>
               )}
             </div>
+            )}
 
             {/* Modality & Body Part */}
             <div className="grid grid-cols-2 gap-4">
@@ -319,6 +460,49 @@ function NewImagingOrderModal({ onClose, onSuccess }: { onClose: () => void; onS
               </div>
             </div>
 
+            {/* Cost Estimate (shown when patient and modality selected) */}
+            {selectedPatient && modalityType && (
+              <CostEstimate
+                patientId={selectedPatient.id}
+                totalCost={estimatedCost}
+                coveragePercentage={patientInsurance.coveragePercentage}
+                insuranceProvider={patientInsurance.insuranceProvider}
+                networkStatus={patientInsurance.networkStatus}
+                size="md"
+              />
+            )}
+
+            {/* Pre-Auth Warning */}
+            {showPreAuthWarning && selectedPatient && (
+              <PreAuthWarning
+                patientId={selectedPatient.id}
+                patientName={`${selectedPatient.firstName} ${selectedPatient.lastName}`}
+                procedureType={modalityType}
+                procedureName={`${modalityType} - ${bodyPart}`}
+                estimatedCost={estimatedCost}
+                insuranceProvider={undefined} // Could come from patient's insurance
+                onPreAuthCreated={(id) => {
+                  setPreAuthId(id);
+                  setShowPreAuthWarning(false);
+                }}
+                onProceedAsSelfPay={() => {
+                  setProceedAsSelfPay(true);
+                  setShowPreAuthWarning(false);
+                }}
+                onCancel={() => setShowPreAuthWarning(false)}
+              />
+            )}
+
+            {/* Pre-Auth Required Notice (shown when selecting high-cost modality) */}
+            {requiresPreAuth && modalityType && !showPreAuthWarning && !preAuthId && !proceedAsSelfPay && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-2">
+                <ExclamationTriangleIcon className="h-5 w-5 text-amber-500" />
+                <span className="text-sm text-amber-700">
+                  <strong>{modalityType}</strong> requires pre-authorization. You'll be prompted when creating the order.
+                </span>
+              </div>
+            )}
+
             {/* Actions */}
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
               <button
@@ -330,7 +514,7 @@ function NewImagingOrderModal({ onClose, onSuccess }: { onClose: () => void; onS
               </button>
               <button
                 type="submit"
-                disabled={loading || !selectedPatient || !modalityType || !bodyPart}
+                disabled={loading || !selectedPatient || !modalityType || !bodyPart || showPreAuthWarning}
                 className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-500 text-white font-semibold hover:from-violet-600 hover:to-purple-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {loading ? (
