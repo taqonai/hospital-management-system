@@ -46,8 +46,8 @@ import AICreationAssistant from '../ai/AICreationAssistant';
 import NotificationDropdown from '../notifications/NotificationDropdown';
 import opdIconPng from '../../assets/opd-icon.png';
 
-const OpdIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <img src={opdIconPng} alt="" className={className} />
+const OpdIcon: React.FC<{ className?: string }> = () => (
+  <img src={opdIconPng} alt="" className="h-6 w-6" />
 );
 
 // Role-based access configuration
