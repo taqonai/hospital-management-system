@@ -187,13 +187,13 @@ All services implement graceful degradation to rule-based fallbacks when OpenAI 
 
 | Metric | Value |
 |--------|-------|
-| Prisma Models | 209 (~8450 lines in `backend/prisma/schema.prisma`) |
-| API Endpoints | 1,031+ |
-| Frontend Pages | 63 page directories |
+| Prisma Models | 210 (~8484 lines in `backend/prisma/schema.prisma`) |
+| API Endpoints | 1,179+ |
+| Frontend Pages | 49 page directories |
 | Mobile Screens | 12 screen modules |
-| AI Services | 20 |
-| Backend Route Files | 66 |
-| Backend Service Files | 96 |
+| AI Services | 23 |
+| Backend Route Files | 67 |
+| Backend Service Files | 97 |
 
 ### Multi-Tenant Data Model
 
@@ -207,7 +207,7 @@ Routes in `backend/src/routes/`, services in `backend/src/services/`. Each modul
 - `{module}Routes.ts` - Express router with endpoints
 - `{module}Service.ts` - Business logic with Prisma queries
 - Middleware chain: `authenticate` → `authorize(...roles)` → `authorizeHospital` → `asyncHandler(controller)`
-- Route handlers use `asyncHandler` wrapper from `backend/src/utils/asyncHandler.ts` to catch async errors
+- Route handlers use `asyncHandler` wrapper from `backend/src/middleware/errorHandler.ts` to catch async errors
 
 **Standardized API responses** (`backend/src/utils/response.ts`): All endpoints must use the response helpers for consistent JSON format:
 - `sendSuccess(res, data, message)` - 200 with `{ success: true, data, message }`
