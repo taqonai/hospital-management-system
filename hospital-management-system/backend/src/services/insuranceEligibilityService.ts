@@ -2,6 +2,8 @@ import prisma from '../config/database';
 import logger from '../utils/logger';
 import { AppError, NotFoundError } from '../middleware/errorHandler';
 import axios from 'axios';
+import { dhaEClaimService } from './dhaEClaimService';
+import type { EligibilityResponse as DHAEligibilityResponse } from './dhaEClaimService';
 
 /**
  * Insurance Eligibility Service
@@ -181,15 +183,18 @@ class InsuranceEligibilityService {
     });
 
     const dbInsurance = patient?.insurances?.[0] || null;
-    const dhaConfig = await this.getDHAConfig(hospitalId);
-    
-    // Try DHA verification if enabled
-    if (dhaConfig?.enabled) {
-      try {
-        const dhaResponse = await this.callDHAEligibilityAPI(dhaConfig, normalizedEid, serviceDate);
 
-        // GAP 5: Mark data source as DHA verified
-        dhaResponse.dataSource = 'DHA_LIVE';
+    // Try DHA verification via dhaEClaimService (config from hospital_settings DB)
+    const dhaConfigured = await dhaEClaimService.isConfigured(hospitalId);
+    if (dhaConfigured) {
+      try {
+        const rawDha = await dhaEClaimService.verifyEligibility(hospitalId, {
+          emiratesId: normalizedEid,
+          serviceDate,
+        });
+
+        // Map dhaEClaimService response to our EligibilityResponse format
+        const dhaResponse = this.mapDHAResponse(rawDha, normalizedEid);
 
         // CROSS-VERIFICATION: Compare DHA vs DB
         if (patient && dbInsurance) {
@@ -199,19 +204,19 @@ class InsuranceEligibilityService {
             dhaResponse,
             alerts
           );
-          
+
           // Return cross-verified response with alerts
           return {
             ...crossVerification,
             alerts: alerts.length > 0 ? alerts : undefined,
           };
         }
-        
+
         // No DB record - just return DHA response
         if (dhaResponse.eligible && patient) {
           await this.syncInsuranceFromDHA(patient.id, dhaResponse);
         }
-        
+
         return dhaResponse;
       } catch (error) {
         logger.error('[Eligibility] DHA API call failed, falling back to cached data', { error });
@@ -587,6 +592,40 @@ class InsuranceEligibilityService {
       dataSource: 'CACHED_DB',
       message: 'Insurance verified from cached records. For real-time verification, use Emirates ID lookup.',
       verifiedAt: new Date(),
+    };
+  }
+
+  /**
+   * Map dhaEClaimService response to our EligibilityResponse format
+   */
+  private mapDHAResponse(raw: DHAEligibilityResponse, emiratesId: string): EligibilityResponse {
+    const eligible = raw.success && raw.policyStatus === 'ACTIVE';
+    return {
+      eligible,
+      emiratesId,
+      memberId: raw.memberId,
+      patientName: raw.memberName,
+      insuranceProvider: raw.payerName,
+      policyNumber: raw.policyNumber,
+      policyStatus: raw.policyStatus || 'NOT_FOUND',
+      policyStartDate: raw.effectiveDate,
+      policyEndDate: raw.expiryDate,
+      networkStatus: raw.networkStatus || 'UNKNOWN',
+      planType: raw.planType,
+      coveragePercentage: raw.coveragePercentage,
+      copayPercentage: raw.coveragePercentage ? (100 - raw.coveragePercentage) : undefined,
+      copayAmount: raw.copayAmount,
+      deductible: raw.deductible,
+      remainingBenefits: raw.benefits ? {
+        consultation: raw.benefits.consultation?.remaining,
+        laboratory: raw.benefits.laboratory?.remaining,
+        imaging: raw.benefits.radiology?.remaining,
+        pharmacy: raw.benefits.pharmacy?.remaining,
+      } : undefined,
+      verificationSource: 'DHA_ECLAIM',
+      verifiedAt: new Date(),
+      dataSource: raw.dataSource,
+      message: raw.errorMessage,
     };
   }
 

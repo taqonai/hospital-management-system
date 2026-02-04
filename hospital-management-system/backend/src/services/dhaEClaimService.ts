@@ -312,6 +312,16 @@ class DHAEClaimService {
     }
 
     const { credentials, mode } = config;
+
+    // In sandbox mode, return mock data instead of calling the real DHA endpoint
+    // (real endpoint would fail with placeholder credentials)
+    if (mode === 'sandbox') {
+      logger.info('[DHA-SANDBOX] Returning mock eligibility for configured sandbox mode:', request.emiratesId);
+      const mockResponse = this.getMockEligibilityResponse(request);
+      mockResponse.dataSource = 'DHA_SANDBOX';
+      return mockResponse;
+    }
+
     const urls = this.getUrls(mode);
 
     const body = {
@@ -328,7 +338,7 @@ class DHAEClaimService {
       const response = await this.sendRequest(urls.eligibilityUrl, xmlRequest);
       const parsed = this.parseEligibilityResponse(response);
       // GAP 5: Tag with data source based on configured mode
-      parsed.dataSource = mode === 'production' ? 'DHA_LIVE' : 'DHA_SANDBOX';
+      parsed.dataSource = 'DHA_LIVE';
       return parsed;
     } catch (error: any) {
       logger.error('[DHA] Eligibility check failed:', error.message);
@@ -336,7 +346,7 @@ class DHAEClaimService {
         success: false,
         policyStatus: 'NOT_FOUND',
         networkStatus: 'UNKNOWN',
-        dataSource: mode === 'production' ? 'DHA_LIVE' : 'DHA_SANDBOX',
+        dataSource: 'DHA_LIVE',
         errorCode: 'CONNECTION_ERROR',
         errorMessage: error.message,
       };
