@@ -237,6 +237,13 @@ export const patientPortalApi = {
   getInsuranceClaims: (params?: { status?: string; page?: number; limit?: number }) =>
     api.get<ApiResponse<InsuranceClaim[]>>('/patient-portal/insurance/claims', { params }),
 
+  // Doctor Reviews
+  submitReview: (data: { appointmentId: string; rating: number; comment?: string }) =>
+    api.post<ApiResponse<any>>('/patient-portal/reviews', data),
+
+  getMyReviewedAppointments: () =>
+    api.get<ApiResponse<{ reviewedAppointmentIds: string[] }>>('/patient-portal/reviews/my'),
+
   // Settings
   getNotificationPreferences: () =>
     api.get<ApiResponse<{
