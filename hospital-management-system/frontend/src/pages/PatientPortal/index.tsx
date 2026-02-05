@@ -53,7 +53,7 @@ export default function PatientPortal() {
     { id: 'records', name: 'Medical Records', icon: DocumentTextIcon },
     { id: 'prescriptions', name: 'Prescriptions', icon: ClipboardDocumentListIcon, count: summary?.activePrescriptions || 0 },
     { id: 'labs', name: 'Lab Results', icon: BeakerIcon, count: summary?.pendingLabs || 0 },
-    { id: 'messages', name: 'Messages', icon: ChatBubbleLeftRightIcon, count: summary?.unreadMessages || 0 },
+    // { id: 'messages', name: 'Messages', icon: ChatBubbleLeftRightIcon, count: summary?.unreadMessages || 0 }, // Hidden: messaging backend not yet implemented
     { id: 'billing', name: 'Billing', icon: CreditCardIcon, count: summary?.pendingBills || 0 },
   ];
 
