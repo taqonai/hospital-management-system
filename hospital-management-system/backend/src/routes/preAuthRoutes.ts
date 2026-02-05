@@ -10,12 +10,12 @@ const router = Router();
 /**
  * POST /pre-auth
  * Create a new pre-authorization request
- * Permission: MANAGE_PRE_AUTH or MANAGE_INSURANCE
+ * Permission: MANAGE_PRE_AUTH or allowed roles
  */
 router.post(
   '/',
   authenticate,
-  authorizeWithPermission('MANAGE_PRE_AUTH', []),
+  authorizeWithPermission('MANAGE_PRE_AUTH', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT', 'RECEPTIONIST']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { user } = req;
     const preAuth = await preAuthService.createPreAuthRequest(
@@ -31,12 +31,12 @@ router.post(
 /**
  * GET /pre-auth
  * List pre-authorization requests with filters
- * Permission: VIEW_PRE_AUTH or VIEW_INSURANCE
+ * Permission: VIEW_PRE_AUTH or allowed roles
  */
 router.get(
   '/',
   authenticate,
-  authorizeWithPermission('VIEW_PRE_AUTH', []),
+  authorizeWithPermission('VIEW_PRE_AUTH', ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT', 'RECEPTIONIST', 'DOCTOR', 'NURSE']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { user } = req;
     const { patientId, status, urgency, page, limit } = req.query;
