@@ -248,6 +248,175 @@ When viewing an existing insurance policy, the following information is displaye
 
 ---
 
+# After Adding Insurance - List View Statuses
+
+Once insurance is added, it appears in the list with various status indicators:
+
+## Insurance Card Statuses
+
+### 1. Primary Status
+| Badge | Color | Meaning | Impact |
+|-------|-------|---------|--------|
+| **Primary** | 🔵 Blue | This is the main insurance | Billed first for all services |
+| *(no badge)* | - | Secondary insurance | Billed after primary |
+
+**Why It Matters:**
+- Only ONE insurance can be "Primary"
+- Primary insurance is always billed first
+- Secondary covers remaining balance (COB - Coordination of Benefits)
+
+---
+
+### 2. Verification Status
+| Badge | Color | Icon | Meaning |
+|-------|-------|------|---------|
+| **Verified** | 🟢 Green | ✅ Shield | Insurance confirmed active with payer |
+| **Pending** | 🟡 Yellow | ⏳ Clock | Awaiting verification |
+| **Rejected** | 🔴 Red | ❌ Shield | Verification failed |
+
+**Verification Flow:**
+```
+Added → Pending → Staff Verifies → Verified ✅
+                              OR → Rejected ❌
+```
+
+**Impact on Patient:**
+
+| Status | At Check-in | Claims |
+|--------|-------------|--------|
+| ✅ Verified | Smooth check-in, copay calculated | Claims processed normally |
+| ⏳ Pending | May need manual verification | Claims may be delayed |
+| ❌ Rejected | Prompted to update or self-pay | Cannot submit claims |
+
+---
+
+### 3. Active/Inactive Status
+| Badge | Color | Meaning | Impact |
+|-------|-------|---------|--------|
+| *(no badge)* | - | Insurance is active | Normal operations |
+| **Inactive** | ⚪ Gray | Insurance deactivated | Not used for billing |
+
+**When Insurance Becomes Inactive:**
+- Manually deactivated by admin
+- Replaced by newer policy
+- Patient requested removal
+
+---
+
+### 4. Expiry Status (Based on Dates)
+| Condition | Visual | Meaning | System Action |
+|-----------|--------|---------|---------------|
+| **Valid** | Normal display | Expiry date in future | Normal coverage |
+| **Expiring Soon** | ⚠️ Warning | Expires within 30 days | Alert shown |
+| **Expired** | 🔴 Red text/badge | Expiry date passed | Blocks insurance use |
+
+**Example Timeline:**
+```
+Jan 1, 2026: Insurance starts (Effective Date)
+Dec 1, 2026: "Expiring Soon" warning appears
+Dec 31, 2026: Insurance expires (Expiry Date)
+Jan 1, 2027: Insurance blocked, must renew or self-pay
+```
+
+---
+
+### 5. Network Status
+| Badge | Icon | Meaning | Cost Impact |
+|-------|------|---------|-------------|
+| **In-Network** | ✅ Green check | Hospital in insurer's network | Lower patient cost |
+| **Out-of-Network** | ⚠️ Warning | Hospital not in network | Higher patient cost |
+
+**Cost Difference Example:**
+| Service | In-Network | Out-of-Network |
+|---------|------------|----------------|
+| Consultation AED 200 | Patient pays AED 40 (20%) | Patient pays AED 100 (50%) |
+
+---
+
+## Complete Status Display Example
+
+Based on your screenshot, here's what each element means:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 🛡️ Orient Insurance    [Primary]  [✅ Verified]    [✏️][🗑️] │
+│                                                             │
+│ Policy: ORIENT-EXP-001  |  Group: GRP-ORIENT               │
+│ Fatima Expired-Test (SELF)  |  Basic                       │
+│ Valid: 1/1/2024 - 1/31/2025                                │
+│                                                             │
+│ Network: ✅ In-Network    Fixed Copay: AED 25              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Status Breakdown:**
+| Element | Status | Meaning |
+|---------|--------|---------|
+| Orient Insurance | Provider | Insurance company name |
+| [Primary] | 🔵 Blue badge | This is the main insurance |
+| [✅ Verified] | 🟢 Green badge | Insurance confirmed with payer |
+| Valid: 1/1/2024 - 1/31/2025 | ⚠️ EXPIRED | Policy has expired! |
+| Network: ✅ In-Network | Green check | Hospital accepts this insurance |
+| Fixed Copay: AED 25 | Amount | Patient pays AED 25 per visit |
+
+---
+
+## Status Combinations & What They Mean
+
+| Primary | Verified | Active | Expiry | What Happens |
+|---------|----------|--------|--------|--------------|
+| ✅ Yes | ✅ Yes | ✅ Yes | ✅ Valid | ✅ Normal billing, smooth check-in |
+| ✅ Yes | ✅ Yes | ✅ Yes | ❌ Expired | ⚠️ Prompted to renew or self-pay |
+| ✅ Yes | ⏳ Pending | ✅ Yes | ✅ Valid | ⚠️ Manual verification at check-in |
+| ✅ Yes | ❌ Rejected | ✅ Yes | ✅ Valid | ❌ Cannot use, must update details |
+| ❌ No | ✅ Yes | ✅ Yes | ✅ Valid | Secondary - used after primary exhausted |
+| Any | Any | ❌ No | Any | ❌ Not used, archived record |
+
+---
+
+## Actions Available by Status
+
+### For Verified Insurance ✅
+- ✏️ Edit details
+- 🗑️ Delete
+- Set as Primary/Secondary
+
+### For Pending Insurance ⏳
+- ✏️ Edit details
+- 🗑️ Delete
+- ✅ Verify (Admin only)
+- ❌ Reject (Admin only)
+
+### For Rejected Insurance ❌
+- ✏️ Edit and resubmit
+- 🗑️ Delete
+- 🔄 Reset to Pending (Admin only)
+
+### For Expired Insurance 🔴
+- ✏️ Update expiry date
+- 🗑️ Delete
+- Add new insurance
+
+---
+
+## Admin Verification Actions
+
+Admins see additional buttons on each insurance card:
+
+| Button | Icon | Action | When to Use |
+|--------|------|--------|-------------|
+| **Verify** | ✅ Green shield | Mark as verified | After confirming with payer |
+| **Reject** | ❌ Red shield | Mark as rejected | Invalid policy details |
+| **Reset** | 🕐 Clock | Reset to pending | Need to re-verify |
+
+**Verification Workflow:**
+1. Patient adds insurance → Status: **Pending**
+2. Admin calls payer or checks DHA → Confirms valid
+3. Admin clicks ✅ Verify → Status: **Verified**
+4. OR Admin clicks ❌ Reject → Status: **Rejected** (with reason)
+
+---
+
 # Verification Status
 
 Insurance records have a verification status:
