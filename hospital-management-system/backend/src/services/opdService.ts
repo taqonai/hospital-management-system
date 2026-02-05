@@ -124,7 +124,28 @@ export class OPDService {
         reason: true,
         notes: true,
         checkedInAt: true,
-        patient: { select: { id: true, firstName: true, lastName: true, mrn: true, phone: true } },
+        patient: { 
+          select: { 
+            id: true, 
+            firstName: true, 
+            lastName: true, 
+            mrn: true, 
+            phone: true,
+            insurances: {
+              where: { isActive: true },
+              orderBy: { priority: 'asc' },
+              take: 1,
+              select: {
+                id: true,
+                providerName: true,
+                policyNumber: true,
+                networkTier: true,
+                coverageType: true,
+                expiryDate: true,
+              },
+            },
+          } 
+        },
         doctor: {
           include: {
             user: { select: { firstName: true, lastName: true } },
@@ -164,7 +185,28 @@ export class OPDService {
         reason: true,
         notes: true,
         checkedInAt: true,
-        patient: { select: { id: true, firstName: true, lastName: true, mrn: true, phone: true } },
+        patient: { 
+          select: { 
+            id: true, 
+            firstName: true, 
+            lastName: true, 
+            mrn: true, 
+            phone: true,
+            insurances: {
+              where: { isActive: true },
+              orderBy: { priority: 'asc' },
+              take: 1,
+              select: {
+                id: true,
+                providerName: true,
+                policyNumber: true,
+                networkTier: true,
+                coverageType: true,
+                expiryDate: true,
+              },
+            },
+          } 
+        },
         doctor: {
           include: {
             user: { select: { firstName: true, lastName: true } },

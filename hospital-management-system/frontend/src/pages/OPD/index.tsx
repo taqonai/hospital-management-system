@@ -18,6 +18,7 @@ import {
   PlayIcon,
   IdentificationIcon,
   MagnifyingGlassIcon,
+  ShieldCheckIcon,
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
 import { useAIHealth } from '../../hooks/useAI';
@@ -39,6 +40,14 @@ interface QueueItem {
     firstName: string;
     lastName: string;
     mrn?: string;
+    insurances?: Array<{
+      id: string;
+      providerName: string;
+      policyNumber: string;
+      networkType?: string;
+      coveragePercentage?: number;
+      expiryDate?: string;
+    }>;
   };
   doctor: {
     id: string;
@@ -873,9 +882,22 @@ export default function OPD() {
                             {patient.tokenNumber}
                           </div>
                           <div>
-                            <h4 className="font-medium text-gray-900">
-                              {patient.patient?.firstName} {patient.patient?.lastName}
-                            </h4>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-medium text-gray-900">
+                                {patient.patient?.firstName} {patient.patient?.lastName}
+                              </h4>
+                              {/* Insurance Badge */}
+                              {patient.patient?.insurances && patient.patient.insurances.length > 0 ? (
+                                <span className="inline-flex items-center gap-1 text-xs font-medium text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
+                                  <ShieldCheckIcon className="h-3 w-3" />
+                                  {patient.patient.insurances[0].providerName?.split(' ')[0] || 'Insured'}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-xs font-medium text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">
+                                  Self-Pay
+                                </span>
+                              )}
+                            </div>
                             {/* Enhanced Status Indicators based on workflow stage */}
                             <div className="flex items-center gap-2 flex-wrap">
                               {patient.status === 'IN_PROGRESS' || patient.status === 'IN_CONSULTATION' ? (
@@ -1040,9 +1062,22 @@ export default function OPD() {
                         {appointment.tokenNumber || '#'}
                       </div>
                       <div>
-                        <h4 className="font-medium text-gray-900">
-                          {appointment.patient?.firstName} {appointment.patient?.lastName}
-                        </h4>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-medium text-gray-900">
+                            {appointment.patient?.firstName} {appointment.patient?.lastName}
+                          </h4>
+                          {/* Insurance Badge */}
+                          {appointment.patient?.insurances && appointment.patient.insurances.length > 0 ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
+                              <ShieldCheckIcon className="h-3 w-3" />
+                              {appointment.patient.insurances[0].providerName?.split(' ')[0] || 'Insured'}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">
+                              Self-Pay
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm text-gray-500">
                             Dr. {appointment.doctor?.user?.firstName} {appointment.doctor?.user?.lastName}
