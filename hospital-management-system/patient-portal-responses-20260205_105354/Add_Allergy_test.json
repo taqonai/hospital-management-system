@@ -1,0 +1,1 @@
+{"success":true,"message":"Allergy added successfully","data":{"id":"ddba17d2-1c38-43ba-a1e4-2f8f1ef32819","patientId":"8d86603e-04ea-4c9e-a841-bfaf645ecfd4","allergen":"API_TEST_Pollen_DELETE_ME","type":"ENVIRONMENTAL","severity":"MILD","reaction":"Sneezing","notes":"Test allergy created by API test script - safe to delete","createdAt":"2026-02-05T10:54:37.559Z"}}

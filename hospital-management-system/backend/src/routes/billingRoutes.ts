@@ -123,6 +123,54 @@ router.post(
   })
 );
 
+// Convert appointment to self-pay (bypass insurance for this visit)
+router.post(
+  '/convert-to-self-pay',
+  authenticate,
+  authorizeWithPermission('billing:write', ['RECEPTIONIST', 'NURSE', 'HOSPITAL_ADMIN']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { patientId, appointmentId, reason } = req.body;
+    const hospitalId = req.user!.hospitalId;
+    const userId = req.user!.userId;
+
+    if (!patientId || !appointmentId) {
+      return res.status(400).json({ success: false, message: 'patientId and appointmentId are required' });
+    }
+
+    // Mark appointment to use self-pay instead of insurance
+    const prisma = (await import('../config/database')).default;
+    
+    // Update appointment with selfPay flag
+    await prisma.appointment.update({
+      where: { id: appointmentId },
+      data: { 
+        selfPay: true,
+        selfPayConvertedAt: new Date(),
+        selfPayConvertedBy: userId,
+        selfPayReason: reason || 'Converted to self-pay at check-in',
+      },
+    });
+
+    // Recalculate copay (will now return self-pay pricing)
+    const copayInfo = await billingService.calculateCopay(patientId, hospitalId, appointmentId);
+
+    // Log the conversion for audit
+    const { insuranceAuditService } = await import('../services/insuranceAuditService');
+    await insuranceAuditService.logAudit({
+      hospitalId,
+      patientId,
+      appointmentId,
+      action: 'CONVERT_TO_SELFPAY',
+      performedBy: userId,
+      previousData: { usingInsurance: true },
+      newData: { selfPay: true, reason },
+      reason: reason || 'Converted to self-pay at check-in',
+    });
+
+    sendSuccess(res, copayInfo, 'Converted to self-pay successfully');
+  })
+);
+
 // GAP 3: Get copay receipt HTML by receipt number
 router.get(
   '/copay-receipt/:receiptNumber',

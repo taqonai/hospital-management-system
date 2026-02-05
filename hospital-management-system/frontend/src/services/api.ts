@@ -1049,6 +1049,11 @@ export const billingApi = {
     useDeposit?: boolean;
     notes?: string;
   }) => api.post('/billing/copay-collect', data),
+  convertToSelfPay: (data: {
+    patientId: string;
+    appointmentId: string;
+    reason?: string;
+  }) => api.post('/billing/convert-to-self-pay', data),
   getDepositBalance: (patientId: string) =>
     api.get(`/billing/patients/${patientId}/deposit-balance`),
   // Pharmacy Copay

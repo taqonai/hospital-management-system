@@ -125,6 +125,13 @@ export default function CopayCollectionModal({
   const [verifying, setVerifying] = useState(false);
   const [verificationAlerts, setVerificationAlerts] = useState<VerificationAlert[]>([]);
   const [showEidLookup, setShowEidLookup] = useState(false);
+  // Convert to self-pay
+  const [converting, setConverting] = useState(false);
+  // Pre-auth request
+  const [requestingPreAuth, setRequestingPreAuth] = useState(false);
+  // Override confirmation
+  const [showOverrideConfirm, setShowOverrideConfirm] = useState(false);
+  const [overrideReason, setOverrideReason] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -267,6 +274,76 @@ export default function CopayCollectionModal({
     });
     toast.success('Copay deferred');
     onSuccess('deferred');
+  };
+
+  // Convert to self-pay (bypass insurance for this visit)
+  const handleConvertToSelfPay = async () => {
+    if (!copayInfo) return;
+    
+    setConverting(true);
+    try {
+      // Call API to convert to self-pay and get new copay calculation
+      const response = await billingApi.convertToSelfPay({
+        patientId: patient.id,
+        appointmentId,
+        reason: notes || 'Converted to self-pay at check-in',
+      });
+      
+      // Update copay info with new self-pay calculation
+      if (response.data?.data) {
+        setCopayInfo(response.data.data);
+      }
+      
+      toast.success('Converted to self-pay. Please collect the full consultation fee.');
+    } catch (error: any) {
+      console.error('Failed to convert to self-pay:', error);
+      toast.error(error.response?.data?.message || 'Failed to convert to self-pay');
+    } finally {
+      setConverting(false);
+    }
+  };
+
+  // Override pre-auth requirement (admin action)
+  const handleOverridePreAuth = async () => {
+    if (!copayInfo || !overrideReason.trim()) {
+      toast.error('Please provide a reason for override');
+      return;
+    }
+
+    // GAP 7: Audit pre-auth override
+    insuranceCodingApi.logInsuranceAudit({
+      patientId: patient.id,
+      appointmentId,
+      action: 'PREAUTH_OVERRIDE',
+      previousData: {
+        preAuthStatus: copayInfo.preAuthStatus,
+        preAuthNumber: copayInfo.preAuthNumber,
+      },
+      newData: {
+        overrideReason: overrideReason,
+      },
+      reason: overrideReason,
+    });
+    
+    setShowOverrideConfirm(false);
+    setOverrideReason('');
+    
+    // Proceed with payment collection
+    await handleCollectPayment();
+  };
+
+  // Request pre-auth now (opens in new tab)
+  const handleRequestPreAuth = () => {
+    setRequestingPreAuth(true);
+    // Open pre-auth form in new tab with patient context
+    const url = `/insurance/pre-auth/new?patientId=${patient.id}&appointmentId=${appointmentId}`;
+    window.open(url, '_blank');
+    
+    // Show toast and reset state after brief delay
+    setTimeout(() => {
+      setRequestingPreAuth(false);
+      toast.success('Pre-auth request page opened. Please complete the form.');
+    }, 500);
   };
 
   if (!isOpen) return null;
@@ -699,53 +776,73 @@ export default function CopayCollectionModal({
                             {(copayInfo.preAuthStatus === 'REQUIRED_NOT_SUBMITTED' || copayInfo.preAuthStatus === 'DENIED') && (
                               <button
                                 type="button"
-                                onClick={() => window.open('/insurance/pre-auth/new', '_blank')}
-                                className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                                onClick={handleRequestPreAuth}
+                                disabled={requestingPreAuth}
+                                className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-1"
                               >
-                                Request Pre-Auth Now
+                                {requestingPreAuth ? (
+                                  <><ArrowPathIcon className="h-3 w-3 animate-spin" /> Opening...</>
+                                ) : (
+                                  'Request Pre-Auth Now'
+                                )}
                               </button>
                             )}
                             <button
                               type="button"
-                              onClick={() => {
-                                // GAP 7: Audit pre-auth override
-                                insuranceCodingApi.logInsuranceAudit({
-                                  patientId: patient.id,
-                                  appointmentId,
-                                  action: 'PREAUTH_OVERRIDE',
-                                  previousData: {
-                                    preAuthStatus: copayInfo.preAuthStatus,
-                                    preAuthNumber: copayInfo.preAuthNumber,
-                                  },
-                                  reason: notes || 'Pre-auth overridden by admin at check-in',
-                                });
-                                handleCollectPayment();
-                              }}
-                              className="px-3 py-1.5 bg-gray-600 text-white text-xs font-medium rounded-lg hover:bg-gray-700 transition-colors"
+                              onClick={() => setShowOverrideConfirm(true)}
+                              disabled={processing}
+                              className="px-3 py-1.5 bg-gray-600 text-white text-xs font-medium rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors"
                             >
                               Override (Admin)
                             </button>
                             <button
                               type="button"
-                              onClick={() => {
-                                // GAP 7: Audit convert to self-pay
-                                insuranceCodingApi.logInsuranceAudit({
-                                  patientId: patient.id,
-                                  appointmentId,
-                                  action: 'CONVERT_TO_SELFPAY',
-                                  previousData: {
-                                    insuranceProvider: copayInfo.insuranceProvider,
-                                    policyNumber: copayInfo.policyNumber,
-                                    preAuthStatus: copayInfo.preAuthStatus,
-                                  },
-                                  reason: notes || 'Converted to self-pay due to pre-auth issue',
-                                });
-                                handleDefer();
-                              }}
-                              className="px-3 py-1.5 bg-orange-100 text-orange-700 text-xs font-medium rounded-lg hover:bg-orange-200 transition-colors"
+                              onClick={handleConvertToSelfPay}
+                              disabled={converting}
+                              className="px-3 py-1.5 bg-orange-100 text-orange-700 text-xs font-medium rounded-lg hover:bg-orange-200 disabled:opacity-50 transition-colors flex items-center gap-1"
                             >
-                              Convert to Self-Pay
+                              {converting ? (
+                                <><ArrowPathIcon className="h-3 w-3 animate-spin" /> Converting...</>
+                              ) : (
+                                'Convert to Self-Pay'
+                              )}
                             </button>
+                          </div>
+                        )}
+                        
+                        {/* Override Confirmation Dialog */}
+                        {showOverrideConfirm && (
+                          <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <p className="text-sm font-medium text-gray-700 mb-2">
+                              ⚠️ Admin Override - Provide Reason:
+                            </p>
+                            <textarea
+                              value={overrideReason}
+                              onChange={(e) => setOverrideReason(e.target.value)}
+                              placeholder="Reason for bypassing pre-authorization..."
+                              className="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                              rows={2}
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={handleOverridePreAuth}
+                                disabled={!overrideReason.trim() || processing}
+                                className="px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
+                              >
+                                Confirm Override & Collect
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setShowOverrideConfirm(false);
+                                  setOverrideReason('');
+                                }}
+                                className="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-300 transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>

@@ -1143,6 +1143,12 @@ model Appointment {
   copayCollected      Boolean           @default(false)
   copayAmount         Decimal?          @db.Decimal(10, 2)
   
+  // Self-pay override (bypass insurance for this visit)
+  selfPay             Boolean           @default(false)
+  selfPayConvertedAt  DateTime?
+  selfPayConvertedBy  String?
+  selfPayReason       String?
+  
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 

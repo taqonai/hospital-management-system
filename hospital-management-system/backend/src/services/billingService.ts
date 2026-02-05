@@ -2474,8 +2474,20 @@ export class BillingService {
     visitType: string;
     paymentRequired: boolean;
   }> {
-    // Look up patient's active primary insurance
-    const patientInsurance = await prisma.patientInsurance.findFirst({
+    // Check if appointment is marked as self-pay (bypassing insurance)
+    let forceSelfPay = false;
+    if (appointmentId) {
+      const appointment = await prisma.appointment.findUnique({
+        where: { id: appointmentId },
+        select: { selfPay: true },
+      });
+      if (appointment?.selfPay) {
+        forceSelfPay = true;
+      }
+    }
+
+    // Look up patient's active primary insurance (skip if forceSelfPay)
+    const patientInsurance = forceSelfPay ? null : await prisma.patientInsurance.findFirst({
       where: {
         patientId,
         isActive: true,
