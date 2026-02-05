@@ -61,7 +61,7 @@ export default function Appointments() {
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [sortBy, setSortBy] = useState('appointmentDate');
+  const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [search, setSearch] = useState('');
   const [limit, setLimit] = useState(10);
@@ -258,6 +258,7 @@ export default function Appointments() {
                     { label: 'Time', field: 'startTime' },
                     { label: 'Type', field: 'type' },
                     { label: 'Status', field: 'status' },
+                    { label: 'Booked On', field: 'createdAt' },
                   ].map(col => (
                     <th
                       key={col.field}
@@ -314,6 +315,11 @@ export default function Appointments() {
                         <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
                           {badge.label}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {appointment.createdAt
+                          ? format(new Date(appointment.createdAt), 'yyyy-MM-dd HH:mm')
+                          : '—'}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">

@@ -108,6 +108,7 @@ export interface Appointment {
     mrn: string;
   };
   doctor: Doctor;
+  createdAt?: string;
 }
 
 export type AppointmentType =

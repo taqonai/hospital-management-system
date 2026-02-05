@@ -187,20 +187,20 @@ All services implement graceful degradation to rule-based fallbacks when OpenAI 
 
 | Metric | Value |
 |--------|-------|
-| Prisma Models | 210 (~8484 lines in `backend/prisma/schema.prisma`) |
+| Prisma Models | 211 (~8523 lines in `backend/prisma/schema.prisma`) |
 | API Endpoints | 1,179+ |
 | Frontend Pages | 49 page directories |
 | Mobile Screens | 12 screen modules |
-| AI Services | 23 |
+| AI Services | 20 (23 including shared modules) |
 | Backend Route Files | 67 |
-| Backend Service Files | 97 |
+| Backend Service Files | 98 |
 
 ### Multi-Tenant Data Model
 
 All entities include `hospitalId` for tenant isolation. The `authorizeHospital` middleware enforces isolation at the API layer (`SUPER_ADMIN` bypasses).
 
 ### User Roles (UserRole enum)
-SUPER_ADMIN, HOSPITAL_ADMIN, DOCTOR, NURSE, RECEPTIONIST, LAB_TECHNICIAN, PHARMACIST, RADIOLOGIST, ACCOUNTANT, PATIENT, HR_MANAGER, HR_STAFF, HOUSEKEEPING_MANAGER, HOUSEKEEPING_STAFF, MAINTENANCE_STAFF, SECURITY_STAFF, DIETARY_STAFF, MARKETING
+SUPER_ADMIN, HOSPITAL_ADMIN, DOCTOR, NURSE, RECEPTIONIST, LAB_TECHNICIAN, PATHOLOGIST, PHARMACIST, RADIOLOGIST, ACCOUNTANT, PATIENT, HR_MANAGER, HR_STAFF, HOUSEKEEPING_MANAGER, HOUSEKEEPING_STAFF, MAINTENANCE_STAFF, SECURITY_STAFF, DIETARY_STAFF, MARKETING, PROCUREMENT_MANAGER, PROCUREMENT_STAFF
 
 ### Backend Route Pattern
 Routes in `backend/src/routes/`, services in `backend/src/services/`. Each module follows:
@@ -220,6 +220,7 @@ Routes in `backend/src/routes/`, services in `backend/src/services/`. Each modul
 Cron jobs in `backend/src/jobs/`, initialized on server start from `app.ts`:
 - `noShowCron.ts` - Marks missed appointments as NO_SHOW
 - `autoReorderCron.ts` - Pharmacy auto-reorder for low stock items
+- `billingCron.ts` - Overdue payment reminders (daily 8 AM) and IPD daily room/bed charges (daily 6 AM)
 
 Key routes (`/api/v1/`):
 - `/auth`, `/patient-auth` - Staff JWT login, patient OTP login
@@ -397,7 +398,7 @@ React crashes (white screen) are usually JavaScript runtime errors. Common cause
 Check route authorization in `backend/src/routes/{module}Routes.ts`. Ensure the user's role is included in the `authorize()` middleware call.
 
 ### Prisma Issues
-The schema is ~8400 lines with 209 models, so `prisma generate` and `prisma migrate dev` can be slow. After schema changes:
+The schema is ~8500 lines with 211 models, so `prisma generate` and `prisma migrate dev` can be slow. After schema changes:
 ```bash
 npx prisma generate          # Regenerate client (required after any schema change)
 npx prisma migrate dev       # Create migration + apply (use for committed changes)
