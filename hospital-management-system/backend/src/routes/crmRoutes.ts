@@ -468,6 +468,16 @@ router.get('/surveys/:id/responses', async (req: AuthenticatedRequest, res: Resp
   }
 });
 
+// Submit survey response
+router.post('/surveys/:id/responses', async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const response = await crmSurveyService.submitResponse(req.params.id, req.body);
+    res.status(201).json({ success: true, data: response });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get survey analytics
 router.get('/surveys/:id/analytics', async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
