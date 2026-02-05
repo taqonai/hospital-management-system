@@ -1914,7 +1914,7 @@ router.get(
 router.post(
   '/insurance/:insuranceId/verify',
   authenticate,
-  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN'),
+  authorize('HOSPITAL_ADMIN', 'SUPER_ADMIN', 'RECEPTIONIST', 'ACCOUNTANT'),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { insuranceId } = req.params;
     const { status, notes } = req.body;

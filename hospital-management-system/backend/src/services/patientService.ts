@@ -449,6 +449,101 @@ export class PatientService {
     return true;
   }
 
+  /**
+   * Verify or reject a patient's insurance (manual verification)
+   */
+  async verifyInsurance(
+    patientId: string,
+    insuranceId: string,
+    hospitalId: string,
+    verifiedById: string,
+    data: {
+      status: 'VERIFIED' | 'REJECTED';
+      notes?: string;
+    }
+  ) {
+    const patient = await prisma.patient.findFirst({
+      where: { id: patientId, hospitalId },
+    });
+
+    if (!patient) {
+      throw new NotFoundError('Patient not found');
+    }
+
+    const insurance = await prisma.patientInsurance.findFirst({
+      where: { id: insuranceId, patientId },
+    });
+
+    if (!insurance) {
+      throw new NotFoundError('Insurance not found');
+    }
+
+    const updated = await prisma.patientInsurance.update({
+      where: { id: insuranceId },
+      data: {
+        verificationStatus: data.status,
+        verifiedAt: new Date(),
+        verifiedBy: verifiedById,
+        verificationNotes: data.notes || null,
+        verificationSource: 'MANUAL',
+      },
+    });
+
+    // Create audit log - get hospitalId from patient
+    await prisma.insuranceVerificationAudit.create({
+      data: {
+        hospitalId: patient.hospitalId,
+        patientId,
+        action: data.status === 'VERIFIED' ? 'MANUAL_VERIFY' : 'MANUAL_REJECT',
+        performedBy: verifiedById,
+        reason: data.notes,
+        previousData: {
+          verificationStatus: insurance.verificationStatus,
+          providerName: insurance.providerName,
+          policyNumber: insurance.policyNumber,
+        },
+        newData: {
+          verificationStatus: data.status,
+          verifiedAt: new Date().toISOString(),
+        },
+      },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Get all pending insurance verifications for a hospital
+   */
+  async getPendingVerifications(hospitalId: string) {
+    const pendingInsurances = await prisma.patientInsurance.findMany({
+      where: {
+        verificationStatus: 'PENDING',
+        patient: {
+          hospitalId,
+        },
+      },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            mrn: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            email: true,
+            emiratesId: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'asc', // Oldest first
+      },
+    });
+
+    return pendingInsurances;
+  }
+
   async getPatientTimeline(patientId: string, hospitalId: string) {
     const patient = await prisma.patient.findFirst({
       where: { id: patientId, hospitalId },
