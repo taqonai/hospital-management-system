@@ -851,6 +851,58 @@ class DHAEClaimService {
     const config = await this.getConfig(hospitalId);
     return config?.mode || 'sandbox';
   }
+
+  /**
+   * Submit pre-authorization request to DHA eClaimLink
+   */
+  async submitPreAuth(
+    hospitalId: string,
+    preAuthId: string,
+    data: {
+      patientId: string;
+      procedureCPTCode: string;
+      diagnosisICDCode?: string;
+      urgency?: string;
+    }
+  ): Promise<{
+    approved: boolean;
+    pending: boolean;
+    authorizationNumber?: string;
+    denialReason?: string;
+    transactionId?: string;
+  }> {
+    const config = await this.getConfig(hospitalId);
+    if (!config) {
+      throw new Error('DHA eClaimLink is not configured for this hospital');
+    }
+
+    // In sandbox mode, simulate a response
+    if (config.mode === 'sandbox') {
+      // Simulate processing delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Simulate approval for most cases, denial for some CPT codes
+      const denialCodes = ['99999', '00000'];
+      const isApproved = !denialCodes.includes(data.procedureCPTCode);
+      
+      return {
+        approved: isApproved,
+        pending: false,
+        authorizationNumber: isApproved ? `DHA-PRE-${Date.now()}` : undefined,
+        denialReason: isApproved ? undefined : 'Procedure not covered under current plan (sandbox test)',
+        transactionId: `TXN-${Date.now()}`,
+      };
+    }
+
+    // Production mode - call actual DHA API
+    // TODO: Implement actual DHA eClaimLink pre-auth API call
+    // For now, return as pending for manual follow-up
+    return {
+      approved: false,
+      pending: true,
+      transactionId: `TXN-${Date.now()}`,
+    };
+  }
 }
 
 export const dhaEClaimService = new DHAEClaimService();

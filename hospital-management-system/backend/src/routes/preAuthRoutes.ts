@@ -174,4 +174,83 @@ router.post(
   })
 );
 
+/**
+ * POST /pre-auth/submit-to-dha
+ * Submit pre-auth request to DHA eClaimLink
+ * Permission: MANAGE_PRE_AUTH
+ */
+router.post(
+  '/submit-to-dha',
+  authenticate,
+  authorizeWithPermission('MANAGE_PRE_AUTH', []),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { user } = req;
+    const { patientId, procedureCPTCode, diagnosisICDCode, urgency, notes, appointmentId } = req.body;
+
+    if (!patientId || !procedureCPTCode) {
+      return res.status(400).json({ success: false, message: 'patientId and procedureCPTCode are required' });
+    }
+
+    // First create the pre-auth request
+    const preAuth = await preAuthService.createPreAuthRequest(
+      user!.hospitalId,
+      {
+        patientId,
+        procedureCPTCode,
+        diagnosisICDCode,
+        urgency: urgency || 'ROUTINE',
+        notes,
+        appointmentId,
+      },
+      user!.userId
+    );
+
+    // Try to submit to DHA
+    try {
+      const { dhaEClaimService } = await import('../services/dhaEClaimService');
+      const isConfigured = await dhaEClaimService.isConfigured(user!.hospitalId);
+      
+      if (!isConfigured) {
+        // DHA not configured - return the saved request as PENDING
+        sendCreated(res, preAuth, 'Pre-auth saved. DHA not configured - follow up manually.');
+        return;
+      }
+
+      // Submit to DHA
+      const dhaResult = await dhaEClaimService.submitPreAuth(
+        user!.hospitalId,
+        preAuth.id,
+        {
+          patientId,
+          procedureCPTCode,
+          diagnosisICDCode,
+          urgency,
+        }
+      );
+
+      // Update pre-auth with DHA response
+      const updated = await preAuthService.updatePreAuthStatus(
+        preAuth.id,
+        user!.hospitalId,
+        {
+          status: dhaResult.approved ? 'APPROVED' : (dhaResult.pending ? 'SUBMITTED' : 'DENIED'),
+          authorizationNumber: dhaResult.authorizationNumber,
+          denialReason: dhaResult.denialReason,
+          dhaTransactionId: dhaResult.transactionId,
+        },
+        user!.userId
+      );
+
+      sendCreated(res, updated, dhaResult.approved ? 'Pre-auth approved by DHA' : 'Pre-auth submitted to DHA');
+    } catch (dhaError: any) {
+      // DHA submission failed - keep request as PENDING for manual follow-up
+      console.error('[PRE-AUTH] DHA submission error:', dhaError.message);
+      sendCreated(res, {
+        ...preAuth,
+        dhaError: dhaError.message,
+      }, 'Pre-auth saved but DHA submission failed. Please follow up manually.');
+    }
+  })
+);
+
 export default router;
