@@ -535,7 +535,365 @@ Portal Access
 
 ---
 
+# 🚨 ALL EDGE CASES BY ROLE
+
+## RECEPTIONIST Edge Cases
+
+### Edge Case R1: Insurance Expired
+**Patient:** Fatima Expired-Test
+| Trigger | System Response | Options |
+|---------|-----------------|---------|
+| Check-in patient | ⚠️ "Insurance Expired (Jan 31, 2025)" | 1. Convert to Self-Pay |
+| | | 2. Defer Check-in |
+| | | 3. Override (needs approval) |
+
+### Edge Case R2: No Insurance on File
+**Patient:** Any new patient
+| Trigger | System Response | Options |
+|---------|-----------------|---------|
+| Check-in patient | "No insurance found" | 1. Enter Emirates ID → Lookup |
+| | | 2. Add insurance manually |
+| | | 3. Proceed as Self-Pay |
+
+### Edge Case R3: Emirates ID Insurance Lookup
+| Trigger | System Response | Result |
+|---------|-----------------|--------|
+| Enter Emirates ID | 🔄 "Checking DHA/DOH..." | ✅ Insurance found & auto-filled |
+| | | OR ❌ "No policy found" |
+
+### Edge Case R4: Dual Insurance (COB)
+**Patient:** Ahmed COB-Test
+| Trigger | System Response | Calculation |
+|---------|-----------------|-------------|
+| Check-in | "2 policies detected" | Primary (Daman): 80% = AED 400 |
+| | | Secondary (AXA): 100% of remaining |
+| | | **Patient pays: AED 0** |
+
+### Edge Case R5: Deductible Not Met
+| Trigger | System Response | Calculation |
+|---------|-----------------|-------------|
+| Check-in insured patient | Deductible status shown | Annual: AED 500 |
+| | | Used: AED 150 |
+| | | Remaining: AED 350 |
+| | | Patient pays deductible first |
+
+### Edge Case R6: Annual Copay Cap Reached
+| Trigger | System Response | Result |
+|---------|-----------------|--------|
+| Check-in patient who hit cap | "Annual cap reached" | Insurance now covers 100% |
+| | | Patient pays: AED 0 |
+
+### Edge Case R7: Pre-Auth Required at Check-in
+**Patient:** Sara PreAuth-Test (for certain procedures)
+| Trigger | System Response | Options |
+|---------|-----------------|---------|
+| Check-in for MRI appt | ⚠️ "Pre-authorization required" | 1. Request Pre-Auth Now |
+| | | 2. Defer until approved |
+
+### Edge Case R8: Patient Blocked (No-Shows)
+| Trigger | System Response | Options |
+|---------|-----------------|---------|
+| Check-in blocked patient | ⚠️ "Patient blocked (3 no-shows)" | 1. Override with reason |
+| | | 2. Deny check-in |
+
+---
+
+## DOCTOR Edge Cases
+
+### Edge Case D1: Ordering High-Cost Procedure (Pre-Auth)
+| Trigger | System Response | Action |
+|---------|-----------------|--------|
+| Order MRI Brain | ⚠️ "Pre-Auth Required from ADNIC" | Click "Request Pre-Auth" |
+| Order CT Scan | May require pre-auth | Check payer rules |
+
+### Edge Case D2: Drug Interaction Warning
+| Trigger | System Response | Action |
+|---------|-----------------|--------|
+| Prescribe conflicting drug | ⚠️ "Drug Interaction Alert" | Review & override OR change |
+
+### Edge Case D3: Allergy Alert
+| Trigger | System Response | Action |
+|---------|-----------------|--------|
+| Prescribe drug patient is allergic to | 🔴 "ALLERGY ALERT: Penicillin" | Cannot proceed without override |
+
+### Edge Case D4: Controlled Substance
+| Trigger | System Response | Requirements |
+|---------|-----------------|--------------|
+| Prescribe controlled drug | ⚠️ "Controlled Substance" | Requires special documentation |
+| | | Patient ID verification at pharmacy |
+
+### Edge Case D5: Cost Exceeds Coverage
+| Trigger | System Response | Display |
+|---------|-----------------|---------|
+| Order expensive procedure | Cost estimate shows | "Total: AED 5000" |
+| | | "Insurance covers: AED 4000" |
+| | | "Patient pays: AED 1000" |
+
+---
+
+## LAB TECHNICIAN Edge Cases
+
+### Edge Case L1: Walk-in No Insurance
+| Trigger | System Response | Flow |
+|---------|-----------------|------|
+| Walk-in patient, no insurance | "Self-pay patient" | Show full test cost |
+| | | Collect 100% payment |
+
+### Edge Case L2: Walk-in Insurance Lookup
+| Trigger | System Response | Flow |
+|---------|-----------------|------|
+| Enter Emirates ID | 🔄 Lookup insurance | Auto-populate if found |
+| | | Calculate copay |
+
+### Edge Case L3: Sample Rejected
+| Trigger | System Response | Action |
+|---------|-----------------|--------|
+| Sample quality issue | Mark as "Rejected" | Request recollection |
+| | | No charge if recollected |
+
+### Edge Case L4: Critical Result
+| Trigger | System Response | Action |
+|---------|-----------------|--------|
+| Result outside normal range | 🔴 "CRITICAL VALUE" | Alert doctor immediately |
+| | | Flag on patient record |
+
+### Edge Case L5: Test Not Covered by Insurance
+| Trigger | System Response | Options |
+|---------|-----------------|---------|
+| Order test not in coverage | "Test not covered" | 1. Patient pays full |
+| | | 2. Cancel test |
+
+---
+
+## PHARMACIST Edge Cases
+
+### Edge Case P1: Drug Out of Stock
+| Trigger | System Response | Options |
+|---------|-----------------|---------|
+| Dispense unavailable drug | ⚠️ "Out of Stock" | 1. Suggest generic alternative |
+| | | 2. Suggest equivalent brand |
+| | | 3. Partial dispense |
+| | | 4. Order & notify patient |
+
+### Edge Case P2: Generic Substitution
+| Trigger | System Response | Flow |
+|---------|-----------------|------|
+| Select generic alternative | New copay calculated | Usually lower price |
+| | Doctor notified | Log substitution |
+
+### Edge Case P3: Controlled Substance
+| Trigger | System Response | Requirements |
+|---------|-----------------|--------------|
+| Dispense controlled drug | ⚠️ "Additional Verification" | 1. Verify patient Emirates ID |
+| | | 2. Record ID number |
+| | | 3. Full audit trail |
+| | | 4. Special storage log |
+
+### Edge Case P4: Insurance Doesn't Cover Drug
+| Trigger | System Response | Options |
+|---------|-----------------|---------|
+| Drug not in formulary | "Not covered by insurance" | 1. Patient pays full price |
+| | | 2. Suggest covered alternative |
+
+### Edge Case P5: Partial Dispense
+| Trigger | System Response | Flow |
+|---------|-----------------|------|
+| Only 10 of 20 tablets available | "Partial dispense" | Dispense 10, schedule balance |
+| | | Charge only for dispensed |
+
+### Edge Case P6: Copay Exceeds Drug Cost
+| Trigger | System Response | Result |
+|---------|-----------------|--------|
+| Copay > actual cost | System caps copay | Patient pays lesser amount |
+
+### Edge Case P7: Prescription Expired
+| Trigger | System Response | Action |
+|---------|-----------------|--------|
+| Rx older than validity period | ⚠️ "Prescription Expired" | Cannot dispense |
+| | | Patient needs new Rx |
+
+---
+
+## ADMIN/FINANCE Edge Cases
+
+### Edge Case A1: Insurance Underpayment
+| Trigger | System Response | Options |
+|---------|-----------------|---------|
+| Insurance pays less than claimed | ⚠️ "Shortfall: AED 200" | 1. Bill patient |
+| Claimed: AED 1000, Paid: AED 800 | | 2. Write off (approval needed) |
+| | | 3. Appeal to insurer |
+
+### Edge Case A2: Claim Denied
+| Trigger | System Response | Options |
+|---------|-----------------|---------|
+| DHA rejects claim | Denial reason shown | 1. Correct & resubmit |
+| | "Missing documentation" | 2. Bill patient |
+| | | 3. Write off |
+
+### Edge Case A3: Copay Waiver Request
+| Trigger | System Response | Flow |
+|---------|-----------------|------|
+| Receptionist requests waiver | Pending approval | Admin reviews |
+| Reason: "Financial hardship" | | Approve or Deny |
+| | | Full audit trail |
+
+### Edge Case A4: Refund Required
+| Trigger | System Response | Flow |
+|---------|-----------------|------|
+| Patient overpaid | Refund calculated | Process refund |
+| | Original: AED 50, Actual: AED 30 | Credit to patient |
+
+### Edge Case A5: Duplicate Claim
+| Trigger | System Response | Action |
+|---------|-----------------|--------|
+| Submit already-submitted claim | ⚠️ "Duplicate detected" | Review before proceeding |
+
+### Edge Case A6: IPD Insurance Expiring During Stay
+| Trigger | System Response | Options |
+|---------|-----------------|---------|
+| Patient admitted, insurance expiring | ⚠️ Alert: "Expires in 2 days" | 1. Contact patient for renewal |
+| | | 2. Convert to self-pay |
+| | | 3. Request extension |
+
+### Edge Case A7: VAT Exempt Service
+| Trigger | System Response | Calculation |
+|---------|-----------------|-------------|
+| Healthcare service (exempt) | No VAT applied | Subtotal = Total |
+| OR taxable service | 5% VAT added | Show breakdown |
+
+### Edge Case A8: Multi-Currency Payment
+| Trigger | System Response | Flow |
+|---------|-----------------|------|
+| Patient pays in USD | Convert to AED | Use current rate |
+| | | Record both amounts |
+
+### Edge Case A9: Bad Debt Write-Off
+| Trigger | System Response | Requirements |
+|---------|-----------------|--------------|
+| Patient won't pay | Write-off request | Finance approval |
+| After collection attempts | | Document attempts |
+| | | Audit trail |
+
+### Edge Case A10: Payment Plan Request
+| Trigger | System Response | Flow |
+|---------|-----------------|------|
+| Large balance, can't pay at once | Create payment plan | Split into installments |
+| | | Track payments |
+
+---
+
+## IPD-SPECIFIC Edge Cases
+
+### Edge Case IPD1: Room Upgrade
+| Trigger | System Response | Display |
+|---------|-----------------|---------|
+| Patient requests private room | ⚠️ "Upgrade cost" | Base (covered): AED 800/day |
+| Insurance covers general ward | | Private: +AED 500/day |
+| | | "Patient pays extra AED 500/day" |
+
+### Edge Case IPD2: Extended Stay Beyond Estimate
+| Trigger | System Response | Action |
+|---------|-----------------|--------|
+| Stay exceeds initial estimate | "Additional deposit needed" | Request top-up |
+| Original: 3 days, Now: 5 days | Calculate new amount | Notify patient |
+
+### Edge Case IPD3: Insurance Denial During Stay
+| Trigger | System Response | Options |
+|---------|-----------------|---------|
+| Insurer denies continued stay | ⚠️ Alert to admin | 1. Appeal decision |
+| "Not medically necessary" | | 2. Convert to self-pay |
+| | | 3. Discharge planning |
+
+### Edge Case IPD4: Deposit Shortfall at Discharge
+| Trigger | System Response | Options |
+|---------|-----------------|---------|
+| Final bill > deposit | "Balance due: AED 500" | 1. Collect balance |
+| | | 2. Payment plan |
+| | | 3. Bill later |
+
+### Edge Case IPD5: Deposit Excess (Refund)
+| Trigger | System Response | Action |
+|---------|-----------------|--------|
+| Final bill < deposit | "Refund due: AED 200" | Process refund |
+| | | Credit to patient |
+
+---
+
+# ✅ COMPLETE EDGE CASE CHECKLIST
+
+## By Category
+
+### Insurance Verification (8 cases)
+| # | Edge Case | Test Patient |
+|---|-----------|--------------|
+| 1 | ✅ Insurance Active | Ahmed COB-Test |
+| 2 | ✅ Insurance Expired | Fatima Expired-Test |
+| 3 | ✅ No Insurance | Anindya Roy |
+| 4 | ✅ Dual Insurance (COB) | Ahmed COB-Test |
+| 5 | ✅ Pre-Auth Required | Sara PreAuth-Test |
+| 6 | ✅ Deductible Not Met | Any insured patient |
+| 7 | ✅ Annual Cap Reached | Any insured patient |
+| 8 | ✅ EID Lookup | Any patient with EID |
+
+### Payment & Billing (10 cases)
+| # | Edge Case | Scenario |
+|---|-----------|----------|
+| 1 | ✅ Copay Collection | Normal flow |
+| 2 | ✅ Self-Pay (full payment) | Expired/no insurance |
+| 3 | ✅ Partial Payment | Patient can't pay full |
+| 4 | ✅ Refund | Overpayment |
+| 5 | ✅ Copay Waiver | Financial hardship |
+| 6 | ✅ VAT Calculation | 5% on invoices |
+| 7 | ✅ Bilingual Receipt | Arabic + English |
+| 8 | ✅ Underpayment | Insurance pays less |
+| 9 | ✅ Write-Off | Uncollectable debt |
+| 10 | ✅ Payment Plan | Large balance |
+
+### Pharmacy (7 cases)
+| # | Edge Case | Scenario |
+|---|-----------|----------|
+| 1 | ✅ Drug Out of Stock | Substitution offered |
+| 2 | ✅ Generic Substitution | Lower copay |
+| 3 | ✅ Controlled Substance | ID verification |
+| 4 | ✅ Drug Not Covered | Patient pays full |
+| 5 | ✅ Partial Dispense | Limited stock |
+| 6 | ✅ Copay > Drug Cost | Cap applied |
+| 7 | ✅ Expired Prescription | Cannot dispense |
+
+### Lab/Radiology (5 cases)
+| # | Edge Case | Scenario |
+|---|-----------|----------|
+| 1 | ✅ Walk-in with Insurance | Auto-capture |
+| 2 | ✅ Walk-in Self-Pay | Full payment |
+| 3 | ✅ Test Not Covered | Patient pays |
+| 4 | ✅ Sample Rejected | Recollection |
+| 5 | ✅ Critical Result | Alert doctor |
+
+### IPD (5 cases)
+| # | Edge Case | Scenario |
+|---|-----------|----------|
+| 1 | ✅ Room Upgrade | Extra charge |
+| 2 | ✅ Insurance Expires During Stay | Alert & options |
+| 3 | ✅ Extended Stay | Additional deposit |
+| 4 | ✅ Deposit Shortfall | Collect at discharge |
+| 5 | ✅ Deposit Excess | Refund patient |
+
+### Claims (5 cases)
+| # | Edge Case | Scenario |
+|---|-----------|----------|
+| 1 | ✅ Claim Submitted | Normal flow |
+| 2 | ✅ Claim Denied | Resubmit/appeal |
+| 3 | ✅ Claim Underpaid | Bill patient/appeal |
+| 4 | ✅ Duplicate Claim | Detection |
+| 5 | ✅ Pre-Auth Request | DHA submission |
+
+---
+
+**TOTAL: 40 Edge Cases Documented** ✅
+
+---
+
 **Document End**
 
 *Created by TeaBot ☕ for Taqon Team*  
-*February 5, 2026*
+*February 5, 2026 — Updated with All Edge Cases*
