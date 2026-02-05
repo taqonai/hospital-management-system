@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRightIcon,
   MegaphoneIcon,
@@ -14,6 +14,7 @@ import ChartCard from '../ChartCard';
 import { doughnutChartOptions, barChartOptions, chartColors } from '../chartSetup';
 
 export default function ReceptionistDashboard() {
+  const navigate = useNavigate();
   const {
     opdStats,
     queueDisplay,
@@ -28,7 +29,7 @@ export default function ReceptionistDashboard() {
   const inProgress = opdStats?.inProgress || opdQueue?.filter((q: any) => q.status === 'IN_PROGRESS').length || 0;
   const completed = opdStats?.completed || 0;
   const noShow = opdStats?.noShow || 0;
-  const total = opdStats?.totalAppointments || todayAppointments?.appointments?.length || 0;
+  const total = opdStats?.totalAppointments || todayAppointments?.length || 0;
 
   const noShowRate = total > 0 ? ((noShow / total) * 100).toFixed(1) : '0';
 
@@ -57,7 +58,7 @@ export default function ReceptionistDashboard() {
       hours[`${i}:00`] = 0;
     }
 
-    todayAppointments?.appointments?.forEach((apt: any) => {
+    todayAppointments?.forEach((apt: any) => {
       const hour = apt.startTime?.split(':')[0];
       if (hour && hours[`${hour}:00`] !== undefined) {
         hours[`${hour}:00`]++;
@@ -216,7 +217,10 @@ export default function ReceptionistDashboard() {
                   </div>
                 </div>
                 {idx === 0 && (
-                  <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm font-medium">
+                  <button
+                    onClick={() => navigate('/opd')}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm font-medium"
+                  >
                     <MegaphoneIcon className="h-4 w-4" />
                     Call
                   </button>
@@ -246,7 +250,7 @@ export default function ReceptionistDashboard() {
           </div>
 
           <div className="space-y-3 max-h-80 overflow-y-auto">
-            {todayAppointments?.appointments
+            {todayAppointments
               ?.filter((apt: any) => apt.status === 'SCHEDULED' || apt.status === 'CONFIRMED')
               .slice(0, 6)
               .map((apt: any) => (
@@ -268,7 +272,7 @@ export default function ReceptionistDashboard() {
                     </div>
                   </div>
                   <Link
-                    to={`/opd/check-in/${apt.id}`}
+                    to="/opd"
                     className="px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 transition-colors text-sm font-medium"
                   >
                     Check In
@@ -276,8 +280,8 @@ export default function ReceptionistDashboard() {
                 </div>
               ))}
 
-            {(!todayAppointments?.appointments ||
-              todayAppointments.appointments.filter((apt: any) =>
+            {(!todayAppointments ||
+              todayAppointments.filter((apt: any) =>
                 apt.status === 'SCHEDULED' || apt.status === 'CONFIRMED'
               ).length === 0) && (
               <div className="text-center py-8">
@@ -292,7 +296,7 @@ export default function ReceptionistDashboard() {
       {/* Quick Actions */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Link
-          to="/opd/check-in"
+          to="/opd"
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-emerald-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-emerald-500 group-hover:scale-110 transition-transform">
@@ -304,7 +308,7 @@ export default function ReceptionistDashboard() {
           </div>
         </Link>
         <Link
-          to="/appointments?action=new"
+          to="/appointments"
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-blue-500 group-hover:scale-110 transition-transform">
@@ -316,7 +320,7 @@ export default function ReceptionistDashboard() {
           </div>
         </Link>
         <Link
-          to="/patients?action=new"
+          to="/patients"
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-purple-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-purple-500 group-hover:scale-110 transition-transform">
@@ -328,7 +332,7 @@ export default function ReceptionistDashboard() {
           </div>
         </Link>
         <Link
-          to="/opd/call"
+          to="/opd"
           className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:border-amber-200 hover:shadow-md transition-all group"
         >
           <div className="p-3 rounded-xl bg-amber-500 group-hover:scale-110 transition-transform">
