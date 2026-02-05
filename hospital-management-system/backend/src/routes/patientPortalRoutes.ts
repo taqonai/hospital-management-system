@@ -578,22 +578,154 @@ router.post(
     const hospitalId = req.patient?.hospitalId || '';
     const patientId = req.patient?.patientId || '';
 
-    // Get patient context for personalized responses
+    // Get rich patient context including clinical data for personalized responses
     let patientContext = '';
+    let clinicalDataContext = '';
     try {
       const patient = await prisma.patient.findUnique({
         where: { id: patientId },
-        select: { firstName: true, lastName: true, dateOfBirth: true, gender: true }
+        select: {
+          firstName: true, lastName: true, dateOfBirth: true, gender: true, bloodGroup: true,
+          medicalHistory: { select: { chronicConditions: true, familyHistory: true, currentMedications: true, currentTreatment: true, isPregnant: true } },
+          allergies: { select: { allergen: true, type: true, severity: true, reaction: true } },
+        }
       });
       if (patient) {
         const age = patient.dateOfBirth
           ? Math.floor((Date.now() - new Date(patient.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
           : null;
-        patientContext = `Patient: ${patient.firstName} ${patient.lastName}, ${age ? `Age: ${age}` : ''}, Gender: ${patient.gender || 'Not specified'}`;
+        patientContext = `Patient: ${patient.firstName} ${patient.lastName}, ${age ? `Age: ${age}` : ''}, Gender: ${patient.gender || 'Not specified'}${patient.bloodGroup ? `, Blood Group: ${patient.bloodGroup}` : ''}`;
+
+        // Add medical history
+        const mh = patient.medicalHistory;
+        if (mh) {
+          const parts: string[] = [];
+          if (mh.chronicConditions?.length) parts.push(`Chronic Conditions: ${(mh.chronicConditions as string[]).join(', ')}`);
+          if (mh.familyHistory?.length) parts.push(`Family History: ${(mh.familyHistory as string[]).join(', ')}`);
+          if (mh.currentTreatment) parts.push(`Current Treatment: ${mh.currentTreatment}`);
+          if (mh.isPregnant) parts.push('Currently pregnant');
+          if (parts.length) clinicalDataContext += `\n\nMEDICAL HISTORY:\n${parts.join('\n')}`;
+        }
+
+        // Add allergies
+        if (patient.allergies?.length) {
+          clinicalDataContext += `\n\nALLERGIES:\n${patient.allergies.map((a: any) => `- ${a.allergen} (${a.type}, Severity: ${a.severity})${a.reaction ? ` — Reaction: ${a.reaction}` : ''}`).join('\n')}`;
+        }
       }
+
+      // Fetch recent lab results (last 5 orders with their test results)
+      const labOrders = await prisma.labOrder.findMany({
+        where: { patientId, hospitalId },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        include: {
+          tests: {
+            include: {
+              labTest: { select: { name: true, category: true } },
+            },
+          },
+        },
+      });
+      if (labOrders.length) {
+        const labLines: string[] = [];
+        for (const order of labOrders) {
+          const date = order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'Unknown date';
+          const completedTests = (order as any).tests.filter((t: any) => t.status === 'COMPLETED' || t.status === 'VERIFIED' || t.resultValue !== null);
+          for (const t of completedTests) {
+            const flag = t.isCritical ? ' **CRITICAL**' : t.isAbnormal ? ' *ABNORMAL*' : '';
+            labLines.push(`- ${t.labTest?.name || 'Unknown Test'} (${t.labTest?.category || ''}): ${t.resultValue ?? t.result ?? 'Pending'} ${t.unit || ''} (Ref: ${t.normalRange || 'N/A'})${flag}${t.comments ? ` — ${t.comments}` : ''} [${date}]`);
+          }
+        }
+        if (labLines.length) {
+          clinicalDataContext += `\n\nRECENT LAB RESULTS:\n${labLines.join('\n')}`;
+        }
+      }
+
+      // Fetch active prescriptions
+      const prescriptions = await prisma.prescription.findMany({
+        where: { patientId, status: 'ACTIVE' },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        include: {
+          medications: {
+            select: { drugName: true, dosage: true, frequency: true, duration: true, route: true, instructions: true, beforeAfterFood: true },
+          },
+        },
+      });
+      if (prescriptions.length) {
+        const medLines: string[] = [];
+        for (const rx of prescriptions) {
+          for (const m of (rx as any).medications) {
+            medLines.push(`- ${m.drugName}: ${m.dosage || ''} ${m.route || 'oral'}, ${m.frequency || ''} for ${m.duration || 'as directed'}${m.instructions ? ` (${m.instructions})` : ''}${m.beforeAfterFood ? ` [${m.beforeAfterFood}]` : ''}`);
+          }
+        }
+        if (medLines.length) {
+          clinicalDataContext += `\n\nACTIVE MEDICATIONS:\n${medLines.join('\n')}`;
+        }
+      }
+
+      // Fetch latest vitals
+      const latestVital = await prisma.vital.findFirst({
+        where: { patientId },
+        orderBy: { recordedAt: 'desc' },
+        select: {
+          temperature: true, bloodPressureSys: true, bloodPressureDia: true,
+          heartRate: true, respiratoryRate: true, oxygenSaturation: true,
+          weight: true, height: true, bmi: true, bloodSugar: true, painLevel: true,
+          recordedAt: true,
+        },
+      });
+      if (latestVital) {
+        const vParts: string[] = [];
+        if (latestVital.bloodPressureSys && latestVital.bloodPressureDia) vParts.push(`BP: ${latestVital.bloodPressureSys}/${latestVital.bloodPressureDia} mmHg`);
+        if (latestVital.heartRate) vParts.push(`HR: ${latestVital.heartRate} bpm`);
+        if (latestVital.temperature) vParts.push(`Temp: ${latestVital.temperature}°C`);
+        if (latestVital.oxygenSaturation) vParts.push(`SpO2: ${latestVital.oxygenSaturation}%`);
+        if (latestVital.respiratoryRate) vParts.push(`RR: ${latestVital.respiratoryRate}/min`);
+        if (latestVital.bloodSugar) vParts.push(`Blood Sugar: ${latestVital.bloodSugar} mg/dL`);
+        if (latestVital.weight) vParts.push(`Weight: ${latestVital.weight} kg`);
+        if (latestVital.height) vParts.push(`Height: ${latestVital.height} cm`);
+        if (latestVital.bmi) vParts.push(`BMI: ${latestVital.bmi}`);
+        if (latestVital.painLevel !== null && latestVital.painLevel !== undefined) vParts.push(`Pain: ${latestVital.painLevel}/10`);
+        if (vParts.length) {
+          const vDate = latestVital.recordedAt ? new Date(latestVital.recordedAt).toLocaleDateString() : '';
+          clinicalDataContext += `\n\nLATEST VITALS${vDate ? ` (${vDate})` : ''}:\n${vParts.join(', ')}`;
+        }
+      }
+
+      // Fetch recent diagnoses from consultations
+      const recentConsultations = await prisma.consultation.findMany({
+        where: { appointment: { patientId, hospitalId }, status: 'COMPLETED' },
+        orderBy: { createdAt: 'desc' },
+        take: 3,
+        select: {
+          diagnosis: true, treatmentPlan: true, advice: true, createdAt: true,
+          consultationDiagnoses: {
+            select: { isPrimary: true, icd10Code: { select: { code: true, description: true } } },
+          },
+        },
+      });
+      if (recentConsultations.length) {
+        const dxLines: string[] = [];
+        for (const c of recentConsultations) {
+          const date = c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '';
+          const diagnoses = c.consultationDiagnoses?.map((d: any) => `${d.icd10Code?.description || ''} (${d.icd10Code?.code || ''})${d.isPrimary ? ' [Primary]' : ''}`).filter(Boolean) || [];
+          const freeText = (c.diagnosis as string[] || []).filter(Boolean);
+          const allDx = [...diagnoses, ...freeText].filter(Boolean);
+          if (allDx.length) dxLines.push(`[${date}] Diagnoses: ${allDx.join('; ')}${c.treatmentPlan ? ` | Plan: ${c.treatmentPlan}` : ''}`);
+        }
+        if (dxLines.length) {
+          clinicalDataContext += `\n\nRECENT DIAGNOSES:\n${dxLines.join('\n')}`;
+        }
+      }
+
     } catch (e) {
-      // Continue without patient context
+      // Continue with whatever context we have
+      console.error('Error fetching patient clinical context:', e);
     }
+
+    // Build full context for AI
+    const fullContext = patientContext + clinicalDataContext;
 
     // Try to use AI Health Assistant service for dynamic response
     try {
@@ -603,8 +735,8 @@ router.post(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message,
-          context: `${context}. ${patientContext}`,
-          patient_context: patientContext ? { raw_context: patientContext } : null,
+          context: `${context}. ${fullContext}`,
+          patient_context: fullContext ? { raw_context: fullContext } : null,
           history: history || [],
           role: 'patient_health_assistant'
         })
