@@ -114,8 +114,9 @@ export class PatientService {
             },
           },
           // Include primary insurance for expiry status display
-          insurance: {
-            where: { isPrimary: true },
+          insurances: {
+            where: { isActive: true },
+            orderBy: { priority: 'asc' },
             take: 1,
             select: {
               id: true,

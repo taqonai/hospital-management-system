@@ -315,14 +315,14 @@ export default function Patients() {
                             </span>
                           )}
                           {/* Insurance Status Badge */}
-                          {(patient as any).insurance?.[0] ? (
-                            new Date((patient as any).insurance[0].expiryDate) < new Date() ? (
+                          {(patient as any).insurances?.[0] ? (
+                            new Date((patient as any).insurances[0].expiryDate) < new Date() ? (
                               <span className="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
                                 Insurance Expired
                               </span>
                             ) : (
                               <span className="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-                                {(patient as any).insurance[0].providerName}
+                                {(patient as any).insurances[0].providerName}
                               </span>
                             )
                           ) : (
