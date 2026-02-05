@@ -6,6 +6,7 @@ import {
   PhoneIcon,
   CalendarDaysIcon,
 } from '@heroicons/react/24/outline';
+import { CheckCircleIcon } from '@heroicons/react/24/outline';
 import { PatientIcon, CalendarBillingIcon, HeartbeatIcon, MedicalShieldIcon, NotificationBellIcon } from '../../../icons/HMSIcons';
 import { Doughnut, Bar } from 'react-chartjs-2';
 import { useReceptionistDashboard } from '../../../../hooks/useReceptionistDashboard';
@@ -24,8 +25,9 @@ export default function ReceptionistDashboard() {
     refetchAll,
   } = useReceptionistDashboard();
 
-  // Calculate stats
-  const waiting = opdStats?.waiting || opdQueue?.filter((q: any) => q.status === 'CHECKED_IN' || q.status === 'SCHEDULED' || q.status === 'CONFIRMED').length || 0;
+  // Calculate stats — backend returns separate counts per status
+  const waiting = opdStats?.waiting || opdQueue?.filter((q: any) => q.status === 'SCHEDULED' || q.status === 'CONFIRMED').length || 0;
+  const checkedIn = opdStats?.checkedIn || opdQueue?.filter((q: any) => q.status === 'CHECKED_IN').length || 0;
   const inProgress = opdStats?.inProgress || opdQueue?.filter((q: any) => q.status === 'IN_PROGRESS').length || 0;
   const completed = opdStats?.completed || 0;
   const noShow = opdStats?.noShow || 0;
@@ -38,8 +40,8 @@ export default function ReceptionistDashboard() {
     labels: ['Checked In', 'Pending', 'No Show'],
     datasets: [{
       data: [
-        opdStats?.checkedIn || waiting + inProgress + completed,
-        total - (opdStats?.checkedIn || waiting + inProgress + completed + noShow) - noShow,
+        checkedIn + inProgress + completed,
+        waiting,
         noShow,
       ],
       backgroundColor: [
@@ -100,13 +102,21 @@ export default function ReceptionistDashboard() {
   return (
     <div className="space-y-6">
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-5">
         <KPICard
           title="Waiting"
           value={waiting}
           icon={HeartbeatIcon}
           color="amber"
-          subtitle="In queue"
+          subtitle="Not arrived"
+          isLoading={isLoading}
+        />
+        <KPICard
+          title="Checked In"
+          value={checkedIn}
+          icon={CheckCircleIcon}
+          color="cyan"
+          subtitle="Ready to see"
           isLoading={isLoading}
         />
         <KPICard
