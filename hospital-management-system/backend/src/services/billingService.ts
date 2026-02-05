@@ -2487,13 +2487,27 @@ export class BillingService {
     }
 
     // Look up patient's active primary insurance (skip if forceSelfPay)
-    const patientInsurance = forceSelfPay ? null : await prisma.patientInsurance.findFirst({
+    let patientInsurance = forceSelfPay ? null : await prisma.patientInsurance.findFirst({
       where: {
         patientId,
         isActive: true,
         isPrimary: true,
       },
     });
+
+    // === FIX: Check if insurance is expired ===
+    let insuranceExpired = false;
+    let insuranceExpiryDate: Date | null = null;
+    if (patientInsurance && patientInsurance.expiryDate) {
+      insuranceExpiryDate = new Date(patientInsurance.expiryDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      insuranceExpiryDate.setHours(0, 0, 0, 0);
+      if (insuranceExpiryDate < today) {
+        insuranceExpired = true;
+        console.warn(`[COPAY] Insurance EXPIRED on ${patientInsurance.expiryDate} for patient ${patientId}`);
+      }
+    }
 
     // For self-pay patients (no insurance), calculate consultation fee
     if (!patientInsurance) {
@@ -2815,8 +2829,18 @@ export class BillingService {
           }
         }
 
-        if (payerRequiresPreAuth || cptRequiresPreAuth) {
-          preAuthRequired = true;
+        // FIX: Only require pre-auth if there are actual pending orders that need it
+    // For check-in (consultation), we DON'T require pre-auth unless there's a pending imaging/surgery order
+    const pendingPreAuthOrders = await prisma.preAuthRequest.findFirst({
+      where: {
+        hospitalId,
+        patientId,
+        status: { in: ['PENDING', 'SUBMITTED'] },
+      },
+    });
+
+    if ((payerRequiresPreAuth || cptRequiresPreAuth) && pendingPreAuthOrders) {
+      preAuthRequired = true;
 
           // Look for existing pre-auth request for this patient and policy
           const existingPreAuth = await prisma.preAuthRequest.findFirst({
@@ -3090,6 +3114,8 @@ export class BillingService {
       preAuthStatus,
       preAuthNumber,
       preAuthMessage,
+      insuranceExpired,
+      insuranceExpiryDate: insuranceExpiryDate ? insuranceExpiryDate.toISOString() : null,
       // GAP 5: Data source indicator
       dataSource,
       // GAP 2: COB (Coordination of Benefits)
