@@ -10,6 +10,8 @@ import {
   RefreshControl,
   Linking,
   Platform,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -34,6 +36,59 @@ const AppointmentDetailScreen: React.FC = () => {
   const queryClient = useQueryClient();
 
   const [isRescheduling, setIsRescheduling] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+
+  // Check if appointment is already reviewed
+  const { data: reviewedData } = useQuery({
+    queryKey: ['patient-reviewed-appointments'],
+    queryFn: async () => {
+      const response = await patientPortalApi.getMyReviewedAppointments();
+      return (response.data as any)?.data?.reviewedAppointmentIds || [];
+    },
+  });
+  const reviewedAppointmentIds: string[] = Array.isArray(reviewedData) ? reviewedData : [];
+  const isReviewed = reviewedAppointmentIds.includes(appointmentId);
+
+  // Submit review mutation
+  const submitReviewMutation = useMutation({
+    mutationFn: (data: { appointmentId: string; rating: number; comment?: string }) =>
+      patientPortalApi.submitReview(data),
+    onSuccess: () => {
+      setShowReviewModal(false);
+      setReviewRating(0);
+      setReviewComment('');
+      queryClient.invalidateQueries({ queryKey: ['patient-reviewed-appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['appointment', appointmentId] });
+      queryClient.invalidateQueries({ queryKey: ['patient-appointments'] });
+      Alert.alert('Thank you!', 'Your review has been submitted successfully.');
+    },
+    onError: (error: any) => {
+      const msg = error?.response?.data?.message || 'Failed to submit review';
+      Alert.alert('Error', msg);
+    },
+  });
+
+  const handleSubmitReview = useCallback(() => {
+    if (reviewRating === 0) return;
+    submitReviewMutation.mutate({
+      appointmentId,
+      rating: reviewRating,
+      comment: reviewComment.trim() || undefined,
+    });
+  }, [appointmentId, reviewRating, reviewComment, submitReviewMutation]);
+
+  const getRatingLabel = (rating: number) => {
+    switch (rating) {
+      case 1: return 'Poor';
+      case 2: return 'Fair';
+      case 3: return 'Good';
+      case 4: return 'Very Good';
+      case 5: return 'Excellent';
+      default: return 'Tap a star to rate';
+    }
+  };
 
   const {
     data: appointment,
@@ -360,6 +415,31 @@ const AppointmentDetailScreen: React.FC = () => {
             </View>
           </View>
         )}
+
+        {/* Rate Doctor / Reviewed for completed appointments */}
+        {appointment.status === 'COMPLETED' && !isReviewed && (
+          <View style={styles.section}>
+            <TouchableOpacity
+              style={styles.rateButton}
+              onPress={() => {
+                setReviewRating(0);
+                setReviewComment('');
+                setShowReviewModal(true);
+              }}
+            >
+              <Ionicons name="star-outline" size={20} color={colors.warning[600]} />
+              <Text style={styles.rateButtonText}>Rate Doctor</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {appointment.status === 'COMPLETED' && isReviewed && (
+          <View style={styles.section}>
+            <View style={styles.reviewedCard}>
+              <Ionicons name="checkmark-circle" size={20} color={colors.success[600]} />
+              <Text style={styles.reviewedCardText}>You have reviewed this appointment</Text>
+            </View>
+          </View>
+        )}
       </ScrollView>
 
       {/* Bottom Actions */}
@@ -389,6 +469,76 @@ const AppointmentDetailScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
       )}
+      {/* Review Modal */}
+      <Modal
+        visible={showReviewModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowReviewModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Rate Your Visit</Text>
+              <TouchableOpacity onPress={() => setShowReviewModal(false)}>
+                <Ionicons name="close" size={24} color={colors.gray[500]} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalSubtitle}>
+              How was your visit with Dr.{' '}
+              {appointment?.doctor?.user?.firstName ?? ''}{' '}
+              {appointment?.doctor?.user?.lastName ?? ''}?
+            </Text>
+
+            {/* Star Rating */}
+            <View style={styles.starsContainer}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <TouchableOpacity
+                  key={star}
+                  onPress={() => setReviewRating(star)}
+                  style={styles.starBtn}
+                >
+                  <Ionicons
+                    name={star <= reviewRating ? 'star' : 'star-outline'}
+                    size={40}
+                    color={star <= reviewRating ? colors.warning[500] : colors.gray[300]}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.ratingLabel}>{getRatingLabel(reviewRating)}</Text>
+
+            {/* Comment */}
+            <TextInput
+              style={styles.commentInput}
+              placeholder="Share your experience (optional)"
+              placeholderTextColor={colors.gray[400]}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              value={reviewComment}
+              onChangeText={setReviewComment}
+            />
+
+            {/* Submit */}
+            <TouchableOpacity
+              style={[
+                styles.submitReviewBtn,
+                (reviewRating === 0 || submitReviewMutation.isPending) && styles.submitReviewBtnDisabled,
+              ]}
+              onPress={handleSubmitReview}
+              disabled={reviewRating === 0 || submitReviewMutation.isPending}
+            >
+              {submitReviewMutation.isPending ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <Text style={styles.submitReviewBtnText}>Submit Review</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -605,6 +755,104 @@ const styles = StyleSheet.create({
     backgroundColor: colors.error[500],
   },
   cancelButtonText: {
+    color: colors.white,
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  // Review styles
+  rateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.warning[50],
+    borderWidth: 1,
+    borderColor: colors.warning[200],
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    gap: spacing.sm,
+  },
+  rateButtonText: {
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.warning[700],
+  },
+  reviewedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.success[50],
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    gap: spacing.sm,
+  },
+  reviewedCardText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.success[700],
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
+    padding: spacing.xl,
+    paddingBottom: spacing['3xl'],
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  modalTitle: {
+    fontSize: typography.fontSize.xl,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.text.primary,
+  },
+  modalSubtitle: {
+    fontSize: typography.fontSize.base,
+    color: colors.text.secondary,
+    marginBottom: spacing.lg,
+  },
+  starsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  starBtn: {
+    padding: spacing.xs,
+  },
+  ratingLabel: {
+    textAlign: 'center',
+    fontSize: typography.fontSize.sm,
+    color: colors.text.secondary,
+    marginBottom: spacing.lg,
+  },
+  commentInput: {
+    borderWidth: 1,
+    borderColor: colors.gray[200],
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    fontSize: typography.fontSize.base,
+    color: colors.text.primary,
+    minHeight: 100,
+    marginBottom: spacing.lg,
+  },
+  submitReviewBtn: {
+    backgroundColor: colors.primary[600],
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+  },
+  submitReviewBtnDisabled: {
+    opacity: 0.5,
+  },
+  submitReviewBtnText: {
     color: colors.white,
     fontSize: typography.fontSize.base,
     fontWeight: typography.fontWeight.semibold,
