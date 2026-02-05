@@ -113,6 +113,17 @@ export class PatientService {
               admissions: true,
             },
           },
+          // Include primary insurance for expiry status display
+          insurance: {
+            where: { isPrimary: true },
+            take: 1,
+            select: {
+              id: true,
+              providerName: true,
+              expiryDate: true,
+              isActive: true,
+            },
+          },
         },
       }),
       prisma.patient.count({ where }),
