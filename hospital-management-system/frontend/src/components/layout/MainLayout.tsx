@@ -39,6 +39,7 @@ import {
   ShoppingCartIcon,
   BanknotesIcon,
   DocumentChartBarIcon,
+  ArrowUturnLeftIcon,
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../../hooks/useAuth';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -178,6 +179,12 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
       { name: 'Insurance Coding', href: '/insurance-coding', icon: ReceiptPercentIcon, color: 'from-teal-500 to-cyan-600',
         permission: 'insurance_coding:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT'] },
+      { name: 'Insurance Audit', href: '/insurance-audit', icon: ClipboardDocumentCheckIcon, color: 'from-cyan-500 to-teal-600',
+        permission: 'insurance_coding:read',
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT'] },
+      { name: 'Copay Refunds', href: '/copay-refunds', icon: ArrowUturnLeftIcon, color: 'from-amber-500 to-orange-600',
+        permission: 'billing:read',
+        roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT', 'RECEPTIONIST'] },
       { name: 'Procurement', href: '/procurement', icon: ShoppingCartIcon, color: 'from-indigo-500 to-blue-600',
         permission: 'procurement:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT'] },
@@ -199,7 +206,7 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
       { name: 'Quality', href: '/quality', icon: ClipboardDocumentCheckIcon, color: 'from-emerald-500 to-teal-600',
         permission: 'quality:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN'] },
-      { name: 'Assets', href: '/assets', icon: WrenchScrewdriverIcon, color: 'from-amber-500 to-orange-600',
+      { name: 'Assets', href: '/asset-management', icon: WrenchScrewdriverIcon, color: 'from-amber-500 to-orange-600',
         permission: 'assets:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'MAINTENANCE_STAFF'] },
       { name: 'Dietary', href: '/dietary', icon: CakeIcon, color: 'from-lime-500 to-green-600',

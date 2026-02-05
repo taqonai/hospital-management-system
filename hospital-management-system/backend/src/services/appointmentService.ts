@@ -326,7 +326,7 @@ export class AppointmentService {
     const {
       page = 1,
       limit = 10,
-      sortBy = 'appointmentDate',
+      sortBy = 'createdAt',
       sortOrder = 'desc',
       search,
       doctorId,

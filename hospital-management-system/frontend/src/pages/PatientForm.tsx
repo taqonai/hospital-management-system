@@ -51,6 +51,15 @@ const initialFormData: PatientFormData = {
   nationality: 'UAE',
 };
 
+// Format Emirates ID: 784-XXXX-XXXXXXX-X
+const formatEmiratesId = (value: string): string => {
+  const digits = value.replace(/\D/g, '').slice(0, 15);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  if (digits.length <= 14) return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 14)}-${digits.slice(14)}`;
+};
+
 const bloodGroups = [
   { label: 'A+', value: 'A_POSITIVE' },
   { label: 'A-', value: 'A_NEGATIVE' },
@@ -167,7 +176,8 @@ export default function PatientForm() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    const finalValue = name === 'emiratesId' ? formatEmiratesId(value) : value;
+    setFormData(prev => ({ ...prev, [name]: finalValue }));
     if (errors[name as keyof PatientFormData]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
@@ -199,6 +209,20 @@ export default function PatientForm() {
     if (!formData.state.trim()) newErrors.state = 'State is required';
     if (formData.emergencyPhone && !/^[\d\s+\-()]{7,20}$/.test(formData.emergencyPhone.trim())) {
       newErrors.emergencyPhone = 'Please enter a valid emergency phone number';
+    }
+    if (formData.emiratesId.trim()) {
+      const eidDigits = formData.emiratesId.replace(/\D/g, '');
+      if (eidDigits.length !== 15) {
+        newErrors.emiratesId = 'Emirates ID must be exactly 15 digits';
+      } else if (!eidDigits.startsWith('784')) {
+        newErrors.emiratesId = 'Emirates ID must start with 784';
+      } else {
+        const year = parseInt(eidDigits.substring(3, 7), 10);
+        const currentYear = new Date().getFullYear();
+        if (year < 1900 || year > currentYear + 10) {
+          newErrors.emiratesId = `Emirates ID year must be between 1900 and ${currentYear + 10}`;
+        }
+      }
     }
 
     setErrors(newErrors);

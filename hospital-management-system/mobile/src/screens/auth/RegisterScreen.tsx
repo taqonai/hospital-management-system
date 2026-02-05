@@ -23,12 +23,26 @@ import { AuthStackScreenProps } from '../../navigation/types';
 
 type NavigationProp = AuthStackScreenProps<'Register'>['navigation'];
 
+// Format Emirates ID: 784-XXXX-XXXXXXX-X
+const formatEmiratesId = (value: string): string => {
+  const digits = value.replace(/\D/g, '').slice(0, 15);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  if (digits.length <= 14) return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 14)}-${digits.slice(14)}`;
+};
+
 // Validation schema
 const registerSchema = z.object({
   firstName: z.string().min(2, 'First name is required'),
   lastName: z.string().min(2, 'Last name is required'),
   email: z.string().email('Please enter a valid email'),
   phone: z.string().min(10, 'Please enter a valid phone number'),
+  emiratesId: z.string().optional().refine((val) => {
+    if (!val) return true;
+    const digits = val.replace(/\D/g, '');
+    return digits.length === 0 || (digits.length === 15 && digits.startsWith('784'));
+  }, 'Emirates ID must be 15 digits starting with 784'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
@@ -57,6 +71,7 @@ const RegisterScreen: React.FC = () => {
       lastName: '',
       email: '',
       phone: '',
+      emiratesId: '',
       password: '',
       confirmPassword: '',
     },
@@ -64,7 +79,7 @@ const RegisterScreen: React.FC = () => {
 
   const onSubmit = async (data: RegisterFormData) => {
     dispatch(clearError());
-    dispatch(registerUser({
+    const payload: any = {
       firstName: data.firstName,
       lastName: data.lastName,
       email: data.email,
@@ -72,7 +87,11 @@ const RegisterScreen: React.FC = () => {
       password: data.password,
       dateOfBirth: '1990-01-01', // Default, can be updated in profile
       gender: 'MALE', // Default, can be updated in profile
-    }));
+    };
+    if (data.emiratesId) {
+      payload.emiratesId = data.emiratesId.replace(/-/g, '');
+    }
+    dispatch(registerUser(payload));
   };
 
   return (
@@ -232,6 +251,37 @@ const RegisterScreen: React.FC = () => {
               />
               {errors.phone && (
                 <Text style={styles.fieldError}>{errors.phone.message}</Text>
+              )}
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Emirates ID <Text style={{ color: colors.gray[400], fontSize: typography.fontSize.xs }}>(Optional)</Text></Text>
+              <Controller
+                control={control}
+                name="emiratesId"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <View style={[styles.inputWrapper, errors.emiratesId && styles.inputError]}>
+                    <Ionicons
+                      name="card-outline"
+                      size={20}
+                      color={colors.gray[400]}
+                      style={styles.inputIcon}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="784-XXXX-XXXXXXX-X"
+                      placeholderTextColor={colors.gray[400]}
+                      keyboardType="number-pad"
+                      value={value}
+                      onChangeText={(text) => onChange(formatEmiratesId(text))}
+                      onBlur={onBlur}
+                      maxLength={18}
+                    />
+                  </View>
+                )}
+              />
+              {errors.emiratesId && (
+                <Text style={styles.fieldError}>{errors.emiratesId.message}</Text>
               )}
             </View>
 

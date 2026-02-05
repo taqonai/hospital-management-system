@@ -132,6 +132,10 @@ import AISettings from './pages/AISettings';
 
 // Insurance Coding (Admin only)
 import InsuranceCoding from './pages/InsuranceCoding';
+import InsuranceAuditLog from './pages/InsuranceCoding/AuditLog';
+
+// Copay Refunds (GAP 9)
+import CopayRefunds from './pages/Billing/CopayRefunds';
 
 // CRM Module
 import CRM from './pages/CRM';
@@ -269,7 +273,7 @@ function App() {
         <Route path="/reports" element={<Reports />} />
         <Route path="/telemedicine" element={<Telemedicine />} />
         <Route path="/queue" element={<Queue />} />
-        <Route path="/assets" element={<Assets />} />
+        <Route path="/asset-management" element={<Assets />} />
         <Route
           path="/rbac"
           element={
@@ -291,6 +295,22 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'ACCOUNTANT']} permission="insurance_coding:read">
               <InsuranceCoding />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/insurance-audit"
+          element={
+            <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT']} permission="insurance_coding:read">
+              <InsuranceAuditLog />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/copay-refunds"
+          element={
+            <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT', 'RECEPTIONIST']} permission="billing:read">
+              <CopayRefunds />
             </ProtectedRoute>
           }
         />

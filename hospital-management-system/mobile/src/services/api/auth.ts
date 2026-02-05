@@ -15,6 +15,7 @@ export interface RegisterData {
   phone: string;
   dateOfBirth: string;
   gender: 'MALE' | 'FEMALE';
+  emiratesId?: string;
   hospitalId?: string;
 }
 

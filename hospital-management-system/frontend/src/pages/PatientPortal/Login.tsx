@@ -15,6 +15,7 @@ import {
   CheckCircleIcon,
   ExclamationCircleIcon,
   ArrowPathIcon,
+  IdentificationIcon,
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartSolid } from '@heroicons/react/24/solid';
 import axios from 'axios';
@@ -41,6 +42,7 @@ interface RegistrationFormData {
   confirmPassword: string;
   dateOfBirth: string;
   gender: string;
+  emiratesId: string;
   agreeToTerms: boolean;
 }
 
@@ -62,6 +64,15 @@ const countryCodes = [
 const getExpectedDigits = (countryCode: string): number => {
   const country = countryCodes.find(c => c.code === countryCode);
   return country?.digits || 10;
+};
+
+// Format Emirates ID: 784-XXXX-XXXXXXX-X
+const formatEmiratesId = (value: string): string => {
+  const digits = value.replace(/\D/g, '').slice(0, 15);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  if (digits.length <= 14) return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 14)}-${digits.slice(14)}`;
 };
 
 // API base URL
@@ -106,6 +117,7 @@ export default function PatientPortalLogin() {
     confirmPassword: '',
     dateOfBirth: '',
     gender: '',
+    emiratesId: '',
     agreeToTerms: false,
   });
   const [showRegPassword, setShowRegPassword] = useState(false);
@@ -325,6 +337,14 @@ export default function PatientPortalLogin() {
       return;
     }
 
+    if (registrationData.emiratesId) {
+      const eidDigits = registrationData.emiratesId.replace(/\D/g, '');
+      if (eidDigits.length !== 15 || !eidDigits.startsWith('784')) {
+        setError('Emirates ID must be 15 digits starting with 784');
+        return;
+      }
+    }
+
     if (!registrationData.agreeToTerms) {
       setError('Please agree to the Terms & Conditions');
       return;
@@ -333,7 +353,7 @@ export default function PatientPortalLogin() {
     setIsLoading(true);
 
     try {
-      const response = await axios.post(`${API_URL}/patient-auth/register`, {
+      const registerPayload: any = {
         firstName: registrationData.firstName,
         lastName: registrationData.lastName,
         email: registrationData.email,
@@ -341,7 +361,11 @@ export default function PatientPortalLogin() {
         password: registrationData.password,
         dateOfBirth: registrationData.dateOfBirth,
         gender: registrationData.gender,
-      });
+      };
+      if (registrationData.emiratesId) {
+        registerPayload.emiratesId = registrationData.emiratesId.replace(/-/g, '');
+      }
+      const response = await axios.post(`${API_URL}/patient-auth/register`, registerPayload);
 
       setSuccess('Registration successful! Please login with your credentials.');
       setIsRegistering(false);
@@ -1080,6 +1104,25 @@ function RegistrationForm({
             />
           </div>
         </div>
+      </div>
+
+      {/* Emirates ID (Optional) */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Emirates ID <span className="text-gray-400 text-xs ml-1">(Optional)</span>
+        </label>
+        <div className="relative">
+          <IdentificationIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <input
+            type="text"
+            value={data.emiratesId}
+            onChange={(e) => setData({ ...data, emiratesId: formatEmiratesId(e.target.value) })}
+            className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-mono"
+            placeholder="784-XXXX-XXXXXXX-X"
+            maxLength={18}
+          />
+        </div>
+        <p className="mt-1 text-xs text-gray-500">UAE Emirates ID for health insurance verification</p>
       </div>
 
       {/* Password */}

@@ -102,6 +102,7 @@ export const createPatientSchema = z.object({
     occupation: z.string().optional(),
     maritalStatus: z.enum(['SINGLE', 'MARRIED', 'DIVORCED', 'WIDOWED']).optional(),
     nationality: z.string().optional(),
+    emiratesId: z.string().regex(/^784[-\s]?\d{4}[-\s]?\d{7}[-\s]?\d$/, 'Invalid Emirates ID format (784-YYYY-NNNNNNN-C)').optional().or(z.literal('')),
   }),
 });
 
@@ -126,6 +127,7 @@ export const updatePatientSchema = z.object({
     occupation: z.string().optional(),
     maritalStatus: z.enum(['SINGLE', 'MARRIED', 'DIVORCED', 'WIDOWED']).optional(),
     nationality: z.string().optional(),
+    emiratesId: z.string().regex(/^784[-\s]?\d{4}[-\s]?\d{7}[-\s]?\d$/, 'Invalid Emirates ID format (784-YYYY-NNNNNNN-C)').optional().or(z.literal('')).nullable(),
   }).strict(),
   params: z.object({
     id: z.string().uuid('Invalid patient ID'),

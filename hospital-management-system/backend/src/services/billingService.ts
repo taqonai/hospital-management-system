@@ -2525,6 +2525,7 @@ export class BillingService {
       // Self-pay: Patient pays 100% of consultation fee
       return {
         hasCopay: true, // YES - patient must pay
+        noInsurance: true, // Flag for frontend self-pay view
         consultationFee,
         coveragePercentage: 0,
         copayPercentage: 100,
