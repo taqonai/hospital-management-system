@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { patientPortalService } from '../services/patientPortalService';
+import { doctorReviewService } from '../services/doctorReviewService';
 import { patientAuthenticate, PatientAuthenticatedRequest } from '../middleware/patientAuth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendError, sendNotFound, calculatePagination, sendPaginated } from '../utils/response';
@@ -2645,6 +2646,56 @@ router.post(
     });
 
     sendSuccess(res, insurance, 'Primary insurance updated');
+  })
+);
+
+// =============================================================================
+// Doctor Review Routes
+// =============================================================================
+
+/**
+ * Submit a doctor review for a completed appointment
+ * POST /api/v1/patient-portal/reviews
+ */
+router.post(
+  '/reviews',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
+    const { appointmentId, rating, comment } = req.body;
+
+    if (!appointmentId || !rating) {
+      return sendError(res, 'appointmentId and rating are required', 400);
+    }
+
+    try {
+      const review = await doctorReviewService.submitReview({
+        hospitalId,
+        patientId,
+        appointmentId,
+        rating: Number(rating),
+        comment,
+      });
+      sendSuccess(res, review, 'Review submitted successfully');
+    } catch (err: any) {
+      sendError(res, err.message || 'Failed to submit review', 400);
+    }
+  })
+);
+
+/**
+ * Get appointment IDs already reviewed by the patient
+ * GET /api/v1/patient-portal/reviews/my
+ */
+router.get(
+  '/reviews/my',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
+    const reviewedIds = await doctorReviewService.getReviewedAppointmentIds(patientId, hospitalId);
+    sendSuccess(res, { reviewedAppointmentIds: reviewedIds }, 'Reviewed appointments retrieved');
   })
 );
 

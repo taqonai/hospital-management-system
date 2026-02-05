@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { doctorService } from '../services/doctorService';
+import { doctorReviewService } from '../services/doctorReviewService';
 import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 import { validate, uuidParamSchema, paginationSchema } from '../middleware/validation';
 import { asyncHandler } from '../middleware/errorHandler';
@@ -291,6 +292,27 @@ router.delete(
       req.user!.hospitalId
     );
     sendSuccess(res, result, 'Absence cancelled successfully');
+  })
+);
+
+// Get patient reviews for a specific doctor
+router.get(
+  '/:id/reviews',
+  authenticate,
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const hospitalId = req.user!.hospitalId;
+    const doctorId = req.params.id;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+
+    const { reviews, total } = await doctorReviewService.getReviewsForDoctor(
+      doctorId,
+      hospitalId,
+      { page, limit }
+    );
+
+    const pagination = calculatePagination(page, limit, total);
+    sendPaginated(res, reviews, pagination, 'Doctor reviews retrieved');
   })
 );
 
