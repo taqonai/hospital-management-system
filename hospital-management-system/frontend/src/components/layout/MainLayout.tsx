@@ -425,21 +425,39 @@ export default function MainLayout() {
 
           {/* Bottom section */}
           <div className="p-3 border-t border-gray-100 bg-gray-50/50">
-            <NavLink
-              to="/settings"
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                  isActive
-                    ? 'bg-gray-200 text-gray-900'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`
-              }
-            >
-              <div className="p-1.5 rounded-lg bg-gray-200">
-                <Cog6ToothIcon className="h-4 w-4 text-gray-600" />
+            {/* User profile - visible to all roles */}
+            <div className="flex items-center gap-3 px-3 py-2.5 mb-1">
+              <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-sm">
+                <span className="text-xs font-bold text-white">
+                  {user?.firstName?.[0]}{user?.lastName?.[0]}
+                </span>
               </div>
-              Settings
-            </NavLink>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-900 truncate">
+                  {user?.firstName} {user?.lastName}
+                </p>
+                <p className="text-xs text-gray-500 truncate">
+                  {user?.role?.replace(/_/g, ' ')}
+                </p>
+              </div>
+            </div>
+            {(user?.role === 'SUPER_ADMIN' || user?.role === 'HOSPITAL_ADMIN') && (
+              <NavLink
+                to="/settings"
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                    isActive
+                      ? 'bg-gray-200 text-gray-900'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`
+                }
+              >
+                <div className="p-1.5 rounded-lg bg-gray-200">
+                  <Cog6ToothIcon className="h-4 w-4 text-gray-600" />
+                </div>
+                Settings
+              </NavLink>
+            )}
             <button
               onClick={logout}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-all mt-1"

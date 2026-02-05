@@ -250,7 +250,7 @@ export default function CRM() {
   });
 
   // Queries
-  const { data: dashboardData, isLoading: loadingDashboard } = useQuery<{ data: DashboardStats }>({
+  const { data: dashboardData, isLoading: loadingDashboard } = useQuery<{ data: { success: boolean; data: DashboardStats } }>({
     queryKey: ['crm-dashboard'],
     queryFn: () => crmApi.getDashboard(),
     enabled: activeTab === 'dashboard',
@@ -551,10 +551,10 @@ export default function CRM() {
       return <div className="flex justify-center py-12"><ArrowPathIcon className="h-8 w-8 animate-spin text-purple-500" /></div>;
     }
 
-    const stats = dashboardData?.data?.leadStats;
-    const taskStats = dashboardData?.data?.taskStats;
-    const commStats = dashboardData?.data?.communicationStats;
-    const surveyStats = dashboardData?.data?.surveyStats;
+    const stats = dashboardData?.data?.data?.leadStats;
+    const taskStats = dashboardData?.data?.data?.taskStats;
+    const commStats = dashboardData?.data?.data?.communicationStats;
+    const surveyStats = dashboardData?.data?.data?.surveyStats;
 
     // Calculate pipeline funnel percentages
     const totalLeads = stats?.totalLeads || 0;
@@ -741,7 +741,7 @@ export default function CRM() {
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Leads</h3>
             <div className="space-y-3">
-              {dashboardData?.data?.recentLeads?.slice(0, 5).map((lead: any) => (
+              {dashboardData?.data?.data?.recentLeads?.slice(0, 5).map((lead: any) => (
                 <div key={lead.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
                   <div>
                     <p className="font-medium text-gray-900">{lead.firstName} {lead.lastName}</p>
@@ -758,7 +758,7 @@ export default function CRM() {
                   </span>
                 </div>
               ))}
-              {(!dashboardData?.data?.recentLeads || dashboardData.data.recentLeads.length === 0) && (
+              {(!dashboardData?.data?.data?.recentLeads || dashboardData.data.data.recentLeads.length === 0) && (
                 <p className="text-sm text-gray-500 text-center py-4">No recent leads</p>
               )}
             </div>
@@ -766,17 +766,17 @@ export default function CRM() {
 
           {/* Overdue Tasks */}
           <div className={`rounded-2xl border p-6 ${
-            dashboardData?.data?.overdueTasks?.length > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'
+            dashboardData?.data?.data?.overdueTasks?.length > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'
           }`}>
             <div className="flex items-center gap-2 mb-4">
-              <ExclamationTriangleIcon className={`h-5 w-5 ${dashboardData?.data?.overdueTasks?.length > 0 ? 'text-red-500' : 'text-gray-400'}`} />
-              <h3 className={`text-lg font-semibold ${dashboardData?.data?.overdueTasks?.length > 0 ? 'text-red-900' : 'text-gray-900'}`}>
+              <ExclamationTriangleIcon className={`h-5 w-5 ${dashboardData?.data?.data?.overdueTasks?.length > 0 ? 'text-red-500' : 'text-gray-400'}`} />
+              <h3 className={`text-lg font-semibold ${dashboardData?.data?.data?.overdueTasks?.length > 0 ? 'text-red-900' : 'text-gray-900'}`}>
                 Overdue Tasks
               </h3>
             </div>
-            {dashboardData?.data?.overdueTasks && dashboardData.data.overdueTasks.length > 0 ? (
+            {dashboardData?.data?.data?.overdueTasks && dashboardData.data.data.overdueTasks.length > 0 ? (
               <div className="space-y-2">
-                {dashboardData.data.overdueTasks.slice(0, 5).map((task: any) => (
+                {dashboardData.data.data.overdueTasks.slice(0, 5).map((task: any) => (
                   <div key={task.id} className="flex items-center justify-between p-3 bg-white rounded-xl">
                     <div>
                       <p className="font-medium text-gray-900">{task.title}</p>
@@ -1879,9 +1879,9 @@ export default function CRM() {
 
   // Render Reports Tab
   const renderReports = () => {
-    const stats = dashboardData?.data?.leadStats;
-    const taskStats = dashboardData?.data?.taskStats;
-    const commStats = dashboardData?.data?.communicationStats;
+    const stats = dashboardData?.data?.data?.leadStats;
+    const taskStats = dashboardData?.data?.data?.taskStats;
+    const commStats = dashboardData?.data?.data?.communicationStats;
     const conversionData = conversionReportData?.data?.data;
 
     // Sample data for reports - in production, this would come from API

@@ -336,7 +336,7 @@ function App() {
         <Route
           path="/crm"
           element={
-            <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'SUPER_ADMIN', 'RECEPTIONIST']} permission="crm:read">
+            <ProtectedRoute allowedRoles={['HOSPITAL_ADMIN', 'SUPER_ADMIN', 'RECEPTIONIST', 'MARKETING']} permission="crm:read">
               <CRM />
             </ProtectedRoute>
           }
