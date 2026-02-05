@@ -56,8 +56,8 @@ const PreAuth: React.FC = () => {
   const urlPatientId = searchParams.get('patientId');
   const urlAppointmentId = searchParams.get('appointmentId');
 
-  // Always show form when on /new route
-  const [showForm, setShowForm] = useState(false);
+  // Initialize showForm to true if on /new route (avoid race condition with useEffect)
+  const [showForm, setShowForm] = useState(isNewRoute);
   const [selectedStatus, setSelectedStatus] = useState('all');
   
   // Form state
@@ -80,12 +80,12 @@ const PreAuth: React.FC = () => {
   });
   const [submittingToDHA, setSubmittingToDHA] = useState(false);
 
-  // Auto-show form when on /new route
+  // Auto-show form when on /new route (backup in case initial state didn't catch it)
   useEffect(() => {
-    if (isNewRoute) {
+    if (isNewRoute && !showForm) {
       setShowForm(true);
     }
-  }, [isNewRoute]);
+  }, [isNewRoute, showForm]);
 
   // Load patient if coming from modal with patientId
   useEffect(() => {
@@ -126,10 +126,18 @@ const PreAuth: React.FC = () => {
           lastName: patient.lastName,
           mrn: patient.mrn,
         });
+      } else {
+        console.warn('Patient data not found in response');
+        toast.error('Patient not found. Please search for the patient manually.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load patient:', error);
-      toast.error('Failed to load patient details');
+      const errorMessage = error.response?.status === 401 
+        ? 'Session expired. Please refresh the page and try again.'
+        : error.response?.status === 404
+        ? 'Patient not found. Please search for the patient manually.'
+        : 'Failed to load patient details. Please search manually.';
+      toast.error(errorMessage);
     }
   };
 
