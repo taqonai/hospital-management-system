@@ -303,6 +303,9 @@ export class CRMLeadService {
     const random = Math.random().toString(36).substring(2, 6).toUpperCase();
     const mrn = `${hospital?.code}-${timestamp}${random}`;
 
+    // Separate lead-specific fields from patient-compatible fields
+    const { conversionReason, notes, ...patientFields } = patientData || {};
+
     // Create patient from lead data
     const patient = await prisma.patient.create({
       data: {
@@ -318,7 +321,7 @@ export class CRMLeadService {
         city: lead.city || '',
         state: lead.state || '',
         zipCode: lead.zipCode || '',
-        ...patientData,
+        ...patientFields,
       },
     });
 
@@ -329,7 +332,7 @@ export class CRMLeadService {
         status: 'CONVERTED',
         convertedToPatientId: patient.id,
         convertedAt: new Date(),
-        conversionReason: patientData.conversionReason || 'Manual conversion',
+        conversionReason: conversionReason || 'Manual conversion',
       },
     });
 
