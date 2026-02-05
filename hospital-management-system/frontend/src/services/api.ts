@@ -224,6 +224,10 @@ export const doctorApi = {
     api.patch(`/doctors/${id}/availability`, { isAvailable }),
   getDashboard: (id: string) => api.get(`/doctors/${id}/dashboard`),
 
+  // Patient reviews
+  getReviews: (doctorId: string, params?: { page?: number; limit?: number }) =>
+    api.get(`/doctors/${doctorId}/reviews`, { params }),
+
   // Absence management
   getAbsences: (doctorId: string, params?: { upcoming?: boolean; status?: string }) =>
     api.get(`/doctors/${doctorId}/absences`, { params }),
@@ -1569,6 +1573,12 @@ export const patientPortalApi = {
     api.put(`/patient-portal/appointments/${id}/reschedule`, data),
   getAvailableSlots: (doctorId: string, date: string) =>
     api.get(`/patient-portal/doctors/${doctorId}/slots`, { params: { date } }),
+
+  // Doctor Reviews
+  submitReview: (data: { appointmentId: string; rating: number; comment?: string }) =>
+    api.post('/patient-portal/reviews', data),
+  getMyReviewedAppointments: () =>
+    api.get('/patient-portal/reviews/my'),
 
   // Medical Records
   getMedicalRecords: (params?: {

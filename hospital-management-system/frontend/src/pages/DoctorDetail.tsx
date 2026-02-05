@@ -20,6 +20,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import { doctorApi, appointmentApi } from '../services/api';
+import { useState } from 'react';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import DoctorAbsenceList from '../components/doctors/DoctorAbsenceList';
 import { format, isToday, isFuture, isPast } from 'date-fns';
@@ -66,11 +67,27 @@ export default function DoctorDetail() {
     );
   }
 
+  const [reviewPage, setReviewPage] = useState(1);
+
+  // Fetch doctor reviews
+  const { data: reviewsData, isLoading: reviewsLoading } = useQuery({
+    queryKey: ['doctor-reviews', id, reviewPage],
+    queryFn: async () => {
+      const response = await doctorApi.getReviews(id!, { page: reviewPage, limit: 10 });
+      return response.data;
+    },
+    enabled: !!id,
+  });
+
+  const reviews = reviewsData?.data || [];
+  const reviewsPagination = reviewsData?.pagination;
+
   const tabs = [
     { name: 'Overview', icon: DocumentTextIcon },
     { name: 'Schedule', icon: CalendarDaysIcon },
     { name: 'Absences', icon: NoSymbolIcon },
     { name: 'Appointments', icon: UserGroupIcon },
+    { name: 'Reviews', icon: StarIcon },
   ];
 
   const dayOrder = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
@@ -485,6 +502,82 @@ export default function DoctorDetail() {
               ) : (
                 <p className="text-gray-500 text-center py-8">
                   No appointments found for this doctor.
+                </p>
+              )}
+            </div>
+          </Tab.Panel>
+
+          {/* Reviews Tab */}
+          <Tab.Panel>
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Patient Reviews ({doctor.totalReviews || 0})
+              </h3>
+              {reviewsLoading ? (
+                <div className="flex justify-center py-8">
+                  <LoadingSpinner size="md" />
+                </div>
+              ) : reviews.length > 0 ? (
+                <div className="space-y-4">
+                  {reviews.map((review: any) => (
+                    <div key={review.id} className="border border-gray-100 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-gray-900">
+                            {review.patient?.firstName} {review.patient?.lastName}
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            {review.appointment?.type?.replace(/_/g, ' ') || ''}
+                          </span>
+                        </div>
+                        <span className="text-xs text-gray-500">
+                          {format(new Date(review.createdAt), 'MMM d, yyyy')}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 mb-2">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          star <= review.rating ? (
+                            <StarIconSolid key={star} className="h-4 w-4 text-amber-400" />
+                          ) : (
+                            <StarIcon key={star} className="h-4 w-4 text-gray-300" />
+                          )
+                        ))}
+                        <span className="ml-1 text-sm font-medium text-gray-600">{review.rating}/5</span>
+                      </div>
+                      {review.comment && (
+                        <p className="text-sm text-gray-600">{review.comment}</p>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Pagination */}
+                  {reviewsPagination && reviewsPagination.totalPages > 1 && (
+                    <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                      <p className="text-sm text-gray-500">
+                        Page {reviewsPagination.page} of {reviewsPagination.totalPages}
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setReviewPage((p) => Math.max(1, p - 1))}
+                          disabled={!reviewsPagination.hasPrev}
+                          className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Previous
+                        </button>
+                        <button
+                          onClick={() => setReviewPage((p) => p + 1)}
+                          disabled={!reviewsPagination.hasNext}
+                          className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-8">
+                  No reviews yet for this doctor.
                 </p>
               )}
             </div>

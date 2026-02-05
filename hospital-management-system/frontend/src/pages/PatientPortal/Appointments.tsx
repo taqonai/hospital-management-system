@@ -27,7 +27,9 @@ import {
   SparklesIcon,
   ChatBubbleLeftRightIcon,
   HeartIcon,
+  StarIcon,
 } from '@heroicons/react/24/outline';
+import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import { patientPortalApi } from '../../services/api';
 import { CurrencyDisplay } from '../../components/common';
 import toast from 'react-hot-toast';
@@ -143,6 +145,13 @@ export default function Appointments() {
   const itemsPerPage = 10;
   const queryClient = useQueryClient();
 
+  // Review state
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewAppointment, setReviewAppointment] = useState<Appointment | null>(null);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewHover, setReviewHover] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+
   // AI-assisted booking state
   const [aiRecommendedDepartment, setAiRecommendedDepartment] = useState('');
   const [aiSymptomsSummary, setAiSymptomsSummary] = useState('');
@@ -218,6 +227,32 @@ export default function Appointments() {
   });
 
   const appointments = Array.isArray(appointmentsData) ? appointmentsData : [];
+
+  // Fetch reviewed appointment IDs so we can show/hide the review button
+  const { data: reviewedData } = useQuery({
+    queryKey: ['patient-reviewed-appointments'],
+    queryFn: async () => {
+      const response = await patientPortalApi.getMyReviewedAppointments();
+      return response.data?.data?.reviewedAppointmentIds || [];
+    },
+  });
+  const reviewedAppointmentIds: string[] = Array.isArray(reviewedData) ? reviewedData : [];
+
+  const submitReviewMutation = useMutation({
+    mutationFn: (data: { appointmentId: string; rating: number; comment?: string }) =>
+      patientPortalApi.submitReview(data),
+    onSuccess: () => {
+      toast.success('Thank you for your review!');
+      setShowReviewModal(false);
+      setReviewAppointment(null);
+      setReviewRating(0);
+      setReviewComment('');
+      queryClient.invalidateQueries({ queryKey: ['patient-reviewed-appointments'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to submit review');
+    },
+  });
 
   // Fetch departments for booking
   const { data: departments } = useQuery({
@@ -706,6 +741,29 @@ export default function Appointments() {
                 <XCircleIcon className="h-4 w-4" />
                 Cancel
               </button>
+            )}
+
+            {appointment.status === 'COMPLETED' && !reviewedAppointmentIds.includes(appointment.id) && (
+              <button
+                onClick={() => {
+                  setReviewAppointment(appointment);
+                  setReviewRating(0);
+                  setReviewHover(0);
+                  setReviewComment('');
+                  setShowReviewModal(true);
+                }}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-100 transition-colors"
+              >
+                <StarIcon className="h-4 w-4" />
+                Rate Doctor
+              </button>
+            )}
+
+            {appointment.status === 'COMPLETED' && reviewedAppointmentIds.includes(appointment.id) && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium bg-green-50 text-green-600 border border-green-200">
+                <CheckCircleIcon className="h-4 w-4" />
+                Reviewed
+              </span>
             )}
           </div>
         </div>
@@ -2136,6 +2194,97 @@ export default function Appointments() {
             </div>
           </Dialog>
         </Transition>
+      {/* Doctor Review Modal */}
+      <Transition appear show={showReviewModal} as={Fragment}>
+        <Dialog as="div" className="relative z-50" onClose={() => setShowReviewModal(false)}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300" enterFrom="opacity-0" enterTo="opacity-100"
+            leave="ease-in duration-200" leaveFrom="opacity-100" leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
+          </Transition.Child>
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300" enterFrom="opacity-0 scale-95" enterTo="opacity-100 scale-100"
+                leave="ease-in duration-200" leaveFrom="opacity-100 scale-100" leaveTo="opacity-0 scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-6">
+                  <Dialog.Title className="text-xl font-bold text-gray-900 mb-1">
+                    Rate Your Experience
+                  </Dialog.Title>
+                  <p className="text-sm text-gray-500 mb-6">
+                    How was your visit with {reviewAppointment ? getDoctorName(reviewAppointment) : ''}?
+                  </p>
+
+                  {/* Star Rating */}
+                  <div className="flex justify-center gap-2 mb-6">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setReviewRating(star)}
+                        onMouseEnter={() => setReviewHover(star)}
+                        onMouseLeave={() => setReviewHover(0)}
+                        className="focus:outline-none transition-transform hover:scale-110"
+                      >
+                        {star <= (reviewHover || reviewRating) ? (
+                          <StarIconSolid className="h-10 w-10 text-amber-400" />
+                        ) : (
+                          <StarIcon className="h-10 w-10 text-gray-300" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-center text-sm text-gray-500 mb-4">
+                    {reviewRating === 1 && 'Poor'}
+                    {reviewRating === 2 && 'Fair'}
+                    {reviewRating === 3 && 'Good'}
+                    {reviewRating === 4 && 'Very Good'}
+                    {reviewRating === 5 && 'Excellent'}
+                    {reviewRating === 0 && 'Tap a star to rate'}
+                  </p>
+
+                  {/* Comment */}
+                  <textarea
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    placeholder="Share your experience (optional)..."
+                    rows={3}
+                    className="w-full rounded-xl border border-gray-200 p-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 mb-6"
+                  />
+
+                  {/* Actions */}
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setShowReviewModal(false)}
+                      className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!reviewAppointment || reviewRating === 0) return;
+                        submitReviewMutation.mutate({
+                          appointmentId: reviewAppointment.id,
+                          rating: reviewRating,
+                          comment: reviewComment || undefined,
+                        });
+                      }}
+                      disabled={reviewRating === 0 || submitReviewMutation.isPending}
+                      className="flex-1 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium hover:from-amber-600 hover:to-orange-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {submitReviewMutation.isPending ? 'Submitting...' : 'Submit Review'}
+                    </button>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
       </div>
     </div>
   );
