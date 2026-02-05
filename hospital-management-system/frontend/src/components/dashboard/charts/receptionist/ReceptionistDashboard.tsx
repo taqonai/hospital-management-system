@@ -59,8 +59,8 @@ export default function ReceptionistDashboard() {
     }
 
     todayAppointments?.forEach((apt: any) => {
-      const hour = apt.startTime?.split(':')[0];
-      if (hour && hours[`${hour}:00`] !== undefined) {
+      const hour = parseInt(apt.startTime?.split(':')[0], 10);
+      if (!isNaN(hour) && hours[`${hour}:00`] !== undefined) {
         hours[`${hour}:00`]++;
       }
     });
