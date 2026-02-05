@@ -168,11 +168,16 @@ class InsuranceEligibilityService {
     const alerts: VerificationAlert[] = [];
     
     // First, check if patient exists in our system with this Emirates ID
+    // Search for both normalized (no dashes) and original format (with dashes)
     const patient = await prisma.patient.findFirst({
       where: {
         hospitalId,
-        emiratesId: normalizedEid,
         isActive: true,
+        OR: [
+          { emiratesId: normalizedEid },
+          { emiratesId: emiratesId },
+          { emiratesId: emiratesId.toUpperCase() },
+        ],
       },
       include: {
         insurances: {
