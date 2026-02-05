@@ -399,6 +399,233 @@ Based on your screenshot, here's what each element means:
 
 ---
 
+---
+
+# COB - Coordination of Benefits (Dual Insurance)
+
+## What is COB?
+
+**Coordination of Benefits (COB)** is the process used when a patient has TWO or more insurance policies. The system determines which insurance pays first (Primary) and which pays second (Secondary).
+
+---
+
+## How COB Works in Spetaar
+
+### Step 1: Identify Primary & Secondary
+
+| Order | Insurance | How Determined |
+|-------|-----------|----------------|
+| **1st** | Primary | Marked as "Primary" in system |
+| **2nd** | Secondary | Any other active insurance |
+
+### Step 2: Calculate Primary Payment
+
+```
+Service Cost:        AED 500
+Primary Coverage:    80%
+Primary Pays:        AED 400
+Remaining:           AED 100
+```
+
+### Step 3: Calculate Secondary Payment
+
+```
+Remaining Amount:    AED 100
+Secondary Coverage:  100% of remaining
+Secondary Pays:      AED 100
+Patient Pays:        AED 0
+```
+
+---
+
+## COB Calculation Example
+
+**Patient:** Ahmed COB-Test (has 2 insurances)
+
+| Insurance | Type | Coverage |
+|-----------|------|----------|
+| Daman | Primary | 80% |
+| AXA Gulf | Secondary | 100% of remaining |
+
+**Service:** Consultation - AED 500
+
+| Step | Calculation | Amount |
+|------|-------------|--------|
+| 1 | Total Service Cost | AED 500 |
+| 2 | Primary (Daman) pays 80% | AED 400 |
+| 3 | Remaining after Primary | AED 100 |
+| 4 | Secondary (AXA) pays 100% of remaining | AED 100 |
+| 5 | **Patient Pays** | **AED 0** ✅ |
+
+---
+
+## COB Display in System
+
+When checking in a patient with dual insurance:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  📋 COORDINATION OF BENEFITS (COB) CALCULATION              │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Service: Consultation                                      │
+│  Total Cost: AED 500                                        │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ PRIMARY: Daman                                       │   │
+│  │ Coverage: 80%                                        │   │
+│  │ Pays: AED 400                                        │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                           ↓                                 │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ SECONDARY: AXA Gulf                                  │   │
+│  │ Coverage: 100% of remaining                          │   │
+│  │ Pays: AED 100                                        │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                           ↓                                 │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ PATIENT RESPONSIBILITY                               │   │
+│  │ Total to Pay: AED 0                              ✅  │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## COB Scenarios
+
+### Scenario 1: Both Insurances Cover Everything
+| | Amount |
+|---|--------|
+| Service Cost | AED 500 |
+| Primary (80%) | -AED 400 |
+| Secondary (100%) | -AED 100 |
+| **Patient Pays** | **AED 0** |
+
+### Scenario 2: Secondary Has Limits
+| | Amount |
+|---|--------|
+| Service Cost | AED 500 |
+| Primary (80%) | -AED 400 |
+| Remaining | AED 100 |
+| Secondary (50% of remaining) | -AED 50 |
+| **Patient Pays** | **AED 50** |
+
+### Scenario 3: Copay Applies
+| | Amount |
+|---|--------|
+| Service Cost | AED 500 |
+| Primary Copay | AED 20 (patient pays) |
+| Primary (80% of rest) | -AED 384 |
+| Secondary covers remaining | -AED 96 |
+| **Patient Pays** | **AED 20** (copay only) |
+
+### Scenario 4: Primary Denied
+| | Amount |
+|---|--------|
+| Service Cost | AED 500 |
+| Primary | ❌ Denied (not covered) |
+| Secondary becomes Primary | 80% = -AED 400 |
+| **Patient Pays** | **AED 100** |
+
+---
+
+## Setting Up COB
+
+### Adding Primary Insurance
+1. Add first insurance
+2. Check ☑️ "This is the primary insurance"
+3. Save
+
+### Adding Secondary Insurance
+1. Add second insurance
+2. Leave "Primary" unchecked (or uncheck it)
+3. Save
+
+### Changing Primary
+1. Edit the insurance you want as primary
+2. Check ☑️ "This is the primary insurance"
+3. Save → Previous primary becomes secondary
+
+---
+
+## COB Rules (UAE Standard)
+
+### Rule 1: Birthday Rule (for dependents)
+When a child is covered by both parents:
+- Parent whose birthday comes **first** in the year = Primary
+- Example: Father (March 15) vs Mother (July 20) → Father's insurance is Primary
+
+### Rule 2: Subscriber vs Dependent
+- If patient is **subscriber** on one plan → That plan is Primary
+- If patient is **dependent** on both plans → Apply Birthday Rule
+
+### Rule 3: Active vs COBRA/Continuation
+- Active employment insurance = Primary
+- COBRA/continuation coverage = Secondary
+
+### Rule 4: Longer Coverage
+- If still tied, plan held **longer** = Primary
+
+---
+
+## COB at Different Touchpoints
+
+| Module | How COB is Used |
+|--------|-----------------|
+| **OPD Check-in** | Shows COB calculation, collects remaining copay |
+| **Pharmacy** | Calculates drug copay with both insurances |
+| **Laboratory** | Bills primary first, secondary for remainder |
+| **Radiology** | Same as laboratory |
+| **IPD** | Daily charges split between insurances |
+| **Billing** | Invoice shows both insurance portions |
+| **Claims** | Submits to Primary first, then Secondary |
+
+---
+
+## COB API Endpoint
+
+```
+POST /api/v1/insurance-advanced/cob/calculate
+
+Request:
+{
+  "patientId": "ahmed-cob-test-id",
+  "serviceAmount": 500,
+  "serviceType": "consultation"
+}
+
+Response:
+{
+  "totalAmount": 500,
+  "primaryInsurance": {
+    "name": "Daman",
+    "coverage": 80,
+    "pays": 400
+  },
+  "secondaryInsurance": {
+    "name": "AXA Gulf",
+    "coverage": 100,
+    "pays": 100
+  },
+  "patientResponsibility": 0
+}
+```
+
+---
+
+## COB Test Patient
+
+**Patient:** Ahmed COB-Test
+- **Email:** ahmed.cob@test.com
+- **Password:** password123
+- **Primary:** Daman (National Health Insurance Company)
+- **Secondary:** AXA Gulf Insurance
+- **Use Case:** Demo COB calculation at check-in
+
+---
+
 ## Admin Verification Actions
 
 Admins see additional buttons on each insurance card:
