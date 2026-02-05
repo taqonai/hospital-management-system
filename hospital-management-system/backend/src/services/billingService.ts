@@ -2835,11 +2835,11 @@ export class BillingService {
       where: {
         hospitalId,
         patientId,
-        status: { in: ['PENDING', 'SUBMITTED'] },
+        status: { in: ['PENDING', 'SUBMITTED', 'DENIED'] },
       },
     });
 
-    if ((payerRequiresPreAuth || cptRequiresPreAuth) && pendingPreAuthOrders) {
+    if (pendingPreAuthOrders) {
       preAuthRequired = true;
 
           // Look for existing pre-auth request for this patient and policy

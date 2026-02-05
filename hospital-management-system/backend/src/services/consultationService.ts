@@ -429,6 +429,7 @@ class ConsultationService {
     advice?: string;
     followUpDate?: Date;
     notes?: string;
+    prescriptions?: Array<{ medication: string; dosage: string; route: string; frequency: string; duration: string; quantity?: number; instructions?: string; }>;
   }) {
     // Validate required fields
     if (!data.diagnosis || data.diagnosis.length === 0) {
@@ -505,6 +506,31 @@ class ConsultationService {
         where: { id: data.appointmentId },
         data: { status: 'COMPLETED' },
       });
+      // Create prescription if medications provided
+      if (data.prescriptions && data.prescriptions.length > 0) {
+        const prescription = await tx.prescription.create({
+          data: {
+            patientId: data.patientId,
+            doctorId: data.doctorId,
+            consultationId: consultation.id,
+            prescriptionDate: new Date(),
+            status: "ACTIVE",
+            medications: {
+              create: data.prescriptions.map(med => ({
+                drugName: med.medication,
+                dosage: med.dosage,
+                frequency: med.frequency,
+                duration: med.duration,
+                route: med.route,
+                quantity: med.quantity || parseInt(med.duration) || 7,
+                instructions: med.instructions || "",
+                isDispensed: false,
+              })),
+            },
+          },
+        });
+      }
+
 
       return consultation;
     });

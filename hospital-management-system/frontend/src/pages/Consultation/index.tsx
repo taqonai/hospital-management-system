@@ -1210,6 +1210,7 @@ export default function Consultation() {
         icdCodes: allIcdCodes,
         historyOfIllness,
         treatmentPlan,
+        prescriptions: prescriptions.length > 0 ? prescriptions : undefined,
         notes: soapData ? `SOAP Notes:\nS: ${soapData.subjective}\nO: ${soapData.objective}\nA: ${soapData.assessment}\nP: ${soapData.plan}` : undefined,
       });
 
@@ -2956,6 +2957,8 @@ export default function Consultation() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Medication Name</label>
                   <div className="flex gap-2">
                     <DrugPicker
+                      patientId={selectedPatientId}
+                      showCostEstimate={true}
                       value={rx.medication}
                       onChange={(drug) => handleDrugSelection(rx.id, drug)}
                       placeholder="Search medication..."

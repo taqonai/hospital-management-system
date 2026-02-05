@@ -292,6 +292,7 @@ router.post(
       icdCodes: [],
       treatmentPlan: Array.isArray(treatment) ? treatment.join('; ') : treatment,
       followUpPlan: notes,
+      prescriptions,
     });
 
     sendSuccess(res, result, 'SOAP note generated successfully');
@@ -370,6 +371,7 @@ router.post(
       advice,
       followUpDate,
       notes,
+      prescriptions,
     } = req.body;
 
     if (!appointmentId) {
@@ -414,6 +416,7 @@ router.post(
       advice,
       followUpDate: followUpDate ? new Date(followUpDate) : undefined,
       notes,
+      prescriptions,
     });
 
     sendSuccess(res, result, 'Consultation completed successfully');

@@ -419,6 +419,7 @@ export const aiConsultationApi = {
     advice?: string;
     followUpDate?: string;
     notes?: string;
+    prescriptions?: Array<{ medication: string; dosage: string; route: string; frequency: string; duration: string; quantity?: number; instructions?: string; }>;
   }) => api.post('/ai-consultation/complete', data),
 };
 
@@ -1098,6 +1099,8 @@ export const billingApi = {
     includeAnesthesia?: boolean;
     insuranceCoverage?: number;
   }) => api.post('/billing/estimate-cost', data),
+  // Receipt
+  getReceipt: (receiptNumber: string) => api.get(`/billing/receipt/${receiptNumber}`),
 };
 
 // HR APIs
