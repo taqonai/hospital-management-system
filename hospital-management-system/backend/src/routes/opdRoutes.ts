@@ -80,8 +80,15 @@ router.post(
   authenticate,
   authorizeWithPermission('opd:visits:write', ['DOCTOR']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    // Get doctor ID from user's doctor profile
-    const doctorId = req.body.doctorId || req.user!.userId;
+    // Get doctor ID: prefer explicit body param, otherwise look up from user profile
+    let doctorId = req.body.doctorId;
+    if (!doctorId) {
+      doctorId = await getDoctorIdForUser(req.user!.userId);
+    }
+    if (!doctorId) {
+      sendSuccess(res, null, 'Doctor profile not found');
+      return;
+    }
     const result = await opdService.callNextPatient(doctorId, req.user!.hospitalId);
     if (result) {
       sendSuccess(res, result, 'Next patient called');

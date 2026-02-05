@@ -41,6 +41,7 @@ interface QueueItem {
     mrn?: string;
   };
   doctor: {
+    id: string;
     user: {
       firstName: string;
       lastName: string;
@@ -706,7 +707,7 @@ export default function OPD() {
     const doctorName = `Dr. ${item.doctor?.user?.firstName || ''} ${item.doctor?.user?.lastName || ''}`.trim();
     if (!acc[doctorName]) {
       acc[doctorName] = {
-        doctorId: item.doctor?.user?.firstName || 'unknown',
+        doctorId: item.doctor?.id || 'unknown',
         specialization: item.doctor?.specialization || 'General',
         patients: [],
       };
