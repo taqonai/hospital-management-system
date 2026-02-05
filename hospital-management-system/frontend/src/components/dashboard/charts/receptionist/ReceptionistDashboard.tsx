@@ -51,10 +51,21 @@ export default function ReceptionistDashboard() {
     }],
   };
 
-  // Hourly distribution (simulated from appointments)
+  // Hourly distribution from today's appointments
   const hourlyData = (() => {
+    // Determine hour range from actual data (default 8-17)
+    let minHour = 8;
+    let maxHour = 17;
+    todayAppointments?.forEach((apt: any) => {
+      const h = parseInt(apt.startTime?.split(':')[0], 10);
+      if (!isNaN(h)) {
+        if (h < minHour) minHour = h;
+        if (h > maxHour) maxHour = h;
+      }
+    });
+
     const hours: Record<string, number> = {};
-    for (let i = 8; i <= 17; i++) {
+    for (let i = minHour; i <= maxHour; i++) {
       hours[`${i}:00`] = 0;
     }
 
