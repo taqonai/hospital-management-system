@@ -1,9 +1,24 @@
 # Spetaar HMS — Insurance & Finance Module
 ## COMPLETE End-to-End Demo Guide (Full Coverage)
 
-**Version:** 2.0 (Full E2E)  
-**Date:** February 5, 2026  
+**Version:** 2.1 (Post-Fix Update)  
+**Date:** February 5, 2026 (Updated 19:30 UTC)  
 **Author:** TeaBot (Taqon AI)
+
+---
+
+# 🆕 Recent Updates (Feb 5, 2026)
+
+| Time | Change | Status |
+|------|--------|--------|
+| 19:26 UTC | **Insurance Expiry Badge Fix** - Patient list now shows insurance status badges | ✅ DEPLOYED |
+| 19:26 UTC | Patients page shows 149 patients (was 0 due to API bug) | ✅ FIXED |
+| 19:27 UTC | Red "Insurance Expired" badge for expired policies | ✅ VERIFIED |
+| 19:27 UTC | Blue provider badges (Daman, ADNIC, etc.) for active insurance | ✅ VERIFIED |
+| 19:27 UTC | Yellow "No Insurance" badge for self-pay patients | ✅ VERIFIED |
+
+### What Was Fixed
+The patient list API was returning a 400 error due to incorrect Prisma relation name (`insurance` → `insurances`). Now fixed and all 149 patients display correctly with insurance status badges.
 
 ---
 
@@ -25,6 +40,104 @@
 14. [UAE-First Features](#uae-first-features)
 15. [Edge Cases & Expected Behavior](#edge-cases--expected-behavior)
 16. [Manual Test Checklist](#manual-test-checklist)
+
+---
+
+# 🎯 QUICK DEMO SCRIPT (15-Minute Presentation)
+
+> **For Management Demo - Follow this exact sequence**
+
+## Pre-Demo Setup (2 min before)
+1. Open https://spetaar.ai in browser
+2. Have two tabs ready: Staff Login + Patient Portal
+3. Clear browser history/cache if needed
+
+## Demo Flow
+
+### Part 1: Patient Insurance Overview (3 min)
+```
+1. Login: receptionist@hospital.com / password123
+2. Navigate: Patients (sidebar)
+3. SHOW: "149 Total Patients" - system is populated
+4. POINT OUT the insurance badges:
+   - 🔴 Red = Insurance Expired (find "Fatima Expired-Test")
+   - 🔵 Blue = Active Insurance with provider name
+   - 🟡 Yellow = No Insurance / Self-Pay
+5. Search: "Fatima" → Show red "Insurance Expired" badge
+6. Search: "Ahmed" → Show blue "Daman" badge
+7. Search: "Sara" → Show blue "ADNIC" badge
+```
+
+### Part 2: Check-In & Copay Collection (4 min)
+```
+1. Navigate: OPD (sidebar)
+2. Find any appointment OR explain the flow:
+   - Patient arrives → Check-in button
+   - System verifies insurance automatically
+   - Copay calculated based on policy
+   - Payment modal: Cash or Card
+   - Receipt generated (bilingual AR/EN)
+3. HIGHLIGHT: "If insurance expired → warning shown → convert to self-pay"
+```
+
+### Part 3: Doctor Ordering with Cost Display (3 min)
+```
+1. Login: idiamin@hospital.com / password123
+2. Navigate: OPD Queue
+3. Explain consultation flow:
+   - Doctor starts consultation
+   - Adds diagnosis (ICD-10 with autocomplete)
+   - Orders lab tests → Cost shown in real-time
+   - Orders radiology → Pre-auth warning if needed
+   - Prescribes medications → Drug cost shown
+4. HIGHLIGHT: "Cost transparency at point of ordering"
+```
+
+### Part 4: Pharmacy Copay (2 min)
+```
+1. Navigate: Pharmacy (sidebar)
+2. Show pending prescriptions queue
+3. Explain dispense flow:
+   - Pharmacist sees prescription
+   - Copay calculated automatically
+   - Patient pays copay
+   - Medication dispensed
+   - Inventory updated
+```
+
+### Part 5: Billing & Claims (3 min)
+```
+1. Navigate: Billing (sidebar)
+2. Show invoice list
+3. Click any invoice → Show:
+   - Line items with CPT codes
+   - VAT calculation (5%)
+   - Insurance vs Patient split
+   - Bilingual receipt option
+4. Navigate: Insurance → Pre-Auth
+5. HIGHLIGHT: "DHA integration ready for claims submission"
+```
+
+## Key Talking Points
+
+✅ **UAE-First Design:**
+- Emirates ID integration for insurance lookup
+- DHA eClaimLink ready
+- 5% VAT with TRN on receipts
+- Bilingual (Arabic + English)
+- All major UAE payers pre-configured
+
+✅ **Full Revenue Cycle:**
+- Check-in → Copay collection
+- Treatment → Auto-billing
+- Discharge → Final settlement
+- Claims → Submission & tracking
+
+✅ **Edge Cases Handled:**
+- Expired insurance → Self-pay conversion
+- Pre-authorization → Workflow built-in
+- Dual insurance → COB calculation
+- Underpayments → Shortfall tracking
 
 ---
 
@@ -52,32 +165,71 @@
 
 # 2. Test Patients & Scenarios
 
-## Patient: Md Kamil (Primary Test Patient)
-- **MRN:** Auto-assigned
-- **Emirates ID:** 784-1990-1234567-1
-- **Insurance:** Daman (National Health Insurance)
-- **Policy:** TEST-POL-001
-- **Coverage:** Enhanced
-- **Copay:** AED 20 fixed + 20% coinsurance
-- **Deductible:** AED 500 annual
-- **Use Case:** Standard OPD flow, copay collection, lab orders
+## 🧪 Test Patients in Production Database
 
-## Patient: Sara PreAuth-Test
-- **Emirates ID:** 784-1995-9876543-2
-- **Insurance:** NAS
-- **Pre-Auth Required:** YES for radiology
-- **Use Case:** Pre-authorization workflow demo
+> **NOTE:** These patients exist in the live production database (https://spetaar.ai)
 
-## Patient: Fatima Expired
-- **Emirates ID:** 784-1988-5555555-3
-- **Insurance:** Expired on 2025-12-31
-- **Use Case:** Expired insurance handling, convert to self-pay
+### Patient 1: Fatima Expired-Test ⭐ KEY DEMO PATIENT
+- **MRN:** MRN-EXPIRED-001
+- **Phone:** +971509993333
+- **Email:** fatima.expired@test.com
+- **Address:** 789 Test Rd, Sharjah
+- **Insurance:** Orient Insurance
+- **Policy Expiry:** January 31, 2025 (**EXPIRED**)
+- **Badge Display:** 🔴 Red "Insurance Expired" badge
+- **Use Case:** Demo expired insurance handling, self-pay conversion
+- **Demo Point:** Search "Fatima" in Patients page → Shows red "Insurance Expired" badge
 
-## Patient: Ahmed COB
-- **Emirates ID:** 784-1992-1111111-4
-- **Primary Insurance:** Daman (80% coverage)
-- **Secondary Insurance:** Thiqa (100% coverage)
-- **Use Case:** Dual insurance / COB calculation
+### Patient 2: Ahmed COB-Test ⭐ DUAL INSURANCE DEMO
+- **MRN:** MRN-COB-001
+- **Phone:** +971509992222
+- **Email:** ahmed.cob@test.com
+- **Address:** 456 Test Ave, Abu Dhabi
+- **Primary Insurance:** Daman (National Health Insurance Company)
+- **Secondary Insurance:** AXA Gulf Insurance
+- **Policy Expiry:** December 31, 2026 (VALID)
+- **Badge Display:** 🔵 Blue "Daman (National Health Insurance Company)" badge
+- **Use Case:** Coordination of Benefits (COB) calculation demo
+- **Demo Point:** Shows primary insurer badge, secondary used for remaining balance
+
+### Patient 3: Sara PreAuth-Test ⭐ PRE-AUTHORIZATION DEMO
+- **MRN:** MRN-PREAUTH-001
+- **Phone:** +971509991111
+- **Email:** sara.preauth@test.com
+- **Address:** 123 Test St, Dubai
+- **Insurance:** ADNIC (Abu Dhabi National Insurance)
+- **Policy Expiry:** December 31, 2026 (VALID)
+- **Badge Display:** 🔵 Blue "ADNIC (Abu Dhabi National Insurance)" badge
+- **Use Case:** Pre-authorization workflow for high-cost procedures
+- **Demo Point:** Requires pre-auth for MRI/CT scans
+
+### Patient 4: Anindya Roy (Self-Pay Example)
+- **MRN:** Various
+- **Phone:** 0551234567
+- **Email:** test@spetaar.ai
+- **Insurance:** None
+- **Badge Display:** 🟡 Yellow "No Insurance" badge
+- **Use Case:** Self-pay patient flow
+- **Demo Point:** Full payment required at check-in
+
+### Patient 5: Amir Khan (Standard Insured)
+- **MRN:** HMS001-ML9IEEF1U3KN
+- **Phone:** +971544403255
+- **Email:** amir@gmail.com
+- **Insurance:** None currently (can add for demo)
+- **Badge Display:** 🟡 Yellow "No Insurance" badge
+- **Use Case:** Adding insurance to existing patient
+
+---
+
+## 📊 Insurance Badge Summary (Visual Demo)
+
+| Badge Color | Meaning | Example Patient |
+|-------------|---------|-----------------|
+| 🔴 **Red** | Insurance Expired | Fatima Expired-Test |
+| 🔵 **Blue** | Active Insurance (shows provider name) | Ahmed COB-Test, Sara PreAuth-Test |
+| 🟡 **Yellow** | No Insurance (Self-Pay) | Anindya Roy, Test User |
+| 🟢 **Green** | Patient Active Status | All patients |
 
 ---
 
@@ -721,19 +873,196 @@ Dashboard → Admin / Settings → Insurance Management
 
 # Edge Cases & Expected Behavior
 
-| Scenario | Expected Behavior |
-|----------|-------------------|
-| Insurance expired | ⚠️ Warning, options: Self-pay / Override |
-| No insurance on file | Prompt for EID lookup or self-pay |
-| Pre-auth required | ⚠️ Warning with "Request Pre-Auth" button |
-| Pre-auth denied | Block procedure or allow with patient consent |
-| Deductible not met | Full amount charged until deductible reached |
-| Annual cap reached | Insurance stops paying, patient pays remainder |
-| Dual insurance | COB calculation, primary billed first |
-| Insurance underpays | Shortfall billed to patient separately |
-| IPD insurance expires | Alert generated, renewal workflow triggered |
-| Drug out of stock | Generic substitution offered |
-| Controlled substance | Additional ID verification required |
+## 🔴 INSURANCE EDGE CASES (With Examples)
+
+### Edge Case 1: Insurance Expired
+**Test Patient:** Fatima Expired-Test  
+**How to Demo:**
+1. Go to Patients page → Search "Fatima"
+2. Observe: Red "Insurance Expired" badge visible
+3. Click on patient → View insurance details
+4. Try to check-in for appointment
+
+**Expected Behavior:**
+- ⚠️ Warning modal: "Insurance Expired (January 31, 2025)"
+- Options presented:
+  - ✅ **Convert to Self-Pay** → Full consultation fee (no discount)
+  - ⏸️ **Defer Check-in** → Wait for patient to update insurance
+  - 🔓 **Manual Override** → Requires supervisor approval
+
+**Screenshot Proof:** `screenshots/FINAL-fatima-search.png`
+
+---
+
+### Edge Case 2: No Insurance on File
+**Test Patient:** Any patient with yellow "No Insurance" badge  
+**How to Demo:**
+1. Go to Patients page → Find patient with yellow badge
+2. Check-in patient for appointment
+
+**Expected Behavior:**
+- Modal shows: "No insurance on file"
+- Options:
+  - 🆔 **Enter Emirates ID** → System looks up insurance from DHA/DOH
+  - 💵 **Proceed as Self-Pay** → Full amount charged
+  - ➕ **Add Insurance Manually** → Enter policy details
+
+---
+
+### Edge Case 3: Pre-Authorization Required
+**Test Patient:** Sara PreAuth-Test  
+**How to Demo:**
+1. Login as Doctor (idiamin@hospital.com)
+2. Start consultation with Sara
+3. Order MRI Brain scan
+
+**Expected Behavior:**
+- ⚠️ Warning: "Pre-Authorization Required from ADNIC"
+- Button: "Request Pre-Auth Now"
+- Pre-auth form auto-fills with:
+  - Patient: Sara PreAuth-Test
+  - Procedure: MRI Brain (CPT: 70553)
+  - Diagnosis: (doctor enters)
+
+---
+
+### Edge Case 4: Dual Insurance (COB - Coordination of Benefits)
+**Test Patient:** Ahmed COB-Test  
+**How to Demo:**
+1. Check-in Ahmed for appointment
+2. View insurance verification
+
+**Expected Behavior:**
+- System shows: "2 Insurance Policies Detected"
+- COB Calculation displayed:
+  ```
+  Service Cost:        AED 500
+  Primary (Daman):     Pays AED 400 (80%)
+  Remaining:           AED 100
+  Secondary (AXA):     Pays AED 100 (100% of remainder)
+  Patient Pays:        AED 0
+  ```
+
+---
+
+### Edge Case 5: Deductible Not Met
+**How to Demo:**
+1. Check patient with fresh annual deductible
+2. Process billing
+
+**Expected Behavior:**
+- Shows deductible status:
+  ```
+  Annual Deductible:   AED 500
+  Used YTD:            AED 150
+  Remaining:           AED 350
+  ```
+- First AED 350 charged to patient
+- Insurance pays 80% of remainder
+
+---
+
+### Edge Case 6: Annual Copay Cap Reached
+**Expected Behavior:**
+- After patient reaches annual cap (e.g., AED 2000):
+  ```
+  Annual Cap:          AED 2000
+  Paid YTD:            AED 2000 ✅ REACHED
+  ```
+- Insurance now covers 100%
+- Patient pays AED 0 copay
+
+---
+
+### Edge Case 7: Insurance Underpayment
+**How to Demo:**
+1. Navigate to Billing → Payments Received
+2. Find claim where insurance paid less than expected
+
+**Expected Behavior:**
+- Alert: "Shortfall Detected"
+  ```
+  Claimed:             AED 1000
+  Insurance Paid:      AED 800
+  Shortfall:           AED 200
+  ```
+- Options:
+  - 📧 **Bill Patient** → Supplemental invoice created
+  - ❌ **Write Off** → Finance approval required
+  - 📋 **Appeal to Insurer** → Resubmit with notes
+
+---
+
+### Edge Case 8: IPD Insurance Expires During Stay
+**How to Demo:**
+1. Navigate to IPD → Admissions
+2. View active admission with expiring insurance
+
+**Expected Behavior:**
+- ⚠️ Alert banner: "Patient's insurance expires in X days"
+- Actions available:
+  - 📞 Contact patient for renewal
+  - 💵 Convert remaining stay to self-pay
+  - 📋 Request extension from insurer
+
+---
+
+## 💊 PHARMACY EDGE CASES
+
+### Edge Case 9: Drug Out of Stock
+**Expected Behavior:**
+- Warning: "Prescribed medication out of stock"
+- Suggestion: "Generic alternative available: Paracetamol Generic"
+- Pharmacist can approve substitution
+- Copay recalculated (usually lower for generic)
+
+### Edge Case 10: Controlled Substance
+**Expected Behavior:**
+- Flag: "⚠️ Controlled Substance - Additional Verification Required"
+- Prompt: "Enter Patient Emirates ID"
+- Audit trail: Full log of dispensing
+
+---
+
+## 💰 BILLING EDGE CASES
+
+### Edge Case 11: Partial Payment
+**Expected Behavior:**
+- Patient can pay partial amount
+- Balance tracked on account
+- Collection reminders sent
+
+### Edge Case 12: Refund Required
+**Expected Behavior:**
+- Copay overpayment detected
+- Refund initiated
+- Available in Billing → Copay Refunds page
+
+### Edge Case 13: VAT Calculation
+**Expected Behavior:**
+- 5% VAT applied to all services
+- TRN (Tax Registration Number) on receipts
+- VAT breakdown visible on invoice
+
+---
+
+## 📋 Summary Table
+
+| # | Scenario | Test Patient | Expected Badge/Warning |
+|---|----------|--------------|------------------------|
+| 1 | Insurance Expired | Fatima Expired-Test | 🔴 Red badge + warning |
+| 2 | No Insurance | Anindya Roy | 🟡 Yellow badge |
+| 3 | Pre-Auth Required | Sara PreAuth-Test | ⚠️ Warning modal |
+| 4 | Dual Insurance | Ahmed COB-Test | 🔵 Blue badge + COB calc |
+| 5 | Deductible Not Met | Any insured | Deductible tracker |
+| 6 | Cap Reached | Any insured | 100% coverage |
+| 7 | Underpayment | N/A | Shortfall alert |
+| 8 | IPD Expiry | N/A | Banner alert |
+| 9 | Drug OOS | N/A | Substitution offer |
+| 10 | Controlled Drug | N/A | ID verification |
+| 11 | Partial Payment | N/A | Balance tracking |
+| 12 | Refund | N/A | Refund workflow |
+| 13 | VAT | All invoices | 5% + TRN |
 
 ---
 
@@ -741,66 +1070,121 @@ Dashboard → Admin / Settings → Insurance Management
 
 Use this during pre-demo testing:
 
-## OPD & Check-in
-| # | Test | Expected | Actual | Pass? |
-|---|------|----------|--------|-------|
-| 1 | Login as Receptionist | Dashboard loads | | ☐ |
-| 2 | Navigate to OPD | Queue visible | | ☐ |
-| 3 | Check in insured patient | Copay modal appears | | ☐ |
-| 4 | Copay calculation correct | Amounts match | | ☐ |
-| 5 | EID lookup works | Insurance auto-found | | ☐ |
-| 6 | Expired insurance warning | Warning shown | | ☐ |
+## ✅ AUTOMATED TEST RESULTS (Feb 5, 2026 - 19:28 UTC)
 
-## Doctor & Orders
-| # | Test | Expected | Actual | Pass? |
-|---|------|----------|--------|-------|
-| 7 | Login as Doctor | Dashboard loads | | ☐ |
-| 8 | Start consultation | Opens correctly | | ☐ |
-| 9 | Lab order cost estimate | Shows amount | | ☐ |
-| 10 | MRI pre-auth warning | Warning appears | | ☐ |
-| 11 | Drug cost in picker | Shows price | | ☐ |
+> All critical tests passed! Run: `node finance-edge-test.mjs`
 
-## Lab
-| # | Test | Expected | Actual | Pass? |
-|---|------|----------|--------|-------|
-| 12 | Login as Lab Tech | Dashboard loads | | ☐ |
-| 13 | View pending orders | Orders listed | | ☐ |
-| 14 | Process sample | Status updates | | ☐ |
-| 15 | Walk-in patient | Insurance captured | | ☐ |
-| 16 | Auto-billing triggers | Charge added | | ☐ |
+| Test | Status |
+|------|--------|
+| Login as Receptionist | ✅ PASS |
+| Invoice List Page | ✅ PASS |
+| Invoice API | ✅ PASS (returns 5 invoices) |
+| Invoice Structure | ✅ PASS |
+| Copay Refunds Page | ✅ PASS |
+| Payment Methods | ✅ PASS |
+| OPD Queue Page | ✅ PASS |
+| Insurance in OPD | ✅ PASS |
+| Pharmacy Page | ✅ PASS |
+| Pharmacy Copay Display | ✅ PASS |
+| Laboratory Page | ✅ PASS |
+| IPD Page | ✅ PASS |
+| IPD Billing Features | ✅ PASS |
+| Insurance Pre-Auth | ✅ PASS |
+| **Insurance Expired Badge** | ✅ PASS |
+| **No Insurance Badge** | ✅ PASS |
+| **Provider Badge (Blue)** | ✅ PASS |
+| API Health | ✅ PASS (v1.0.0) |
 
-## Pharmacy
-| # | Test | Expected | Actual | Pass? |
-|---|------|----------|--------|-------|
-| 17 | Login as Pharmacist | Dashboard loads | | ☐ |
-| 18 | View prescriptions | Queue visible | | ☐ |
-| 19 | Dispense medication | Copay modal works | | ☐ |
-| 20 | Copay calculation | Correct amounts | | ☐ |
-| 21 | Inventory update | Stock reduced | | ☐ |
+**Total: 18 PASSED, 0 FAILED**
 
-## IPD
-| # | Test | Expected | Actual | Pass? |
-|---|------|----------|--------|-------|
-| 22 | Navigate to IPD | Page loads | | ☐ |
-| 23 | New admission | Form opens | | ☐ |
-| 24 | Room class selection | Options shown | | ☐ |
-| 25 | Upgrade cost warning | Warning appears | | ☐ |
-| 26 | Deposit calculation | Amount correct | | ☐ |
-| 27 | Daily charges | Auto-accrue | | ☐ |
-| 28 | Discharge billing | Final invoice | | ☐ |
+---
 
-## Billing & Claims
-| # | Test | Expected | Actual | Pass? |
-|---|------|----------|--------|-------|
-| 29 | View invoice | Details correct | | ☐ |
-| 30 | VAT calculation | 5% applied | | ☐ |
-| 31 | Bilingual receipt | AR + EN shown | | ☐ |
-| 32 | Claims dashboard | Status visible | | ☐ |
-| 33 | DHA submission | Submits ok | | ☐ |
+## Manual Pre-Demo Checklist
+
+### 🏥 OPD & Check-in
+| # | Test | Expected | Status |
+|---|------|----------|--------|
+| 1 | Login as Receptionist | Dashboard loads | ✅ Verified |
+| 2 | Navigate to Patients | 149 patients shown | ✅ Verified |
+| 3 | Search "Fatima" | Red "Insurance Expired" badge | ✅ Verified |
+| 4 | Search "Ahmed" | Blue "Daman" badge | ✅ Verified |
+| 5 | Search "Sara" | Blue "ADNIC" badge | ✅ Verified |
+| 6 | Navigate to OPD | Queue visible | ✅ Verified |
+
+### 👨‍⚕️ Doctor & Orders
+| # | Test | Expected | Status |
+|---|------|----------|--------|
+| 7 | Login as Doctor | Dashboard loads | ☐ Test |
+| 8 | Start consultation | Opens correctly | ☐ Test |
+| 9 | Lab order cost estimate | Shows amount | ☐ Test |
+| 10 | MRI pre-auth warning | Warning appears | ☐ Test |
+| 11 | Drug cost in picker | Shows price | ☐ Test |
+
+### 🔬 Lab
+| # | Test | Expected | Status |
+|---|------|----------|--------|
+| 12 | Navigate to Lab | Page loads | ✅ Verified |
+| 13 | View pending orders | Orders listed | ☐ Test |
+| 14 | Walk-in flow | Insurance captured | ☐ Test |
+
+### 💊 Pharmacy
+| # | Test | Expected | Status |
+|---|------|----------|--------|
+| 15 | Navigate to Pharmacy | Page loads | ✅ Verified |
+| 16 | View prescriptions | Queue visible | ☐ Test |
+| 17 | Copay calculation | Shows amounts | ✅ Verified |
+
+### 🏨 IPD
+| # | Test | Expected | Status |
+|---|------|----------|--------|
+| 18 | Navigate to IPD | Page loads | ✅ Verified |
+| 19 | Billing features visible | Charges/Deposits shown | ✅ Verified |
+
+### 💰 Billing & Claims
+| # | Test | Expected | Status |
+|---|------|----------|--------|
+| 20 | Navigate to Billing | Invoice list loads | ✅ Verified |
+| 21 | Invoice API works | Returns data | ✅ Verified |
+| 22 | Copay Refunds page | Accessible | ✅ Verified |
+| 23 | Insurance Pre-Auth page | Accessible | ✅ Verified |
+
+---
+
+## 📸 Available Screenshots
+
+Location: `/home/taqon/clawd/spetaar-qa-test/screenshots/`
+
+| Screenshot | Description |
+|------------|-------------|
+| `FINAL-fatima-search.png` | Patient list showing insurance badges |
+| `FIN-01-billing-page.png` | Billing module main page |
+| `FIN-02-copay-refunds.png` | Copay refunds management |
+| `FIN-03-opd-queue.png` | OPD queue with insurance info |
+| `FIN-04-pharmacy.png` | Pharmacy module with copay |
+| `FIN-05-laboratory.png` | Laboratory module |
+| `FIN-06-ipd.png` | IPD admissions and billing |
+| `FIN-07-insurance.png` | Insurance management |
+
+---
+
+## 🚀 Quick Commands
+
+```bash
+# Run finance edge case tests
+cd /home/taqon/clawd/spetaar-qa-test
+node finance-edge-test.mjs
+
+# Run full verification
+node final-verify.mjs
+
+# Check backend health
+curl https://spetaar.ai/api/v1/health
+```
 
 ---
 
 **Document End**
 
-*Generated by TeaBot ☕ for Taqon Team*
+*Generated by TeaBot ☕ for Taqon Team*  
+*Last Updated: February 5, 2026 at 19:30 UTC*  
 *For questions: teabot@taqon.ai*
