@@ -857,6 +857,7 @@ model Patient {
   // Settings & Preferences
   notificationPreference  PatientNotificationPreference?
   communicationPreference PatientCommunicationPreference?
+  pushTokens              PatientPushToken[]
 
   // A'mad Precision Health Platform
   healthDataPoints     HealthDataPoint[]
@@ -6003,6 +6004,22 @@ model PatientCommunicationPreference {
   updatedAt DateTime @updatedAt
 
   @@map("patient_communication_preferences")
+}
+
+model PatientPushToken {
+  id        String  @id @default(uuid())
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  token    String @unique
+  platform String // 'ios' | 'android'
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([patientId, token])
+  @@map("patient_push_tokens")
 }
 
 enum WellnessAssessmentType {

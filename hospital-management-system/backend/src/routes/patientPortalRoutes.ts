@@ -2594,6 +2594,73 @@ router.put(
 );
 
 // =============================================================================
+// Patient Portal Push Token Routes
+// =============================================================================
+
+/**
+ * Register push notification token
+ * POST /api/v1/patient-portal/settings/push-token
+ */
+router.post(
+  '/settings/push-token',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const { token, platform } = req.body;
+
+    if (!token) {
+      return sendError(res, 'Push token is required', 400);
+    }
+
+    const pushToken = await prisma.patientPushToken.upsert({
+      where: { patientId_token: { patientId, token } },
+      update: {
+        platform: platform || 'android',
+        isActive: true,
+        updatedAt: new Date(),
+      },
+      create: {
+        patientId,
+        token,
+        platform: platform || 'android',
+        isActive: true,
+      },
+    });
+
+    sendSuccess(res, { success: true, id: pushToken.id }, 'Push token registered');
+  })
+);
+
+/**
+ * Unregister push notification token
+ * DELETE /api/v1/patient-portal/settings/push-token
+ */
+router.delete(
+  '/settings/push-token',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const patientId = req.patient?.patientId || '';
+    const { token } = req.body || {};
+
+    if (token) {
+      // Deactivate specific token
+      await prisma.patientPushToken.updateMany({
+        where: { patientId, token },
+        data: { isActive: false },
+      });
+    } else {
+      // Deactivate all tokens for this patient
+      await prisma.patientPushToken.updateMany({
+        where: { patientId },
+        data: { isActive: false },
+      });
+    }
+
+    sendSuccess(res, { success: true }, 'Push token unregistered');
+  })
+);
+
+// =============================================================================
 // Patient Portal Insurance Routes
 // =============================================================================
 
