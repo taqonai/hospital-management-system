@@ -750,21 +750,25 @@ router.post(
           aiPowered?: boolean;
           model?: string;
         };
-        sendSuccess(res, {
-          response: aiData.response || aiData.message,
-          suggestedActions: aiData.suggestedActions || getSuggestedActions(message),
-          aiPowered: aiData.aiPowered || false,
-          model: aiData.model
-        }, 'AI response generated');
-        return;
+        // If AI-powered response, use it directly
+        if (aiData.aiPowered) {
+          sendSuccess(res, {
+            response: aiData.response || aiData.message,
+            suggestedActions: aiData.suggestedActions || getSuggestedActions(message),
+            aiPowered: true,
+            model: aiData.model
+          }, 'AI response generated');
+          return;
+        }
+        // If AI service returned a fallback, check if we have clinical data to enrich it
       }
     } catch (e) {
       console.error('AI Health Assistant error:', e);
-      // Fall through to rule-based response
+      // Fall through to clinical-data-aware response
     }
 
-    // Rule-based fallback response
-    const response = generateLocalResponse(message);
+    // Generate a response using the clinical data we have
+    const response = generateClinicalResponse(message, clinicalDataContext) || generateLocalResponse(message);
     sendSuccess(res, {
       response,
       suggestedActions: getSuggestedActions(message),
@@ -772,6 +776,58 @@ router.post(
     }, 'Response generated');
   })
 );
+
+// Helper function to generate a clinical-data-aware response when AI is unavailable
+function generateClinicalResponse(query: string, clinicalData: string): string | null {
+  if (!clinicalData.trim()) return null;
+  const lowerQuery = query.toLowerCase();
+
+  if (lowerQuery.includes('lab') || lowerQuery.includes('test') || lowerQuery.includes('result')) {
+    const labSection = clinicalData.match(/RECENT LAB RESULTS:\n([\s\S]*?)(\n\n|$)/);
+    if (labSection) {
+      return `Here's a summary of your recent lab results:\n\n${labSection[1].trim()}\n\n**How to read this:**\n- Values within the reference range (Ref) are normal\n- *ABNORMAL* values are outside the expected range and may need attention\n- **CRITICAL** values require immediate medical attention\n\nPlease discuss any abnormal results with your doctor during your next visit. They can provide personalized advice based on your complete medical history.\n\n*Note: This is an automated summary of your actual lab data, not a medical diagnosis.*`;
+    }
+  }
+
+  if (lowerQuery.includes('medication') || lowerQuery.includes('prescription') || lowerQuery.includes('medicine') || lowerQuery.includes('drug')) {
+    const medSection = clinicalData.match(/ACTIVE MEDICATIONS:\n([\s\S]*?)(\n\n|$)/);
+    if (medSection) {
+      return `Here are your currently active medications:\n\n${medSection[1].trim()}\n\nPlease take all medications exactly as prescribed. If you experience any side effects or have questions about your medications, contact your healthcare provider.\n\n*Note: This is a summary of your actual prescription data.*`;
+    }
+  }
+
+  if (lowerQuery.includes('vital') || lowerQuery.includes('blood pressure') || lowerQuery.includes('heart rate') || lowerQuery.includes('bp') || lowerQuery.includes('weight') || lowerQuery.includes('bmi')) {
+    const vitalSection = clinicalData.match(/LATEST VITALS[^:]*:\n([\s\S]*?)(\n\n|$)/);
+    if (vitalSection) {
+      return `Here are your most recent vital signs:\n\n${vitalSection[1].trim()}\n\n**General reference ranges:**\n- Blood Pressure: Normal is below 120/80 mmHg\n- Heart Rate: Normal resting is 60-100 bpm\n- Temperature: Normal is around 36.5-37.5°C\n- SpO2: Normal is 95-100%\n- BMI: Normal range is 18.5-24.9\n\nPlease discuss any concerns about your vitals with your doctor.\n\n*Note: This is a summary of your actual recorded vitals.*`;
+    }
+  }
+
+  if (lowerQuery.includes('allerg')) {
+    const allergySection = clinicalData.match(/ALLERGIES:\n([\s\S]*?)(\n\n|$)/);
+    if (allergySection) {
+      return `Your recorded allergies:\n\n${allergySection[1].trim()}\n\nAlways inform your healthcare providers about these allergies before receiving any treatment or medication.\n\n*Note: This is from your actual medical records.*`;
+    }
+  }
+
+  if (lowerQuery.includes('diagnos') || lowerQuery.includes('condition') || lowerQuery.includes('health status') || lowerQuery.includes('medical history')) {
+    const parts: string[] = [];
+    const histSection = clinicalData.match(/MEDICAL HISTORY:\n([\s\S]*?)(\n\n|$)/);
+    const dxSection = clinicalData.match(/RECENT DIAGNOSES:\n([\s\S]*?)(\n\n|$)/);
+    if (histSection) parts.push(`**Medical History:**\n${histSection[1].trim()}`);
+    if (dxSection) parts.push(`**Recent Diagnoses:**\n${dxSection[1].trim()}`);
+    if (parts.length) {
+      return `Here's a summary of your health information:\n\n${parts.join('\n\n')}\n\nPlease consult your doctor for any questions about your conditions or treatment plan.\n\n*Note: This is from your actual medical records.*`;
+    }
+  }
+
+  // If the question is general but we have clinical data, provide an overview
+  if (lowerQuery.includes('health') || lowerQuery.includes('summary') || lowerQuery.includes('overview')) {
+    return `Here's an overview of your health data on file:\n\n${clinicalData.trim()}\n\nIf you have specific questions about any of these results, feel free to ask! You can also discuss them with your doctor during your next appointment.\n\n*Note: This is a summary of your actual medical records.*`;
+  }
+
+  return null;
+}
 
 // Helper function to generate local response
 function generateLocalResponse(query: string): string {
