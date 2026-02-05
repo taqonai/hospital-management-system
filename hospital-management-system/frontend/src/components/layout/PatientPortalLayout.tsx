@@ -210,7 +210,7 @@ const navigationItems: NavItem[] = [
   { name: 'Lab Results', href: '/patient-portal/labs', icon: BeakerIcon },
   { name: 'Bills & Payments', href: '/patient-portal/billing', icon: CreditCardIcon },
   { name: 'My Insurance', href: '/patient-portal/insurance', icon: ShieldCheckIcon },
-  { name: 'Messages', href: '/patient-portal/messages', icon: ChatBubbleLeftRightIcon },
+  // { name: 'Messages', href: '/patient-portal/messages', icon: ChatBubbleLeftRightIcon }, // Hidden: messaging backend not yet implemented
   { name: 'My Profile', href: '/patient-portal/settings', icon: UserCircleIcon },
 ];
 
