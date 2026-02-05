@@ -1299,7 +1299,7 @@ export class PatientPortalService {
           orderBy: { paymentDate: 'desc' },
         },
         claims: {
-          where: { status: { in: ['APPROVED', 'PROCESSING', 'SUBMITTED'] as any[] } },
+          where: { status: { in: ['APPROVED', 'UNDER_REVIEW', 'SUBMITTED'] as any[] } },
           select: { approvedAmount: true, claimAmount: true, status: true },
         },
       },
