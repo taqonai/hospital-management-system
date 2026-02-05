@@ -249,7 +249,7 @@ export default function ReceptionistDashboard() {
         </div>
 
         {/* Upcoming Appointments */}
-        <div className="bg-white rounded-xl border border-gray-100 p-6">
+        <div className="bg-white rounded-xl border border-gray-100 p-6 flex flex-col">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Upcoming Appointments</h3>
             <Link
@@ -260,7 +260,7 @@ export default function ReceptionistDashboard() {
             </Link>
           </div>
 
-          <div className="space-y-3 max-h-80 overflow-y-auto">
+          <div className="space-y-3 flex-1 overflow-y-auto">
             {todayAppointments
               ?.filter((apt: any) => apt.status === 'SCHEDULED' || apt.status === 'CONFIRMED')
               .slice(0, 6)
