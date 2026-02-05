@@ -53,9 +53,9 @@ export default function ReceptionistDashboard() {
 
   // Hourly distribution from today's appointments
   const hourlyData = (() => {
-    // Determine hour range from actual data (default 8-17)
-    let minHour = 8;
-    let maxHour = 17;
+    // Base range: typical hospital hours (7 AM – 9 PM), expand if data falls outside
+    let minHour = 7;
+    let maxHour = 21;
     todayAppointments?.forEach((apt: any) => {
       const h = parseInt(apt.startTime?.split(':')[0], 10);
       if (!isNaN(h)) {
@@ -66,18 +66,23 @@ export default function ReceptionistDashboard() {
 
     const hours: Record<string, number> = {};
     for (let i = minHour; i <= maxHour; i++) {
-      hours[`${i}:00`] = 0;
+      const label = i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`;
+      hours[label] = 0;
     }
 
+    const hourKeys = Object.keys(hours);
     todayAppointments?.forEach((apt: any) => {
       const hour = parseInt(apt.startTime?.split(':')[0], 10);
-      if (!isNaN(hour) && hours[`${hour}:00`] !== undefined) {
-        hours[`${hour}:00`]++;
+      if (!isNaN(hour)) {
+        const idx = hour - minHour;
+        if (idx >= 0 && idx < hourKeys.length) {
+          hours[hourKeys[idx]]++;
+        }
       }
     });
 
     return {
-      labels: Object.keys(hours),
+      labels: hourKeys,
       datasets: [{
         label: 'Appointments',
         data: Object.values(hours),
