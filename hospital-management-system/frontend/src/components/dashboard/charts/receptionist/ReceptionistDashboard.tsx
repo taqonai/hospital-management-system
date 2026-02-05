@@ -25,7 +25,7 @@ export default function ReceptionistDashboard() {
   } = useReceptionistDashboard();
 
   // Calculate stats
-  const waiting = opdStats?.waiting || opdQueue?.filter((q: any) => q.status === 'CHECKED_IN' || q.status === 'WAITING').length || 0;
+  const waiting = opdStats?.waiting || opdQueue?.filter((q: any) => q.status === 'CHECKED_IN' || q.status === 'SCHEDULED' || q.status === 'CONFIRMED').length || 0;
   const inProgress = opdStats?.inProgress || opdQueue?.filter((q: any) => q.status === 'IN_PROGRESS').length || 0;
   const completed = opdStats?.completed || 0;
   const noShow = opdStats?.noShow || 0;
@@ -76,9 +76,9 @@ export default function ReceptionistDashboard() {
     };
   })();
 
-  // Find next patients to call
+  // Find next patients to call (checked-in first, then scheduled/confirmed)
   const nextInQueue = opdQueue?.filter((q: any) =>
-    q.status === 'CHECKED_IN' || q.status === 'WAITING'
+    q.status === 'CHECKED_IN' || q.status === 'SCHEDULED' || q.status === 'CONFIRMED'
   ).slice(0, 5) || [];
 
   return (
