@@ -221,12 +221,12 @@ export class LaboratoryService {
                 where: { isActive: true, isPrimary: true },
                 select: {
                   id: true,
-                  insurerName: true,
+                  providerName: true,
                   policyNumber: true,
-                  planType: true,
-                  coveragePercentage: true,
+                  coverageType: true,
+                  copay: true,
                   expiryDate: true,
-                  networkStatus: true,
+                  networkTier: true,
                 },
                 take: 1,
               },
@@ -255,13 +255,15 @@ export class LaboratoryService {
         insuranceValid = expiryDate >= new Date();
       }
 
-      // Calculate coverage
+      // Calculate coverage based on copay percentage
+      // copay is the patient's percentage, so coverage = 100 - copay
+      const copayPercent = Number(insurance?.copay) || 20; // Default 20% copay
       let coveragePercentage = 0;
       let insuranceAmount = 0;
       let patientAmount = totalCost;
 
       if (insurance && insuranceValid) {
-        coveragePercentage = Number(insurance.coveragePercentage) || 80; // Default 80% coverage
+        coveragePercentage = 100 - copayPercent;
         insuranceAmount = Math.round((totalCost * coveragePercentage) / 100 * 100) / 100;
         patientAmount = Math.round((totalCost - insuranceAmount) * 100) / 100;
       }
@@ -271,10 +273,10 @@ export class LaboratoryService {
         billing: {
           totalCost,
           hasInsurance: !!insurance && insuranceValid,
-          insuranceProvider: insurance?.insurerName || null,
+          insuranceProvider: insurance?.providerName || null,
           policyNumber: insurance?.policyNumber || null,
-          planType: insurance?.planType || null,
-          networkStatus: insurance?.networkStatus || null,
+          planType: insurance?.coverageType || null,
+          networkStatus: insurance?.networkTier || null,
           coveragePercentage,
           insuranceAmount,
           patientAmount,
