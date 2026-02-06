@@ -29,16 +29,39 @@ export interface UseConsultationScribeOptions {
 
 // ============ Helpers ============
 
-/** Safely convert any GPT response value to a string (handles dicts, arrays, etc.) */
+/** Safely convert any GPT response value to a readable string (handles nested dicts, arrays, etc.) */
 function ensureString(value: unknown): string {
   if (value == null) return '';
   if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    return value.map(v => typeof v === 'string' ? v : String(v)).join('\n');
+  }
   if (typeof value === 'object') {
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return String(value);
+    const obj = value as Record<string, unknown>;
+    // Try common text keys first
+    for (const key of ['text', 'summary', 'content', 'description']) {
+      if (typeof obj[key] === 'string') return obj[key] as string;
     }
+    // Join all values into readable text (handles GPT sub-structured objects)
+    const parts: string[] = [];
+    for (const [k, v] of Object.entries(obj)) {
+      if (typeof v === 'string' && v.trim()) {
+        const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        parts.push(`${label}: ${v}`);
+      } else if (Array.isArray(v)) {
+        const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        const items = v.filter(Boolean).join(', ');
+        if (items) parts.push(`${label}: ${items}`);
+      } else if (v && typeof v === 'object') {
+        const nested = ensureString(v);
+        if (nested) {
+          const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+          parts.push(`${label}: ${nested}`);
+        }
+      }
+    }
+    if (parts.length > 0) return parts.join('\n');
+    try { return JSON.stringify(value); } catch { return String(value); }
   }
   return String(value);
 }
