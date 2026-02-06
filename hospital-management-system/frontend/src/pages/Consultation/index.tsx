@@ -1483,12 +1483,12 @@ export default function Consultation() {
               Patient Medical Records
             </h3>
           </div>
-          <div className="p-6 space-y-5">
+          <div className="p-6 space-y-6">
 
             {/* Allergies - Detailed */}
             <div>
-              <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
-                <ExclamationTriangleIcon className="h-4 w-4 text-red-500" />
+              <h4 className="text-base font-bold text-gray-800 flex items-center gap-2 mb-3 pb-1.5 border-b border-gray-100">
+                <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
                 Allergies
               </h4>
               {(medicalSummary?.allergies?.length > 0 || patientData.allergies?.length > 0) ? (
@@ -1534,8 +1534,8 @@ export default function Consultation() {
 
             {/* Chronic Conditions */}
             <div>
-              <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
-                <HeartIcon className="h-4 w-4 text-rose-500" />
+              <h4 className="text-base font-bold text-gray-800 flex items-center gap-2 mb-3 pb-1.5 border-b border-gray-100">
+                <HeartIcon className="h-5 w-5 text-rose-500" />
                 Chronic Conditions
               </h4>
               {patientData.medicalHistory?.chronicConditions?.length ? (
@@ -1551,8 +1551,8 @@ export default function Consultation() {
 
             {/* Current Medications - Detailed */}
             <div>
-              <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
-                <BoltIcon className="h-4 w-4 text-amber-500" />
+              <h4 className="text-base font-bold text-gray-800 flex items-center gap-2 mb-3 pb-1.5 border-b border-gray-100">
+                <BoltIcon className="h-5 w-5 text-amber-500" />
                 Current Medications
               </h4>
               {patientData.medicalHistory?.currentMedications?.length ? (
@@ -1569,8 +1569,8 @@ export default function Consultation() {
             {/* Ongoing Treatment */}
             {patientData.medicalHistory?.currentTreatment && (
               <div>
-                <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
-                  <EyeIcon className="h-4 w-4 text-cyan-500" />
+                <h4 className="text-base font-bold text-gray-800 flex items-center gap-2 mb-3 pb-1.5 border-b border-gray-100">
+                  <EyeIcon className="h-5 w-5 text-cyan-500" />
                   Ongoing Treatment
                 </h4>
                 <p className="text-sm text-gray-700 bg-cyan-50 border border-cyan-100 rounded-xl p-3">
@@ -1581,8 +1581,8 @@ export default function Consultation() {
 
             {/* Family History */}
             <div>
-              <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
-                <UserGroupIcon className="h-4 w-4 text-purple-500" />
+              <h4 className="text-base font-bold text-gray-800 flex items-center gap-2 mb-3 pb-1.5 border-b border-gray-100">
+                <UserGroupIcon className="h-5 w-5 text-purple-500" />
                 Family History
               </h4>
               {patientData.medicalHistory?.familyHistory?.length ? (
@@ -1598,8 +1598,8 @@ export default function Consultation() {
 
             {/* Past Surgeries - Detailed */}
             <div>
-              <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
-                <BeakerIcon className="h-4 w-4 text-blue-500" />
+              <h4 className="text-base font-bold text-gray-800 flex items-center gap-2 mb-3 pb-1.5 border-b border-gray-100">
+                <BeakerIcon className="h-5 w-5 text-blue-500" />
                 Past Surgeries
               </h4>
               {medicalSummary?.detailedPastSurgeries?.length > 0 ? (
@@ -1639,8 +1639,8 @@ export default function Consultation() {
 
             {/* Immunization Records - Detailed */}
             <div>
-              <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
-                <ShieldCheckIcon className="h-4 w-4 text-green-500" />
+              <h4 className="text-base font-bold text-gray-800 flex items-center gap-2 mb-3 pb-1.5 border-b border-gray-100">
+                <ShieldCheckIcon className="h-5 w-5 text-green-500" />
                 Immunization Records
               </h4>
               {medicalSummary?.detailedImmunizations?.length > 0 ? (
@@ -1678,8 +1678,8 @@ export default function Consultation() {
             {/* Lifestyle */}
             {patientData.medicalHistory?.lifestyle && (
               <div>
-                <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
-                  <ChartBarIcon className="h-4 w-4 text-indigo-500" />
+                <h4 className="text-base font-bold text-gray-800 flex items-center gap-2 mb-3 pb-1.5 border-b border-gray-100">
+                  <ChartBarIcon className="h-5 w-5 text-indigo-500" />
                   Lifestyle
                 </h4>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -1714,8 +1714,8 @@ export default function Consultation() {
             {/* Notes */}
             {patientData.medicalHistory?.notes && (
               <div>
-                <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
-                  <DocumentTextIcon className="h-4 w-4 text-gray-500" />
+                <h4 className="text-base font-bold text-gray-800 flex items-center gap-2 mb-3 pb-1.5 border-b border-gray-100">
+                  <DocumentTextIcon className="h-5 w-5 text-gray-500" />
                   Medical Notes
                 </h4>
                 <p className="text-sm text-gray-700 bg-gray-50 border border-gray-100 rounded-xl p-3 whitespace-pre-wrap">
