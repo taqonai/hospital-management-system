@@ -57,8 +57,10 @@ export default function InsuranceProviders() {
     },
   });
 
-  const providers: InsuranceProvider[] = data?.data || [];
-  const pagination = data?.pagination || { total: 0, page: 1, limit: 50, totalPages: 1 };
+  // Handle nested response: { success, data: { data: [...], pagination: {...} } }
+  const responseData = data?.data || data;
+  const providers: InsuranceProvider[] = responseData?.data || responseData || [];
+  const pagination = responseData?.pagination || data?.pagination || { total: 0, page: 1, limit: 50, totalPages: 1 };
 
   const stats = [
     { label: 'Total Providers', value: pagination.total, icon: ShieldCheckIcon, color: 'bg-blue-500' },
