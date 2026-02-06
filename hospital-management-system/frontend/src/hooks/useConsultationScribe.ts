@@ -1,7 +1,7 @@
 /**
- * useConsultationScribe - Hook for AI Scribe integration in the consultation workflow.
- * Manages audio recording and calls the authenticated backend API to transcribe
- * and generate structured clinical documentation (SOAP notes, entities, codes).
+ * useConsultationScribe - Simplified background AI Scribe for consultation.
+ * Records silently, then on stopAndProcess: transcribes via Whisper → generates SOAP via GPT.
+ * No pause/resume, no complex results. Just record → process → callback.
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -9,50 +9,49 @@ import { aiScribeApi } from '../services/api';
 
 // ============ Types ============
 
-export interface ScribeResults {
-  sessionId: string;
+export type ScribeStatus = 'idle' | 'recording' | 'processing' | 'done' | 'error';
+
+export interface ScribeResult {
   transcript: string;
   soapNote: {
     subjective: string;
     objective: string;
     assessment: string;
     plan: string;
-  } | null;
-  extractedSymptoms: Array<{ type: string; value: string; confidence: number; context?: string }>;
-  extractedDiagnoses: Array<{ type: string; value: string; confidence: number; context?: string }>;
-  extractedMedications: Array<{ type: string; value: string; confidence: number; context?: string }>;
-  icdCodes: Array<{ code: string; description: string; confidence: string; supportingText?: string }>;
-  cptCodes: Array<{ code: string; description: string; confidence: string; category?: string }>;
-  followUpRecommendations: Array<{ recommendation: string; timeframe?: string; priority?: string }>;
-  prescriptionSuggestions: Array<{ medication: string; dosage?: string; frequency?: string; duration?: string; route?: string; reason?: string }>;
+  };
 }
-
-export type ScribeStatus = 'idle' | 'recording' | 'paused' | 'processing' | 'completed' | 'error';
 
 export interface UseConsultationScribeOptions {
   autoStart?: boolean;
-  patientContext: {
-    patientId: string;
-    patientName: string;
-    patientAge: number;
-    patientGender: string;
-    appointmentId: string;
-    existingConditions?: string[];
-    currentMedications?: string[];
-    knownAllergies?: string[];
-  };
+  onComplete?: (result: ScribeResult) => void;
+  onError?: (message: string) => void;
+}
+
+// ============ Helpers ============
+
+/** Safely convert any GPT response value to a string (handles dicts, arrays, etc.) */
+function ensureString(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
 }
 
 // ============ Hook ============
 
 export function useConsultationScribe(options: UseConsultationScribeOptions) {
-  const { autoStart = true, patientContext } = options;
+  const { autoStart = true, onComplete, onError } = options;
 
   // State
-  const [scribeStatus, setScribeStatus] = useState<ScribeStatus>('idle');
+  const [status, setStatus] = useState<ScribeStatus>('idle');
   const [isEnabled, setIsEnabled] = useState(true);
   const [duration, setDuration] = useState(0);
-  const [results, setResults] = useState<ScribeResults | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Refs
@@ -86,9 +85,7 @@ export function useConsultationScribe(options: UseConsultationScribeOptions) {
       'audio/mp4',
     ];
     for (const type of types) {
-      if (MediaRecorder.isTypeSupported(type)) {
-        return type;
-      }
+      if (MediaRecorder.isTypeSupported(type)) return type;
     }
     return 'audio/webm';
   }, []);
@@ -100,11 +97,7 @@ export function useConsultationScribe(options: UseConsultationScribeOptions) {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 16000,
-        },
+        audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 },
       });
 
       if (!isMountedRef.current) {
@@ -118,61 +111,33 @@ export function useConsultationScribe(options: UseConsultationScribeOptions) {
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
       };
 
       mediaRecorder.onerror = () => {
-        setError('Recording error occurred');
-        setScribeStatus('error');
+        if (isMountedRef.current) {
+          setError('Recording error occurred');
+          setStatus('error');
+        }
       };
 
       mediaRecorder.start(100);
       startTimeRef.current = Date.now();
-      setScribeStatus('recording');
+      setStatus('recording');
       setDuration(0);
 
       timerRef.current = setInterval(() => {
-        if (isMountedRef.current) {
-          setDuration(Date.now() - startTimeRef.current);
-        }
+        if (isMountedRef.current) setDuration(Date.now() - startTimeRef.current);
       }, 100);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to access microphone';
       setError(msg);
-      setScribeStatus('idle');
+      setStatus('error');
+      onError?.(msg);
     }
-  }, [getSupportedMimeType]);
+  }, [getSupportedMimeType, onError]);
 
-  // Pause recording
-  const pauseRecording = useCallback(() => {
-    if (mediaRecorderRef.current?.state === 'recording') {
-      mediaRecorderRef.current.pause();
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-      setScribeStatus('paused');
-    }
-  }, []);
-
-  // Resume recording
-  const resumeRecording = useCallback(() => {
-    if (mediaRecorderRef.current?.state === 'paused') {
-      mediaRecorderRef.current.resume();
-      const pausedDuration = duration;
-      const resumeTime = Date.now();
-      timerRef.current = setInterval(() => {
-        if (isMountedRef.current) {
-          setDuration(pausedDuration + (Date.now() - resumeTime));
-        }
-      }, 100);
-      setScribeStatus('recording');
-    }
-  }, [duration]);
-
-  // Stop recording and process via the authenticated backend API
+  // Stop recording and process: transcribe → generate SOAP → callback
   const stopAndProcess = useCallback(async () => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -180,15 +145,15 @@ export function useConsultationScribe(options: UseConsultationScribeOptions) {
     }
 
     if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
-      setScribeStatus('idle');
+      setStatus('idle');
       return;
     }
 
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
-    setScribeStatus('processing');
+    setStatus('processing');
 
-    // Wait for recorder to stop and collect audio
+    // Stop recorder and collect audio blob
     const audioBlob = await new Promise<Blob | null>((resolve) => {
       const recorder = mediaRecorderRef.current!;
       recorder.onstop = () => {
@@ -208,81 +173,77 @@ export function useConsultationScribe(options: UseConsultationScribeOptions) {
     });
 
     if (!audioBlob || audioBlob.size === 0) {
-      setError('No audio recorded. Please speak and try again.');
-      setScribeStatus('error');
+      const msg = 'No audio recorded';
+      setError(msg);
+      setStatus('error');
       isProcessingRef.current = false;
+      onError?.(msg);
       return;
     }
 
-    // Minimum ~1 second of recording and ~1KB of data to be a valid audio file
-    if (duration < 1000 || audioBlob.size < 1000) {
-      setError('Recording too short. Please speak for at least a few seconds before stopping.');
-      setScribeStatus('error');
+    if (duration < 2000 || audioBlob.size < 1000) {
+      const msg = 'Recording too short. Please speak for at least a few seconds.';
+      setError(msg);
+      setStatus('error');
       isProcessingRef.current = false;
+      onError?.(msg);
       return;
     }
 
     try {
-      // Build FormData with audio + patient context
+      // Step 1: Transcribe audio via Whisper
       const formData = new FormData();
       const ext = audioBlob.type.includes('webm') ? 'webm' :
                   audioBlob.type.includes('ogg') ? 'ogg' :
                   audioBlob.type.includes('mp4') ? 'm4a' : 'webm';
       formData.append('audio', audioBlob, `consultation-recording.${ext}`);
-      formData.append('patientId', patientContext.patientId);
-      formData.append('patientName', patientContext.patientName);
-      formData.append('patientAge', String(patientContext.patientAge));
-      formData.append('patientGender', patientContext.patientGender);
-      formData.append('appointmentId', patientContext.appointmentId);
-      formData.append('noteType', 'consultation');
-      formData.append('generateSoapNote', 'true');
-      formData.append('extractEntities', 'true');
-      formData.append('suggestIcdCodes', 'true');
-      formData.append('suggestCptCodes', 'true');
-      formData.append('generateFollowUp', 'true');
-      formData.append('generatePrescriptions', 'true');
 
-      if (patientContext.existingConditions?.length) {
-        formData.append('existingConditions', JSON.stringify(patientContext.existingConditions));
-      }
-      if (patientContext.currentMedications?.length) {
-        formData.append('currentMedications', JSON.stringify(patientContext.currentMedications));
-      }
-      if (patientContext.knownAllergies?.length) {
-        formData.append('knownAllergies', JSON.stringify(patientContext.knownAllergies));
+      const transcribeResponse = await aiScribeApi.transcribe(formData);
+      const transcribeData = transcribeResponse.data?.data || transcribeResponse.data;
+      const transcript = ensureString(transcribeData?.transcript || transcribeData?.text || transcribeData?.fullTranscript || '');
+
+      if (!transcript.trim()) {
+        const msg = 'No speech detected in recording';
+        if (isMountedRef.current) {
+          setError(msg);
+          setStatus('error');
+        }
+        isProcessingRef.current = false;
+        onError?.(msg);
+        return;
       }
 
-      const response = await aiScribeApi.transcribeAndGenerate(formData);
-      const data = response.data?.data || response.data;
+      // Step 2: Generate SOAP note from transcript
+      const noteResponse = await aiScribeApi.generateNote({ text: transcript, noteType: 'consultation' });
+      const noteData = noteResponse.data?.data || noteResponse.data;
+      const rawSoap = noteData?.soapNote || noteData?.generatedNote || noteData || {};
 
-      const scribeResults: ScribeResults = {
-        sessionId: data.sessionId || '',
-        transcript: data.fullTranscript || data.transcript || '',
-        soapNote: data.generatedNote || data.soapNote || null,
-        extractedSymptoms: data.extractedEntities?.symptoms || [],
-        extractedDiagnoses: data.extractedEntities?.diagnoses || [],
-        extractedMedications: data.extractedEntities?.medications || [],
-        icdCodes: data.suggestedICD10Codes || data.icdCodes || [],
-        cptCodes: data.suggestedCPTCodes || data.cptCodes || [],
-        followUpRecommendations: data.followUpRecommendations || [],
-        prescriptionSuggestions: data.prescriptionSuggestions || [],
+      const soapNote = {
+        subjective: ensureString(rawSoap.subjective),
+        objective: ensureString(rawSoap.objective),
+        assessment: ensureString(rawSoap.assessment),
+        plan: ensureString(rawSoap.plan),
       };
 
+      const result: ScribeResult = { transcript, soapNote };
+
       if (isMountedRef.current) {
-        setResults(scribeResults);
-        setScribeStatus('completed');
+        setStatus('done');
         setError(null);
       }
+
+      onComplete?.(result);
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.message || 'Failed to process recording';
       if (isMountedRef.current) {
         setError(msg);
-        setScribeStatus('error');
+        setStatus('error');
       }
+      onError?.(msg);
     } finally {
       isProcessingRef.current = false;
     }
-  }, [patientContext]);
+  }, [duration, onComplete, onError]);
 
   // Toggle enabled/disabled
   const toggleEnabled = useCallback(() => {
@@ -302,7 +263,7 @@ export function useConsultationScribe(options: UseConsultationScribeOptions) {
           streamRef.current = null;
         }
         audioChunksRef.current = [];
-        setScribeStatus('idle');
+        setStatus('idle');
         setDuration(0);
       }
       return newVal;
@@ -320,47 +281,35 @@ export function useConsultationScribe(options: UseConsultationScribeOptions) {
       streamRef.current = null;
     }
     audioChunksRef.current = [];
-    setScribeStatus('idle');
+    setStatus('idle');
     setDuration(0);
-    setResults(null);
     setError(null);
     isProcessingRef.current = false;
     hasAutoStartedRef.current = false;
   }, []);
 
-  // Auto-start recording when enabled and patient data is available
+  // Auto-start recording when enabled
   useEffect(() => {
-    if (
-      autoStart &&
-      isEnabled &&
-      patientContext.patientId &&
-      patientContext.appointmentId &&
-      !hasAutoStartedRef.current &&
-      scribeStatus === 'idle'
-    ) {
+    if (autoStart && isEnabled && !hasAutoStartedRef.current && status === 'idle') {
       hasAutoStartedRef.current = true;
       startRecording();
     }
-  }, [autoStart, isEnabled, patientContext.patientId, patientContext.appointmentId, scribeStatus, startRecording]);
+  }, [autoStart, isEnabled, status, startRecording]);
 
-  // When toggled back on after being off, start recording
+  // When toggled back on after being off, restart recording
   useEffect(() => {
-    if (isEnabled && scribeStatus === 'idle' && hasAutoStartedRef.current) {
-      // The user toggled back on — restart recording
+    if (isEnabled && status === 'idle' && hasAutoStartedRef.current) {
       startRecording();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEnabled]);
 
   return {
-    scribeStatus,
+    status,
     isEnabled,
     duration,
-    results,
     error,
     startRecording,
-    pauseRecording,
-    resumeRecording,
     stopAndProcess,
     toggleEnabled,
     reset,

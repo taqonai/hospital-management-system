@@ -112,6 +112,9 @@ model Hospital {
   // Doctor's Orders
   doctorOrders DoctorOrder[]
 
+  // Insurance Providers (Master Data)
+  insuranceProviders InsuranceProvider[]
+
   // Notification Module
   notificationSettings     NotificationSettings?
   teamContacts             TeamContact[]
@@ -199,6 +202,31 @@ model Specialization {
 
   @@unique([departmentId, code])
   @@map("specializations")
+}
+
+// ==================== INSURANCE PROVIDER MASTER ====================
+
+model InsuranceProvider {
+  id            String   @id @default(uuid())
+  hospitalId    String
+  name          String
+  licenseNumber String // Regulatory ID (e.g., DHA license number)
+  tpaName       String? // Third Party Administrator
+  contactPhone  String?
+  email         String?
+  emirate       String? // Dubai, Abu Dhabi, Sharjah, etc.
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdById   String?
+  updatedById   String?
+
+  // Relations
+  hospital Hospital @relation(fields: [hospitalId], references: [id])
+
+  @@unique([hospitalId, licenseNumber])
+  @@index([hospitalId, isActive])
+  @@map("insurance_providers")
 }
 
 // ==================== USER MANAGEMENT ====================

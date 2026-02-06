@@ -288,6 +288,32 @@ export const departmentApi = {
     api.delete(`/departments/${departmentId}/specializations/${specId}`),
 };
 
+// Insurance Provider API
+export const insuranceProviderApi = {
+  getAll: (params?: { page?: number; limit?: number; search?: string; includeInactive?: boolean }) =>
+    api.get('/staff/insurance-providers', { params }),
+  getActive: () => api.get('/insurance-providers/active'),
+  getById: (id: string) => api.get(`/staff/insurance-providers/${id}`),
+  create: (data: {
+    name: string;
+    licenseNumber: string;
+    tpaName?: string;
+    contactPhone?: string;
+    email?: string;
+    emirate?: string;
+  }) => api.post('/staff/insurance-providers', data),
+  update: (id: string, data: {
+    name?: string;
+    licenseNumber?: string;
+    tpaName?: string;
+    contactPhone?: string;
+    email?: string;
+    emirate?: string;
+    isActive?: boolean;
+  }) => api.put(`/staff/insurance-providers/${id}`, data),
+  delete: (id: string) => api.delete(`/staff/insurance-providers/${id}`),
+};
+
 // AI APIs
 export const aiApi = {
   // Health check

@@ -414,8 +414,10 @@ Use `npm run db:push` for rapid iteration during development; use `npm run db:mi
 ### Adding New Backend Routes
 1. Create `{module}Routes.ts` in `backend/src/routes/`
 2. Create `{module}Service.ts` in `backend/src/services/`
-3. Register in `backend/src/routes/index.ts`
+3. Register in `backend/src/routes/index.ts` (import router and add `router.use('/module', moduleRoutes)`)
 4. Apply appropriate middleware: `authenticate`, `authorize(...roles)`, `authorizeHospital`
+5. Use response helpers from `@utils/response` (`sendSuccess`, `sendCreated`, `sendPaginated`, etc.)
+6. Include `hospitalId` from `req.user.hospitalId` in all Prisma queries for tenant isolation
 
 ### Adding New AI Service
 1. Create directory in `ai-services/{service_name}/`
@@ -443,3 +445,10 @@ const total = Number(response.amount || 0).toFixed(2);  // Safe
 const name = user?.name ?? 'Unknown';  // Safe
 // NOT: user.name  // May crash if undefined
 ```
+
+### Prisma Schema Modifications
+The schema at `backend/prisma/schema.prisma` is ~8500 lines. When adding models:
+- Always include `hospitalId String` and the relation `hospital Hospital @relation(fields: [hospitalId], references: [id])` for tenant isolation
+- Add `@@index([hospitalId])` for query performance
+- Run `npx prisma generate` after any change (required before the TypeScript compiler can see new types)
+- Use `npm run db:push` while iterating, `npm run db:migrate` for final migration files
