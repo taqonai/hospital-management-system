@@ -41,9 +41,9 @@ class StartSessionRequest(BaseModel):
     doctorSpecialty: Optional[str] = None
     appointmentId: Optional[str] = None
     sessionType: str = "consultation"  # consultation, follow_up, procedure, discharge
-    existingConditions: Optional[List[str]] = None
-    currentMedications: Optional[List[str]] = None
-    knownAllergies: Optional[List[str]] = None
+    existingConditions: Optional[List[Any]] = None
+    currentMedications: Optional[List[Any]] = None
+    knownAllergies: Optional[List[Any]] = None
 
 
 class StartSessionResponse(BaseModel):
@@ -364,6 +364,24 @@ class AIScribeService:
         """Check if OpenAI services are available"""
         return openai_manager.is_available()
 
+    @staticmethod
+    def _normalize_string_list(items: Optional[List]) -> List[str]:
+        """Normalize a list of items to strings, handling dicts gracefully."""
+        if not items:
+            return []
+        result = []
+        for item in items:
+            if isinstance(item, dict):
+                # Try common field names for allergy/medication/condition objects
+                val = (item.get("allergen") or item.get("medication") or
+                       item.get("name") or item.get("value") or
+                       item.get("condition") or str(item))
+            else:
+                val = str(item)
+            if val:
+                result.append(val)
+        return result
+
     def start_session(self, request: StartSessionRequest) -> StartSessionResponse:
         """Start a new scribe session"""
         session_id = str(uuid.uuid4())
@@ -381,9 +399,9 @@ class AIScribeService:
             "doctorSpecialty": request.doctorSpecialty,
             "appointmentId": request.appointmentId,
             "sessionType": request.sessionType,
-            "existingConditions": request.existingConditions or [],
-            "currentMedications": request.currentMedications or [],
-            "knownAllergies": request.knownAllergies or [],
+            "existingConditions": self._normalize_string_list(request.existingConditions),
+            "currentMedications": self._normalize_string_list(request.currentMedications),
+            "knownAllergies": self._normalize_string_list(request.knownAllergies),
             "audioChunks": [],
             "transcript": None,
             "soapNote": None,
@@ -1478,8 +1496,14 @@ Limit to 3 most important recommendations."""
             text_to_check += " " + soap_note.get("assessment", "").lower()
             text_to_check += " " + soap_note.get("plan", "").lower()
 
-        # Convert known allergies to lowercase for comparison
-        allergies_lower = [a.lower() for a in known_allergies]
+        # Convert known allergies to lowercase for comparison (handle both str and dict items)
+        allergies_lower = []
+        for a in known_allergies:
+            if isinstance(a, dict):
+                val = a.get("allergen") or a.get("name") or a.get("value") or str(a)
+            else:
+                val = str(a)
+            allergies_lower.append(val.lower())
 
         # Check for conditions and suggest medications
         condition_mappings = [
@@ -1515,8 +1539,12 @@ Limit to 3 most important recommendations."""
                     if has_allergy:
                         continue
 
-                    # Check if already on this medication
-                    already_taking = any(med_name_lower in curr.lower() for curr in current_medications)
+                    # Check if already on this medication (handle both str and dict items)
+                    def _med_to_str(m):
+                        if isinstance(m, dict):
+                            return (m.get("medication") or m.get("name") or m.get("value") or str(m)).lower()
+                        return str(m).lower()
+                    already_taking = any(med_name_lower in _med_to_str(curr) for curr in current_medications)
 
                     warnings = []
                     if has_allergy:
