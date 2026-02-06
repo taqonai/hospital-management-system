@@ -42,7 +42,6 @@ import {
 } from '../../components/insurance';
 import { useBookingData, usePatientHistory } from '../../hooks/useBookingData';
 import { LabOrdersCard } from '../../components/booking/LabOrdersCard';
-import { VitalsSummaryCard } from '../../components/booking/VitalsSummaryCard';
 import DrugPicker, { DrugSelection } from '../../components/consultation/DrugPicker';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
@@ -1502,17 +1501,6 @@ export default function Consultation() {
 
           {/* Note: Pregnancy, Medications, and Treatment are now shown from MedicalHistory above (single source of truth) */}
         </div>
-      )}
-
-      {/* Nurse-Recorded Vitals Summary - shown prominently in Step 1 */}
-      {bookingData?.vitals && (
-        <VitalsSummaryCard
-          vitals={bookingData.vitals}
-          riskPrediction={bookingData.riskPrediction}
-          patient={patientData ? { gender: patientData.gender, dateOfBirth: patientData.dateOfBirth } : null}
-          appointmentNotes={bookingData.appointment?.notes}
-          className="shadow-sm"
-        />
       )}
 
       {/* AI Patient Context Summary */}
