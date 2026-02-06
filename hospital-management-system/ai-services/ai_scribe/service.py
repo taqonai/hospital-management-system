@@ -1047,11 +1047,20 @@ Return as JSON with keys: subjective, objective, assessment, plan"""
 
             if api_result and api_result.get("success"):
                 result = api_result.get("data", {})
+                # Ensure all SOAP values are strings (GPT may return nested dicts)
+                def _to_str(val, default="Not documented"):
+                    if val is None:
+                        return default
+                    if isinstance(val, dict):
+                        return val.get("text") or val.get("summary") or val.get("content") or str(val)
+                    if isinstance(val, list):
+                        return "\n".join(str(item) for item in val)
+                    return str(val)
                 return {
-                    "subjective": result.get("subjective", "Not documented"),
-                    "objective": result.get("objective", "Not documented"),
-                    "assessment": result.get("assessment", "Not documented"),
-                    "plan": result.get("plan", "Not documented"),
+                    "subjective": _to_str(result.get("subjective")),
+                    "objective": _to_str(result.get("objective")),
+                    "assessment": _to_str(result.get("assessment")),
+                    "plan": _to_str(result.get("plan")),
                 }
             else:
                 raise Exception(api_result.get("error", "Failed") if api_result else "No response")
@@ -1142,7 +1151,7 @@ Return as JSON with keys: subjective, objective, assessment, plan"""
         # First, check for common conditions using local mapping
         text_to_check = transcript.lower()
         if soap_note:
-            text_to_check += " " + soap_note.get("assessment", "").lower()
+            text_to_check += " " + str(soap_note.get("assessment", "")).lower()
 
         found_codes = set()
         for condition, code_info in self.common_icd_codes.items():
@@ -1271,7 +1280,7 @@ Limit to 5 most relevant codes."""
         found_codes = set()
         text_to_check = transcript.lower()
         if soap_note:
-            text_to_check += " " + soap_note.get("plan", "").lower()
+            text_to_check += " " + str(soap_note.get("plan", "")).lower()
 
         # Determine E/M code based on session type and duration
         if session_type in ["consultation", "follow_up"]:
@@ -1385,8 +1394,8 @@ Limit to 5 most relevant codes."""
 
         text_to_check = transcript.lower()
         if soap_note:
-            text_to_check += " " + soap_note.get("assessment", "").lower()
-            text_to_check += " " + soap_note.get("plan", "").lower()
+            text_to_check += " " + str(soap_note.get("assessment", "")).lower()
+            text_to_check += " " + str(soap_note.get("plan", "")).lower()
 
         for condition, config in chronic_conditions.items():
             if condition in text_to_check:
@@ -1493,8 +1502,8 @@ Limit to 3 most important recommendations."""
         suggestions = []
         text_to_check = transcript.lower()
         if soap_note:
-            text_to_check += " " + soap_note.get("assessment", "").lower()
-            text_to_check += " " + soap_note.get("plan", "").lower()
+            text_to_check += " " + str(soap_note.get("assessment", "")).lower()
+            text_to_check += " " + str(soap_note.get("plan", "")).lower()
 
         # Convert known allergies to lowercase for comparison (handle both str and dict items)
         allergies_lower = []
