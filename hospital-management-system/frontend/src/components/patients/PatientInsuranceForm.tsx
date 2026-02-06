@@ -72,7 +72,7 @@ export default function PatientInsuranceForm({ patientId }: PatientInsuranceForm
     queryFn: () => insuranceProviderApi.getActive(),
     staleTime: 5 * 60 * 1000,
   });
-  const providers: InsuranceProvider[] = providersData?.data || [];
+  const providers: InsuranceProvider[] = providersData?.data?.data || providersData?.data || [];
 
   // Fetch patient insurances
   const { data: insurances, isLoading: insurancesLoading } = useQuery<PatientInsurance[]>({

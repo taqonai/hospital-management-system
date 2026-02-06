@@ -90,7 +90,7 @@ export default function PatientPortalInsurance() {
     queryFn: () => insuranceProviderApi.getActive(),
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
-  const insuranceProviders = providersData?.data || [];
+  const insuranceProviders = providersData?.data?.data || providersData?.data || [];
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<InsuranceFormData>(emptyForm);
