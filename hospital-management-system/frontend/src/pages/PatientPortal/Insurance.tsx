@@ -13,7 +13,7 @@ import {
   CameraIcon,
   IdentificationIcon,
 } from '@heroicons/react/24/outline';
-import { patientPortalApi, insuranceProviderApi } from '../../services/api';
+import { patientPortalApi } from '../../services/api';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 
@@ -84,10 +84,10 @@ const emptyForm: InsuranceFormData = {
 export default function PatientPortalInsurance() {
   const queryClient = useQueryClient();
 
-  // Fetch active insurance providers from API
+  // Fetch active insurance providers from patient portal API
   const { data: providersData } = useQuery({
-    queryKey: ['insurance-providers-active'],
-    queryFn: () => insuranceProviderApi.getActive(),
+    queryKey: ['patient-portal-insurance-providers'],
+    queryFn: () => patientPortalApi.getInsuranceProviders(),
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
   const insuranceProviders = providersData?.data?.data || providersData?.data || [];
