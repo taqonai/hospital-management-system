@@ -1470,37 +1470,7 @@ export default function Consultation() {
             </div>
           )}
 
-          {/* Allergies */}
-          {patientData.allergies && patientData.allergies.length > 0 && (
-            <div className="mt-4 p-3 bg-red-500/30 backdrop-blur border border-red-300/30 rounded-xl">
-              <div className="flex items-center gap-2">
-                <ExclamationTriangleIcon className="h-5 w-5 text-red-100" />
-                <span className="font-medium">Allergies:</span>
-                {patientData.allergies.map((a, i) => (
-                  <span key={i} className="px-2 py-0.5 bg-red-200/30 rounded text-sm">
-                    {a.allergen} ({a.severity})
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Pregnancy Status - prominent alert */}
-          {patientData.medicalHistory && isChildbearingAge(patientData.gender, patientAge) && patientData.medicalHistory.isPregnant === true && (
-            <div className="mt-3 p-3 bg-pink-500/20 rounded-xl border border-pink-400/30">
-              <div className="flex items-center gap-2 text-pink-100">
-                <span className="text-xl">🤰</span>
-                <div>
-                  <span className="font-semibold">Pregnant</span>
-                  {patientData.medicalHistory.expectedDueDate && (
-                    <span className="ml-2 text-sm text-pink-200">
-                      Due: {new Date(patientData.medicalHistory.expectedDueDate).toLocaleDateString()}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Allergies & Pregnancy alerts moved to Patient Medical Records section below */}
         </div>
       )}
 
@@ -1546,6 +1516,21 @@ export default function Consultation() {
                 <p className="text-sm text-gray-500 italic">No known allergies recorded.</p>
               )}
             </div>
+
+            {/* Pregnancy Status */}
+            {patientData.medicalHistory && isChildbearingAge(patientData.gender, patientAge) && patientData.medicalHistory.isPregnant === true && (
+              <div className="p-3 bg-pink-50 border border-pink-200 rounded-xl flex items-center gap-3">
+                <span className="text-2xl">🤰</span>
+                <div>
+                  <p className="font-semibold text-pink-800 text-sm">Pregnant</p>
+                  {patientData.medicalHistory.expectedDueDate && (
+                    <p className="text-xs text-pink-600">
+                      Expected due date: {new Date(patientData.medicalHistory.expectedDueDate).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Chronic Conditions */}
             <div>
