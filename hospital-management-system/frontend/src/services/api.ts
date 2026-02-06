@@ -1808,6 +1808,7 @@ export const patientPortalApi = {
   getInsuranceProviders: () => api.get('/patient-portal/insurance-providers'),
   getInsurance: () => api.get('/patient-portal/insurance'),
   addInsurance: (data: {
+    providerId?: string;
     providerName: string;
     policyNumber: string;
     groupNumber?: string;

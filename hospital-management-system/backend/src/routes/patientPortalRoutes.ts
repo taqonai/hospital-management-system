@@ -2698,8 +2698,10 @@ router.post(
   patientAuthenticate,
   asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
     const patientId = req.patient?.patientId || '';
+    const hospitalId = req.patient?.hospitalId || '';
     const {
-      providerName,
+      providerId,
+      providerName: inputProviderName,
       policyNumber,
       groupNumber,
       subscriberName,
@@ -2710,6 +2712,38 @@ router.post(
       coverageType,
       isPrimary,
     } = req.body;
+
+    let providerName = inputProviderName;
+
+    // If providerId is given, validate and get provider name
+    if (providerId) {
+      const provider = await prisma.insuranceProvider.findFirst({
+        where: { id: providerId, hospitalId, isActive: true },
+      });
+      if (!provider) {
+        return res.status(400).json({
+          success: false,
+          message: 'Insurance provider not found or inactive',
+        });
+      }
+      providerName = provider.name;
+
+      // Check for duplicate: same patient + provider + policy
+      const existing = await prisma.patientInsurance.findFirst({
+        where: {
+          patientId,
+          providerId,
+          policyNumber,
+          isActive: true,
+        },
+      });
+      if (existing) {
+        return res.status(400).json({
+          success: false,
+          message: 'This insurance policy already exists for this patient',
+        });
+      }
+    }
 
     // Validate required fields
     if (!providerName || !policyNumber || !subscriberName || !effectiveDate) {
@@ -2735,6 +2769,7 @@ router.post(
     const insurance = await prisma.patientInsurance.create({
       data: {
         patientId,
+        providerId: providerId || null,
         providerName,
         policyNumber,
         groupNumber: groupNumber || null,

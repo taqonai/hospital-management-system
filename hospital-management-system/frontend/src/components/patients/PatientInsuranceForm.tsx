@@ -183,6 +183,7 @@ export default function PatientInsuranceForm({ patientId }: PatientInsuranceForm
     e.preventDefault();
     
     const submitData = {
+      providerId: formData.payerId || undefined, // Send provider ID for linking
       providerName: formData.providerName,
       policyNumber: formData.policyNumber,
       groupNumber: formData.groupNumber || undefined,
