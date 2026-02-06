@@ -29,6 +29,8 @@ import {
   MicrophoneIcon,
   StopIcon,
   ChatBubbleBottomCenterTextIcon,
+  ShieldCheckIcon,
+  EyeIcon,
 } from '@heroicons/react/24/outline';
 import { patientApi, aiApi, smartOrderApi, medSafetyApi, ipdApi, appointmentApi, opdApi, insuranceCodingApi, aiConsultationApi, laboratoryApi } from '../../services/api';
 import { useAIHealth } from '../../hooks/useAI';
@@ -699,6 +701,17 @@ export default function Consultation() {
       if (!selectedPatientId) return [];
       const response = await patientApi.getVitals(selectedPatientId, 5);
       return response.data.data || [];
+    },
+    enabled: !!selectedPatientId,
+  });
+
+  // Patient Medical Summary (detailed surgeries, immunizations, allergy details)
+  const { data: medicalSummary } = useQuery({
+    queryKey: ['patient-medical-summary', selectedPatientId],
+    queryFn: async () => {
+      if (!selectedPatientId) return null;
+      const response = await opdApi.getPatientMedicalSummary(selectedPatientId);
+      return response.data?.data || null;
     },
     enabled: !!selectedPatientId,
   });
@@ -1472,95 +1485,261 @@ export default function Consultation() {
             </div>
           )}
 
-          {/* Comprehensive Medical History from MedicalHistory Model */}
-          {patientData.medicalHistory && (
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              {/* Chronic Conditions */}
-              {patientData.medicalHistory.chronicConditions?.length > 0 && (
-                <div className="p-3 bg-red-500/10 rounded-xl">
-                  <span className="text-xs uppercase text-red-200">Chronic Conditions</span>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {patientData.medicalHistory.chronicConditions.map((c: string, i: number) => (
-                      <span key={i} className="px-2 py-0.5 bg-red-200/30 text-white rounded text-sm">{c}</span>
-                    ))}
-                  </div>
+          {/* Pregnancy Status - prominent alert */}
+          {patientData.medicalHistory && isChildbearingAge(patientData.gender, patientAge) && patientData.medicalHistory.isPregnant === true && (
+            <div className="mt-3 p-3 bg-pink-500/20 rounded-xl border border-pink-400/30">
+              <div className="flex items-center gap-2 text-pink-100">
+                <span className="text-xl">🤰</span>
+                <div>
+                  <span className="font-semibold">Pregnant</span>
+                  {patientData.medicalHistory.expectedDueDate && (
+                    <span className="ml-2 text-sm text-pink-200">
+                      Due: {new Date(patientData.medicalHistory.expectedDueDate).toLocaleDateString()}
+                    </span>
+                  )}
                 </div>
-              )}
-
-              {/* Past Surgeries */}
-              {patientData.medicalHistory.pastSurgeries?.length > 0 && (
-                <div className="p-3 bg-blue-500/10 rounded-xl">
-                  <span className="text-xs uppercase text-blue-200">Past Surgeries</span>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {patientData.medicalHistory.pastSurgeries.map((s: string, i: number) => (
-                      <span key={i} className="px-2 py-0.5 bg-blue-200/30 text-white rounded text-sm">{s}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Family History */}
-              {patientData.medicalHistory.familyHistory?.length > 0 && (
-                <div className="p-3 bg-purple-500/10 rounded-xl">
-                  <span className="text-xs uppercase text-purple-200">Family History</span>
-                  <div className="mt-1 text-sm text-white/80">
-                    {patientData.medicalHistory.familyHistory.join(', ')}
-                  </div>
-                </div>
-              )}
-
-              {/* Pregnancy Status from MedicalHistory - Only show for females of childbearing age (19-51) */}
-              {isChildbearingAge(patientData.gender, patientAge) && patientData.medicalHistory.isPregnant === true && (
-                <div className="p-3 bg-pink-500/20 rounded-xl col-span-2 border border-pink-400/30">
-                  <div className="flex items-center gap-2 text-pink-100">
-                    <span className="text-xl">🤰</span>
-                    <div>
-                      <span className="font-semibold">Pregnant</span>
-                      {patientData.medicalHistory.expectedDueDate && (
-                        <span className="ml-2 text-sm text-pink-200">
-                          Due: {new Date(patientData.medicalHistory.expectedDueDate).toLocaleDateString()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Current Medications from MedicalHistory */}
-              {patientData.medicalHistory.currentMedications?.length > 0 && (
-                <div className="p-3 bg-amber-500/20 rounded-xl col-span-2 border border-amber-400/30">
-                  <div className="flex items-start gap-2">
-                    <span className="text-xl">💊</span>
-                    <div className="flex-1">
-                      <span className="text-xs uppercase text-amber-200 font-medium">Current Medications</span>
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {patientData.medicalHistory.currentMedications.map((m: string, i: number) => (
-                          <span key={i} className="px-2 py-0.5 bg-amber-300/30 text-white rounded text-sm">{m}</span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Ongoing Treatment from MedicalHistory */}
-              {patientData.medicalHistory.currentTreatment && (
-                <div className="p-3 bg-cyan-500/20 rounded-xl col-span-2 border border-cyan-400/30">
-                  <div className="flex items-start gap-2">
-                    <span className="text-xl">🏥</span>
-                    <div>
-                      <span className="text-xs uppercase text-cyan-200 font-medium">Ongoing Treatment</span>
-                      <div className="mt-1 text-sm text-white/90">
-                        {patientData.medicalHistory.currentTreatment}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+              </div>
             </div>
           )}
+        </div>
+      )}
 
-          {/* Note: Pregnancy, Medications, and Treatment are now shown from MedicalHistory above (single source of truth) */}
+      {/* Comprehensive Patient Medical Records */}
+      {patientData && (medicalSummary || patientData.medicalHistory) && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="px-6 py-4 bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <ClipboardDocumentListIcon className="h-5 w-5 text-emerald-600" />
+              Patient Medical Records
+            </h3>
+          </div>
+          <div className="p-6 space-y-5">
+
+            {/* Allergies - Detailed */}
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                <ExclamationTriangleIcon className="h-4 w-4 text-red-500" />
+                Allergies
+              </h4>
+              {(medicalSummary?.allergies?.length > 0 || patientData.allergies?.length > 0) ? (
+                <div className="space-y-2">
+                  {(medicalSummary?.allergies || patientData.allergies || []).map((a: any, i: number) => (
+                    <div key={a.id || i} className="flex items-start gap-3 p-2.5 bg-red-50 border border-red-100 rounded-xl">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-red-900 text-sm">{a.allergen}</span>
+                          <span className={clsx('px-1.5 py-0.5 rounded text-xs font-medium',
+                            a.severity === 'SEVERE' || a.severity === 'LIFE_THREATENING' ? 'bg-red-200 text-red-800' :
+                            a.severity === 'MODERATE' ? 'bg-orange-200 text-orange-800' : 'bg-yellow-100 text-yellow-800'
+                          )}>
+                            {(a.severity || '').replace('_', ' ')}
+                          </span>
+                          {a.type && <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{a.type}</span>}
+                        </div>
+                        {a.reaction && <p className="text-xs text-red-700 mt-1">Reaction: {a.reaction}</p>}
+                        {a.notes && <p className="text-xs text-gray-500 mt-0.5">{a.notes}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 italic">No known allergies recorded.</p>
+              )}
+            </div>
+
+            {/* Chronic Conditions */}
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                <HeartIcon className="h-4 w-4 text-rose-500" />
+                Chronic Conditions
+              </h4>
+              {patientData.medicalHistory?.chronicConditions?.length ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {patientData.medicalHistory.chronicConditions.map((c: string, i: number) => (
+                    <span key={i} className="px-2.5 py-1 bg-rose-50 text-rose-800 rounded-lg text-sm border border-rose-200">{c}</span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 italic">None recorded.</p>
+              )}
+            </div>
+
+            {/* Current Medications - Detailed */}
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                <BoltIcon className="h-4 w-4 text-amber-500" />
+                Current Medications
+              </h4>
+              {patientData.medicalHistory?.currentMedications?.length ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {patientData.medicalHistory.currentMedications.map((m: string, i: number) => (
+                    <span key={i} className="px-2.5 py-1 bg-amber-50 text-amber-800 rounded-lg text-sm border border-amber-200">{m}</span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 italic">None recorded.</p>
+              )}
+            </div>
+
+            {/* Ongoing Treatment */}
+            {patientData.medicalHistory?.currentTreatment && (
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                  <EyeIcon className="h-4 w-4 text-cyan-500" />
+                  Ongoing Treatment
+                </h4>
+                <p className="text-sm text-gray-700 bg-cyan-50 border border-cyan-100 rounded-xl p-3">
+                  {patientData.medicalHistory.currentTreatment}
+                </p>
+              </div>
+            )}
+
+            {/* Family History */}
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                <UserGroupIcon className="h-4 w-4 text-purple-500" />
+                Family History
+              </h4>
+              {patientData.medicalHistory?.familyHistory?.length ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {patientData.medicalHistory.familyHistory.map((f: string, i: number) => (
+                    <span key={i} className="px-2.5 py-1 bg-purple-50 text-purple-800 rounded-lg text-sm border border-purple-200">{f}</span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 italic">None recorded.</p>
+              )}
+            </div>
+
+            {/* Past Surgeries - Detailed */}
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                <BeakerIcon className="h-4 w-4 text-blue-500" />
+                Past Surgeries
+              </h4>
+              {medicalSummary?.detailedPastSurgeries?.length > 0 ? (
+                <div className="space-y-2">
+                  {medicalSummary.detailedPastSurgeries.map((s: any, i: number) => (
+                    <div key={s.id || i} className="p-3 bg-blue-50 border border-blue-100 rounded-xl">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="font-medium text-blue-900 text-sm">{s.surgeryName}</p>
+                          <div className="flex items-center gap-3 mt-1 text-xs text-gray-600">
+                            {s.surgeryDate && <span>{new Date(s.surgeryDate).toLocaleDateString()}</span>}
+                            {s.hospitalName && <span>{s.hospitalName}</span>}
+                            {s.hospitalLocation && <span>({s.hospitalLocation})</span>}
+                          </div>
+                        </div>
+                      </div>
+                      {(s.surgeonName || s.complications || s.outcome) && (
+                        <div className="mt-1.5 text-xs text-gray-600 space-y-0.5">
+                          {s.surgeonName && <p>Surgeon: {s.surgeonName}</p>}
+                          {s.complications && <p>Complications: {s.complications}</p>}
+                          {s.outcome && <p>Outcome: {s.outcome}</p>}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : patientData.medicalHistory?.pastSurgeries?.length ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {patientData.medicalHistory.pastSurgeries.map((s: string, i: number) => (
+                    <span key={i} className="px-2.5 py-1 bg-blue-50 text-blue-800 rounded-lg text-sm border border-blue-200">{s}</span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 italic">No past surgeries recorded.</p>
+              )}
+            </div>
+
+            {/* Immunization Records - Detailed */}
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                <ShieldCheckIcon className="h-4 w-4 text-green-500" />
+                Immunization Records
+              </h4>
+              {medicalSummary?.detailedImmunizations?.length > 0 ? (
+                <div className="space-y-2">
+                  {medicalSummary.detailedImmunizations.map((imm: any, i: number) => (
+                    <div key={imm.id || i} className="p-3 bg-green-50 border border-green-100 rounded-xl">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="font-medium text-green-900 text-sm">
+                            {imm.vaccineName}
+                            {imm.vaccineType && <span className="font-normal text-gray-600 ml-1">({imm.vaccineType})</span>}
+                          </p>
+                          <div className="flex items-center gap-3 mt-1 text-xs text-gray-600">
+                            {imm.dateAdministered && <span>Administered: {new Date(imm.dateAdministered).toLocaleDateString()}</span>}
+                            {imm.doseNumber && <span>Dose #{imm.doseNumber}</span>}
+                            {imm.administeredBy && <span>By: {imm.administeredBy}</span>}
+                          </div>
+                        </div>
+                      </div>
+                      {(imm.lotNumber || imm.nextDueDate || imm.reactions) && (
+                        <div className="mt-1.5 text-xs text-gray-600 space-y-0.5">
+                          {imm.lotNumber && <p>Lot #: {imm.lotNumber}</p>}
+                          {imm.nextDueDate && <p>Next due: {new Date(imm.nextDueDate).toLocaleDateString()}</p>}
+                          {imm.reactions && <p className="text-orange-700">Reactions: {imm.reactions}</p>}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 italic">No immunizations recorded.</p>
+              )}
+            </div>
+
+            {/* Lifestyle */}
+            {patientData.medicalHistory?.lifestyle && (
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                  <ChartBarIcon className="h-4 w-4 text-indigo-500" />
+                  Lifestyle
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {patientData.medicalHistory.lifestyle.smoking && (
+                    <div className="p-2 bg-gray-50 rounded-lg border border-gray-100 text-center">
+                      <p className="text-xs text-gray-500">Smoking</p>
+                      <p className="text-sm font-medium text-gray-800">{patientData.medicalHistory.lifestyle.smoking}</p>
+                    </div>
+                  )}
+                  {patientData.medicalHistory.lifestyle.alcohol && (
+                    <div className="p-2 bg-gray-50 rounded-lg border border-gray-100 text-center">
+                      <p className="text-xs text-gray-500">Alcohol</p>
+                      <p className="text-sm font-medium text-gray-800">{patientData.medicalHistory.lifestyle.alcohol}</p>
+                    </div>
+                  )}
+                  {patientData.medicalHistory.lifestyle.exercise && (
+                    <div className="p-2 bg-gray-50 rounded-lg border border-gray-100 text-center">
+                      <p className="text-xs text-gray-500">Exercise</p>
+                      <p className="text-sm font-medium text-gray-800">{patientData.medicalHistory.lifestyle.exercise}</p>
+                    </div>
+                  )}
+                  {patientData.medicalHistory.lifestyle.diet && (
+                    <div className="p-2 bg-gray-50 rounded-lg border border-gray-100 text-center">
+                      <p className="text-xs text-gray-500">Diet</p>
+                      <p className="text-sm font-medium text-gray-800">{patientData.medicalHistory.lifestyle.diet}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Notes */}
+            {patientData.medicalHistory?.notes && (
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                  <DocumentTextIcon className="h-4 w-4 text-gray-500" />
+                  Medical Notes
+                </h4>
+                <p className="text-sm text-gray-700 bg-gray-50 border border-gray-100 rounded-xl p-3 whitespace-pre-wrap">
+                  {patientData.medicalHistory.notes}
+                </p>
+              </div>
+            )}
+
+          </div>
         </div>
       )}
 
