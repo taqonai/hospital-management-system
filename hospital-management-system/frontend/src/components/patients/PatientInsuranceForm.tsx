@@ -3,10 +3,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { XMarkIcon, PlusIcon, TrashIcon, ShieldCheckIcon, ShieldExclamationIcon, ClockIcon } from '@heroicons/react/24/outline';
 import { format } from 'date-fns';
 import axios from 'axios';
+import { insuranceProviderApi } from '../../services/api';
 import toast from 'react-hot-toast';
 import LoadingSpinner from '../common/LoadingSpinner';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
+
+interface InsuranceProvider {
+  id: string;
+  name: string;
+  licenseNumber?: string;
+}
 
 interface InsurancePayer {
   id: string;
@@ -59,17 +66,13 @@ export default function PatientInsuranceForm({ patientId }: PatientInsuranceForm
     isPrimary: true,
   });
 
-  // Fetch insurance payers
-  const { data: payers, isLoading: payersLoading } = useQuery<InsurancePayer[]>({
-    queryKey: ['insurance-payers'],
-    queryFn: async () => {
-      const token = localStorage.getItem('token');
-      const response = await axios.get('/api/v1/insurance-coding/payers?limit=100', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      return response.data.data;
-    },
+  // Fetch insurance providers from InsuranceProvider master
+  const { data: providersData, isLoading: providersLoading } = useQuery({
+    queryKey: ['insurance-providers-active'],
+    queryFn: () => insuranceProviderApi.getActive(),
+    staleTime: 5 * 60 * 1000,
   });
+  const providers: InsuranceProvider[] = providersData?.data || [];
 
   // Fetch patient insurances
   const { data: insurances, isLoading: insurancesLoading } = useQuery<PatientInsurance[]>({
@@ -186,11 +189,11 @@ export default function PatientInsuranceForm({ patientId }: PatientInsuranceForm
   };
 
   const handlePayerChange = (payerId: string) => {
-    const payer = payers?.find((p) => p.id === payerId);
+    const provider = providers.find((p) => p.id === payerId);
     setFormData({
       ...formData,
       payerId,
-      providerName: payer?.name || '',
+      providerName: provider?.name || '',
     });
   };
 
@@ -221,7 +224,7 @@ export default function PatientInsuranceForm({ patientId }: PatientInsuranceForm
     }
   };
 
-  if (insurancesLoading || payersLoading) {
+  if (insurancesLoading || providersLoading) {
     return (
       <div className="flex justify-center py-8">
         <LoadingSpinner size="lg" />
@@ -275,9 +278,9 @@ export default function PatientInsuranceForm({ patientId }: PatientInsuranceForm
                   required
                 >
                   <option value="">Select Provider</option>
-                  {payers?.map((payer) => (
-                    <option key={payer.id} value={payer.id}>
-                      {payer.name} ({payer.code})
+                  {providers.map((provider) => (
+                    <option key={provider.id} value={provider.id}>
+                      {provider.name}
                     </option>
                   ))}
                 </select>

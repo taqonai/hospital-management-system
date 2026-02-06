@@ -13,7 +13,7 @@ import {
   CameraIcon,
   IdentificationIcon,
 } from '@heroicons/react/24/outline';
-import { patientPortalApi } from '../../services/api';
+import { patientPortalApi, insuranceProviderApi } from '../../services/api';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 
@@ -66,19 +66,7 @@ const COVERAGE_TYPES = [
   { value: 'International', label: 'International' },
 ];
 
-const UAE_INSURERS = [
-  'Daman (National Health Insurance Company)',
-  'AXA Insurance (Gulf)',
-  'Dubai Insurance Company',
-  'Emirates Insurance Company',
-  'ADNIC',
-  'Oman Insurance Company',
-  'Sukoon Insurance',
-  'Al Sagr Insurance',
-  'Methaq Takaful',
-  'Abu Dhabi National Takaful',
-  'Other',
-];
+// Insurance providers fetched from API
 
 const emptyForm: InsuranceFormData = {
   providerName: '',
@@ -95,6 +83,14 @@ const emptyForm: InsuranceFormData = {
 
 export default function PatientPortalInsurance() {
   const queryClient = useQueryClient();
+
+  // Fetch active insurance providers from API
+  const { data: providersData } = useQuery({
+    queryKey: ['insurance-providers-active'],
+    queryFn: () => insuranceProviderApi.getActive(),
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+  const insuranceProviders = providersData?.data || [];
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<InsuranceFormData>(emptyForm);
@@ -187,7 +183,7 @@ export default function PatientPortalInsurance() {
       coverageType: policy.coverageType,
       isPrimary: policy.isPrimary,
     });
-    setCustomProvider(!UAE_INSURERS.includes(policy.providerName));
+    setCustomProvider(!insuranceProviders.some((p: { name: string }) => p.name === policy.providerName));
     setEditingId(policy.id);
     setShowForm(true);
   };
@@ -313,9 +309,10 @@ export default function PatientPortalInsurance() {
                     required
                   >
                     <option value="">Select insurance provider...</option>
-                    {UAE_INSURERS.map((insurer) => (
-                      <option key={insurer} value={insurer}>{insurer}</option>
+                    {insuranceProviders.map((provider: { id: string; name: string }) => (
+                      <option key={provider.id} value={provider.name}>{provider.name}</option>
                     ))}
+                    <option value="Other">Other (Not Listed)</option>
                   </select>
                 </div>
               ) : (
