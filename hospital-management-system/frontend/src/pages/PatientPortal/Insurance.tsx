@@ -19,6 +19,7 @@ import clsx from 'clsx';
 
 interface InsurancePolicy {
   id: string;
+  providerId?: string;
   providerName: string;
   policyNumber: string;
   groupNumber?: string;
@@ -39,6 +40,7 @@ interface InsurancePolicy {
 }
 
 interface InsuranceFormData {
+  providerId?: string;
   providerName: string;
   policyNumber: string;
   groupNumber: string;
@@ -69,6 +71,7 @@ const COVERAGE_TYPES = [
 // Insurance providers fetched from API
 
 const emptyForm: InsuranceFormData = {
+  providerId: undefined,
   providerName: '',
   policyNumber: '',
   groupNumber: '',
@@ -172,6 +175,7 @@ export default function PatientPortalInsurance() {
 
   const handleEdit = (policy: InsurancePolicy) => {
     setFormData({
+      providerId: policy.providerId,
       providerName: policy.providerName,
       policyNumber: policy.policyNumber,
       groupNumber: policy.groupNumber || '',
@@ -183,7 +187,8 @@ export default function PatientPortalInsurance() {
       coverageType: policy.coverageType,
       isPrimary: policy.isPrimary,
     });
-    setCustomProvider(!insuranceProviders.some((p: { name: string }) => p.name === policy.providerName));
+    // If providerId exists, it's from master list; otherwise custom
+    setCustomProvider(!policy.providerId && !insuranceProviders.some((p: { name: string }) => p.name === policy.providerName));
     setEditingId(policy.id);
     setShowForm(true);
   };
@@ -296,13 +301,18 @@ export default function PatientPortalInsurance() {
               {!customProvider ? (
                 <div className="space-y-2">
                   <select
-                    value={formData.providerName}
+                    value={formData.providerId || ''}
                     onChange={(e) => {
                       if (e.target.value === 'Other') {
                         setCustomProvider(true);
-                        setFormData({ ...formData, providerName: '' });
+                        setFormData({ ...formData, providerId: undefined, providerName: '' });
                       } else {
-                        setFormData({ ...formData, providerName: e.target.value });
+                        const selectedProvider = insuranceProviders.find((p: { id: string }) => p.id === e.target.value);
+                        setFormData({ 
+                          ...formData, 
+                          providerId: e.target.value,
+                          providerName: selectedProvider?.name || '' 
+                        });
                       }
                     }}
                     className="w-full rounded-xl border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
@@ -310,7 +320,7 @@ export default function PatientPortalInsurance() {
                   >
                     <option value="">Select insurance provider...</option>
                     {insuranceProviders.map((provider: { id: string; name: string }) => (
-                      <option key={provider.id} value={provider.name}>{provider.name}</option>
+                      <option key={provider.id} value={provider.id}>{provider.name}</option>
                     ))}
                     <option value="Other">Other (Not Listed)</option>
                   </select>
@@ -320,7 +330,7 @@ export default function PatientPortalInsurance() {
                   <input
                     type="text"
                     value={formData.providerName}
-                    onChange={(e) => setFormData({ ...formData, providerName: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, providerId: undefined, providerName: e.target.value })}
                     placeholder="Enter insurance provider name"
                     className="flex-1 rounded-xl border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                     required
@@ -329,7 +339,7 @@ export default function PatientPortalInsurance() {
                     type="button"
                     onClick={() => {
                       setCustomProvider(false);
-                      setFormData({ ...formData, providerName: '' });
+                      setFormData({ ...formData, providerId: undefined, providerName: '' });
                     }}
                     className="px-3 py-2 text-sm text-blue-600 hover:text-blue-700"
                   >

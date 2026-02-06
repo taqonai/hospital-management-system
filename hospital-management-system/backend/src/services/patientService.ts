@@ -365,7 +365,8 @@ export class PatientService {
   }
 
   async addInsurance(patientId: string, hospitalId: string, data: {
-    providerName: string;
+    providerId?: string;
+    providerName?: string;
     policyNumber: string;
     groupNumber?: string;
     subscriberName: string;
@@ -386,6 +387,37 @@ export class PatientService {
       throw new NotFoundError('Patient not found');
     }
 
+    let providerName = data.providerName;
+    let providerId = data.providerId;
+
+    // If providerId is given, validate and get provider name
+    if (providerId) {
+      const provider = await prisma.insuranceProvider.findFirst({
+        where: { id: providerId, hospitalId, isActive: true },
+      });
+      if (!provider) {
+        throw new NotFoundError('Insurance provider not found or inactive');
+      }
+      providerName = provider.name;
+
+      // Check for duplicate: same patient + provider + policy
+      const existing = await prisma.patientInsurance.findFirst({
+        where: {
+          patientId,
+          providerId,
+          policyNumber: data.policyNumber,
+          isActive: true,
+        },
+      });
+      if (existing) {
+        throw new Error('This insurance policy already exists for this patient');
+      }
+    }
+
+    if (!providerName) {
+      throw new Error('Provider name is required');
+    }
+
     // If this is primary, update other insurances
     if (data.isPrimary) {
       await prisma.patientInsurance.updateMany({
@@ -397,7 +429,19 @@ export class PatientService {
     const insurance = await prisma.patientInsurance.create({
       data: {
         patientId,
-        ...data,
+        providerId,
+        providerName,
+        policyNumber: data.policyNumber,
+        groupNumber: data.groupNumber,
+        subscriberName: data.subscriberName,
+        subscriberId: data.subscriberId,
+        relationship: data.relationship,
+        effectiveDate: data.effectiveDate,
+        expiryDate: data.expiryDate,
+        coverageType: data.coverageType,
+        copay: data.copay,
+        deductible: data.deductible,
+        isPrimary: data.isPrimary,
       },
     });
 

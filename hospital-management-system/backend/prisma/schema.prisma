@@ -222,8 +222,10 @@ model InsuranceProvider {
   updatedById   String?
 
   // Relations
-  hospital Hospital @relation(fields: [hospitalId], references: [id])
+  hospital          Hospital           @relation(fields: [hospitalId], references: [id])
+  patientInsurances PatientInsurance[]
 
+  @@unique([hospitalId, name])          // No duplicate provider names per hospital
   @@unique([hospitalId, licenseNumber])
   @@index([hospitalId, isActive])
   @@map("insurance_providers")
@@ -1110,7 +1112,8 @@ model Vital {
 model PatientInsurance {
   id             String    @id @default(uuid())
   patientId      String
-  providerName   String
+  providerId     String?   // FK to InsuranceProvider (optional for legacy data)
+  providerName   String    // Kept for display and legacy support
   policyNumber   String
   groupNumber    String?
   subscriberName String
@@ -1140,11 +1143,14 @@ model PatientInsurance {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  patient         Patient          @relation(fields: [patientId], references: [id])
+  patient         Patient            @relation(fields: [patientId], references: [id])
+  provider        InsuranceProvider? @relation(fields: [providerId], references: [id])
   preAuthRequests PreAuthRequest[]
   invoices        Invoice[]
-  verifier        User?            @relation("InsuranceVerifier", fields: [verifiedBy], references: [id])
+  verifier        User?              @relation("InsuranceVerifier", fields: [verifiedBy], references: [id])
 
+  @@unique([patientId, providerId, policyNumber]) // Prevent duplicate insurance entries
+  @@index([providerId])
   @@map("patient_insurances")
 }
 
