@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { XMarkIcon, PlusIcon, TrashIcon, ShieldCheckIcon, ShieldExclamationIcon, ClockIcon } from '@heroicons/react/24/outline';
 import { format } from 'date-fns';
-import axios from 'axios';
-import { insuranceProviderApi } from '../../services/api';
+import { api, insuranceProviderApi } from '../../services/api';
 import toast from 'react-hot-toast';
 import LoadingSpinner from '../common/LoadingSpinner';
 import { useSelector } from 'react-redux';
@@ -78,11 +77,8 @@ export default function PatientInsuranceForm({ patientId }: PatientInsuranceForm
   const { data: insurances, isLoading: insurancesLoading } = useQuery<PatientInsurance[]>({
     queryKey: ['patient-insurances', patientId],
     queryFn: async () => {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`/api/v1/patients/${patientId}/insurance`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      return response.data.data;
+      const response = await api.get(`/patients/${patientId}/insurance`);
+      return response.data.data || response.data || [];
     },
     enabled: !!patientId,
   });
@@ -90,10 +86,7 @@ export default function PatientInsuranceForm({ patientId }: PatientInsuranceForm
   // Add insurance mutation
   const addInsuranceMutation = useMutation({
     mutationFn: async (data: any) => {
-      const token = localStorage.getItem('token');
-      return axios.post(`/api/v1/patients/${patientId}/insurance`, data, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      return api.post(`/patients/${patientId}/insurance`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['patient-insurances', patientId] });
@@ -109,10 +102,7 @@ export default function PatientInsuranceForm({ patientId }: PatientInsuranceForm
   // Delete insurance mutation
   const deleteInsuranceMutation = useMutation({
     mutationFn: async (insuranceId: string) => {
-      const token = localStorage.getItem('token');
-      return axios.delete(`/api/v1/patients/${patientId}/insurance/${insuranceId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      return api.delete(`/patients/${patientId}/insurance/${insuranceId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['patient-insurances', patientId] });
@@ -130,11 +120,7 @@ export default function PatientInsuranceForm({ patientId }: PatientInsuranceForm
   // Manual verification mutation (admin only)
   const verifyInsuranceMutation = useMutation({
     mutationFn: async ({ insuranceId, status, notes }: { insuranceId: string; status: 'VERIFIED' | 'REJECTED'; notes?: string }) => {
-      const token = localStorage.getItem('token');
-      return axios.post(`/api/v1/insurance-coding/insurance/${insuranceId}/verify`, 
-        { status, notes },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      return api.post(`/insurance-coding/insurance/${insuranceId}/verify`, { status, notes });
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['patient-insurances', patientId] });
@@ -148,11 +134,7 @@ export default function PatientInsuranceForm({ patientId }: PatientInsuranceForm
   // Reset verification mutation (admin only)
   const resetVerificationMutation = useMutation({
     mutationFn: async (insuranceId: string) => {
-      const token = localStorage.getItem('token');
-      return axios.post(`/api/v1/insurance-coding/insurance/${insuranceId}/reset-verification`, 
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      return api.post(`/insurance-coding/insurance/${insuranceId}/reset-verification`, {});
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['patient-insurances', patientId] });
