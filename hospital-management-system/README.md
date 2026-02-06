@@ -9,12 +9,48 @@ A multi-tenant Cloud SaaS Hospital Management System with 50 modules, 20 AI serv
 | Metric | Value |
 |--------|-------|
 | Modules | 50 (49 complete, 1 partial) |
-| Prisma Models | 193 |
-| API Endpoints | 1,031+ |
-| Frontend Pages | 113 |
-| Mobile Screens | 51 |
+| Prisma Models | 213 |
+| API Endpoints | 1,199+ |
+| Frontend Pages | 134 |
+| Mobile Screens | 54 |
 | AI Services | 20 |
 | User Roles | 18 |
+
+---
+
+## Recent Major Updates (766 commits since Jan 30, 2025)
+
+### AI Scribe & Clinical Notes
+- Full AI Scribe integration into consultation workflow
+- Medical dictation with Whisper + GPT-4o-mini
+- Transcript and clinical notes persistence to database
+- Clinical Notes page displaying stored transcripts and notes
+- Support for audio file upload via FormData
+
+### Insurance & Billing Enhancements
+- **DHA eClaimLink Integration**: Real-time insurance eligibility verification
+- **Pre-Authorization Workflows**: Dual-mode (DHA + Manual) pre-auth with form validation
+- **Coordination of Benefits (COB)**: Support for multiple insurance policies (primary/secondary)
+- **Emirates ID Validation**: Full Emirates ID integration with format validation
+- **Insurance Audit Trail**: Complete audit log for copay check-in decisions and verifications
+- **Copay Management**: Collection, refunds, bilingual UAE VAT-compliant receipts
+- **Deductible & Cap Tracking**: Automatic tracking of insurance deductibles and annual caps
+- **Pharmacy Copay Estimates**: Real-time copay estimates at check-in
+- **Insurance Badges**: Visual indicators in OPD queue and patient lists
+- **IPD Insurance Monitoring**: Real-time insurance status tracking during admission
+- **Lab/Radiology Integration**: Automatic insurance/billing info in diagnostic orders
+
+### Patient Engagement
+- **Doctor Reviews & Ratings**: Patient feedback system for doctor consultations
+- **AI Health Assistant**: Enhanced with actual patient clinical data integration
+- **Push Notifications**: Token management endpoints for patient portal mobile app
+- **Mobile Sync**: Unified medical records, insurance management, and billing claims between web and mobile
+
+### User Experience
+- CRM enhancements with campaign/survey deletion endpoints
+- Receptionist dashboard improvements with accurate KPIs and charts
+- Call Next improvements with proper doctor name display
+- Queue management fixes for appointment distribution visualization
 
 ---
 
@@ -45,23 +81,23 @@ A multi-tenant Cloud SaaS Hospital Management System with 50 modules, 20 AI serv
 - **Emergency** - Triage, resuscitation dashboard, ED beds, on-call doctors
 - **Surgery** - Scheduling, records, inventory tracking
 - **Appointments** - CRUD, doctor slot management, no-show tracking
-- **Consultations** - Linked to appointments, prescriptions, lab orders
+- **Consultations** - Linked to appointments, prescriptions, lab orders, AI Scribe integration for medical dictation, clinical notes persistence with transcript storage
 - **Nursing** - eMAR, vitals, I&O charting, assessments, shift handoff, task management
 
 ### Diagnostics (3)
-- **Laboratory** - Test catalog, orders, results, chain of custody, AI analysis
+- **Laboratory** - Test catalog, orders, results, chain of custody, AI analysis, insurance/billing integration with automatic copay calculation
 - **Radiology** - Imaging orders, studies, AI-assisted reporting
 - **Pharmacy** - Drug management, inventory, CSV import, interaction checking
 
 ### Administrative (5)
-- **Patients** - Registration, medical history, allergies, immunizations, insurance
+- **Patients** - Registration, medical history, allergies, immunizations, insurance with Emirates ID validation, DHA eClaimLink integration, real-time eligibility verification, Coordination of Benefits (COB) for multiple insurance policies
 - **Doctors** - Profiles, schedules, slots, absence management
 - **Departments** - CRUD, specializations
 - **HR** - Employees, shifts, attendance, payroll, leave, training, performance reviews
 - **Auth / RBAC** - JWT auth, hybrid role+permission RBAC, Redis-cached permissions, patient OTP login
 
 ### Support Services (10)
-- **Billing** - Invoices, payments, insurance claims, AI charge capture
+- **Billing** - Invoices, payments, insurance claims with pre-authorization workflows, copay collection and refunds, bilingual receipts with UAE VAT compliance, insurance audit trail, deductible tracking, pharmacy copay estimates at check-in, AI charge capture
 - **Blood Bank** - Donors, donations, components, cross-match, transfusions
 - **Dietary** - Diet plans, meal orders, patient dietary management
 - **Ambulance** - Fleet management, trip tracking, assignments
@@ -74,7 +110,7 @@ A multi-tenant Cloud SaaS Hospital Management System with 50 modules, 20 AI serv
 
 ### Digital & Patient Engagement (7)
 - **Telemedicine** - Video sessions, recordings, reports
-- **Patient Portal** - Dashboard, records, billing, health sync, wellness, AI assistant (20+ pages)
+- **Patient Portal** - Dashboard, records, billing with claim tracking, insurance management, health sync, wellness, AI assistant with clinical data integration, doctor reviews and ratings (20+ pages)
 - **Queue Management** - Counters, TV display boards, patient status check
 - **Kiosk** - Self check-in for patients
 - **CRM** - Leads, campaigns, surveys, communications, task management
@@ -86,7 +122,7 @@ A multi-tenant Cloud SaaS Hospital Management System with 50 modules, 20 AI serv
 | Service | AI Model | Purpose |
 |---------|----------|---------|
 | Diagnostic AI | GPT-4o + MiniLM-L6 | Symptom analysis, differential diagnosis |
-| AI Scribe | Whisper + GPT-4o-mini | Medical dictation, session management |
+| AI Scribe | Whisper + GPT-4o-mini | Medical dictation, session management, transcript and clinical notes persistence |
 | Symptom Checker | GPT-4o + Whisper | Interactive patient assessment, triage |
 | Early Warning | GPT-4o-mini + algorithmic | NEWS2, qSOFA, fall risk, deterioration |
 | Med Safety | GPT-4o-mini + rule-based | 5 Rights, barcode scan, IV compatibility |
@@ -101,7 +137,7 @@ A multi-tenant Cloud SaaS Hospital Management System with 50 modules, 20 AI serv
 | Chat AI | GPT-4o-mini | Conversational booking assistant |
 | Speech | Whisper | Audio transcription |
 | Queue AI | GPT-4o-mini + algorithmic | Wait time prediction, demand forecasting |
-| Insurance Coding AI | GPT-4o-mini + rule-based | ICD-10/CPT suggestions, claim prediction |
+| Insurance Coding AI | GPT-4o-mini + rule-based | ICD-10/CPT suggestions, claim prediction, DHA eClaimLink integration, COB support |
 | Genomic | Rule-based | VCF parsing, genetic markers, risk scoring |
 | Nutrition AI | GPT-4o Vision | Meal image analysis, food database |
 | Recommendation | Rule-based | Multi-source health recommendations |
@@ -124,7 +160,7 @@ All AI services implement graceful degradation to rule-based fallbacks when Open
 
 ## Mobile App
 
-**Platform:** React Native + Expo SDK 54 | **51 screens** across 14 categories
+**Platform:** React Native + Expo SDK 54 | **54 screens** across 14 categories
 
 | Category | Screens |
 |----------|---------|
@@ -227,16 +263,16 @@ hospital-management-system/
 │   ├── src/
 │   │   ├── config/            # Configuration
 │   │   ├── middleware/        # Auth, RBAC, validation, error handling
-│   │   ├── routes/            # 58 route files (1,031+ endpoints)
-│   │   ├── services/          # 78 service files (business logic)
+│   │   ├── routes/            # 67 route files (1,199+ endpoints)
+│   │   ├── services/          # 99 service files (business logic)
 │   │   ├── jobs/              # Cron jobs (no-show, auto-reorder)
 │   │   ├── types/             # TypeScript types
 │   │   └── utils/             # Utilities (response helpers)
-│   └── prisma/                # Schema (193 models), migrations, seeds
+│   └── prisma/                # Schema (213 models), migrations, seeds
 ├── frontend/                   # React application (150K lines)
 │   └── src/
-│       ├── components/        # 103 components across 25 directories
-│       ├── pages/             # 113 pages across 47 modules
+│       ├── components/        # 117 components across 25 directories
+│       ├── pages/             # 134 pages across 50 modules
 │       ├── hooks/             # Custom hooks
 │       ├── store/             # Redux store
 │       ├── services/          # API services
@@ -264,9 +300,9 @@ hospital-management-system/
 │   ├── chat/                  # Booking assistant
 │   ├── queue_ai/              # Wait time prediction
 │   └── speech/                # Audio transcription
-├── mobile/                     # React Native/Expo (51 screens)
+├── mobile/                     # React Native/Expo (54 screens)
 │   └── src/
-│       ├── screens/           # 51 screens across 12 categories
+│       ├── screens/           # 54 screens across 14 categories
 │       ├── navigation/        # Tab + stack navigators
 │       ├── services/          # API, offline, biometric, notifications
 │       ├── store/             # Redux (auth)
@@ -286,7 +322,7 @@ hospital-management-system/
 ## Architecture
 
 ### Multi-Tenant Data Model
-All 193 Prisma models include `hospitalId` for tenant isolation. The `authorizeHospital` middleware enforces isolation at the API layer (SUPER_ADMIN bypasses).
+All 213 Prisma models include `hospitalId` for tenant isolation. The `authorizeHospital` middleware enforces isolation at the API layer (SUPER_ADMIN bypasses).
 
 ### Authentication & Authorization
 - **Staff JWT:** Access token (15 min) + refresh token (7 days)
@@ -332,8 +368,8 @@ All routes prefixed with `/api/v1/`:
 | `/laboratory`, `/radiology`, `/pharmacy` | Diagnostics |
 | `/nurse`, `/clinician` | Clinical staff |
 | `/billing` | Invoices, payments, claims |
-| `/insurance-coding` | ICD-10, CPT, payer rules, eClaimLink (113 endpoints) |
-| `/ai`, `/ai-scribe`, `/symptom-checker` | AI services |
+| `/insurance-coding`, `/dha-eclaim`, `/pre-auth`, `/insurance-advanced` | ICD-10, CPT, payer rules, eClaimLink, DHA eligibility, pre-authorization, COB (113 endpoints) |
+| `/ai`, `/ai-scribe`, `/symptom-checker`, `/clinical-notes` | AI services |
 | `/early-warning`, `/med-safety`, `/smart-orders` | Clinical safety AI |
 | `/hr` | Employees, shifts, attendance, payroll |
 | `/procurement` | Suppliers, PRs, POs, GRNs, invoices, returns (58 endpoints) |
