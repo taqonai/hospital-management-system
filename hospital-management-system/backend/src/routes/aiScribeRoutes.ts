@@ -10,6 +10,7 @@ import { authenticate, authorize, authorizeWithPermission } from '../middleware/
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
+import logger from '../utils/logger';
 
 const router = Router();
 
@@ -398,7 +399,11 @@ router.post(
     const validNoteTypes = ['consultation', 'follow_up', 'procedure', 'discharge'];
     const selectedNoteType = validNoteTypes.includes(noteType) ? noteType : 'consultation';
 
-    // Start session with patient context
+    const parsedConditions = existingConditions ? JSON.parse(existingConditions) : undefined;
+    const parsedMedications = currentMedications ? JSON.parse(currentMedications) : undefined;
+    const parsedAllergies = knownAllergies ? JSON.parse(knownAllergies) : undefined;
+
+    // Start session with patient context (Python AI service)
     const session = await aiScribeService.startSession({
       patientId,
       patientName,
@@ -407,10 +412,31 @@ router.post(
       doctorId: req.user?.userId,
       appointmentId,
       sessionType: selectedNoteType,
-      existingConditions: existingConditions ? JSON.parse(existingConditions) : undefined,
-      currentMedications: currentMedications ? JSON.parse(currentMedications) : undefined,
-      knownAllergies: knownAllergies ? JSON.parse(knownAllergies) : undefined,
+      existingConditions: parsedConditions,
+      currentMedications: parsedMedications,
+      knownAllergies: parsedAllergies,
     });
+
+    // Persist session to database
+    const hospitalId = req.user?.hospitalId || '';
+    const userId = req.user?.userId || '';
+    let dbSession: any = null;
+    try {
+      dbSession = await aiScribeService.createDbSession(hospitalId, userId, {
+        patientId,
+        patientName,
+        patientAge: patientAge ? parseInt(patientAge) : undefined,
+        patientGender,
+        appointmentId,
+        sessionType: selectedNoteType,
+        existingConditions: parsedConditions,
+        currentMedications: parsedMedications,
+        knownAllergies: parsedAllergies,
+      });
+    } catch (dbErr) {
+      // Log but don't fail the request — transcription is more important than session tracking
+      logger.error('Failed to create DB session for AI Scribe:', dbErr);
+    }
 
     // Process recording with all options
     const result = await aiScribeService.transcribeAndGenerate(
@@ -428,8 +454,41 @@ router.post(
       }
     );
 
+    // Persist transcript and generated note to database
+    if (dbSession) {
+      try {
+        await aiScribeService.updateSessionTranscript(
+          dbSession.id,
+          result.fullTranscript || '',
+          result.transcript || []
+        );
+        await aiScribeService.saveGeneratedNote(hospitalId, userId, {
+          sessionId: dbSession.id,
+          patientId,
+          appointmentId,
+          noteType: selectedNoteType,
+          content: {
+            subjective: result.generatedNote?.subjective,
+            objective: result.generatedNote?.objective,
+            assessment: result.generatedNote?.assessment,
+            plan: result.generatedNote?.plan,
+            fullText: result.fullTranscript,
+          },
+          extractedEntities: result.extractedEntities,
+          icdCodes: result.suggestedICD10Codes,
+          cptCodes: result.suggestedCPTCodes,
+          keyFindings: result.keyFindings,
+          prescriptionSuggestions: result.prescriptionSuggestions,
+          modelVersion: result.modelVersion,
+        });
+      } catch (dbErr) {
+        logger.error('Failed to persist AI Scribe results to DB:', dbErr);
+      }
+    }
+
     sendSuccess(res, {
       sessionId: session.sessionId,
+      dbSessionId: dbSession?.id,
       noteType: selectedNoteType,
       ...result,
     }, `${selectedNoteType.replace('_', ' ')} note generated successfully`);
