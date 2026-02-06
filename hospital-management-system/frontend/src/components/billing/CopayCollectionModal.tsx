@@ -54,6 +54,8 @@ interface CopayInfo {
   preAuthStatus?: string; // NOT_REQUIRED | REQUIRED_NOT_SUBMITTED | APPROVED | PENDING | DENIED
   preAuthNumber?: string | null;
   preAuthMessage?: string | null;
+  insuranceExpired?: boolean;
+  insuranceExpiryDate?: string | null;
   // GAP 5: Data source indicator
   dataSource?: 'DHA_LIVE' | 'DHA_SANDBOX' | 'MOCK_DATA' | 'CACHED_DB' | 'NOT_CONFIGURED';
   // GAP 2: COB (Coordination of Benefits)
@@ -422,7 +424,7 @@ export default function CopayCollectionModal({
                 <div className="flex gap-3">
                   <button
                     onClick={() => {
-                      window.open(`/billing/copay-receipt/${receiptInfo.receiptNumber}`, '_blank');
+                      window.print();
                     }}
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-50 text-blue-700 font-medium rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors"
                   >
@@ -741,8 +743,27 @@ export default function CopayCollectionModal({
                   </div>
                 )}
 
+                {/* INSURANCE EXPIRED WARNING */}
+                {copayInfo.insuranceExpired && (
+                  <div className="bg-red-50 border-2 border-red-400 rounded-lg p-4 mb-4">
+                    <div className="flex items-start gap-3">
+                      <ExclamationTriangleIcon className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <h4 className="text-red-800 font-bold text-lg">🔴 Insurance Expired</h4>
+                        <p className="text-red-700 text-sm mt-1">
+                          This policy has expired. Please update insurance or treat as Self-Pay.
+                        </p>
+                        <div className="mt-3 flex gap-2">
+                          <button onClick={() => setShowEidLookup(true)} className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700">Update Insurance</button>
+                          <button onClick={handleConvertToSelfPay} className="px-3 py-1.5 bg-red-600 text-white text-sm rounded-md hover:bg-red-700">Treat as Self-Pay</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* GAP 1: Pre-Authorization Warning */}
-                {copayInfo.preAuthRequired && (
+                {copayInfo.preAuthRequired && !copayInfo.insuranceExpired && (
                   <div className={`rounded-xl p-4 border-2 ${
                     copayInfo.preAuthStatus === 'APPROVED' ? 'bg-green-50 border-green-300' :
                     copayInfo.preAuthStatus === 'PENDING' ? 'bg-yellow-50 border-yellow-300' :

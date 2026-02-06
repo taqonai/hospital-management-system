@@ -38,7 +38,8 @@ export const paginationSchema = z.object({
 
 export const uuidParamSchema = z.object({
   params: z.object({
-    id: z.string().uuid('Invalid ID format'),
+    // Accept both UUIDs and custom string IDs (for legacy/test data)
+    id: z.string().min(1, 'ID is required'),
   }),
 });
 

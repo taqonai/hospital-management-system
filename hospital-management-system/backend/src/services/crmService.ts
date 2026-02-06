@@ -1109,6 +1109,25 @@ export class CRMCampaignService {
       communicationsByStatus: communications,
     };
   }
+
+  async delete(hospitalId: string, id: string) {
+    const campaign = await prisma.cRMCampaign.findFirst({
+      where: { id, hospitalId },
+    });
+
+    if (!campaign) {
+      throw new NotFoundError('Campaign not found');
+    }
+
+    // Nullify campaignId on related communications before deleting
+    await prisma.cRMCommunication.updateMany({
+      where: { campaignId: id },
+      data: { campaignId: null },
+    });
+
+    await prisma.cRMCampaign.delete({ where: { id } });
+    return { message: 'Campaign deleted successfully' };
+  }
 }
 
 // Survey Service
@@ -1269,6 +1288,24 @@ export class CRMSurveyService {
     });
 
     return response;
+  }
+
+  async delete(hospitalId: string, id: string) {
+    const survey = await prisma.cRMSurvey.findFirst({
+      where: { id, hospitalId },
+    });
+
+    if (!survey) {
+      throw new NotFoundError('Survey not found');
+    }
+
+    // Delete related responses first (required FK)
+    await prisma.cRMSurveyResponse.deleteMany({
+      where: { surveyId: id },
+    });
+
+    await prisma.cRMSurvey.delete({ where: { id } });
+    return { message: 'Survey deleted successfully' };
   }
 }
 

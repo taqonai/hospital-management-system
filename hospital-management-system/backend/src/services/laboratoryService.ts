@@ -211,7 +211,27 @@ export class LaboratoryService {
         take: limit,
         orderBy: [{ priority: 'asc' }, { orderedAt: 'desc' }],
         include: {
-          patient: { select: { id: true, firstName: true, lastName: true, mrn: true } },
+          patient: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              mrn: true,
+              insurances: {
+                where: { isActive: true, isPrimary: true },
+                select: {
+                  id: true,
+                  providerName: true,
+                  policyNumber: true,
+                  coverageType: true,
+                  copay: true,
+                  expiryDate: true,
+                  networkTier: true,
+                },
+                take: 1,
+              },
+            },
+          },
           orderedByUser: { select: { id: true, firstName: true, lastName: true, role: true } },
           tests: { include: { labTest: true } },
           consultation: { select: { id: true, appointmentId: true } },
@@ -220,7 +240,52 @@ export class LaboratoryService {
       prisma.labOrder.count({ where }),
     ]);
 
-    return { orders, total, page, limit };
+    // Calculate billing info for each order
+    const ordersWithBilling = orders.map(order => {
+      // Calculate total test cost
+      const totalCost = order.tests.reduce((sum, t) => sum + Number(t.labTest.price || 0), 0);
+
+      // Get primary insurance
+      const insurance = order.patient.insurances?.[0] || null;
+
+      // Check if insurance is valid (not expired)
+      let insuranceValid = false;
+      if (insurance?.expiryDate) {
+        const expiryDate = new Date(insurance.expiryDate);
+        insuranceValid = expiryDate >= new Date();
+      }
+
+      // Calculate coverage based on copay percentage
+      // copay is the patient's percentage, so coverage = 100 - copay
+      const copayPercent = Number(insurance?.copay) || 20; // Default 20% copay
+      let coveragePercentage = 0;
+      let insuranceAmount = 0;
+      let patientAmount = totalCost;
+
+      if (insurance && insuranceValid) {
+        coveragePercentage = 100 - copayPercent;
+        insuranceAmount = Math.round((totalCost * coveragePercentage) / 100 * 100) / 100;
+        patientAmount = Math.round((totalCost - insuranceAmount) * 100) / 100;
+      }
+
+      return {
+        ...order,
+        billing: {
+          totalCost,
+          hasInsurance: !!insurance && insuranceValid,
+          insuranceProvider: insurance?.providerName || null,
+          policyNumber: insurance?.policyNumber || null,
+          planType: insurance?.coverageType || null,
+          networkStatus: insurance?.networkTier || null,
+          coveragePercentage,
+          insuranceAmount,
+          patientAmount,
+          paymentStatus: 'PENDING' as const, // TODO: Check actual invoice status
+        },
+      };
+    });
+
+    return { orders: ordersWithBilling, total, page, limit };
   }
 
   async getLabOrderById(id: string, hospitalId: string) {

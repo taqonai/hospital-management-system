@@ -28,6 +28,9 @@ import clsx from 'clsx';
 
 export default function DoctorDetail() {
   const { id } = useParams<{ id: string }>();
+  
+  // All hooks must be called before any conditional returns (React rules of hooks)
+  const [reviewPage, setReviewPage] = useState(1);
 
   const { data: doctor, isLoading } = useQuery({
     queryKey: ['doctor', id],
@@ -48,6 +51,19 @@ export default function DoctorDetail() {
     enabled: !!id,
   });
 
+  // Fetch doctor reviews
+  const { data: reviewsData, isLoading: reviewsLoading } = useQuery({
+    queryKey: ['doctor-reviews', id, reviewPage],
+    queryFn: async () => {
+      const response = await doctorApi.getReviews(id!, { page: reviewPage, limit: 10 });
+      return response.data;
+    },
+    enabled: !!id,
+  });
+
+  const reviews = reviewsData?.data || [];
+  const reviewsPagination = reviewsData?.pagination;
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -66,21 +82,6 @@ export default function DoctorDetail() {
       </div>
     );
   }
-
-  const [reviewPage, setReviewPage] = useState(1);
-
-  // Fetch doctor reviews
-  const { data: reviewsData, isLoading: reviewsLoading } = useQuery({
-    queryKey: ['doctor-reviews', id, reviewPage],
-    queryFn: async () => {
-      const response = await doctorApi.getReviews(id!, { page: reviewPage, limit: 10 });
-      return response.data;
-    },
-    enabled: !!id,
-  });
-
-  const reviews = reviewsData?.data || [];
-  const reviewsPagination = reviewsData?.pagination;
 
   const tabs = [
     { name: 'Overview', icon: DocumentTextIcon },

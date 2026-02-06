@@ -15,6 +15,7 @@ import { AuthenticatedRequest } from '../types';
 import { cobService } from '../services/coordinationOfBenefitsService';
 import { ipdInsuranceMonitorService } from '../services/ipdInsuranceMonitorService';
 import { insuranceUnderpaymentService } from '../services/insuranceUnderpaymentService';
+import { patientService } from '../services/patientService';
 
 const router = Router();
 
@@ -211,6 +212,42 @@ router.get(
       },
       topDenialReasons: report.byDenialReason.slice(0, 5),
       topPayerShortfalls: report.byPayer.sort((a, b) => b.shortfall - a.shortfall).slice(0, 5),
+    });
+  })
+);
+
+// ==================== INSURANCE VERIFICATION ====================
+
+/**
+ * GET /api/v1/insurance-advanced/verifications/pending
+ * Get all pending insurance verifications for staff review
+ */
+router.get(
+  '/verifications/pending',
+  authenticate,
+  authorize('RECEPTIONIST', 'ACCOUNTANT', 'HOSPITAL_ADMIN'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const pendingVerifications = await patientService.getPendingVerifications(req.user!.hospitalId);
+    
+    sendSuccess(res, {
+      total: pendingVerifications.length,
+      verifications: pendingVerifications.map(ins => ({
+        id: ins.id,
+        patientId: ins.patientId,
+        patient: ins.patient,
+        providerName: ins.providerName,
+        policyNumber: ins.policyNumber,
+        groupNumber: ins.groupNumber,
+        subscriberName: ins.subscriberName,
+        subscriberId: ins.subscriberId,
+        relationship: ins.relationship,
+        effectiveDate: ins.effectiveDate,
+        expiryDate: ins.expiryDate,
+        coverageType: ins.coverageType,
+        isPrimary: ins.isPrimary,
+        createdAt: ins.createdAt,
+        verificationStatus: ins.verificationStatus,
+      })),
     });
   })
 );

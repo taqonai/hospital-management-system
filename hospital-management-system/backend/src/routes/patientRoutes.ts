@@ -3,7 +3,7 @@ import { patientService } from '../services/patientService';
 import { authenticate, authorize, authorizeWithPermission, authorizeHospital } from '../middleware/auth';
 import { validate, createPatientSchema, updatePatientSchema, uuidParamSchema, paginationSchema, emiratesIdParamSchema } from '../middleware/validation';
 import { asyncHandler } from '../middleware/errorHandler';
-import { sendSuccess, sendCreated, sendPaginated, calculatePagination } from '../utils/response';
+import { sendSuccess, sendCreated, sendPaginated, sendError, calculatePagination } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
 
 const router = Router();
@@ -227,6 +227,29 @@ router.delete(
       req.user!.hospitalId
     );
     sendSuccess(res, null, 'Insurance deleted');
+  })
+);
+
+// Verify or reject insurance (manual verification)
+router.patch(
+  '/:id/insurance/:insuranceId/verify',
+  authenticate,
+  authorizeWithPermission('patients:write', ['HOSPITAL_ADMIN', 'RECEPTIONIST', 'ACCOUNTANT']),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { status, notes } = req.body;
+
+    if (!status || !['VERIFIED', 'REJECTED'].includes(status)) {
+      return sendError(res, 'Status must be VERIFIED or REJECTED', 400);
+    }
+
+    const insurance = await patientService.verifyInsurance(
+      req.params.id,
+      req.params.insuranceId,
+      req.user!.hospitalId,
+      req.user!.userId,
+      { status, notes }
+    );
+    sendSuccess(res, insurance, `Insurance ${status.toLowerCase()}`);
   })
 );
 

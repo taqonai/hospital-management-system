@@ -43,6 +43,8 @@ import {
 import { useBookingData, usePatientHistory } from '../../hooks/useBookingData';
 import { LabOrdersCard } from '../../components/booking/LabOrdersCard';
 import DrugPicker, { DrugSelection } from '../../components/consultation/DrugPicker';
+import ConsultationScribePanel from '../../components/consultation/ConsultationScribePanel';
+import { ScribeResults } from '../../hooks/useConsultationScribe';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import {
@@ -1149,6 +1151,65 @@ export default function Consultation() {
     });
   };
 
+  // =============== AI Scribe Results Handler ===============
+  const handleScribeResults = useCallback((results: ScribeResults) => {
+    // 1. Set chief complaint from SOAP subjective (if empty)
+    if (!chiefComplaint && results.soapNote?.subjective) {
+      setChiefComplaint(results.soapNote.subjective);
+    }
+
+    // 2. Add extracted symptoms (avoid duplicates by name)
+    if (results.extractedSymptoms?.length) {
+      setSymptoms(prev => {
+        const existingNames = new Set(prev.map(s => s.name.toLowerCase()));
+        const newSymptoms = results.extractedSymptoms
+          .filter(s => !existingNames.has(s.value.toLowerCase()))
+          .map(s => ({
+            id: crypto.randomUUID(),
+            name: s.value,
+            severity: 'moderate' as const,
+            extractedByAI: true,
+          }));
+        return [...prev, ...newSymptoms];
+      });
+    }
+
+    // 3. Add extracted diagnoses with ICD codes
+    if (results.icdCodes?.length) {
+      setSelectedDiagnoses(prev => {
+        const existingCodes = new Set(prev.map(d => d.icd10.toLowerCase()));
+        const newDiagnoses = results.icdCodes
+          .filter(c => !existingCodes.has(c.code.toLowerCase()))
+          .map(c => ({
+            icd10: c.code,
+            name: c.description,
+            confidence: c.confidence === 'high' ? 0.9 : c.confidence === 'medium' ? 0.7 : 0.5,
+            isPrimary: false,
+          }));
+        return [...prev, ...newDiagnoses];
+      });
+    }
+
+    // 4. Set SOAP notes
+    if (results.soapNote) {
+      setSoapNotes({
+        subjective: results.soapNote.subjective || '',
+        objective: results.soapNote.objective || '',
+        assessment: results.soapNote.assessment || '',
+        plan: results.soapNote.plan || '',
+      });
+    }
+
+    // 5. Set clinical notes from transcript
+    if (results.transcript) {
+      setClinicalNotes(prev =>
+        prev ? prev + '\n\n--- AI Scribe Transcript ---\n' + results.transcript : results.transcript
+      );
+    }
+
+    toast.success('AI Scribe results applied to consultation');
+  }, [chiefComplaint]);
+
   const completeConsultation = async () => {
     if (!selectedPatientId) {
       toast.error('No patient selected');
@@ -1210,6 +1271,7 @@ export default function Consultation() {
         icdCodes: allIcdCodes,
         historyOfIllness,
         treatmentPlan,
+        prescriptions: prescriptions.length > 0 ? prescriptions : undefined,
         notes: soapData ? `SOAP Notes:\nS: ${soapData.subjective}\nO: ${soapData.objective}\nA: ${soapData.assessment}\nP: ${soapData.plan}` : undefined,
       });
 
@@ -2956,6 +3018,8 @@ export default function Consultation() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Medication Name</label>
                   <div className="flex gap-2">
                     <DrugPicker
+                      patientId={selectedPatientId}
+                      showCostEstimate={true}
                       value={rx.medication}
                       onChange={(drug) => handleDrugSelection(rx.id, drug)}
                       placeholder="Search medication..."
@@ -3943,6 +4007,21 @@ export default function Consultation() {
 
       {/* Step Indicator */}
       {renderStepIndicator()}
+
+      {/* AI Scribe Panel - persists across all steps */}
+      {patientData && appointmentId && (
+        <ConsultationScribePanel
+          patientId={selectedPatientId!}
+          patientName={`${patientData.firstName} ${patientData.lastName}`}
+          patientAge={patientAge}
+          patientGender={patientData.gender}
+          appointmentId={appointmentId}
+          existingConditions={patientData.medicalHistory?.chronicConditions}
+          currentMedications={patientData.medicalHistory?.currentMedications}
+          knownAllergies={patientData.allergies?.map((a: { allergen: string }) => a.allergen)}
+          onResultsReady={handleScribeResults}
+        />
+      )}
 
       {/* Main Content Layout */}
       <div className="grid lg:grid-cols-10 gap-6">

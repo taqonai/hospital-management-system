@@ -410,6 +410,17 @@ router.get('/campaigns/:id/analytics', async (req: AuthenticatedRequest, res: Re
   }
 });
 
+// Delete campaign
+router.delete('/campaigns/:id', authorizeWithPermission('crm:campaigns', ['SUPER_ADMIN', 'HOSPITAL_ADMIN']), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const hospitalId = req.user!.hospitalId;
+    const result = await crmCampaignService.delete(hospitalId, req.params.id);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ==================== SURVEYS ====================
 
 // Get surveys
@@ -484,6 +495,17 @@ router.get('/surveys/:id/analytics', async (req: AuthenticatedRequest, res: Resp
     const hospitalId = req.user!.hospitalId;
     const analytics = await crmSurveyService.getAnalytics(hospitalId, req.params.id);
     res.json({ success: true, data: analytics });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete survey
+router.delete('/surveys/:id', authorizeWithPermission('crm:surveys', ['SUPER_ADMIN', 'HOSPITAL_ADMIN']), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const hospitalId = req.user!.hospitalId;
+    const result = await crmSurveyService.delete(hospitalId, req.params.id);
+    res.json({ success: true, ...result });
   } catch (error) {
     next(error);
   }

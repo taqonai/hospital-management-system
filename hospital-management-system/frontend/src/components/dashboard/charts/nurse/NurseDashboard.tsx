@@ -39,11 +39,12 @@ export default function NurseDashboard() {
   } = useNurseDashboard();
 
   // Filter OPD queue for patients needing vitals
+  // Backend returns vitalsRecordedAt (timestamp), not vitalsRecorded (boolean)
   const vitalsNeeded = opdQueue?.filter((p: any) =>
-    p.status === 'CHECKED_IN' && !p.vitalsRecorded
+    p.status === 'CHECKED_IN' && !p.vitalsRecordedAt
   ) || [];
 
-  const vitalsRecorded = opdQueue?.filter((p: any) => p.vitalsRecorded) || [];
+  const vitalsRecorded = opdQueue?.filter((p: any) => p.vitalsRecordedAt) || [];
 
   // Risk distribution chart data
   const riskChartData = {

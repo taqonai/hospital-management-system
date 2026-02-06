@@ -168,11 +168,16 @@ class InsuranceEligibilityService {
     const alerts: VerificationAlert[] = [];
     
     // First, check if patient exists in our system with this Emirates ID
+    // Search for both normalized (no dashes) and original format (with dashes)
     const patient = await prisma.patient.findFirst({
       where: {
         hospitalId,
-        emiratesId: normalizedEid,
         isActive: true,
+        OR: [
+          { emiratesId: normalizedEid },
+          { emiratesId: emiratesId },
+          { emiratesId: emiratesId.toUpperCase() },
+        ],
       },
       include: {
         insurances: {
@@ -266,6 +271,50 @@ class InsuranceEligibilityService {
     // ==================== SCENARIO A: Insurance Mismatch ====================
     // DB has insurance but DHA says NOT eligible or NOT FOUND
     if (!dhaResponse.eligible && dbInsurance) {
+      // If DB insurance is not expired, trust the DB data but add warning
+      // This handles cases like DHA sandbox mode or temporary DHA issues
+      if (!dbExpired) {
+        alerts.push({
+          type: 'MISMATCH_DB_VS_DHA',
+          severity: 'WARNING',
+          title: 'DHA Verification Mismatch',
+          message: `DHA returned different status, but our records show valid coverage with ${dbInsurance.providerName}.`,
+          details: {
+            dbValue: `${dbInsurance.providerName} - ${dbInsurance.policyNumber}`,
+            dhaValue: dhaResponse.policyStatus || 'Not Found / Not Eligible',
+            field: 'insurance',
+          },
+          actions: [
+            { label: 'Proceed with Coverage', action: 'USE_DB_DATA' },
+            { label: 'Treat as Self-Pay', action: 'TREAT_AS_SELFPAY' },
+          ],
+        });
+
+        // Return eligible=true using DB data since it's not expired
+        return {
+          eligible: true,
+          emiratesId: dhaResponse.emiratesId || dbInsurance.emiratesId,
+          patientName: dhaResponse.patientName,
+          insuranceProvider: dbInsurance.providerName,
+          policyNumber: dbInsurance.policyNumber,
+          policyStatus: 'ACTIVE',
+          policyStartDate: dbInsurance.effectiveDate,
+          policyEndDate: dbInsurance.expiryDate,
+          networkStatus: dbInsurance.networkTier || 'IN_NETWORK',
+          planType: dbInsurance.coverageType,
+          coveragePercentage: previousCoverage.coveragePercentage,
+          copayPercentage: previousCoverage.copayPercentage,
+          copayAmount: previousCoverage.copayAmount,
+          message: 'Using cached insurance data. DHA verification returned different status.',
+          hasMismatch: true,
+          previousCoverage,
+          verificationSource: 'CACHED',
+          dataSource: 'CACHED_DB',
+          verifiedAt: new Date(),
+        };
+      }
+
+      // DB insurance is also expired - return not eligible
       alerts.push({
         type: 'MISMATCH_DB_VS_DHA',
         severity: 'ERROR',

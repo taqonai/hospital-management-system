@@ -419,6 +419,7 @@ export const aiConsultationApi = {
     advice?: string;
     followUpDate?: string;
     notes?: string;
+    prescriptions?: Array<{ medication: string; dosage: string; route: string; frequency: string; duration: string; quantity?: number; instructions?: string; }>;
   }) => api.post('/ai-consultation/complete', data),
 };
 
@@ -1098,6 +1099,8 @@ export const billingApi = {
     includeAnesthesia?: boolean;
     insuranceCoverage?: number;
   }) => api.post('/billing/estimate-cost', data),
+  // Receipt
+  getReceipt: (receiptNumber: string) => api.get(`/billing/receipt/${receiptNumber}`),
 };
 
 // HR APIs
@@ -2969,6 +2972,50 @@ export const accountingApi = {
 
   closeFiscalPeriod: (id: string) =>
     api.put(`/accounting/fiscal-periods/${id}/close`).then((res) => res.data.data),
+};
+
+// AI Scribe API - Authenticated endpoints for consultation-embedded scribe
+export const aiScribeApi = {
+  checkHealth() {
+    return api.get('/ai-scribe/health');
+  },
+  startSession(data: {
+    patientId?: string;
+    patientName?: string;
+    patientAge?: number;
+    patientGender?: string;
+    appointmentId?: string;
+    sessionType?: string;
+    existingConditions?: string[];
+    currentMedications?: string[];
+    knownAllergies?: string[];
+  }) {
+    return api.post('/ai-scribe/start-session', data);
+  },
+  transcribe(formData: FormData) {
+    return api.post('/ai-scribe/transcribe', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 180000,
+    });
+  },
+  transcribeAndGenerate(formData: FormData) {
+    return api.post('/ai-scribe/transcribe-and-generate', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 180000,
+    });
+  },
+  processRecording(formData: FormData) {
+    return api.post('/ai-scribe/process', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 180000,
+    });
+  },
+  generateNote(data: { text: string; noteType?: string; patientInfo?: any }) {
+    return api.post('/ai-scribe/generate-note', data);
+  },
+  extractEntities(data: { text: string }) {
+    return api.post('/ai-scribe/extract-entities', data);
+  },
 };
 
 export default api;

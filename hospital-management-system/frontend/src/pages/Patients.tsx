@@ -314,6 +314,22 @@ export default function Patients() {
                               Inactive
                             </span>
                           )}
+                          {/* Insurance Status Badge */}
+                          {(patient as any).insurances?.[0] ? (
+                            new Date((patient as any).insurances[0].expiryDate) < new Date() ? (
+                              <span className="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                                Insurance Expired
+                              </span>
+                            ) : (
+                              <span className="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                                {(patient as any).insurances[0].providerName}
+                              </span>
+                            )
+                          ) : (
+                            <span className="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
+                              No Insurance
+                            </span>
+                          )}
                         </div>
                         <p className="text-sm text-gray-500 mt-0.5">
                           {age} years • {patient.gender.charAt(0) + patient.gender.slice(1).toLowerCase()}
