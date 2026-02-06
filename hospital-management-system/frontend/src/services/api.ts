@@ -1805,6 +1805,7 @@ export const patientPortalApi = {
     api.put('/patient-portal/notifications/read-all'),
 
   // Insurance Management (Patient Self-Service)
+  getInsuranceProviders: () => api.get('/patient-portal/insurance-providers'),
   getInsurance: () => api.get('/patient-portal/insurance'),
   addInsurance: (data: {
     providerName: string;

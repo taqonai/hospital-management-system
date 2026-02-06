@@ -2954,4 +2954,33 @@ router.get(
   })
 );
 
+/**
+ * Get active insurance providers (for patient portal dropdowns)
+ * GET /api/v1/patient-portal/insurance-providers
+ */
+router.get(
+  '/insurance-providers',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    
+    const providers = await prisma.insuranceProvider.findMany({
+      where: {
+        hospitalId,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        licenseNumber: true,
+        tpaName: true,
+        emirate: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+    
+    sendSuccess(res, providers, 'Insurance providers retrieved');
+  })
+);
+
 export default router;
