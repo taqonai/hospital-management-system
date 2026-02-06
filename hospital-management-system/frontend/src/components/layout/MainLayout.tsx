@@ -186,7 +186,7 @@ const navigationGroups: { name: string; items: NavItem[] }[] = [
         permission: 'patients:write',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT', 'RECEPTIONIST'] },
       { name: 'Insurance Providers', href: '/insurance-providers', icon: ShieldCheckIcon, color: 'from-blue-500 to-indigo-600',
-        permission: 'insurance:read',
+        permission: 'patients:read',
         roles: ['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT', 'RECEPTIONIST'] },
       { name: 'Copay Refunds', href: '/copay-refunds', icon: ArrowUturnLeftIcon, color: 'from-amber-500 to-orange-600',
         permission: 'billing:read',
