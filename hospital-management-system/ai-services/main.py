@@ -3094,14 +3094,6 @@ async def get_supported_diagnoses():
 from ai_scribe.service import StartSessionRequest as ScribeStartSessionRequest
 
 
-class ScribeProcessRequest(BaseModel):
-    sessionId: str
-    generateSoapNote: bool = True
-    extractEntities: bool = True
-    suggestIcdCodes: bool = True
-    suggestCptCodes: bool = True
-
-
 class ScribeGenerateNoteRequest(BaseModel):
     text: str
     sessionType: str = "consultation"
@@ -3143,17 +3135,35 @@ async def upload_scribe_audio(
 
 
 @app.post("/api/scribe/process")
-async def process_scribe_recording(request: ScribeProcessRequest):
+async def process_scribe_recording(
+    sessionId: str = Form(...),
+    generateSoapNote: bool = Form(default=True),
+    extractEntities: bool = Form(default=True),
+    suggestIcdCodes: bool = Form(default=True),
+    suggestCptCodes: bool = Form(default=True),
+    generateFollowUp: bool = Form(default=True),
+    generatePrescriptions: bool = Form(default=True),
+    audio: UploadFile = File(None),
+):
     """Process recording and generate clinical documentation"""
     try:
+        audio_data = None
+        if audio:
+            audio_data = await audio.read()
+
         result = await ai_scribe.process_recording(
-            session_id=request.sessionId,
-            generate_soap=request.generateSoapNote,
-            extract_entities=request.extractEntities,
-            suggest_icd=request.suggestIcdCodes,
-            suggest_cpt=request.suggestCptCodes
+            session_id=sessionId,
+            audio_data=audio_data,
+            generate_soap=generateSoapNote,
+            extract_entities=extractEntities,
+            suggest_icd=suggestIcdCodes,
+            suggest_cpt=suggestCptCodes,
+            generate_follow_up=generateFollowUp,
+            generate_prescriptions=generatePrescriptions,
         )
         return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
