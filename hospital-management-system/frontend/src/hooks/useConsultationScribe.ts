@@ -214,6 +214,14 @@ export function useConsultationScribe(options: UseConsultationScribeOptions) {
       return;
     }
 
+    // Minimum ~1 second of recording and ~1KB of data to be a valid audio file
+    if (duration < 1000 || audioBlob.size < 1000) {
+      setError('Recording too short. Please speak for at least a few seconds before stopping.');
+      setScribeStatus('error');
+      isProcessingRef.current = false;
+      return;
+    }
+
     try {
       // Build FormData with audio + patient context
       const formData = new FormData();
