@@ -678,6 +678,13 @@ class AIScribeService:
                 "transcript": "",
             }
 
+        if len(audio_data) < 1000:
+            return {
+                "success": False,
+                "error": "Audio recording too short. Please speak for at least a few seconds.",
+                "transcript": "",
+            }
+
         try:
             # Save to temporary file
             with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as temp_file:
