@@ -3016,6 +3016,18 @@ export const aiScribeApi = {
   extractEntities(data: { text: string }) {
     return api.post('/ai-scribe/extract-entities', data);
   },
+  getNotes(params?: { patientId?: string; noteType?: string; status?: string; page?: number; limit?: number }) {
+    return api.get('/ai-scribe/notes', { params });
+  },
+  getNoteById(noteId: string) {
+    return api.get(`/ai-scribe/notes/${noteId}`);
+  },
+  signNote(noteId: string) {
+    return api.post(`/ai-scribe/notes/${noteId}/sign`);
+  },
+  getSessions(params?: { patientId?: string; status?: string; page?: number; limit?: number }) {
+    return api.get('/ai-scribe/sessions', { params });
+  },
 };
 
 export default api;
