@@ -138,6 +138,9 @@ import InsuranceAuditLog from './pages/InsuranceCoding/AuditLog';
 import InsurancePreAuth from './pages/Insurance/PreAuth';
 import InsurancePendingVerifications from './pages/Insurance/PendingVerifications';
 
+// Insurance Provider Master
+import InsuranceProviders from './pages/InsuranceProviders';
+
 // Copay Refunds (GAP 9)
 import CopayRefunds from './pages/Billing/CopayRefunds';
 
@@ -331,6 +334,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT', 'RECEPTIONIST']}>
               <InsurancePendingVerifications />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/insurance-providers"
+          element={
+            <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'RECEPTIONIST', 'ACCOUNTANT']} permission="insurance:read">
+              <InsuranceProviders />
             </ProtectedRoute>
           }
         />

@@ -53,6 +53,7 @@ import insuranceCodingRoutes from './insuranceCodingRoutes';
 import dhaEClaimRoutes from './dhaEClaimRoutes';
 import insuranceAdvancedRoutes from './insuranceAdvancedRoutes';
 import preAuthRoutes from './preAuthRoutes';
+import insuranceProviderRoutes from './insurance-provider.routes';
 // A'mad Precision Health Platform routes
 import healthPlatformRoutes from './healthPlatformRoutes';
 import genomicRoutes from './genomicRoutes';
@@ -148,6 +149,9 @@ router.use('/ai-settings', aiSettingsRoutes);
 router.use('/insurance-coding', insuranceCodingRoutes);
 router.use('/dha-eclaim', dhaEClaimRoutes);
 router.use('/insurance-advanced', insuranceAdvancedRoutes);
+
+// Insurance Provider Master (CRUD)
+router.use(insuranceProviderRoutes);
 
 // Pre-Authorization routes
 router.use('/pre-auth', preAuthRoutes);
