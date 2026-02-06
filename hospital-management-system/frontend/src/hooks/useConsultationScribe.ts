@@ -144,14 +144,17 @@ export function useConsultationScribe(options: UseConsultationScribeOptions) {
         }
       };
 
-      mediaRecorder.start(100);
+      // Start recording WITHOUT timeslice — produces one valid WebM file on stop().
+      // Using start(timeslice) creates many small chunks that, when concatenated,
+      // may produce malformed WebM files rejected by Whisper API ("Invalid file format").
+      mediaRecorder.start();
       startTimeRef.current = Date.now();
       setStatus('recording');
       setDuration(0);
 
       timerRef.current = setInterval(() => {
         if (isMountedRef.current) setDuration(Date.now() - startTimeRef.current);
-      }, 100);
+      }, 1000);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to access microphone';
       setError(msg);
