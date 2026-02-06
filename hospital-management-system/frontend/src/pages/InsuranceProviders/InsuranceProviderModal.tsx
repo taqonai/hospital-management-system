@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useMutation } from '@tantml:invoke name="@tanstack/react-query">
+import { useMutation } from '@tanstack/react-query';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { insuranceProviderApi } from '../../services/api';
 import toast from 'react-hot-toast';
