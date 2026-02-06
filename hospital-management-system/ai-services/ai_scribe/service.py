@@ -1030,7 +1030,8 @@ Generate a complete SOAP note with these sections:
 Use professional medical documentation style. Be thorough but concise.
 If information is not mentioned, write "Not documented in this encounter."
 
-Return as JSON with keys: subjective, objective, assessment, plan"""
+Return as JSON with keys: subjective, objective, assessment, plan
+IMPORTANT: Each value must be a plain text string (not a nested object). Write each section as a single text paragraph or multiple paragraphs separated by newlines."""
 
             api_result = openai_manager.chat_completion_json(
                 messages=[
@@ -1051,10 +1052,33 @@ Return as JSON with keys: subjective, objective, assessment, plan"""
                 def _to_str(val, default="Not documented"):
                     if val is None:
                         return default
+                    if isinstance(val, str):
+                        return val
                     if isinstance(val, dict):
-                        return val.get("text") or val.get("summary") or val.get("content") or str(val)
+                        # Try common text keys first
+                        for key in ("text", "summary", "content", "description"):
+                            if key in val and isinstance(val[key], str):
+                                return val[key]
+                        # Join all values into readable text (handles GPT sub-structured dicts)
+                        parts = []
+                        for k, v in val.items():
+                            if isinstance(v, str) and v.strip():
+                                label = k.replace("_", " ").replace("-", " ").title()
+                                parts.append(f"{label}: {v}")
+                            elif isinstance(v, list):
+                                label = k.replace("_", " ").replace("-", " ").title()
+                                items = ", ".join(str(item) for item in v if item)
+                                if items:
+                                    parts.append(f"{label}: {items}")
+                            elif isinstance(v, dict):
+                                # Recursively extract text from nested dicts
+                                nested = _to_str(v, "")
+                                if nested:
+                                    label = k.replace("_", " ").replace("-", " ").title()
+                                    parts.append(f"{label}: {nested}")
+                        return "\n".join(parts) if parts else default
                     if isinstance(val, list):
-                        return "\n".join(str(item) for item in val)
+                        return "\n".join(str(item) for item in val if item)
                     return str(val)
                 return {
                     "subjective": _to_str(result.get("subjective")),
