@@ -32,6 +32,19 @@ import { CurrencyDisplay } from '../../components/common';
 import SampleTracker from '../../components/laboratory/SampleTracker';
 import ResultsEntryForm from '../../components/laboratory/ResultsEntryForm';
 
+interface LabOrderBilling {
+  totalCost: number;
+  hasInsurance: boolean;
+  insuranceProvider: string | null;
+  policyNumber: string | null;
+  planType: string | null;
+  networkStatus: string | null;
+  coveragePercentage: number;
+  insuranceAmount: number;
+  patientAmount: number;
+  paymentStatus: 'PENDING' | 'PAID' | 'PARTIAL';
+}
+
 interface LabOrder {
   id: string;
   orderNumber: string;
@@ -55,6 +68,7 @@ interface LabOrder {
     labTest?: {
       name: string;
       code: string;
+      price?: number;
     };
     status: string;
     labTestId?: string;
@@ -65,6 +79,7 @@ interface LabOrder {
   priority: string;
   createdAt: string;
   completedAt?: string;
+  billing?: LabOrderBilling;
   consultation?: {
     id: string;
     appointmentId?: string;
@@ -185,6 +200,89 @@ function TestsListCard({ tests }: { tests: LabOrder['tests'] }) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// Billing Card Component
+function BillingCard({ billing, tests }: { billing?: LabOrderBilling; tests: LabOrder['tests'] }) {
+  // Calculate total from tests if billing not provided
+  const totalCost = billing?.totalCost ?? tests.reduce((sum, t) => sum + Number(t.labTest?.price || 0), 0);
+
+  if (totalCost === 0) return null;
+
+  const hasInsurance = billing?.hasInsurance ?? false;
+  const coveragePercentage = billing?.coveragePercentage ?? 0;
+  const insuranceAmount = billing?.insuranceAmount ?? 0;
+  const patientAmount = billing?.patientAmount ?? totalCost;
+  const paymentStatus = billing?.paymentStatus ?? 'PENDING';
+
+  const paymentStatusConfig = {
+    PENDING: { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Pending' },
+    PAID: { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Paid' },
+    PARTIAL: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Partial' },
+  };
+
+  const statusStyle = paymentStatusConfig[paymentStatus] || paymentStatusConfig.PENDING;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-sm font-semibold text-gray-700">Billing & Insurance</h4>
+        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${statusStyle.bg} ${statusStyle.text}`}>
+          {statusStyle.label}
+        </span>
+      </div>
+
+      <div className="space-y-3">
+        {/* Total Cost */}
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-gray-500">Total Cost:</span>
+          <span className="text-sm font-bold text-gray-900">
+            <CurrencyDisplay amount={totalCost} />
+          </span>
+        </div>
+
+        {/* Insurance Info */}
+        {hasInsurance ? (
+          <>
+            <div className="pt-2 border-t border-gray-100">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span className="text-xs font-medium text-emerald-700">Insured Patient</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500">{billing?.insuranceProvider || 'Insurance'}</span>
+                <span className="text-xs text-gray-400">{billing?.policyNumber}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-100">
+              <div className="bg-emerald-50 rounded-lg p-2.5 text-center">
+                <p className="text-xs text-emerald-600 mb-0.5">Insurance Covers</p>
+                <p className="text-sm font-bold text-emerald-700">{coveragePercentage}%</p>
+                <p className="text-xs text-emerald-600"><CurrencyDisplay amount={insuranceAmount} /></p>
+              </div>
+              <div className="bg-blue-50 rounded-lg p-2.5 text-center">
+                <p className="text-xs text-blue-600 mb-0.5">Patient Pays</p>
+                <p className="text-sm font-bold text-blue-700">{100 - coveragePercentage}%</p>
+                <p className="text-xs text-blue-600"><CurrencyDisplay amount={patientAmount} /></p>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="pt-2 border-t border-gray-100">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-2 h-2 rounded-full bg-orange-500"></span>
+              <span className="text-xs font-medium text-orange-700">Self-Pay Patient</span>
+            </div>
+            <div className="bg-orange-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-orange-600 mb-1">Full Payment Required</p>
+              <p className="text-lg font-bold text-orange-700"><CurrencyDisplay amount={totalCost} /></p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -405,10 +503,11 @@ function ExpandedOrderDetails({
   return (
     <div className="p-6 bg-gray-50 border-t border-gray-200">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left column: Patient info + Tests */}
+        {/* Left column: Patient info + Tests + Billing */}
         <div className="space-y-4">
           <PatientInfoCard patient={order.patient} />
           <TestsListCard tests={order.tests} />
+          <BillingCard billing={order.billing} tests={order.tests} />
           <ClinicalNotesCard
             notes={(order as any).clinicalNotes}
             createdAt={order.createdAt}
@@ -1441,9 +1540,31 @@ export default function Laboratory() {
                             <h3 className="mt-3 font-semibold text-gray-900 text-lg">
                               {order.patient?.firstName || ''} {order.patient?.lastName || ''}
                             </h3>
-                            <p className="text-sm text-gray-500 mt-1">
-                              MRN: {order.patient?.mrn} | Tests: {order.tests?.length || 0} | {formatTimeAgo(order.createdAt)}
-                            </p>
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                              <p className="text-sm text-gray-500">
+                                MRN: {order.patient?.mrn} | Tests: {order.tests?.length || 0} | {formatTimeAgo(order.createdAt)}
+                              </p>
+                              {/* Billing indicator */}
+                              {order.billing && (
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  order.billing.hasInsurance 
+                                    ? 'bg-emerald-100 text-emerald-700' 
+                                    : 'bg-orange-100 text-orange-700'
+                                }`}>
+                                  {order.billing.hasInsurance ? (
+                                    <>
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                      {order.billing.insuranceProvider?.split(' ')[0] || 'Insured'} • <CurrencyDisplay amount={order.billing.patientAmount} />
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
+                                      Self-Pay • <CurrencyDisplay amount={order.billing.totalCost} />
+                                    </>
+                                  )}
+                                </span>
+                              )}
+                            </div>
                           </div>
 
                           {/* Primary Action + Expand Button */}
