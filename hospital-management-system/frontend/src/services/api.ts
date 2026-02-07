@@ -777,6 +777,24 @@ export const opdApi = {
     api.delete(`/opd/patient-immunizations/${patientId}/${immunizationId}`),
 };
 
+// Staff Copay APIs (Check-in & Payment Collection)
+export const staffCopayApi = {
+  // Get appointments with payment status for check-in view
+  getAppointmentsWithPaymentStatus: (params?: { date?: string; doctorId?: string }) =>
+    api.get('/staff/checkin/appointments', { params }),
+  // Collect cash/card payment at check-in
+  collectPayment: (appointmentId: string, data: { amount: number; paymentMethod: 'CASH' | 'CARD'; notes?: string }) =>
+    api.post(`/staff/checkin/appointments/${appointmentId}/collect-payment`, data),
+  // Get payment status for single appointment
+  getPaymentStatus: (appointmentId: string) =>
+    api.get(`/staff/checkin/appointments/${appointmentId}/payment-status`),
+  // Get payment summary for date range
+  getPaymentSummary: (params?: { startDate?: string; endDate?: string }) =>
+    api.get('/staff/payment-summary', { params }),
+  // Get pending reminders (for notification service)
+  getPendingReminders: () => api.get('/staff/payment-reminders'),
+};
+
 // Emergency APIs
 export const emergencyApi = {
   registerPatient: (data: any) => api.post('/emergency/register', data),
