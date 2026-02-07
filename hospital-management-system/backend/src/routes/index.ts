@@ -40,6 +40,8 @@ import earlyWarningRoutes from './earlyWarningRoutes';
 import medSafetyRoutes from './medSafetyRoutes';
 import smartOrderRoutes from './smartOrderRoutes';
 import patientPortalRoutes from './patientPortalRoutes';
+import patientCopayRoutes from './patientCopayRoutes';
+import staffCopayRoutes from './staffCopayRoutes';
 import aiConsultationRoutes from './aiConsultationRoutes';
 import advancedPharmacyAIRoutes from './advancedPharmacyAIRoutes';
 import pdfRoutes from './pdfRoutes';
@@ -128,6 +130,10 @@ router.use('/early-warning', earlyWarningRoutes);
 router.use('/med-safety', medSafetyRoutes);
 router.use('/smart-orders', smartOrderRoutes);
 router.use('/patient-portal', patientPortalRoutes);
+router.use('/patient-portal', patientCopayRoutes); // Copay payment endpoints
+
+// Staff Check-in & Copay Collection
+router.use('/staff', staffCopayRoutes);
 router.use('/ai-consultation', aiConsultationRoutes);
 router.use('/advanced-pharmacy-ai', advancedPharmacyAIRoutes);
 router.use('/pdf', pdfRoutes);

@@ -30,6 +30,8 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../../hooks/useAuth';
 import VitalsRecordingModal from '../../components/vitals/VitalsRecordingModal';
 import CopayCollectionModal from '../../components/billing/CopayCollectionModal';
+import PaymentStatusBadge, { PaymentStatus, isPaymentComplete, needsCashCollection } from '../../components/billing/PaymentStatusBadge';
+import { staffCopayApi } from '../../services/api';
 import EmiratesIdLookup from '../../components/insurance/EmiratesIdLookup';
 
 interface QueueItem {
@@ -561,6 +563,8 @@ export default function OPD() {
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [showCopayModal, setShowCopayModal] = useState(false);
   const [selectedAppointmentForCopay, setSelectedAppointmentForCopay] = useState<QueueItem | null>(null);
+  // Payment status tracking for appointments
+  const [paymentStatuses, setPaymentStatuses] = useState<Record<string, { status: PaymentStatus; amount: number }>>({});
   const { data: healthStatus } = useAIHealth();
   const isAIOnline = healthStatus?.status === 'connected';
   const { hasRole } = useAuth();
@@ -644,6 +648,34 @@ export default function OPD() {
     return () => clearInterval(interval);
   }, []);
 
+  // Fetch payment statuses for today's appointments
+  useEffect(() => {
+    const fetchPaymentStatuses = async () => {
+      try {
+        const response = await staffCopayApi.getAppointmentsWithPaymentStatus();
+        const data = response.data?.data || response.data;
+        if (data?.appointments) {
+          const statuses: Record<string, { status: PaymentStatus; amount: number }> = {};
+          data.appointments.forEach((apt: any) => {
+            statuses[apt.appointment.id] = {
+              status: apt.paymentStatus as PaymentStatus,
+              amount: apt.copayAmount || 0,
+            };
+          });
+          setPaymentStatuses(statuses);
+        }
+      } catch (error) {
+        console.error('Failed to fetch payment statuses:', error);
+      }
+    };
+
+    fetchPaymentStatuses();
+
+    // Poll every 30 seconds
+    const interval = setInterval(fetchPaymentStatuses, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   const handleCallNext = async (doctorId: string) => {
     try {
       const response = await opdApi.callNext(doctorId);
@@ -675,6 +707,19 @@ export default function OPD() {
 
       if (!appointment) {
         toast.error('Appointment not found');
+        return;
+      }
+
+      // Check if payment is already complete (paid online)
+      const paymentInfo = paymentStatuses[appointmentId];
+      if (paymentInfo && isPaymentComplete(paymentInfo.status)) {
+        // Payment already done - proceed directly to check-in
+        await opdApi.checkIn(appointmentId);
+        toast.success('Patient checked in successfully (payment already received)');
+        
+        // Refresh queue
+        const response = await opdApi.getQueue();
+        setQueue(response.data.data || []);
         return;
       }
 
@@ -933,6 +978,14 @@ export default function OPD() {
                                   Vitals
                                 </span>
                               )}
+                              {/* Payment Status Badge */}
+                              {paymentStatuses[patient.id] && (
+                                <PaymentStatusBadge 
+                                  status={paymentStatuses[patient.id].status} 
+                                  amount={paymentStatuses[patient.id].amount}
+                                  compact
+                                />
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1076,6 +1129,13 @@ export default function OPD() {
                             <span className="inline-flex items-center gap-1 text-xs font-medium text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">
                               Self-Pay
                             </span>
+                          )}
+                          {/* Payment Status Badge */}
+                          {paymentStatuses[appointment.id] && (
+                            <PaymentStatusBadge 
+                              status={paymentStatuses[appointment.id].status} 
+                              compact
+                            />
                           )}
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">

@@ -21,6 +21,7 @@ import DashboardScreen from '../screens/dashboard/DashboardScreen';
 import AppointmentsScreen from '../screens/appointments/AppointmentsScreen';
 import BookAppointmentScreen from '../screens/appointments/BookAppointmentScreen';
 import AppointmentDetailScreen from '../screens/appointments/AppointmentDetailScreen';
+import CopayPaymentScreen from '../screens/appointments/CopayPaymentScreen';
 
 // Health screens
 import HealthHubScreen from '../screens/health/HealthHubScreen';
@@ -129,6 +130,11 @@ const AppointmentsStackNavigator = () => (
       name="AppointmentDetail"
       component={AppointmentDetailScreen}
       options={{ title: 'Appointment Details' }}
+    />
+    <AppointmentsStack.Screen
+      name="CopayPayment"
+      component={CopayPaymentScreen}
+      options={{ headerShown: false }}
     />
   </AppointmentsStack.Navigator>
 );

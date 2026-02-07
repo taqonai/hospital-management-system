@@ -103,6 +103,37 @@ export const patientPortalApi = {
   getAvailableSlots: (doctorId: string, date: string) =>
     api.get<ApiResponse<TimeSlot[]>>(`/patient-portal/doctors/${doctorId}/slots`, { params: { date } }),
 
+  // Copay Payment
+  getCopayInfo: (appointmentId: string) =>
+    api.get<ApiResponse<{
+      appointmentId: string;
+      copayAmount: number;
+      paymentStatus: string;
+      paymentMethod?: string;
+      paidAt?: string;
+      transactionId?: string;
+    }>>(`/patient-portal/appointments/${appointmentId}/copay`),
+
+  initiateCopayPayment: (appointmentId: string) =>
+    api.post<ApiResponse<{
+      copayInfo: any;
+      paymentIntent: {
+        transactionId: string;
+        clientSecret: string;
+        amount: number;
+        currency: string;
+      };
+    }>>(`/patient-portal/appointments/${appointmentId}/copay/pay-online`),
+
+  confirmCopayPayment: (appointmentId: string, transactionId: string) =>
+    api.post<ApiResponse<any>>(`/patient-portal/appointments/${appointmentId}/copay/confirm`, { transactionId }),
+
+  selectPayAtClinic: (appointmentId: string) =>
+    api.post<ApiResponse<any>>(`/patient-portal/appointments/${appointmentId}/copay/pay-at-clinic`),
+
+  selectDecideLater: (appointmentId: string) =>
+    api.post<ApiResponse<any>>(`/patient-portal/appointments/${appointmentId}/copay/decide-later`),
+
   // Doctors and Departments
   getDoctors: (params?: { departmentId?: string; search?: string }) =>
     api.get<ApiResponse<Doctor[]>>('/patient-portal/doctors', { params }),
