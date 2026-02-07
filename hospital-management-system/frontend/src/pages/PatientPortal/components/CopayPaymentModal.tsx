@@ -386,10 +386,76 @@ export default function CopayPaymentModal({
     if (onUpdateInsurance) {
       onUpdateInsurance();
     } else {
-      // Default: navigate to insurance page in profile
-      window.location.href = '/patient-portal/profile?tab=insurance';
+      // Default: navigate to insurance page directly (edit mode if possible)
+      window.location.href = '/patient-portal/insurance?edit=true';
     }
   };
+
+  // Calculate hours until appointment for dynamic reminder text
+  const getHoursUntilAppointment = (): number => {
+    try {
+      const { date, time } = appointmentDetails;
+      // Parse date (e.g., "Feb 8, 2025" or "2025-02-08") and time (e.g., "10:30 AM")
+      const appointmentDateTime = new Date(`${date} ${time}`);
+      if (isNaN(appointmentDateTime.getTime())) {
+        // Try ISO format
+        const isoDateTime = new Date(`${date}T${time}`);
+        if (!isNaN(isoDateTime.getTime())) {
+          return (isoDateTime.getTime() - Date.now()) / (1000 * 60 * 60);
+        }
+        return 48; // Default to 48h if parsing fails
+      }
+      return (appointmentDateTime.getTime() - Date.now()) / (1000 * 60 * 60);
+    } catch {
+      return 48; // Default to 48h if any error
+    }
+  };
+
+  // Get dynamic reminder text based on time until appointment
+  const getReminderInfo = (): { text: string; showDecideLater: boolean; successText: string } => {
+    const hoursUntil = getHoursUntilAppointment();
+    
+    if (hoursUntil > 24) {
+      return { 
+        text: "We'll remind you 24h before", 
+        showDecideLater: true,
+        successText: "We'll send you a payment reminder 24 hours before your appointment."
+      };
+    } else if (hoursUntil > 12) {
+      return { 
+        text: "We'll remind you 12h before", 
+        showDecideLater: true,
+        successText: "We'll send you a payment reminder 12 hours before your appointment."
+      };
+    } else if (hoursUntil > 4) {
+      return { 
+        text: "We'll remind you 4h before", 
+        showDecideLater: true,
+        successText: "We'll send you a payment reminder 4 hours before your appointment."
+      };
+    } else if (hoursUntil > 1) {
+      return { 
+        text: "We'll remind you 1h before", 
+        showDecideLater: true,
+        successText: "We'll send you a payment reminder 1 hour before your appointment."
+      };
+    } else if (hoursUntil > 0.5) {
+      return { 
+        text: "We'll remind you 30 min before", 
+        showDecideLater: true,
+        successText: "We'll send you a payment reminder 30 minutes before your appointment."
+      };
+    } else {
+      // Less than 30 min - hide Decide Later option
+      return { 
+        text: "", 
+        showDecideLater: false,
+        successText: ""
+      };
+    }
+  };
+
+  const reminderInfo = getReminderInfo();
 
   // Refetch copay when user returns (in case they updated insurance)
   useEffect(() => {
@@ -681,23 +747,25 @@ export default function CopayPaymentModal({
                         )}
                       </button>
 
-                      {/* Decide Later */}
-                      <button
-                        onClick={() => decideLaterMutation.mutate()}
-                        disabled={isProcessing}
-                        className="w-full p-4 rounded-xl border-2 border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 transition-all text-left flex items-center gap-4 group disabled:opacity-50"
-                      >
-                        <div className="p-3 bg-blue-500 rounded-xl text-white group-hover:bg-blue-600 transition-colors">
-                          <ClockIcon className="h-6 w-6" />
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-semibold text-gray-900">Decide Later</p>
-                          <p className="text-sm text-gray-500">We'll remind you 24h before</p>
-                        </div>
-                        {decideLaterMutation.isPending && (
-                          <ArrowPathIcon className="h-5 w-5 text-blue-600 animate-spin" />
-                        )}
-                      </button>
+                      {/* Decide Later - only show if enough time before appointment */}
+                      {reminderInfo.showDecideLater && (
+                        <button
+                          onClick={() => decideLaterMutation.mutate()}
+                          disabled={isProcessing}
+                          className="w-full p-4 rounded-xl border-2 border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 transition-all text-left flex items-center gap-4 group disabled:opacity-50"
+                        >
+                          <div className="p-3 bg-blue-500 rounded-xl text-white group-hover:bg-blue-600 transition-colors">
+                            <ClockIcon className="h-6 w-6" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-semibold text-gray-900">Decide Later</p>
+                            <p className="text-sm text-gray-500">{reminderInfo.text}</p>
+                          </div>
+                          {decideLaterMutation.isPending && (
+                            <ArrowPathIcon className="h-5 w-5 text-blue-600 animate-spin" />
+                          )}
+                        </button>
+                      )}
                     </div>
 
                     {/* Security Note */}
@@ -771,7 +839,7 @@ export default function CopayPaymentModal({
                       <>
                         <h4 className="text-xl font-bold text-gray-900">Reminder Set</h4>
                         <p className="text-gray-500 mt-2">
-                          We'll send you a payment reminder 24 hours before your appointment.
+                          {reminderInfo.successText}
                         </p>
                       </>
                     )}
