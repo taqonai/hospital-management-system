@@ -28,12 +28,14 @@ import {
   ChatBubbleLeftRightIcon,
   HeartIcon,
   StarIcon,
+  CreditCardIcon,
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import { patientPortalApi } from '../../services/api';
 import { CurrencyDisplay } from '../../components/common';
 import toast from 'react-hot-toast';
 import { isSlotPastInUAE, getTodayInUAE } from '../../utils/timezone';
+import CopayPaymentModal from './components/CopayPaymentModal';
 
 interface Appointment {
   id: string;
@@ -353,6 +355,10 @@ export default function Appointments() {
     appointment?: any;
   }>({ show: false });
 
+  // Copay payment modal state
+  const [showCopayModal, setShowCopayModal] = useState(false);
+  const [copayAppointment, setCopayAppointment] = useState<any>(null);
+
   // Book appointment mutation
   const bookMutation = useMutation({
     mutationFn: (data: {
@@ -385,6 +391,9 @@ export default function Appointments() {
         show: true,
         appointment: appointmentData,
       });
+
+      // Store appointment for copay modal
+      setCopayAppointment(appointmentData);
 
       toast.success('Appointment booked successfully!');
       resetBookingForm();
@@ -2163,6 +2172,29 @@ export default function Appointments() {
                             Please arrive 15 minutes before your scheduled time. Bring your ID and any relevant medical records.
                           </p>
                         </div>
+
+                        {/* Copay Payment Section */}
+                        <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="p-2 bg-green-500 rounded-lg">
+                              <CreditCardIcon className="h-5 w-5 text-white" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-gray-900">Pay Copay Now</p>
+                              <p className="text-sm text-green-600">Skip the queue at check-in!</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setBookingSuccess({ show: false });
+                              setShowCopayModal(true);
+                            }}
+                            className="w-full py-2.5 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 text-white font-medium hover:from-green-700 hover:to-emerald-700 transition-all flex items-center justify-center gap-2"
+                          >
+                            <CreditCardIcon className="h-5 w-5" />
+                            Pay or Choose Payment Option
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -2175,7 +2207,7 @@ export default function Appointments() {
                         }}
                         className="flex-1 py-3 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-100 transition-colors"
                       >
-                        Close
+                        Skip for Now
                       </button>
                       <button
                         onClick={() => {
@@ -2185,7 +2217,7 @@ export default function Appointments() {
                         }}
                         className="flex-1 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium hover:from-blue-700 hover:to-indigo-700 transition-all"
                       >
-                        View My Appointments
+                        View Appointments
                       </button>
                     </div>
                   </Dialog.Panel>
@@ -2285,6 +2317,34 @@ export default function Appointments() {
           </div>
         </Dialog>
       </Transition>
+
+      {/* Copay Payment Modal */}
+      {copayAppointment && (
+        <CopayPaymentModal
+          isOpen={showCopayModal}
+          onClose={() => {
+            setShowCopayModal(false);
+            setCopayAppointment(null);
+            refetch();
+          }}
+          appointmentId={copayAppointment.id}
+          appointmentDetails={{
+            doctorName: copayAppointment.doctorName ||
+              (copayAppointment.doctor?.user
+                ? `Dr. ${copayAppointment.doctor.user.firstName} ${copayAppointment.doctor.user.lastName}`
+                : 'Doctor'),
+            date: (copayAppointment.appointmentDate || copayAppointment.date)
+              ? format(parseISO(copayAppointment.appointmentDate || copayAppointment.date), 'MMM d, yyyy')
+              : '',
+            time: copayAppointment.startTime || copayAppointment.time || '',
+            department: copayAppointment.departmentName || copayAppointment.doctor?.department?.name,
+          }}
+          onPaymentComplete={(status) => {
+            console.log('Payment status:', status);
+            refetch();
+          }}
+        />
+      )}
       </div>
     </div>
   );

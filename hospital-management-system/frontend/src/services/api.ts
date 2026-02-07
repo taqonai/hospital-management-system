@@ -1685,6 +1685,20 @@ export const patientPortalApi = {
   downloadReceipt: (paymentId: string) =>
     api.get(`/payments/${paymentId}/receipt`, { responseType: 'blob' }),
 
+  // Copay Payment (Appointment-level)
+  getCopayInfo: (appointmentId: string) =>
+    api.get(`/patient-portal/appointments/${appointmentId}/copay`),
+  initiateCopayPayment: (appointmentId: string) =>
+    api.post(`/patient-portal/appointments/${appointmentId}/copay/pay-online`),
+  confirmCopayPayment: (appointmentId: string, transactionId: string) =>
+    api.post(`/patient-portal/appointments/${appointmentId}/copay/confirm`, { transactionId }),
+  selectPayAtClinic: (appointmentId: string) =>
+    api.post(`/patient-portal/appointments/${appointmentId}/copay/pay-at-clinic`),
+  selectDecideLater: (appointmentId: string) =>
+    api.post(`/patient-portal/appointments/${appointmentId}/copay/decide-later`),
+  getCopayReceipt: (appointmentId: string) =>
+    api.get(`/patient-portal/appointments/${appointmentId}/copay/receipt`),
+
   // Insurance Claims
   getInsuranceClaims: (params?: { status?: string; page?: number; limit?: number }) =>
     api.get('/patient-portal/insurance-claims', { params }),
