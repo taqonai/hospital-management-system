@@ -261,7 +261,7 @@ const BookAppointmentScreen: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      await patientPortalApi.bookAppointment({
+      const response = await patientPortalApi.bookAppointment({
         doctorId: bookingData.doctor.id,
         appointmentDate: bookingData.date,
         startTime: bookingData.timeSlot.startTime,
@@ -269,20 +269,32 @@ const BookAppointmentScreen: React.FC = () => {
         reason: bookingData.reason,
       });
 
+      // Get appointment data from response
+      const appointmentData = response.data?.data || response.data;
+
       // Invalidate all appointment-related queries to trigger immediate refresh
       // This ensures the appointments list and dashboard counts update immediately
       await queryClient.invalidateQueries({ queryKey: ['patient-appointments'] });
       await queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
       await queryClient.invalidateQueries({ queryKey: ['patient-portal-summary'] });
 
-      // Reset form state before navigating back
+      // Reset form state
       resetBookingForm();
 
-      Alert.alert(
-        'Success',
-        'Your appointment has been booked successfully!',
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
-      );
+      // Navigate to copay payment screen
+      const doctorName = `Dr. ${bookingData.doctor.user?.firstName || ''} ${bookingData.doctor.user?.lastName || ''}`.trim();
+      const formattedDate = new Date(bookingData.date).toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      });
+
+      navigation.replace('CopayPayment', {
+        appointmentId: appointmentData.id,
+        doctorName,
+        appointmentDate: formattedDate,
+        appointmentTime: bookingData.timeSlot.startTime,
+      });
     } catch (error: any) {
       Alert.alert(
         'Error',

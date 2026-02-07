@@ -45,6 +45,12 @@ export type AppointmentsStackParamList = {
   AppointmentDetail: { appointmentId: string };
   SelectDoctor: { departmentId: string };
   SelectSlot: { doctorId: string; date: string };
+  CopayPayment: {
+    appointmentId: string;
+    doctorName: string;
+    appointmentDate: string;
+    appointmentTime: string;
+  };
 };
 
 // Health stack
