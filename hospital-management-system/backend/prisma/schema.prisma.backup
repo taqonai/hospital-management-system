@@ -1178,17 +1178,6 @@ model Appointment {
   copayCollected      Boolean           @default(false)
   copayAmount         Decimal?          @db.Decimal(10, 2)
   
-  // Copay waiver fields (Phase 3)
-  copayWaived         Boolean           @default(false)
-  copayWaivedReason   String?
-  copayWaivedBy       String?
-  copayWaivedAt       DateTime?
-  
-  // Copay verification status (Phase 3)
-  copayVerificationStatus String?       // pending, verified, mismatch, underpayment, overpayment
-  copayVerificationFlag   String?       // Underpayment, Overpayment, etc.
-  copayAutoVerified       Boolean       @default(false)
-  
   // Self-pay override (bypass insurance for this visit)
   selfPay             Boolean           @default(false)
   selfPayConvertedAt  DateTime?

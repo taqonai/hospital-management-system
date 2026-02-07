@@ -5,6 +5,7 @@ import { sendSuccess } from '../utils/response';
 import { appointmentCopayService, CopayPaymentStatus } from '../services/appointmentCopayService';
 import { AuthenticatedRequest } from '../types';
 import { body, param, query } from 'express-validator';
+import prisma from '../config/database';
 
 const router = Router();
 
@@ -29,7 +30,6 @@ router.get(
       doctorId
     );
 
-    // Group by payment status for easy filtering
     const summary = {
       total: appointments.length,
       paid: appointments.filter(a => 
@@ -38,6 +38,12 @@ router.get(
       ).length,
       cashDue: appointments.filter(a => a.paymentStatus === CopayPaymentStatus.PAY_AT_CLINIC).length,
       pending: appointments.filter(a => a.paymentStatus === CopayPaymentStatus.PENDING).length,
+      // Phase 3: Add verification stats
+      pendingVerification: appointments.filter(a => 
+        (a.paymentStatus === CopayPaymentStatus.PAID_ONLINE || a.paymentStatus === CopayPaymentStatus.PAID_CASH) &&
+        (!a.verificationStatus || a.verificationStatus === 'pending')
+      ).length,
+      flagged: appointments.filter(a => a.verificationFlag).length,
     };
 
     sendSuccess(res, { appointments, summary }, 'Appointments with payment status retrieved');
@@ -76,6 +82,64 @@ router.post(
 );
 
 /**
+ * Phase 3 Feature #7: Check if appointment can be checked in
+ * GET /api/v1/staff/checkin/appointments/:id/can-checkin
+ */
+router.get(
+  '/checkin/appointments/:id/can-checkin',
+  authenticate,
+  authorizeWithPermission('appointments:read', ['HOSPITAL_ADMIN', 'RECEPTIONIST', 'NURSE', 'DOCTOR']),
+  param('id').isUUID(),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const hospitalId = req.user!.hospitalId;
+    const appointmentId = req.params.id;
+
+    const result = await appointmentCopayService.canCheckIn(hospitalId, appointmentId);
+    sendSuccess(res, result, 'Check-in eligibility retrieved');
+  })
+);
+
+/**
+ * Phase 3 Feature #7: Waive copay
+ * POST /api/v1/staff/checkin/appointments/:id/waive-copay
+ */
+router.post(
+  '/checkin/appointments/:id/waive-copay',
+  authenticate,
+  authorizeWithPermission('billing:write', ['HOSPITAL_ADMIN', 'ACCOUNTANT']), // Manager-level only
+  param('id').isUUID(),
+  body('reason').isString().isLength({ min: 5 }).withMessage('Reason must be at least 5 characters'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const hospitalId = req.user!.hospitalId;
+    const staffUserId = req.user!.userId;
+    const appointmentId = req.params.id;
+    const { reason } = req.body;
+
+    await appointmentCopayService.waiveCopay(hospitalId, appointmentId, staffUserId, reason);
+    sendSuccess(res, { success: true }, 'Copay waived successfully');
+  })
+);
+
+/**
+ * Phase 3 Feature #2: Quick verify payment (for exact matches)
+ * POST /api/v1/staff/checkin/appointments/:id/quick-verify
+ */
+router.post(
+  '/checkin/appointments/:id/quick-verify',
+  authenticate,
+  authorizeWithPermission('billing:write', ['HOSPITAL_ADMIN', 'RECEPTIONIST', 'ACCOUNTANT']),
+  param('id').isUUID(),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const hospitalId = req.user!.hospitalId;
+    const staffUserId = req.user!.userId;
+    const appointmentId = req.params.id;
+
+    await appointmentCopayService.quickVerify(hospitalId, appointmentId, staffUserId);
+    sendSuccess(res, { success: true }, 'Payment quick verified successfully');
+  })
+);
+
+/**
  * Get payment status for a specific appointment
  * GET /api/v1/staff/checkin/appointments/:id/payment-status
  */
@@ -88,7 +152,6 @@ router.get(
     const hospitalId = req.user!.hospitalId;
     const appointmentId = req.params.id;
 
-    // Get appointment with patient info
     const appointments = await appointmentCopayService.getAppointmentsWithPaymentStatus(
       hospitalId,
       new Date(),
@@ -109,7 +172,7 @@ router.get(
 );
 
 /**
- * Get pending payment reminders (for notification service)
+ * Get pending payment reminders
  * GET /api/v1/staff/payment-reminders
  */
 router.get(
@@ -118,9 +181,7 @@ router.get(
   authorizeWithPermission('notifications:read', ['HOSPITAL_ADMIN', 'SUPER_ADMIN']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const hospitalId = req.user!.hospitalId;
-
     const reminders = await appointmentCopayService.getPendingPaymentReminders(hospitalId);
-
     sendSuccess(res, reminders, 'Pending payment reminders retrieved');
   })
 );
@@ -144,14 +205,12 @@ router.get(
       ? new Date(req.query.endDate as string) 
       : new Date(new Date().setHours(23, 59, 59, 999));
 
-    // Get all appointments in range
     const appointments = await appointmentCopayService.getAppointmentsWithPaymentStatus(
       hospitalId,
       startDate,
       undefined
     );
 
-    // Calculate summary
     const paidOnline = appointments.filter(a => a.paymentStatus === CopayPaymentStatus.PAID_ONLINE);
     const paidCash = appointments.filter(a => a.paymentStatus === CopayPaymentStatus.PAID_CASH);
     const pending = appointments.filter(a => 
@@ -188,7 +247,7 @@ router.get(
 );
 
 /**
- * Issue #4: Verify payment
+ * Verify payment
  * POST /api/v1/staff/checkin/appointments/:id/verify
  */
 router.post(
@@ -205,7 +264,6 @@ router.post(
     const appointmentId = req.params.id;
     const { action, reason, notes } = req.body;
 
-    // Get appointment with payment info
     const appointment = await prisma.appointment.findFirst({
       where: { id: appointmentId, hospitalId },
       include: {
@@ -226,7 +284,6 @@ router.post(
       });
     }
 
-    // Create audit log entry
     const auditLogEntry = {
       action,
       reason: reason || null,
@@ -239,12 +296,13 @@ router.post(
       copayAmount: appointment.copayAmount ? Number(appointment.copayAmount) : 0,
     };
 
-    // Update appointment notes with verification status
     const existingNotes = appointment.notes ? JSON.parse(appointment.notes) : {};
     const verificationLog = existingNotes.verificationLog || [];
     verificationLog.push(auditLogEntry);
 
     let verificationStatus = 'pending';
+    let verificationFlag: string | null = null;
+    
     switch (action) {
       case 'verify':
         verificationStatus = 'verified';
@@ -255,14 +313,12 @@ router.post(
         break;
       case 'flag_fraud':
         verificationStatus = 'fraud_alert';
-        // TODO: Integrate with notification system when admin user IDs are available
-        // For now, just log the fraud alert
+        verificationFlag = 'Fraud Alert';
         console.warn(`[FRAUD ALERT] Payment flagged for patient MRN: ${appointment.patient.mrn}, Reason: ${reason || 'Not specified'}`);
         break;
       case 'request_refund':
         verificationStatus = 'refund_pending';
-        // TODO: Integrate with notification system when admin user IDs are available
-        // For now, just log the refund request
+        verificationFlag = 'Refund Requested';
         console.warn(`[REFUND REQUEST] Refund requested for patient MRN: ${appointment.patient.mrn}, Reason: ${reason || 'Overpayment'}`);
         break;
     }
@@ -270,9 +326,10 @@ router.post(
     await prisma.appointment.update({
       where: { id: appointmentId },
       data: {
+        copayVerificationStatus: verificationStatus,
+        copayVerificationFlag: verificationFlag,
         notes: JSON.stringify({
           ...existingNotes,
-          verificationStatus,
           lastVerifiedBy: staffUserId,
           lastVerifiedAt: new Date().toISOString(),
           verificationLog,
@@ -280,9 +337,7 @@ router.post(
       },
     });
 
-    // If converting to self-pay, update copay amount
     if (action === 'convert_selfpay') {
-      // Get consultation fee from doctor
       const appointmentWithDoctor = await prisma.appointment.findUnique({
         where: { id: appointmentId },
         include: { doctor: true },
@@ -302,13 +357,14 @@ router.post(
 
     sendSuccess(res, { 
       verificationStatus,
+      verificationFlag,
       auditLogEntry,
     }, 'Payment verification recorded');
   })
 );
 
 /**
- * Issue #4: Get audit log for appointment
+ * Get audit log for appointment
  * GET /api/v1/staff/checkin/appointments/:id/audit-log
  */
 router.get(
@@ -339,7 +395,6 @@ router.get(
     const notes = appointment.notes ? JSON.parse(appointment.notes) : {};
     const verificationLog = notes.verificationLog || [];
 
-    // Combine with payment records for full audit trail
     const paymentLog = appointment.copayPayments.map(p => ({
       action: 'payment_collected',
       amount: Number(p.amount),
@@ -355,49 +410,32 @@ router.get(
 
     sendSuccess(res, {
       appointmentId,
-      verificationStatus: notes.verificationStatus || 'pending',
+      verificationStatus: (appointment as any).copayVerificationStatus || notes.verificationStatus || 'pending',
       auditLog: fullAuditLog,
     }, 'Audit log retrieved');
   })
 );
 
 /**
- * Issue #4: Get pending verifications
+ * Phase 3 Feature #1: Get pending verifications with filters
  * GET /api/v1/staff/copay/pending-verifications
  */
 router.get(
   '/copay/pending-verifications',
   authenticate,
   authorizeWithPermission('billing:read', ['HOSPITAL_ADMIN', 'RECEPTIONIST', 'ACCOUNTANT']),
+  query('filter').optional().isIn(['all', 'pending', 'flagged']),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const hospitalId = req.user!.hospitalId;
+    const filter = (req.query.filter as 'all' | 'pending' | 'flagged') || 'pending';
 
-    const appointments = await appointmentCopayService.getAppointmentsWithPaymentStatus(
-      hospitalId,
-      new Date(),
-      undefined
-    );
-
-    // Filter for paid but not verified
-    const pendingVerifications = appointments.filter(a => {
-      if (a.paymentStatus !== CopayPaymentStatus.PAID_ONLINE && a.paymentStatus !== CopayPaymentStatus.PAID_CASH) {
-        return false;
-      }
-      // Check verification status from notes
-      try {
-        const notes = JSON.parse((a.appointment as any).notes || '{}');
-        return !notes.verificationStatus || notes.verificationStatus === 'pending';
-      } catch {
-        return true;
-      }
-    });
-
+    const pendingVerifications = await appointmentCopayService.getPendingVerifications(hospitalId, filter);
     sendSuccess(res, pendingVerifications, 'Pending verifications retrieved');
   })
 );
 
 /**
- * Issue #4: Get mismatch alerts
+ * Get mismatch alerts
  * GET /api/v1/staff/copay/mismatch-alerts
  */
 router.get(
@@ -407,13 +445,12 @@ router.get(
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const hospitalId = req.user!.hospitalId;
 
-    // Get appointments where paid amount doesn't match expected copay
     const appointments = await prisma.appointment.findMany({
       where: {
         hospitalId,
         copayCollected: true,
         appointmentDate: {
-          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
+          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
         },
       },
       include: {
@@ -438,10 +475,12 @@ router.get(
         if (!payment) return false;
         const expectedAmount = apt.copayAmount ? Number(apt.copayAmount) : 0;
         const paidAmount = Number(payment.amount);
-        return Math.abs(expectedAmount - paidAmount) > 0.01; // Allow small float differences
+        return Math.abs(expectedAmount - paidAmount) > 0.01;
       })
       .map(apt => {
         const payment = apt.copayPayments[0];
+        const expectedAmount = apt.copayAmount ? Number(apt.copayAmount) : 0;
+        const paidAmount = Number(payment.amount);
         return {
           appointmentId: apt.id,
           patientId: apt.patientId,
@@ -449,11 +488,14 @@ router.get(
           mrn: apt.patient.mrn,
           doctorName: apt.doctor ? `Dr. ${apt.doctor.user.firstName} ${apt.doctor.user.lastName}` : 'Unknown',
           appointmentDate: apt.appointmentDate,
-          expectedAmount: apt.copayAmount ? Number(apt.copayAmount) : 0,
-          paidAmount: Number(payment.amount),
-          difference: Number(payment.amount) - (apt.copayAmount ? Number(apt.copayAmount) : 0),
+          expectedAmount,
+          paidAmount,
+          difference: paidAmount - expectedAmount,
+          type: paidAmount < expectedAmount ? 'underpayment' : 'overpayment',
           paymentMethod: payment.paymentMethod,
           paidAt: payment.paymentDate,
+          verificationStatus: (apt as any).copayVerificationStatus,
+          verificationFlag: (apt as any).copayVerificationFlag,
         };
       });
 
@@ -462,7 +504,31 @@ router.get(
 );
 
 /**
- * Issue #4: Daily reconciliation report
+ * Phase 3 Feature #3: Get reconciliation report
+ * GET /api/v1/staff/copay/reconciliation
+ */
+router.get(
+  '/copay/reconciliation',
+  authenticate,
+  authorizeWithPermission('billing:read', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
+  query('startDate').optional().isISO8601(),
+  query('endDate').optional().isISO8601(),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const hospitalId = req.user!.hospitalId;
+    const startDate = req.query.startDate 
+      ? new Date(req.query.startDate as string) 
+      : new Date(new Date().setHours(0, 0, 0, 0));
+    const endDate = req.query.endDate 
+      ? new Date(req.query.endDate as string) 
+      : new Date(new Date().setHours(23, 59, 59, 999));
+
+    const report = await appointmentCopayService.getReconciliationReport(hospitalId, startDate, endDate);
+    sendSuccess(res, report, 'Reconciliation report generated');
+  })
+);
+
+/**
+ * Daily reconciliation report (legacy - redirects to new endpoint)
  * GET /api/v1/staff/copay/daily-reconciliation
  */
 router.get(
@@ -480,7 +546,6 @@ router.get(
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
 
-    // Get all copay payments for the day
     const payments = await prisma.copayPayment.findMany({
       where: {
         paymentDate: {
@@ -502,21 +567,15 @@ router.get(
       },
     });
 
-    // Group by payment method
     const byMethod = {
       CASH: payments.filter(p => p.paymentMethod === 'CASH'),
       CARD: payments.filter(p => ['CREDIT_CARD', 'DEBIT_CARD'].includes(p.paymentMethod)),
       ONLINE: payments.filter(p => ['ONLINE', 'APPLE_PAY', 'GOOGLE_PAY'].includes(p.paymentMethod)),
     };
 
-    // Get verified vs unverified
     const verified = payments.filter(p => {
-      try {
-        const notes = JSON.parse(p.appointment.notes || '{}');
-        return notes.verificationStatus === 'verified';
-      } catch {
-        return false;
-      }
+      return (p.appointment as any).copayVerificationStatus === 'verified' || 
+             (p.appointment as any).copayAutoVerified === true;
     });
 
     const report = {
@@ -552,14 +611,13 @@ router.get(
         receiptNumber: p.receiptNumber,
         collectedBy: p.collectedBy,
         time: p.paymentDate,
+        verificationStatus: (p.appointment as any).copayVerificationStatus,
+        autoVerified: (p.appointment as any).copayAutoVerified,
       })),
     };
 
     sendSuccess(res, report, 'Daily reconciliation report generated');
   })
 );
-
-// Import prisma for the new routes
-import prisma from '../config/database';
 
 export default router;

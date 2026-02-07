@@ -697,7 +697,7 @@ export default function OPD() {
     toast.success('AI is optimizing the queue...');
   };
 
-  // Handle patient check-in (Front Desk / Receptionist only)
+  // Phase 3 Feature #7: Handle patient check-in with copay lock
   const handleCheckIn = async (appointmentId: string) => {
     try {
       // Find the appointment from queue or todayAppointments
@@ -710,14 +710,46 @@ export default function OPD() {
         return;
       }
 
-      // Check if payment is already complete (paid online)
+      // Phase 3: Check copay eligibility first via API
+      try {
+        const eligibilityResponse = await staffCopayApi.canCheckIn(appointmentId);
+        const eligibility = eligibilityResponse.data?.data || eligibilityResponse.data;
+        
+        if (eligibility.allowed) {
+          // Copay paid, waived, or not required - proceed to check-in
+          const paymentInfo = paymentStatuses[appointmentId];
+          if (paymentInfo && isPaymentComplete(paymentInfo.status)) {
+            await opdApi.checkIn(appointmentId);
+            toast.success('Patient checked in successfully (payment already received)');
+            const response = await opdApi.getQueue();
+            setQueue(response.data.data || []);
+            return;
+          } else if (eligibility.copayWaived) {
+            await opdApi.checkIn(appointmentId);
+            toast.success('Patient checked in successfully (copay waived)');
+            const response = await opdApi.getQueue();
+            setQueue(response.data.data || []);
+            return;
+          }
+        }
+        
+        // If copay is required but not paid/waived, show the copay modal
+        if (eligibility.copayRequired && !eligibility.copayPaid && !eligibility.copayWaived) {
+          // Store eligibility info for the modal - cast to any for copay data
+          setSelectedAppointmentForCopay(appointment);
+          // Note: copayAmount will be fetched in the modal via API
+          setShowCopayModal(true);
+          return;
+        }
+      } catch (eligError) {
+        console.warn('Could not check copay eligibility, falling back to payment status:', eligError);
+      }
+
+      // Fallback: Check local payment status
       const paymentInfo = paymentStatuses[appointmentId];
       if (paymentInfo && isPaymentComplete(paymentInfo.status)) {
-        // Payment already done - proceed directly to check-in
         await opdApi.checkIn(appointmentId);
         toast.success('Patient checked in successfully (payment already received)');
-        
-        // Refresh queue
         const response = await opdApi.getQueue();
         setQueue(response.data.data || []);
         return;

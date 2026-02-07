@@ -146,6 +146,7 @@ import CopayRefunds from './pages/Billing/CopayRefunds';
 
 // Copay Verification Dashboard (Issue #4)
 import CopayVerification from './pages/Billing/CopayVerification';
+import CopayReconciliation from './pages/Billing/CopayReconciliation';
 
 // CRM Module
 import CRM from './pages/CRM';
@@ -361,6 +362,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT', 'RECEPTIONIST', 'CASHIER']} permission="billing:read">
               <CopayVerification />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/billing/copay-reconciliation"
+          element={
+            <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT']} permission="billing:read">
+              <CopayReconciliation />
             </ProtectedRoute>
           }
         />

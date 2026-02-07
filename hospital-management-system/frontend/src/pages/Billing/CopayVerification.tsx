@@ -1,6 +1,6 @@
 /**
- * Copay Verification Dashboard - Issue #4 Fix
- * Staff-side verification for patient copay payments with fraud prevention
+ * Copay Verification Dashboard - Phase 3: Staff Automation + System-Level Features
+ * Staff-side verification for patient copay payments with auto-verification
  */
 import { useState, Fragment } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -26,10 +26,17 @@ import {
   BellAlertIcon,
   ChevronDownIcon,
   XMarkIcon,
+  CheckBadgeIcon,
+  ArrowTrendingUpIcon,
+  ArrowTrendingDownIcon,
+  SparklesIcon,
+  DocumentArrowDownIcon,
+  ChartBarIcon,
 } from '@heroicons/react/24/outline';
 import { api } from '../../services/api';
 import { CurrencyDisplay } from '../../components/common';
 import toast from 'react-hot-toast';
+import { Link } from 'react-router-dom';
 
 // Types
 interface CopayAppointment {
@@ -55,7 +62,27 @@ interface CopayAppointment {
   transactionId?: string;
   verifiedBy?: string;
   verifiedAt?: string;
-  verificationStatus?: 'pending' | 'verified' | 'mismatch' | 'fraud_alert';
+  verificationStatus?: 'pending' | 'verified' | 'mismatch' | 'fraud_alert' | 'underpayment' | 'overpayment' | 'auto_verified';
+  verificationFlag?: string;
+  copayWaived?: boolean;
+}
+
+interface PendingVerification {
+  appointmentId: string;
+  patientId: string;
+  patientName: string;
+  mrn: string;
+  doctorName: string;
+  appointmentDate: string;
+  expectedAmount: number;
+  paidAmount: number;
+  difference: number;
+  amountMatches: boolean;
+  paymentMethod?: string;
+  paidAt?: string;
+  verificationStatus?: string;
+  verificationFlag?: string;
+  autoVerified?: boolean;
 }
 
 interface VerificationAction {
@@ -105,10 +132,13 @@ const paymentStatusConfig = {
 };
 
 const verificationStatusConfig = {
-  pending: { label: 'Pending Verification', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
-  verified: { label: 'Verified', bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' },
-  mismatch: { label: 'Amount Mismatch', bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' },
-  fraud_alert: { label: 'Fraud Alert', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' },
+  pending: { label: 'Pending Verification', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', icon: ClockIcon },
+  verified: { label: 'Verified', bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: CheckCircleIcon },
+  auto_verified: { label: 'Auto-Verified', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', icon: SparklesIcon },
+  mismatch: { label: 'Amount Mismatch', bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', icon: ExclamationTriangleIcon },
+  underpayment: { label: 'Underpayment', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: ArrowTrendingDownIcon },
+  overpayment: { label: 'Overpayment', bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', icon: ArrowTrendingUpIcon },
+  fraud_alert: { label: 'Fraud Alert', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: ShieldExclamationIcon },
 };
 
 // Staff Copay API
@@ -121,10 +151,12 @@ const staffCopayApi = {
     api.post(`/staff/checkin/appointments/${appointmentId}/collect-payment`, data),
   verifyPayment: (appointmentId: string, data: VerificationAction) =>
     api.post(`/staff/checkin/appointments/${appointmentId}/verify`, data),
+  quickVerify: (appointmentId: string) =>
+    api.post(`/staff/checkin/appointments/${appointmentId}/quick-verify`),
   getAuditLog: (appointmentId: string) =>
     api.get(`/staff/checkin/appointments/${appointmentId}/audit-log`),
-  getPendingVerifications: () =>
-    api.get('/staff/copay/pending-verifications'),
+  getPendingVerifications: (filter?: 'all' | 'pending' | 'flagged') =>
+    api.get('/staff/copay/pending-verifications', { params: { filter } }),
   getMismatchAlerts: () =>
     api.get('/staff/copay/mismatch-alerts'),
   getDailyReconciliation: (date?: string) =>
@@ -139,6 +171,7 @@ export default function CopayVerification() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [showAuditModal, setShowAuditModal] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
   
   // Payment collection state
   const [paymentAmount, setPaymentAmount] = useState('');
@@ -161,7 +194,25 @@ export default function CopayVerification() {
   });
 
   const appointments = appointmentsData?.appointments || [];
-  const summary = appointmentsData?.summary || { total: 0, paid: 0, cashDue: 0, pending: 0 };
+  const summary = appointmentsData?.summary || { total: 0, paid: 0, cashDue: 0, pending: 0, pendingVerification: 0, flagged: 0 };
+
+  // Fetch pending verifications (Phase 3 Feature #1)
+  const { data: pendingVerifications, refetch: refetchPending } = useQuery({
+    queryKey: ['pending-verifications'],
+    queryFn: async () => {
+      const response = await staffCopayApi.getPendingVerifications('pending');
+      return response.data?.data || response.data || [];
+    },
+  });
+
+  // Fetch flagged payments
+  const { data: flaggedPayments } = useQuery({
+    queryKey: ['flagged-payments'],
+    queryFn: async () => {
+      const response = await staffCopayApi.getPendingVerifications('flagged');
+      return response.data?.data || response.data || [];
+    },
+  });
 
   // Fetch payment summary
   const { data: paymentSummary } = useQuery({
@@ -183,6 +234,7 @@ export default function CopayVerification() {
       toast.success('Payment collected successfully');
       queryClient.invalidateQueries({ queryKey: ['staff-checkin-appointments'] });
       queryClient.invalidateQueries({ queryKey: ['staff-payment-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['pending-verifications'] });
       setShowPaymentModal(false);
       resetPaymentForm();
     },
@@ -198,11 +250,26 @@ export default function CopayVerification() {
     onSuccess: () => {
       toast.success('Payment verification recorded');
       queryClient.invalidateQueries({ queryKey: ['staff-checkin-appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['pending-verifications'] });
+      queryClient.invalidateQueries({ queryKey: ['flagged-payments'] });
       setShowVerificationModal(false);
       resetVerificationForm();
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.message || 'Failed to verify payment');
+    },
+  });
+
+  // Quick verify mutation (Phase 3 Feature #2)
+  const quickVerifyMutation = useMutation({
+    mutationFn: (appointmentId: string) => staffCopayApi.quickVerify(appointmentId),
+    onSuccess: () => {
+      toast.success('Payment quick verified!');
+      queryClient.invalidateQueries({ queryKey: ['staff-checkin-appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['pending-verifications'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Cannot quick verify - amount mismatch');
     },
   });
 
@@ -231,7 +298,6 @@ export default function CopayVerification() {
       return;
     }
 
-    // Fraud prevention: Check if amount matches expected copay
     if (amount !== selectedAppointment.copayAmount) {
       const confirmed = window.confirm(
         `Warning: Amount entered (AED ${amount}) doesn't match expected copay (AED ${selectedAppointment.copayAmount}). Continue anyway?`
@@ -265,9 +331,13 @@ export default function CopayVerification() {
     });
   };
 
+  // Handle quick verify (Phase 3 Feature #2)
+  const handleQuickVerify = (appointmentId: string) => {
+    quickVerifyMutation.mutate(appointmentId);
+  };
+
   // Filter appointments
   const filteredAppointments = appointments.filter((apt: CopayAppointment) => {
-    // Search filter
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
       if (
@@ -279,7 +349,6 @@ export default function CopayVerification() {
       }
     }
 
-    // Status filter
     if (statusFilter && apt.paymentStatus !== statusFilter) {
       return false;
     }
@@ -287,11 +356,19 @@ export default function CopayVerification() {
     return true;
   });
 
+  // Get payments needing verification (paid but not verified)
+  const paidNotVerified = appointments.filter((apt: CopayAppointment) => 
+    (apt.paymentStatus === 'paid_online' || apt.paymentStatus === 'paid_cash') &&
+    (!apt.verificationStatus || apt.verificationStatus === 'pending')
+  );
+
   const renderAppointmentRow = (apt: CopayAppointment) => {
     const status = paymentStatusConfig[apt.paymentStatus] || paymentStatusConfig.pending;
     const StatusIcon = status.icon;
     const verificationStatus = apt.verificationStatus ? verificationStatusConfig[apt.verificationStatus] : null;
     const hasAmountMismatch = apt.paidAmount && apt.paidAmount !== apt.copayAmount;
+    const canQuickVerify = apt.paidAmount && Math.abs(apt.paidAmount - apt.copayAmount) <= 0.01 && 
+                          (!apt.verificationStatus || apt.verificationStatus === 'pending');
 
     return (
       <tr key={apt.appointment.id} className="hover:bg-gray-50">
@@ -313,7 +390,7 @@ export default function CopayVerification() {
           </div>
         </td>
         <td className="px-4 py-3">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-1.5">
             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${status.bg} ${status.text}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
               {status.label}
@@ -332,7 +409,7 @@ export default function CopayVerification() {
               <CurrencyDisplay amount={apt.copayAmount} />
             </p>
             {apt.paidAmount && apt.paidAmount !== apt.copayAmount && (
-              <p className="text-sm text-orange-600">
+              <p className={`text-sm ${apt.paidAmount < apt.copayAmount ? 'text-red-600' : 'text-purple-600'}`}>
                 Paid: <CurrencyDisplay amount={apt.paidAmount} />
               </p>
             )}
@@ -341,7 +418,13 @@ export default function CopayVerification() {
         <td className="px-4 py-3">
           {verificationStatus && (
             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${verificationStatus.bg} ${verificationStatus.text} border ${verificationStatus.border}`}>
+              <verificationStatus.icon className="h-3.5 w-3.5" />
               {verificationStatus.label}
+            </span>
+          )}
+          {apt.copayWaived && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 ml-1">
+              Waived
             </span>
           )}
         </td>
@@ -362,6 +445,18 @@ export default function CopayVerification() {
               </button>
             )}
 
+            {/* Quick Verify - Phase 3 Feature #2 */}
+            {canQuickVerify && (
+              <button
+                onClick={() => handleQuickVerify(apt.appointment.id)}
+                disabled={quickVerifyMutation.isPending}
+                className="p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors disabled:opacity-50"
+                title="Quick Verify (Exact Match)"
+              >
+                <CheckBadgeIcon className="h-5 w-5" />
+              </button>
+            )}
+
             {/* Verify Payment - For paid appointments */}
             {['paid_online', 'paid_cash'].includes(apt.paymentStatus) && (
               <button
@@ -370,13 +465,13 @@ export default function CopayVerification() {
                   setShowVerificationModal(true);
                 }}
                 className={`p-2 rounded-lg transition-colors ${
-                  apt.verificationStatus === 'verified'
+                  apt.verificationStatus === 'verified' || apt.verificationStatus === 'auto_verified'
                     ? 'bg-green-50 text-green-600'
                     : 'bg-amber-50 text-amber-600 hover:bg-amber-100'
                 }`}
                 title="Verify Payment"
               >
-                {apt.verificationStatus === 'verified' ? (
+                {apt.verificationStatus === 'verified' || apt.verificationStatus === 'auto_verified' ? (
                   <ShieldCheckIcon className="h-5 w-5" />
                 ) : (
                   <ShieldExclamationIcon className="h-5 w-5" />
@@ -401,6 +496,86 @@ export default function CopayVerification() {
     );
   };
 
+  // Render pending verification row (Phase 3 Feature #1)
+  const renderPendingVerificationRow = (item: PendingVerification) => {
+    const canQuickVerify = item.amountMatches;
+
+    return (
+      <tr key={item.appointmentId} className="hover:bg-gray-50">
+        <td className="px-4 py-3">
+          <div>
+            <p className="font-medium text-gray-900">{item.patientName}</p>
+            <p className="text-sm text-gray-500">MRN: {item.mrn}</p>
+          </div>
+        </td>
+        <td className="px-4 py-3 text-sm text-gray-600">{item.doctorName}</td>
+        <td className="px-4 py-3 text-sm text-gray-600">
+          {format(new Date(item.appointmentDate), 'MMM d, yyyy')}
+        </td>
+        <td className="px-4 py-3 text-right">
+          <p className="font-medium"><CurrencyDisplay amount={item.expectedAmount} /></p>
+        </td>
+        <td className="px-4 py-3 text-right">
+          <p className={`font-medium ${item.difference !== 0 ? (item.difference < 0 ? 'text-red-600' : 'text-purple-600') : 'text-green-600'}`}>
+            <CurrencyDisplay amount={item.paidAmount} />
+          </p>
+        </td>
+        <td className="px-4 py-3">
+          {item.difference !== 0 ? (
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+              item.difference < 0 ? 'bg-red-100 text-red-700' : 'bg-purple-100 text-purple-700'
+            }`}>
+              {item.difference < 0 ? <ArrowTrendingDownIcon className="h-3 w-3" /> : <ArrowTrendingUpIcon className="h-3 w-3" />}
+              <CurrencyDisplay amount={Math.abs(item.difference)} />
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+              <CheckCircleIcon className="h-3 w-3" />
+              Match
+            </span>
+          )}
+        </td>
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-2 justify-end">
+            {canQuickVerify && (
+              <button
+                onClick={() => handleQuickVerify(item.appointmentId)}
+                disabled={quickVerifyMutation.isPending}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500 text-white text-sm font-medium hover:bg-green-600 transition-colors disabled:opacity-50"
+                title="Quick Verify"
+              >
+                <CheckBadgeIcon className="h-4 w-4" />
+                Quick Verify
+              </button>
+            )}
+            {!canQuickVerify && (
+              <button
+                onClick={() => {
+                  // Open full verification modal
+                  const apt = appointments.find((a: CopayAppointment) => a.appointment.id === item.appointmentId);
+                  if (apt) {
+                    setSelectedAppointment(apt);
+                    setShowVerificationModal(true);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition-colors"
+              >
+                <EyeIcon className="h-4 w-4" />
+                Review
+              </button>
+            )}
+          </div>
+        </td>
+      </tr>
+    );
+  };
+
+  const tabs = [
+    { name: 'All Appointments', count: appointments.length },
+    { name: 'Pending Verification', count: paidNotVerified.length || (pendingVerifications?.length || 0) },
+    { name: 'Flagged', count: summary.flagged || (flaggedPayments?.length || 0) },
+  ];
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -412,6 +587,13 @@ export default function CopayVerification() {
               <p className="text-gray-500 mt-1">Verify and manage patient copay payments</p>
             </div>
             <div className="flex items-center gap-3">
+              <Link
+                to="/billing/copay-reconciliation"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-50 text-purple-700 font-medium hover:bg-purple-100 transition-colors"
+              >
+                <ChartBarIcon className="h-5 w-5" />
+                Reconciliation Report
+              </Link>
               <input
                 type="date"
                 value={selectedDate}
@@ -419,7 +601,10 @@ export default function CopayVerification() {
                 className="px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
               <button
-                onClick={() => refetch()}
+                onClick={() => {
+                  refetch();
+                  refetchPending();
+                }}
                 className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
               >
                 <ArrowPathIcon className="h-5 w-5 text-gray-500" />
@@ -429,48 +614,70 @@ export default function CopayVerification() {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl shadow-sm p-5">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+          <div className="bg-white rounded-xl shadow-sm p-4">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-blue-100 rounded-xl">
-                <CalendarDaysIcon className="h-6 w-6 text-blue-600" />
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <CalendarDaysIcon className="h-5 w-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-gray-900">{summary.total}</p>
-                <p className="text-sm text-gray-500">Total Appointments</p>
+                <p className="text-xl font-bold text-gray-900">{summary.total}</p>
+                <p className="text-xs text-gray-500">Total</p>
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-xl shadow-sm p-5">
+          <div className="bg-white rounded-xl shadow-sm p-4">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-green-100 rounded-xl">
-                <CheckCircleIcon className="h-6 w-6 text-green-600" />
+              <div className="p-2 bg-green-100 rounded-lg">
+                <CheckCircleIcon className="h-5 w-5 text-green-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-gray-900">{summary.paid}</p>
-                <p className="text-sm text-gray-500">Paid</p>
+                <p className="text-xl font-bold text-gray-900">{summary.paid}</p>
+                <p className="text-xs text-gray-500">Paid</p>
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-xl shadow-sm p-5">
+          <div className="bg-white rounded-xl shadow-sm p-4">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-amber-100 rounded-xl">
-                <BanknotesIcon className="h-6 w-6 text-amber-600" />
+              <div className="p-2 bg-amber-100 rounded-lg">
+                <BanknotesIcon className="h-5 w-5 text-amber-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-gray-900">{summary.cashDue}</p>
-                <p className="text-sm text-gray-500">Cash Due</p>
+                <p className="text-xl font-bold text-gray-900">{summary.cashDue}</p>
+                <p className="text-xs text-gray-500">Cash Due</p>
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-xl shadow-sm p-5">
+          <div className="bg-white rounded-xl shadow-sm p-4">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-orange-100 rounded-xl">
-                <ClockIcon className="h-6 w-6 text-orange-600" />
+              <div className="p-2 bg-orange-100 rounded-lg">
+                <ClockIcon className="h-5 w-5 text-orange-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-gray-900">{summary.pending}</p>
-                <p className="text-sm text-gray-500">Pending</p>
+                <p className="text-xl font-bold text-gray-900">{summary.pending}</p>
+                <p className="text-xs text-gray-500">Pending</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <ShieldExclamationIcon className="h-5 w-5 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-gray-900">{summary.pendingVerification || paidNotVerified.length}</p>
+                <p className="text-xs text-gray-500">To Verify</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-100 rounded-lg">
+                <ExclamationTriangleIcon className="h-5 w-5 text-red-600" />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-gray-900">{summary.flagged || 0}</p>
+                <p className="text-xs text-gray-500">Flagged</p>
               </div>
             </div>
           </div>
@@ -506,70 +713,296 @@ export default function CopayVerification() {
           </div>
         )}
 
-        {/* Filters and Search */}
-        <div className="bg-white rounded-xl shadow-sm p-4">
-          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-            <div className="relative flex-1">
-              <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search by patient name, MRN, or doctor..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <FunnelIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="pl-9 pr-8 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm appearance-none bg-white"
-                >
-                  <option value="">All Status</option>
-                  <option value="pending">Pending</option>
-                  <option value="pay_at_clinic">Cash Due</option>
-                  <option value="paid_online">Paid Online</option>
-                  <option value="paid_cash">Paid Cash</option>
-                </select>
-                <ChevronDownIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Appointments Table */}
+        {/* Tabs */}
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          {isLoading ? (
-            <div className="p-12 text-center">
-              <ArrowPathIcon className="h-8 w-8 text-blue-600 animate-spin mx-auto" />
-              <p className="text-gray-500 mt-2">Loading appointments...</p>
-            </div>
-          ) : filteredAppointments.length === 0 ? (
-            <div className="p-12 text-center">
-              <CalendarDaysIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500">No appointments found for the selected date</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Patient</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Appointment</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Payment Status</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Amount</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Verification</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {filteredAppointments.map((apt: CopayAppointment) => renderAppointmentRow(apt))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <Tab.Group selectedIndex={activeTab} onChange={setActiveTab}>
+            <Tab.List className="flex border-b border-gray-200">
+              {tabs.map((tab, index) => (
+                <Tab
+                  key={tab.name}
+                  className={({ selected }) =>
+                    `flex-1 py-4 px-6 text-sm font-medium focus:outline-none ${
+                      selected
+                        ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                    }`
+                  }
+                >
+                  <span className="flex items-center justify-center gap-2">
+                    {tab.name}
+                    {tab.count > 0 && (
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${
+                        index === 2 ? 'bg-red-100 text-red-700' : 
+                        index === 1 ? 'bg-amber-100 text-amber-700' : 
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {tab.count}
+                      </span>
+                    )}
+                  </span>
+                </Tab>
+              ))}
+            </Tab.List>
+
+            <Tab.Panels>
+              {/* All Appointments Tab */}
+              <Tab.Panel>
+                {/* Filters and Search */}
+                <div className="p-4 border-b border-gray-200">
+                  <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+                    <div className="relative flex-1">
+                      <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                      <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Search by patient name, MRN, or doctor..."
+                        className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        <FunnelIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <select
+                          value={statusFilter}
+                          onChange={(e) => setStatusFilter(e.target.value)}
+                          className="pl-9 pr-8 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm appearance-none bg-white"
+                        >
+                          <option value="">All Status</option>
+                          <option value="pending">Pending</option>
+                          <option value="pay_at_clinic">Cash Due</option>
+                          <option value="paid_online">Paid Online</option>
+                          <option value="paid_cash">Paid Cash</option>
+                        </select>
+                        <ChevronDownIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {isLoading ? (
+                  <div className="p-12 text-center">
+                    <ArrowPathIcon className="h-8 w-8 text-blue-600 animate-spin mx-auto" />
+                    <p className="text-gray-500 mt-2">Loading appointments...</p>
+                  </div>
+                ) : filteredAppointments.length === 0 ? (
+                  <div className="p-12 text-center">
+                    <CalendarDaysIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                    <p className="text-gray-500">No appointments found for the selected date</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Patient</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Appointment</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Payment Status</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Amount</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Verification</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {filteredAppointments.map((apt: CopayAppointment) => renderAppointmentRow(apt))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </Tab.Panel>
+
+              {/* Pending Verification Tab - Phase 3 Feature #1 */}
+              <Tab.Panel>
+                <div className="p-4 border-b border-gray-200 bg-amber-50">
+                  <div className="flex items-center gap-2 text-amber-700">
+                    <ClockIcon className="h-5 w-5" />
+                    <p className="text-sm font-medium">
+                      These payments have been received but require staff verification. Sorted by oldest first (FIFO).
+                    </p>
+                  </div>
+                </div>
+                
+                {(!pendingVerifications || pendingVerifications.length === 0) && paidNotVerified.length === 0 ? (
+                  <div className="p-12 text-center">
+                    <CheckCircleIcon className="h-12 w-12 text-green-300 mx-auto mb-3" />
+                    <p className="text-gray-500">All payments have been verified!</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Patient</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Doctor</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Expected</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Paid</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Difference</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {(pendingVerifications || []).map((item: PendingVerification) => renderPendingVerificationRow(item))}
+                        {pendingVerifications?.length === 0 && paidNotVerified.map((apt: CopayAppointment) => (
+                          <tr key={apt.appointment.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3">
+                              <div>
+                                <p className="font-medium text-gray-900">{apt.appointment.patientName}</p>
+                                <p className="text-sm text-gray-500">MRN: {apt.appointment.mrn}</p>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-600">{apt.appointment.doctorName}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600">
+                              {format(new Date(apt.appointment.appointmentDate), 'MMM d, yyyy')}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <p className="font-medium"><CurrencyDisplay amount={apt.copayAmount} /></p>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <p className="font-medium"><CurrencyDisplay amount={apt.paidAmount || 0} /></p>
+                            </td>
+                            <td className="px-4 py-3">
+                              {apt.paidAmount && Math.abs(apt.paidAmount - apt.copayAmount) <= 0.01 ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                                  <CheckCircleIcon className="h-3 w-3" />
+                                  Match
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
+                                  <ExclamationTriangleIcon className="h-3 w-3" />
+                                  Mismatch
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2 justify-end">
+                                {apt.paidAmount && Math.abs(apt.paidAmount - apt.copayAmount) <= 0.01 && (
+                                  <button
+                                    onClick={() => handleQuickVerify(apt.appointment.id)}
+                                    disabled={quickVerifyMutation.isPending}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500 text-white text-sm font-medium hover:bg-green-600 transition-colors disabled:opacity-50"
+                                  >
+                                    <CheckBadgeIcon className="h-4 w-4" />
+                                    Quick Verify
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => {
+                                    setSelectedAppointment(apt);
+                                    setShowVerificationModal(true);
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-sm font-medium hover:bg-gray-200 transition-colors"
+                                >
+                                  <EyeIcon className="h-4 w-4" />
+                                  Review
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </Tab.Panel>
+
+              {/* Flagged Tab - Phase 3 Features #5, #6 */}
+              <Tab.Panel>
+                <div className="p-4 border-b border-gray-200 bg-red-50">
+                  <div className="flex items-center gap-2 text-red-700">
+                    <ExclamationTriangleIcon className="h-5 w-5" />
+                    <p className="text-sm font-medium">
+                      These payments have been flagged for review due to amount discrepancies or other issues.
+                    </p>
+                  </div>
+                </div>
+                
+                {(!flaggedPayments || flaggedPayments.length === 0) ? (
+                  <div className="p-12 text-center">
+                    <CheckCircleIcon className="h-12 w-12 text-green-300 mx-auto mb-3" />
+                    <p className="text-gray-500">No flagged payments</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Patient</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Flag Type</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Expected</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Paid</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Difference</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {(flaggedPayments || []).map((item: PendingVerification) => (
+                          <tr key={item.appointmentId} className="hover:bg-gray-50">
+                            <td className="px-4 py-3">
+                              <div>
+                                <p className="font-medium text-gray-900">{item.patientName}</p>
+                                <p className="text-sm text-gray-500">MRN: {item.mrn}</p>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              {item.verificationFlag && (
+                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
+                                  item.verificationFlag.includes('Underpayment') 
+                                    ? 'bg-red-100 text-red-700' 
+                                    : item.verificationFlag.includes('Overpayment')
+                                    ? 'bg-purple-100 text-purple-700'
+                                    : 'bg-orange-100 text-orange-700'
+                                }`}>
+                                  {item.verificationFlag.includes('Underpayment') ? (
+                                    <ArrowTrendingDownIcon className="h-3.5 w-3.5" />
+                                  ) : item.verificationFlag.includes('Overpayment') ? (
+                                    <ArrowTrendingUpIcon className="h-3.5 w-3.5" />
+                                  ) : (
+                                    <ExclamationTriangleIcon className="h-3.5 w-3.5" />
+                                  )}
+                                  {item.verificationFlag}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <p className="font-medium"><CurrencyDisplay amount={item.expectedAmount} /></p>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <p className={`font-medium ${item.difference < 0 ? 'text-red-600' : 'text-purple-600'}`}>
+                                <CurrencyDisplay amount={item.paidAmount} />
+                              </p>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                                item.difference < 0 ? 'bg-red-100 text-red-700' : 'bg-purple-100 text-purple-700'
+                              }`}>
+                                {item.difference < 0 ? '-' : '+'}<CurrencyDisplay amount={Math.abs(item.difference)} />
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <button
+                                onClick={() => {
+                                  const apt = appointments.find((a: CopayAppointment) => a.appointment.id === item.appointmentId);
+                                  if (apt) {
+                                    setSelectedAppointment(apt);
+                                    setShowVerificationModal(true);
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition-colors"
+                              >
+                                <EyeIcon className="h-4 w-4" />
+                                Review & Resolve
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </Tab.Panel>
+            </Tab.Panels>
+          </Tab.Group>
         </div>
 
         {/* Collect Payment Modal */}
@@ -606,14 +1039,12 @@ export default function CopayVerification() {
 
                       {selectedAppointment && (
                         <div className="space-y-4">
-                          {/* Patient Info */}
                           <div className="p-4 bg-gray-50 rounded-xl">
                             <p className="font-medium text-gray-900">{selectedAppointment.appointment.patientName}</p>
                             <p className="text-sm text-gray-500">MRN: {selectedAppointment.appointment.mrn}</p>
                             <p className="text-sm text-gray-500">{selectedAppointment.appointment.doctorName}</p>
                           </div>
 
-                          {/* Expected Amount */}
                           <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
                             <p className="text-sm text-blue-600">Expected Copay</p>
                             <p className="text-2xl font-bold text-blue-700">
@@ -621,7 +1052,6 @@ export default function CopayVerification() {
                             </p>
                           </div>
 
-                          {/* Payment Amount */}
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                               Amount Received *
@@ -645,7 +1075,6 @@ export default function CopayVerification() {
                             )}
                           </div>
 
-                          {/* Payment Method */}
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                               Payment Method
@@ -678,7 +1107,6 @@ export default function CopayVerification() {
                             </div>
                           </div>
 
-                          {/* Notes */}
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                               Notes (Optional)
@@ -764,7 +1192,6 @@ export default function CopayVerification() {
 
                       {selectedAppointment && (
                         <div className="space-y-4">
-                          {/* Payment Info */}
                           <div className="p-4 bg-gray-50 rounded-xl">
                             <div className="flex justify-between items-start">
                               <div>
@@ -782,14 +1209,29 @@ export default function CopayVerification() {
                             </div>
                           </div>
 
-                          {/* Amount Mismatch Warning */}
                           {selectedAppointment.paidAmount && selectedAppointment.paidAmount !== selectedAppointment.copayAmount && (
-                            <div className="p-3 bg-orange-50 rounded-xl border border-orange-200">
+                            <div className={`p-3 rounded-xl border ${
+                              selectedAppointment.paidAmount < selectedAppointment.copayAmount
+                                ? 'bg-red-50 border-red-200'
+                                : 'bg-purple-50 border-purple-200'
+                            }`}>
                               <div className="flex items-start gap-2">
-                                <ExclamationTriangleIcon className="h-5 w-5 text-orange-500 flex-shrink-0" />
+                                {selectedAppointment.paidAmount < selectedAppointment.copayAmount ? (
+                                  <ArrowTrendingDownIcon className="h-5 w-5 text-red-500 flex-shrink-0" />
+                                ) : (
+                                  <ArrowTrendingUpIcon className="h-5 w-5 text-purple-500 flex-shrink-0" />
+                                )}
                                 <div>
-                                  <p className="text-sm font-medium text-orange-800">Amount Mismatch Detected</p>
-                                  <p className="text-xs text-orange-600 mt-0.5">
+                                  <p className={`text-sm font-medium ${
+                                    selectedAppointment.paidAmount < selectedAppointment.copayAmount
+                                      ? 'text-red-800'
+                                      : 'text-purple-800'
+                                  }`}>
+                                    {selectedAppointment.paidAmount < selectedAppointment.copayAmount
+                                      ? 'Underpayment Detected'
+                                      : 'Overpayment Detected - Refund may be needed'}
+                                  </p>
+                                  <p className="text-xs mt-0.5">
                                     Expected: <CurrencyDisplay amount={selectedAppointment.copayAmount} /> | 
                                     Received: <CurrencyDisplay amount={selectedAppointment.paidAmount} />
                                   </p>
@@ -798,7 +1240,6 @@ export default function CopayVerification() {
                             </div>
                           )}
 
-                          {/* Verification Actions */}
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                               Select Action
@@ -886,7 +1327,6 @@ export default function CopayVerification() {
                             </div>
                           </div>
 
-                          {/* Reason Input */}
                           {verificationAction && verificationAction !== 'verify' && (
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">

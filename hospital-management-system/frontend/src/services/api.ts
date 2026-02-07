@@ -793,6 +793,21 @@ export const staffCopayApi = {
     api.get('/staff/payment-summary', { params }),
   // Get pending reminders (for notification service)
   getPendingReminders: () => api.get('/staff/payment-reminders'),
+  // Phase 3: Check if appointment can be checked in (copay lock)
+  canCheckIn: (appointmentId: string) =>
+    api.get(`/staff/checkin/appointments/${appointmentId}/can-checkin`),
+  // Phase 3: Quick verify payment (for exact matches)
+  quickVerify: (appointmentId: string) =>
+    api.post(`/staff/checkin/appointments/${appointmentId}/quick-verify`),
+  // Phase 3: Waive copay
+  waiveCopay: (appointmentId: string, reason: string) =>
+    api.post(`/staff/checkin/appointments/${appointmentId}/waive-copay`, { reason }),
+  // Phase 3: Get pending verifications
+  getPendingVerifications: (filter?: string) =>
+    api.get('/staff/copay/pending-verifications', { params: { filter } }),
+  // Phase 3: Get reconciliation report
+  getReconciliation: (startDate: string, endDate: string) =>
+    api.get('/staff/copay/reconciliation', { params: { startDate, endDate } }),
 };
 
 // Emergency APIs
