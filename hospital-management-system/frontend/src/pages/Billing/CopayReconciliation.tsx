@@ -128,7 +128,7 @@ export default function CopayReconciliation() {
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <Link
-                  to="/billing/copay-verification"
+                  to="/copay-verification"
                   className="text-blue-600 hover:text-blue-700 text-sm"
                 >
                   ← Back to Verification
