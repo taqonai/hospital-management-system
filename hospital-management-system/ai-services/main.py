@@ -3096,8 +3096,7 @@ from ai_scribe.service import StartSessionRequest as ScribeStartSessionRequest
 
 class ScribeGenerateNoteRequest(BaseModel):
     text: str
-    noteType: str = "consultation"
-    sessionType: str = "consultation"  # Legacy alias
+    sessionType: str = "consultation"
 
 
 class ScribeExtractEntitiesRequest(BaseModel):
@@ -3177,7 +3176,7 @@ async def generate_note_from_text(request: ScribeGenerateNoteRequest):
     try:
         result = await ai_scribe.generate_note_from_text(
             text=request.text,
-            note_type=request.noteType or request.sessionType,
+            session_type=request.sessionType
         )
         return result
     except Exception as e:
