@@ -809,16 +809,24 @@ class AppointmentCopayService {
       },
     });
 
-    const receiptNumber = `RCP-${Date.now()}`;
+    const receiptNumber = `RCP-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
     const paidAmount = Number(transaction.amount);
     const expectedAmount = appointment.copayAmount ? Number(appointment.copayAmount) : 0;
     
-    // Create CopayPayment record
+    // Phase 4: Calculate remaining balance
+    const remainingBalance = Math.max(0, expectedAmount - paidAmount);
+    const fullyPaid = remainingBalance <= 0.01;
+    const status = fullyPaid ? 'PAID' : 'PARTIAL';
+    
+    // Create CopayPayment record with Phase 4 fields
     await prisma.copayPayment.create({
       data: {
         patientId: appointment.patientId,
         appointmentId: appointment.id,
+        expectedAmount, // Phase 4: Track expected amount
         amount: transaction.amount,
+        remainingBalance, // Phase 4: Track remaining
+        status, // Phase 4: Track payment status
         paymentMethod: 'CREDIT_CARD',
         insuranceProvider: patientInsurance?.providerName || 'Self-Pay',
         policyNumber: patientInsurance?.policyNumber || 'N/A',
@@ -827,12 +835,12 @@ class AppointmentCopayService {
       },
     });
 
-    // Update appointment
+    // Update appointment - only mark as collected if fully paid
     await prisma.appointment.update({
       where: { id: appointmentId },
       data: {
-        copayCollected: true,
-        copayAmount: transaction.amount,
+        copayCollected: fullyPaid,
+        copayAmount: expectedAmount, // Keep expected amount, not paid amount
       },
     });
 
@@ -876,14 +884,22 @@ class AppointmentCopayService {
         id: appointmentId,
         hospitalId,
       },
+      include: {
+        copayPayments: true, // Get existing payments
+      },
     });
 
     if (!appointment) {
       throw new NotFoundError('Appointment not found');
     }
 
-    if (appointment.copayCollected) {
-      throw new ValidationError('Copay already collected for this appointment');
+    // Phase 4: Allow partial payments - check total paid vs expected
+    const expectedAmount = appointment.copayAmount ? Number(appointment.copayAmount) : 0;
+    const alreadyPaid = appointment.copayPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+    const currentBalance = expectedAmount - alreadyPaid;
+
+    if (currentBalance <= 0.01 && appointment.copayCollected) {
+      throw new ValidationError('Copay already fully collected for this appointment');
     }
 
     const patientInsurance = await prisma.patientInsurance.findFirst({
@@ -893,33 +909,42 @@ class AppointmentCopayService {
       },
     });
 
-    const expectedAmount = appointment.copayAmount ? Number(appointment.copayAmount) : 0;
+    // Phase 4: Calculate remaining balance after this payment
+    const newRemainingBalance = Math.max(0, currentBalance - amount);
+    const fullyPaid = newRemainingBalance <= 0.01;
+    const status = fullyPaid ? 'PAID' : 'PARTIAL';
 
     await prisma.copayPayment.create({
       data: {
         patientId: appointment.patientId,
         appointmentId: appointment.id,
+        expectedAmount, // Phase 4: Track expected amount
         amount,
+        remainingBalance: newRemainingBalance, // Phase 4: Track remaining
+        status, // Phase 4: Track payment status
         paymentMethod,
         insuranceProvider: patientInsurance?.providerName || 'Self-Pay',
         policyNumber: patientInsurance?.policyNumber || 'N/A',
         collectedBy: staffUserId,
         notes,
-        receiptNumber: `RCP-${Date.now()}`,
+        receiptNumber: `RCP-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`,
       },
     });
 
+    // Phase 4: Only mark as collected if fully paid
     await prisma.appointment.update({
       where: { id: appointmentId },
       data: {
-        copayCollected: true,
-        copayAmount: amount,
+        copayCollected: fullyPaid,
+        copayAmount: expectedAmount, // Keep expected amount
         checkedInAt: new Date(),
       },
     });
 
-    // Phase 3: Auto-verify payment
-    await this.autoVerifyPayment(appointmentId, amount, expectedAmount);
+    // Phase 3: Auto-verify payment (only if fully paid)
+    if (fullyPaid) {
+      await this.autoVerifyPayment(appointmentId, amount, expectedAmount);
+    }
 
     return this.getCopayInfo(hospitalId, appointment.patientId, appointmentId);
   }

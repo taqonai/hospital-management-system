@@ -2183,26 +2183,51 @@ enum PaymentMethod {
   DEPOSIT
 }
 
+// Phase 4: Copay Payment Status
+enum CopayPaymentStatus {
+  PENDING      // Payment initiated but not completed
+  PARTIAL      // Partial payment made, balance remaining
+  PAID         // Fully paid
+  REFUNDED     // Payment refunded
+  WAIVED       // Copay waived by staff
+}
+
 model CopayPayment {
-  id                 String        @id @default(uuid())
+  id                 String              @id @default(uuid())
   patientId          String
   appointmentId      String
-  amount             Decimal       @db.Decimal(10, 2)
+  
+  // Phase 4: Partial Payment Support
+  expectedAmount     Decimal             @db.Decimal(10, 2) // Total copay expected for this appointment
+  amount             Decimal             @db.Decimal(10, 2) // Amount paid in this transaction
+  remainingBalance   Decimal             @default(0) @db.Decimal(10, 2) // Balance after this payment
+  status             CopayPaymentStatus  @default(PAID)
+  
   paymentMethod      PaymentMethod
   insuranceProvider  String
   policyNumber       String
   notes              String?
   collectedBy        String
-  paymentDate        DateTime      @default(now())
-  createdAt          DateTime      @default(now())
+  paymentDate        DateTime            @default(now())
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  
   // GAP 2: COB (Coordination of Benefits)
   secondaryInsuranceProvider String?  // Secondary insurer name (if COB applied)
   secondaryPolicyNumber      String?  // Secondary policy number
   cobApplied                 Boolean? @default(false) // Whether COB was applied
+  
   // GAP 3: Receipt Generation
   receiptNumber              String?  @unique // RCP-{hospitalCode}-{YYYYMMDD}-{seq}
   receiptUrl                 String?  // URL/path to receipt HTML
   vatAmount                  Decimal? @db.Decimal(10, 2) // UAE VAT amount (5%)
+  
+  // Phase 4: Finance Integration
+  syncedToFinance    Boolean   @default(false)
+  financeSyncDate    DateTime?
+  financeRecordId    String?   // GLEntry reference ID
+  glAccountId        String?   // GL Account used for recording
+  revenueCategory    String?   @default("COPAY") // Revenue category for reports
 
   patient     Patient     @relation(fields: [patientId], references: [id])
   appointment Appointment @relation(fields: [appointmentId], references: [id])
@@ -2210,6 +2235,10 @@ model CopayPayment {
   // GAP 9: Refunds
   refunds CopayRefund[]
 
+  @@index([patientId])
+  @@index([appointmentId])
+  @@index([syncedToFinance])
+  @@index([paymentDate])
   @@map("copay_payments")
 }
 

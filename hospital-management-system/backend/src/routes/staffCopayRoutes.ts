@@ -3,6 +3,7 @@ import { authenticate, authorizeWithPermission } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess } from '../utils/response';
 import { appointmentCopayService, CopayPaymentStatus } from '../services/appointmentCopayService';
+import { copayFinanceService } from '../services/copayFinanceService';
 import { AuthenticatedRequest } from '../types';
 import { body, param, query } from 'express-validator';
 import prisma from '../config/database';
@@ -617,6 +618,229 @@ router.get(
     };
 
     sendSuccess(res, report, 'Daily reconciliation report generated');
+  })
+);
+
+// ============================================================================
+// Phase 4: Finance Integration Routes
+// ============================================================================
+
+/**
+ * Get patient's outstanding copay balance (for check-in view)
+ * GET /api/v1/staff/patients/:patientId/outstanding-balance
+ */
+router.get(
+  '/patients/:patientId/outstanding-balance',
+  authenticate,
+  authorizeWithPermission('billing:read', ['HOSPITAL_ADMIN', 'RECEPTIONIST', 'ACCOUNTANT', 'NURSE']),
+  param('patientId').isUUID(),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const hospitalId = req.user!.hospitalId;
+    const patientId = req.params.patientId;
+
+    const outstandingBalance = await copayFinanceService.getPatientOutstandingBalance(hospitalId, patientId);
+    sendSuccess(res, outstandingBalance, 'Patient outstanding balance retrieved');
+  })
+);
+
+/**
+ * Get all patients with outstanding copay balances
+ * GET /api/v1/staff/copay/outstanding-patients
+ */
+router.get(
+  '/copay/outstanding-patients',
+  authenticate,
+  authorizeWithPermission('billing:read', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
+  query('minBalance').optional().isFloat({ min: 0 }),
+  query('limit').optional().isInt({ min: 1, max: 100 }),
+  query('offset').optional().isInt({ min: 0 }),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const hospitalId = req.user!.hospitalId;
+    const minBalance = req.query.minBalance ? parseFloat(req.query.minBalance as string) : undefined;
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : 0;
+
+    const result = await copayFinanceService.getPatientsWithOutstandingBalance(hospitalId, { minBalance, limit, offset });
+    sendSuccess(res, result, 'Patients with outstanding balance retrieved');
+  })
+);
+
+/**
+ * Collect partial payment for an appointment
+ * POST /api/v1/staff/copay/partial-payment
+ */
+router.post(
+  '/copay/partial-payment',
+  authenticate,
+  authorizeWithPermission('billing:write', ['HOSPITAL_ADMIN', 'RECEPTIONIST', 'ACCOUNTANT']),
+  body('appointmentId').isUUID(),
+  body('amount').isFloat({ min: 0.01 }),
+  body('paymentMethod').isIn(['CASH', 'CREDIT_CARD', 'DEBIT_CARD']),
+  body('notes').optional().isString(),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const hospitalId = req.user!.hospitalId;
+    const staffUserId = req.user!.userId;
+    const { appointmentId, amount, paymentMethod, notes } = req.body;
+
+    // Get patientId from appointment
+    const appointment = await prisma.appointment.findFirst({
+      where: { id: appointmentId, hospitalId },
+    });
+
+    if (!appointment) {
+      return res.status(404).json({ success: false, message: 'Appointment not found' });
+    }
+
+    const result = await copayFinanceService.processPartialPayment({
+      hospitalId,
+      appointmentId,
+      patientId: appointment.patientId,
+      amount,
+      paymentMethod,
+      collectedBy: staffUserId,
+      notes,
+    });
+
+    sendSuccess(res, result, 'Partial payment collected successfully');
+  })
+);
+
+/**
+ * Collect outstanding balance payment (apply to multiple appointments)
+ * POST /api/v1/staff/copay/collect-outstanding
+ */
+router.post(
+  '/copay/collect-outstanding',
+  authenticate,
+  authorizeWithPermission('billing:write', ['HOSPITAL_ADMIN', 'RECEPTIONIST', 'ACCOUNTANT']),
+  body('patientId').isUUID(),
+  body('amount').isFloat({ min: 0.01 }),
+  body('paymentMethod').isIn(['CASH', 'CREDIT_CARD', 'DEBIT_CARD']),
+  body('notes').optional().isString(),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const hospitalId = req.user!.hospitalId;
+    const staffUserId = req.user!.userId;
+    const { patientId, amount, paymentMethod, notes } = req.body;
+
+    const result = await copayFinanceService.processOutstandingBalancePayment(
+      hospitalId,
+      patientId,
+      amount,
+      paymentMethod,
+      staffUserId,
+      notes
+    );
+
+    sendSuccess(res, result, 'Outstanding balance payment processed');
+  })
+);
+
+/**
+ * Sync copay payment to finance/GL
+ * POST /api/v1/staff/copay/sync-to-finance
+ */
+router.post(
+  '/copay/sync-to-finance',
+  authenticate,
+  authorizeWithPermission('billing:write', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
+  body('paymentId').isUUID(),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const hospitalId = req.user!.hospitalId;
+    const staffUserId = req.user!.userId;
+    const { paymentId } = req.body;
+
+    const result = await copayFinanceService.syncCopayToFinance(paymentId, hospitalId, staffUserId);
+    sendSuccess(res, result, 'Payment synced to finance');
+  })
+);
+
+/**
+ * Batch sync unsynced copay payments to finance
+ * POST /api/v1/staff/copay/batch-sync-finance
+ */
+router.post(
+  '/copay/batch-sync-finance',
+  authenticate,
+  authorizeWithPermission('billing:write', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
+  body('startDate').optional().isISO8601(),
+  body('endDate').optional().isISO8601(),
+  body('limit').optional().isInt({ min: 1, max: 500 }),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const hospitalId = req.user!.hospitalId;
+    const staffUserId = req.user!.userId;
+    const { startDate, endDate, limit } = req.body;
+
+    const result = await copayFinanceService.batchSyncToFinance(hospitalId, staffUserId, {
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      limit,
+    });
+
+    sendSuccess(res, result, 'Batch sync completed');
+  })
+);
+
+/**
+ * Get copay finance summary for dashboard
+ * GET /api/v1/staff/copay/finance-summary
+ */
+router.get(
+  '/copay/finance-summary',
+  authenticate,
+  authorizeWithPermission('billing:read', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
+  query('startDate').optional().isISO8601(),
+  query('endDate').optional().isISO8601(),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const hospitalId = req.user!.hospitalId;
+    const startDate = req.query.startDate 
+      ? new Date(req.query.startDate as string) 
+      : new Date(new Date().setHours(0, 0, 0, 0));
+    const endDate = req.query.endDate 
+      ? new Date(req.query.endDate as string) 
+      : new Date(new Date().setHours(23, 59, 59, 999));
+
+    const summary = await copayFinanceService.getCopayFinanceSummary(hospitalId, startDate, endDate);
+    sendSuccess(res, summary, 'Finance summary retrieved');
+  })
+);
+
+/**
+ * Get end-of-day copay summary for finance
+ * GET /api/v1/staff/copay/end-of-day-summary
+ */
+router.get(
+  '/copay/end-of-day-summary',
+  authenticate,
+  authorizeWithPermission('billing:read', ['HOSPITAL_ADMIN', 'ACCOUNTANT']),
+  query('date').optional().isISO8601(),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const hospitalId = req.user!.hospitalId;
+    const date = req.query.date ? new Date(req.query.date as string) : new Date();
+
+    const summary = await copayFinanceService.getEndOfDaySummary(hospitalId, date);
+    sendSuccess(res, summary, 'End of day summary retrieved');
+  })
+);
+
+/**
+ * Get patient's copay payment history
+ * GET /api/v1/staff/patients/:patientId/copay-history
+ */
+router.get(
+  '/patients/:patientId/copay-history',
+  authenticate,
+  authorizeWithPermission('billing:read', ['HOSPITAL_ADMIN', 'RECEPTIONIST', 'ACCOUNTANT', 'NURSE']),
+  param('patientId').isUUID(),
+  query('limit').optional().isInt({ min: 1, max: 100 }),
+  query('offset').optional().isInt({ min: 0 }),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const hospitalId = req.user!.hospitalId;
+    const patientId = req.params.patientId;
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : 0;
+
+    const history = await copayFinanceService.getPatientPaymentHistory(hospitalId, patientId, { limit, offset });
+    sendSuccess(res, history, 'Payment history retrieved');
   })
 );
 

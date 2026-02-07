@@ -3674,7 +3674,10 @@ export class BillingService {
             data: {
               patientId: params.patientId,
               appointmentId: params.appointmentId,
+              expectedAmount: copayInfo.patientAmount || params.amount, // Phase 4: Track expected amount
               amount: params.amount,
+              remainingBalance: 0, // Phase 4: Fully paid via deposit
+              status: 'PAID', // Phase 4: Payment status
               paymentMethod: 'DEPOSIT' as any,
               insuranceProvider: copayInfo.insuranceProvider || '',
               policyNumber: copayInfo.policyNumber || '',
@@ -3736,7 +3739,10 @@ export class BillingService {
         data: {
           patientId: params.patientId,
           appointmentId: params.appointmentId,
+          expectedAmount: copayInfo.patientAmount || params.amount, // Phase 4: Track expected amount
           amount: params.amount,
+          remainingBalance: 0, // Phase 4: Fully paid
+          status: 'PAID', // Phase 4: Payment status
           paymentMethod: params.paymentMethod,
           insuranceProvider: copayInfo.insuranceProvider || '',
           policyNumber: copayInfo.policyNumber || '',

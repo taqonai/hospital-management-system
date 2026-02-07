@@ -3,8 +3,91 @@ import { patientAuthenticate, PatientAuthenticatedRequest } from '../middleware/
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendSuccess, sendError } from '../utils/response';
 import { appointmentCopayService } from '../services/appointmentCopayService';
+import { copayFinanceService } from '../services/copayFinanceService';
 
 const router = Router();
+
+// ============================================================================
+// Phase 4: Outstanding Balance & Payment History
+// ============================================================================
+
+/**
+ * Get patient's outstanding copay balance across all appointments
+ * GET /api/v1/patient-portal/copay/outstanding-balance
+ */
+router.get(
+  '/copay/outstanding-balance',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
+
+    const outstandingBalance = await copayFinanceService.getPatientOutstandingBalance(hospitalId, patientId);
+    sendSuccess(res, outstandingBalance, 'Outstanding balance retrieved');
+  })
+);
+
+/**
+ * Get patient's copay payment history
+ * GET /api/v1/patient-portal/copay/payment-history
+ */
+router.get(
+  '/copay/payment-history',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
+    const limit = parseInt(req.query.limit as string) || 20;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    const history = await copayFinanceService.getPatientPaymentHistory(hospitalId, patientId, { limit, offset });
+    sendSuccess(res, history, 'Payment history retrieved');
+  })
+);
+
+/**
+ * Pay outstanding balance (bulk payment)
+ * POST /api/v1/patient-portal/copay/pay-outstanding
+ */
+router.post(
+  '/copay/pay-outstanding',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
+    const { amount, paymentMethod } = req.body;
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid payment amount is required',
+      });
+    }
+
+    // For online payments, this would typically initiate a payment gateway flow
+    // For now, we'll create a pending payment that needs confirmation
+    const outstandingBalance = await copayFinanceService.getPatientOutstandingBalance(hospitalId, patientId);
+
+    if (outstandingBalance.totalOutstanding <= 0.01) {
+      return res.status(400).json({
+        success: false,
+        message: 'No outstanding balance to pay',
+      });
+    }
+
+    // Return the outstanding appointments and amount for the payment flow
+    sendSuccess(res, {
+      outstandingBalance: outstandingBalance.totalOutstanding,
+      requestedAmount: amount,
+      appointments: outstandingBalance.appointments,
+      message: 'Proceed to payment confirmation',
+    }, 'Outstanding balance payment initiated');
+  })
+);
+
+// ============================================================================
+// Existing Routes
+// ============================================================================
 
 /**
  * Get copay information for an appointment
