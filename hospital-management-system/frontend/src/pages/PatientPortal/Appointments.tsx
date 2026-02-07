@@ -77,6 +77,10 @@ interface Appointment {
   doctorSpecialty?: string;
   departmentId?: string;
   departmentName?: string;
+  // Copay fields
+  copayCollected?: boolean;
+  copayAmount?: number;
+  copayStatus?: string;
 }
 
 interface Department {
@@ -750,6 +754,28 @@ export default function Appointments() {
                 <XCircleIcon className="h-4 w-4" />
                 Cancel
               </button>
+            )}
+
+            {/* Pay Copay Button - Issue #1 Fix: Show for unpaid copay appointments */}
+            {['SCHEDULED', 'CONFIRMED'].includes(appointment.status) && !appointment.copayCollected && (
+              <button
+                onClick={() => {
+                  setCopayAppointment(appointment);
+                  setShowCopayModal(true);
+                }}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium bg-green-50 text-green-600 border border-green-200 hover:bg-green-100 transition-colors"
+              >
+                <CreditCardIcon className="h-4 w-4" />
+                Pay Copay
+              </button>
+            )}
+
+            {/* Show Copay Paid badge if copay was collected */}
+            {appointment.copayCollected && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-600 border border-emerald-200">
+                <CheckCircleIcon className="h-4 w-4" />
+                Copay Paid
+              </span>
             )}
 
             {appointment.status === 'COMPLETED' && !reviewedAppointmentIds.includes(appointment.id) && (

@@ -144,6 +144,9 @@ import InsuranceProviders from './pages/InsuranceProviders';
 // Copay Refunds (GAP 9)
 import CopayRefunds from './pages/Billing/CopayRefunds';
 
+// Copay Verification Dashboard (Issue #4)
+import CopayVerification from './pages/Billing/CopayVerification';
+
 // CRM Module
 import CRM from './pages/CRM';
 
@@ -350,6 +353,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT', 'RECEPTIONIST']} permission="billing:read">
               <CopayRefunds />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/copay-verification"
+          element={
+            <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'HOSPITAL_ADMIN', 'ACCOUNTANT', 'RECEPTIONIST', 'CASHIER']} permission="billing:read">
+              <CopayVerification />
             </ProtectedRoute>
           }
         />

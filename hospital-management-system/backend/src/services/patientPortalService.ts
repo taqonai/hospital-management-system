@@ -315,6 +315,9 @@ export class PatientPortalService {
         notes: apt.notes,
         tokenNumber: apt.tokenNumber,
         createdAt: apt.createdAt,
+        // Copay fields - Issue #1 Fix: Include copay status in appointments list
+        copayCollected: apt.copayCollected || false,
+        copayAmount: apt.copayAmount ? Number(apt.copayAmount) : null,
       })),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };

@@ -8,8 +8,10 @@ import {
   CheckCircleIcon,
   XMarkIcon,
   ExclamationCircleIcon,
+  ExclamationTriangleIcon,
   ArrowPathIcon,
   ShieldCheckIcon,
+  InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 import { patientPortalApi } from '../../../services/api';
 import { CurrencyDisplay } from '../../../components/common';
@@ -41,6 +43,25 @@ interface CopayInfo {
   paidAt?: string;
   transactionId?: string;
   receiptUrl?: string;
+  // Issue #3: Enhanced copay breakdown fields
+  breakdown?: {
+    serviceFee: number;
+    insuranceCoverage: number;
+    insuranceCoveragePercent: number;
+    patientResponsibility: number;
+    deductibleApplied: number;
+    annualCapRemaining?: number;
+  };
+  insuranceStatus?: {
+    isActive: boolean;
+    policyExpiry?: string;
+    providerName?: string;
+    policyNumber?: string;
+    coverageChanged?: boolean;
+    deductibleMet?: boolean;
+    annualCapReached?: boolean;
+    warnings?: string[];
+  };
 }
 
 // Stripe Payment Form Component
@@ -128,6 +149,155 @@ function StripePaymentForm({
   );
 }
 
+// Issue #3: Copay Breakdown Component
+function CopayBreakdown({ breakdown, insuranceStatus }: { 
+  breakdown?: CopayInfo['breakdown']; 
+  insuranceStatus?: CopayInfo['insuranceStatus'];
+}) {
+  if (!breakdown) return null;
+
+  return (
+    <div className="bg-gradient-to-br from-slate-50 to-blue-50 rounded-xl p-4 mb-4 border border-blue-100">
+      <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+        <InformationCircleIcon className="h-5 w-5 text-blue-600" />
+        Copay Breakdown
+      </h4>
+      
+      <div className="space-y-2 text-sm">
+        <div className="flex justify-between">
+          <span className="text-gray-600">Service Fee</span>
+          <span className="font-medium text-gray-900">
+            <CurrencyDisplay amount={breakdown.serviceFee} />
+          </span>
+        </div>
+        
+        {insuranceStatus?.isActive && (
+          <>
+            <div className="flex justify-between text-green-600">
+              <span>Insurance Covers ({breakdown.insuranceCoveragePercent}%)</span>
+              <span className="font-medium">
+                -<CurrencyDisplay amount={breakdown.insuranceCoverage} />
+              </span>
+            </div>
+            
+            {breakdown.deductibleApplied > 0 && (
+              <div className="flex justify-between text-amber-600">
+                <span>Deductible Applied</span>
+                <span className="font-medium">
+                  +<CurrencyDisplay amount={breakdown.deductibleApplied} />
+                </span>
+              </div>
+            )}
+          </>
+        )}
+        
+        <div className="border-t border-blue-200 pt-2 mt-2">
+          <div className="flex justify-between">
+            <span className="font-semibold text-gray-900">You Pay</span>
+            <span className="font-bold text-lg text-blue-600">
+              <CurrencyDisplay amount={breakdown.patientResponsibility} />
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Insurance Info */}
+      {insuranceStatus?.isActive && (
+        <div className="mt-3 pt-3 border-t border-blue-100">
+          <p className="text-xs text-gray-500">
+            <span className="font-medium">{insuranceStatus.providerName}</span>
+            {insuranceStatus.policyNumber && ` • Policy: ${insuranceStatus.policyNumber}`}
+          </p>
+          {breakdown?.annualCapRemaining !== undefined && (
+            <p className="text-xs text-gray-500 mt-1">
+              Annual cap remaining: <CurrencyDisplay amount={breakdown.annualCapRemaining} />
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Issue #3: Insurance Status Alert Component
+function InsuranceStatusAlert({ insuranceStatus }: { insuranceStatus?: CopayInfo['insuranceStatus'] }) {
+  if (!insuranceStatus) return null;
+
+  const hasWarnings = insuranceStatus.warnings && insuranceStatus.warnings.length > 0;
+  const isExpired = !insuranceStatus.isActive;
+  const coverageChanged = insuranceStatus.coverageChanged;
+  const deductibleNotMet = insuranceStatus.deductibleMet === false;
+  const capReached = insuranceStatus.annualCapReached;
+
+  if (!hasWarnings && !isExpired && !coverageChanged && !deductibleNotMet && !capReached) {
+    return null;
+  }
+
+  return (
+    <div className="mb-4 space-y-2">
+      {/* Expired Policy Alert */}
+      {isExpired && (
+        <div className="flex items-start gap-2 p-3 bg-red-50 rounded-lg border border-red-200">
+          <ExclamationTriangleIcon className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-red-800">Insurance Policy Expired</p>
+            <p className="text-xs text-red-600 mt-0.5">
+              Your insurance has expired. You will be charged the full amount as self-pay.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Coverage Changed Alert */}
+      {coverageChanged && !isExpired && (
+        <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
+          <ExclamationTriangleIcon className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-800">Coverage Changed</p>
+            <p className="text-xs text-amber-600 mt-0.5">
+              Your insurance coverage has changed since booking. The copay has been recalculated.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Deductible Not Met */}
+      {deductibleNotMet && !isExpired && (
+        <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+          <InformationCircleIcon className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-blue-800">Deductible Not Yet Met</p>
+            <p className="text-xs text-blue-600 mt-0.5">
+              Your annual deductible hasn't been met yet. This affects your copay amount.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Annual Cap Reached */}
+      {capReached && !isExpired && (
+        <div className="flex items-start gap-2 p-3 bg-green-50 rounded-lg border border-green-200">
+          <CheckCircleIcon className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-green-800">Annual Cap Reached!</p>
+            <p className="text-xs text-green-600 mt-0.5">
+              Good news! Your insurance covers 100% as you've reached your annual out-of-pocket maximum.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Warnings */}
+      {hasWarnings && insuranceStatus.warnings!.map((warning, idx) => (
+        <div key={idx} className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
+          <ExclamationCircleIcon className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-amber-700">{warning}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function CopayPaymentModal({
   isOpen,
   onClose,
@@ -139,7 +309,7 @@ export default function CopayPaymentModal({
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
 
-  // Fetch copay info
+  // Fetch copay info with insurance validation (Issue #3)
   const { data: copayData, isLoading, refetch } = useQuery({
     queryKey: ['copay-info', appointmentId],
     queryFn: async () => {
@@ -147,6 +317,8 @@ export default function CopayPaymentModal({
       return response.data?.data || response.data;
     },
     enabled: isOpen && !!appointmentId,
+    // Refetch on open to get real-time insurance validation
+    refetchOnMount: 'always',
   });
 
   const copayInfo = copayData as CopayInfo | undefined;
@@ -270,20 +442,31 @@ export default function CopayPaymentModal({
                 {isLoading && (
                   <div className="px-6 py-12 text-center">
                     <ArrowPathIcon className="h-8 w-8 text-blue-600 animate-spin mx-auto" />
-                    <p className="text-gray-500 mt-2">Loading payment details...</p>
+                    <p className="text-gray-500 mt-2">Validating insurance & calculating copay...</p>
                   </div>
                 )}
 
                 {/* Selection Step */}
                 {!isLoading && step === 'selection' && copayInfo && (
                   <div className="px-6 py-6">
-                    {/* Amount Display */}
-                    <div className="text-center mb-6">
-                      <p className="text-gray-500 text-sm">Copay Amount Due</p>
-                      <p className="text-4xl font-bold text-gray-900 mt-1">
-                        <CurrencyDisplay amount={copayInfo.copayAmount} />
-                      </p>
-                    </div>
+                    {/* Issue #3: Insurance Status Alerts */}
+                    <InsuranceStatusAlert insuranceStatus={copayInfo.insuranceStatus} />
+
+                    {/* Issue #3: Copay Breakdown */}
+                    <CopayBreakdown 
+                      breakdown={copayInfo.breakdown} 
+                      insuranceStatus={copayInfo.insuranceStatus} 
+                    />
+
+                    {/* Amount Display (if no breakdown available, show simple amount) */}
+                    {!copayInfo.breakdown && (
+                      <div className="text-center mb-6">
+                        <p className="text-gray-500 text-sm">Copay Amount Due</p>
+                        <p className="text-4xl font-bold text-gray-900 mt-1">
+                          <CurrencyDisplay amount={copayInfo.copayAmount} />
+                        </p>
+                      </div>
+                    )}
 
                     {/* Payment Options */}
                     <div className="space-y-3">
@@ -355,6 +538,12 @@ export default function CopayPaymentModal({
                 {/* Payment Step (Stripe Form) */}
                 {step === 'payment' && clientSecret && copayInfo && (
                   <div className="px-6 py-6">
+                    {/* Show breakdown before payment */}
+                    <CopayBreakdown 
+                      breakdown={copayInfo.breakdown} 
+                      insuranceStatus={copayInfo.insuranceStatus} 
+                    />
+                    
                     <Elements
                       stripe={stripePromise}
                       options={{
@@ -400,6 +589,20 @@ export default function CopayPaymentModal({
                         <p className="text-gray-500 mt-2">
                           Your copay has been paid. Show your confirmation at check-in for faster service.
                         </p>
+                        {/* Receipt download link */}
+                        <button
+                          onClick={async () => {
+                            try {
+                              const response = await patientPortalApi.getCopayReceipt(appointmentId);
+                              toast.success('Receipt ready!');
+                            } catch {
+                              toast.error('Could not download receipt');
+                            }
+                          }}
+                          className="mt-3 text-sm text-blue-600 hover:text-blue-700 underline"
+                        >
+                          Download Receipt
+                        </button>
                       </>
                     )}
                     

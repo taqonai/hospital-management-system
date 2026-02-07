@@ -1,5 +1,5 @@
 import prisma from '../config/database';
-import { NotFoundError, BadRequestError } from '../middleware/errorHandler';
+import { NotFoundError, ValidationError } from '../middleware/errorHandler';
 import { paymentGatewayService } from './paymentGatewayService';
 import { Decimal } from '@prisma/client/runtime/library';
 
@@ -20,6 +20,26 @@ export interface CopayInfo {
   paidAt?: Date;
   transactionId?: string;
   receiptUrl?: string;
+  // Issue #3: Enhanced copay breakdown
+  breakdown?: {
+    serviceFee: number;
+    insuranceCoverage: number;
+    insuranceCoveragePercent: number;
+    patientResponsibility: number;
+    deductibleApplied: number;
+    annualCapRemaining?: number;
+  };
+  // Issue #3: Insurance status for real-time validation
+  insuranceStatus?: {
+    isActive: boolean;
+    policyExpiry?: string;
+    providerName?: string;
+    policyNumber?: string;
+    coverageChanged?: boolean;
+    deductibleMet?: boolean;
+    annualCapReached?: boolean;
+    warnings?: string[];
+  };
 }
 
 class AppointmentCopayService {
@@ -38,14 +58,6 @@ class AppointmentCopayService {
           orderBy: { createdAt: 'desc' },
           take: 1,
         },
-        patient: {
-          include: {
-            insuranceInfo: {
-              where: { status: 'ACTIVE' },
-              take: 1,
-            },
-          },
-        },
         doctor: {
           include: {
             department: true,
@@ -58,28 +70,34 @@ class AppointmentCopayService {
       throw new NotFoundError('Appointment not found');
     }
 
+    // Get patient's active insurance separately
+    const patientInsurance = await prisma.patientInsurance.findFirst({
+      where: { 
+        patientId,
+        isActive: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Get service fee from doctor's consultation fee
+    const serviceFee = appointment.doctor?.consultationFee 
+      ? Number(appointment.doctor.consultationFee) 
+      : 150; // Default consultation fee
+
     // Determine copay amount from insurance or default
     let copayAmount = appointment.copayAmount ? Number(appointment.copayAmount) : 0;
     
-    // If no copay set, try to get from insurance policy
-    if (!copayAmount && appointment.patient.insuranceInfo?.[0]) {
-      const insurance = appointment.patient.insuranceInfo[0];
-      // Default copay based on insurance type (simplified - in production would come from payer contract)
-      copayAmount = insurance.policyType === 'BASIC' ? 50 : 
-                    insurance.policyType === 'ENHANCED' ? 30 : 20;
+    // If no copay set, calculate from insurance
+    // Use copay field from insurance or default to 20% of service fee
+    if (!copayAmount && patientInsurance) {
+      const insuranceCopay = patientInsurance.copay ? Number(patientInsurance.copay) : null;
+      const coveragePercent = insuranceCopay ? Math.round((1 - insuranceCopay / serviceFee) * 100) : 80;
+      copayAmount = insuranceCopay || Math.round(serviceFee * (100 - coveragePercent) / 100);
     }
 
-    // If still no copay and self-pay, use consultation fee
-    if (!copayAmount && appointment.selfPay) {
-      // Get consultation fee from doctor/department
-      const fee = await prisma.servicePricing.findFirst({
-        where: {
-          hospitalId,
-          serviceType: 'CONSULTATION',
-          departmentId: appointment.doctor.departmentId,
-        },
-      });
-      copayAmount = fee ? Number(fee.basePrice) : 150; // Default consultation fee
+    // If still no copay (self-pay), use full service fee
+    if (!copayAmount) {
+      copayAmount = serviceFee;
     }
 
     // Determine payment status
@@ -89,27 +107,91 @@ class AppointmentCopayService {
     let transactionId: string | undefined;
     let receiptUrl: string | undefined;
 
-    if (appointment.copayCollected) {
+    if (appointment.copayCollected && appointment.copayPayments[0]) {
       const lastPayment = appointment.copayPayments[0];
-      if (lastPayment) {
-        paymentMethod = lastPayment.paymentMethod;
-        paidAt = lastPayment.paymentDate;
-        transactionId = lastPayment.id;
-        receiptUrl = lastPayment.receiptUrl || undefined;
-        
-        // Check if it was online or cash
-        if (['CARD', 'ONLINE', 'APPLE_PAY', 'GOOGLE_PAY'].includes(lastPayment.paymentMethod)) {
-          paymentStatus = CopayPaymentStatus.PAID_ONLINE;
-        } else {
-          paymentStatus = CopayPaymentStatus.PAID_CASH;
-        }
+      paymentMethod = lastPayment.paymentMethod;
+      paidAt = lastPayment.paymentDate;
+      transactionId = lastPayment.id;
+      receiptUrl = lastPayment.receiptUrl || undefined;
+      
+      // Check if it was online or cash
+      if (['CREDIT_CARD', 'DEBIT_CARD', 'NET_BANKING', 'UPI'].includes(lastPayment.paymentMethod)) {
+        paymentStatus = CopayPaymentStatus.PAID_ONLINE;
+      } else {
+        paymentStatus = CopayPaymentStatus.PAID_CASH;
       }
     } else {
       // Check if patient selected "pay at clinic"
-      const metadata = appointment.notes ? JSON.parse(appointment.notes) : null;
-      if (metadata?.paymentChoice === 'pay_at_clinic') {
-        paymentStatus = CopayPaymentStatus.PAY_AT_CLINIC;
+      try {
+        const metadata = appointment.notes ? JSON.parse(appointment.notes) : null;
+        if (metadata?.paymentChoice === 'pay_at_clinic') {
+          paymentStatus = CopayPaymentStatus.PAY_AT_CLINIC;
+        }
+      } catch {
+        // Invalid JSON, keep as pending
       }
+    }
+
+    // Issue #3: Build insurance status and breakdown
+    let insuranceStatus: CopayInfo['insuranceStatus'] | undefined;
+    let breakdown: CopayInfo['breakdown'] | undefined;
+
+    if (patientInsurance) {
+      // Real-time insurance validation
+      const now = new Date();
+      const policyExpiry = patientInsurance.expiryDate ? new Date(patientInsurance.expiryDate) : null;
+      const isActive = patientInsurance.isActive && (!policyExpiry || policyExpiry > now);
+      
+      // Build warnings array
+      const warnings: string[] = [];
+      if (!isActive) {
+        warnings.push('Your insurance policy is no longer active. You will be charged as self-pay.');
+      } else if (policyExpiry) {
+        const daysUntilExpiry = Math.ceil((policyExpiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        if (daysUntilExpiry <= 30 && daysUntilExpiry > 0) {
+          warnings.push(`Your insurance expires in ${daysUntilExpiry} days.`);
+        }
+      }
+
+      insuranceStatus = {
+        isActive,
+        policyExpiry: policyExpiry?.toISOString(),
+        providerName: patientInsurance.providerName,
+        policyNumber: patientInsurance.policyNumber,
+        coverageChanged: false,
+        deductibleMet: true, // Simplified
+        annualCapReached: false,
+        warnings: warnings.length > 0 ? warnings : undefined,
+      };
+
+      // Calculate breakdown - use copay if set, otherwise default to 80% coverage
+      const insuranceCopay = patientInsurance.copay ? Number(patientInsurance.copay) : null;
+      const coveragePercent = isActive ? (insuranceCopay ? Math.round((1 - insuranceCopay / serviceFee) * 100) : 80) : 0;
+      const insuranceCoverage = isActive ? Math.round(serviceFee * coveragePercent / 100) : 0;
+      const patientResponsibility = serviceFee - insuranceCoverage;
+
+      breakdown = {
+        serviceFee,
+        insuranceCoverage,
+        insuranceCoveragePercent: coveragePercent,
+        patientResponsibility,
+        deductibleApplied: 0,
+      };
+
+      // Update copayAmount if insurance is inactive
+      if (!isActive) {
+        copayAmount = serviceFee;
+      }
+    } else {
+      // Self-pay patient - full service fee
+      breakdown = {
+        serviceFee,
+        insuranceCoverage: 0,
+        insuranceCoveragePercent: 0,
+        patientResponsibility: serviceFee,
+        deductibleApplied: 0,
+      };
+      copayAmount = serviceFee;
     }
 
     return {
@@ -120,6 +202,8 @@ class AppointmentCopayService {
       paidAt,
       transactionId,
       receiptUrl,
+      breakdown,
+      insuranceStatus,
     };
   }
 
@@ -141,7 +225,7 @@ class AppointmentCopayService {
     }
 
     if (appointment.copayCollected) {
-      throw new BadRequestError('Copay already collected for this appointment');
+      throw new ValidationError('Copay already collected for this appointment');
     }
 
     // Update appointment with payment choice in notes metadata
@@ -217,13 +301,6 @@ class AppointmentCopayService {
         patientId,
         status: { in: ['SCHEDULED', 'CONFIRMED'] },
       },
-      include: {
-        patient: {
-          include: {
-            insuranceInfo: { where: { status: 'ACTIVE' }, take: 1 },
-          },
-        },
-      },
     });
 
     if (!appointment) {
@@ -231,14 +308,14 @@ class AppointmentCopayService {
     }
 
     if (appointment.copayCollected) {
-      throw new BadRequestError('Copay already collected for this appointment');
+      throw new ValidationError('Copay already collected for this appointment');
     }
 
     // Get copay amount
     const copayInfo = await this.getCopayInfo(hospitalId, patientId, appointmentId);
 
     if (copayInfo.copayAmount <= 0) {
-      throw new BadRequestError('No copay amount due for this appointment');
+      throw new ValidationError('No copay amount due for this appointment');
     }
 
     // Create a temporary invoice for copay payment
@@ -249,10 +326,10 @@ class AppointmentCopayService {
         invoiceNumber: `COP-${Date.now()}`,
         invoiceDate: new Date(),
         dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+        subtotal: copayInfo.copayAmount,
         totalAmount: copayInfo.copayAmount,
         balanceAmount: copayInfo.copayAmount,
         status: 'PENDING',
-        invoiceType: 'OPD',
         notes: JSON.stringify({ appointmentId, type: 'copay' }),
       },
     });
@@ -311,34 +388,34 @@ class AppointmentCopayService {
     const appointmentId = invoiceNotes.appointmentId;
 
     if (!appointmentId) {
-      throw new BadRequestError('Appointment ID not found in transaction');
+      throw new ValidationError('Appointment ID not found in transaction');
     }
 
     const appointment = await prisma.appointment.findUnique({
       where: { id: appointmentId },
-      include: {
-        patient: {
-          include: {
-            insuranceInfo: { where: { status: 'ACTIVE' }, take: 1 },
-          },
-        },
-      },
     });
 
     if (!appointment) {
       throw new NotFoundError('Appointment not found');
     }
 
+    // Get patient's insurance for receipt
+    const patientInsurance = await prisma.patientInsurance.findFirst({
+      where: { 
+        patientId: appointment.patientId,
+        isActive: true,
+      },
+    });
+
     // Create CopayPayment record
-    const insurance = appointment.patient.insuranceInfo?.[0];
     await prisma.copayPayment.create({
       data: {
         patientId: appointment.patientId,
         appointmentId: appointment.id,
         amount: transaction.amount,
-        paymentMethod: 'CARD',
-        insuranceProvider: insurance?.providerName || 'Self-Pay',
-        policyNumber: insurance?.policyNumber || 'N/A',
+        paymentMethod: 'CREDIT_CARD',
+        insuranceProvider: patientInsurance?.providerName || 'Self-Pay',
+        policyNumber: patientInsurance?.policyNumber || 'N/A',
         collectedBy: 'ONLINE_PAYMENT',
         receiptNumber: `RCP-${Date.now()}`,
       },
@@ -364,20 +441,13 @@ class AppointmentCopayService {
     appointmentId: string,
     staffUserId: string,
     amount: number,
-    paymentMethod: 'CASH' | 'CARD' = 'CASH',
+    paymentMethod: 'CASH' | 'CREDIT_CARD' = 'CASH',
     notes?: string
   ): Promise<CopayInfo> {
     const appointment = await prisma.appointment.findFirst({
       where: {
         id: appointmentId,
         hospitalId,
-      },
-      include: {
-        patient: {
-          include: {
-            insuranceInfo: { where: { status: 'ACTIVE' }, take: 1 },
-          },
-        },
       },
     });
 
@@ -386,19 +456,26 @@ class AppointmentCopayService {
     }
 
     if (appointment.copayCollected) {
-      throw new BadRequestError('Copay already collected for this appointment');
+      throw new ValidationError('Copay already collected for this appointment');
     }
 
+    // Get patient's insurance
+    const patientInsurance = await prisma.patientInsurance.findFirst({
+      where: { 
+        patientId: appointment.patientId,
+        isActive: true,
+      },
+    });
+
     // Create CopayPayment record
-    const insurance = appointment.patient.insuranceInfo?.[0];
-    const copayPayment = await prisma.copayPayment.create({
+    await prisma.copayPayment.create({
       data: {
         patientId: appointment.patientId,
         appointmentId: appointment.id,
         amount,
         paymentMethod,
-        insuranceProvider: insurance?.providerName || 'Self-Pay',
-        policyNumber: insurance?.policyNumber || 'N/A',
+        insuranceProvider: patientInsurance?.providerName || 'Self-Pay',
+        policyNumber: patientInsurance?.policyNumber || 'N/A',
         collectedBy: staffUserId,
         notes,
         receiptNumber: `RCP-${Date.now()}`,
@@ -463,6 +540,7 @@ class AppointmentCopayService {
         doctor: {
           select: {
             id: true,
+            consultationFee: true,
             user: { select: { firstName: true, lastName: true } },
           },
         },
@@ -476,11 +554,12 @@ class AppointmentCopayService {
 
     return appointments.map((apt) => {
       let paymentStatus = CopayPaymentStatus.PENDING;
-      const copayAmount = apt.copayAmount ? Number(apt.copayAmount) : 50; // Default
+      const copayAmount = apt.copayAmount ? Number(apt.copayAmount) : 
+                         (apt.doctor?.consultationFee ? Number(apt.doctor.consultationFee) * 0.2 : 50);
 
       if (apt.copayCollected && apt.copayPayments[0]) {
         const payment = apt.copayPayments[0];
-        if (['CARD', 'ONLINE', 'APPLE_PAY', 'GOOGLE_PAY'].includes(payment.paymentMethod)) {
+        if (['CREDIT_CARD', 'DEBIT_CARD', 'NET_BANKING', 'UPI'].includes(payment.paymentMethod)) {
           paymentStatus = CopayPaymentStatus.PAID_ONLINE;
         } else {
           paymentStatus = CopayPaymentStatus.PAID_CASH;
@@ -555,6 +634,7 @@ class AppointmentCopayService {
         },
         doctor: {
           select: {
+            consultationFee: true,
             user: { select: { firstName: true, lastName: true } },
           },
         },
@@ -579,7 +659,8 @@ class AppointmentCopayService {
         patientEmail: apt.patient.email || undefined,
         appointmentDate: apt.appointmentDate,
         doctorName: `Dr. ${apt.doctor.user.firstName} ${apt.doctor.user.lastName}`,
-        copayAmount: apt.copayAmount ? Number(apt.copayAmount) : 50,
+        copayAmount: apt.copayAmount ? Number(apt.copayAmount) : 
+                    (apt.doctor?.consultationFee ? Number(apt.doctor.consultationFee) * 0.2 : 50),
       }));
   }
 }
