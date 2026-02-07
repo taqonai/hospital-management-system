@@ -36,6 +36,7 @@ import { CurrencyDisplay } from '../../components/common';
 import toast from 'react-hot-toast';
 import { isSlotPastInUAE, getTodayInUAE } from '../../utils/timezone';
 import CopayPaymentModal from './components/CopayPaymentModal';
+import InsuranceStatusCard, { useInsuranceExpiryWarning } from './components/InsuranceStatusCard';
 
 interface Appointment {
   id: string;
@@ -211,6 +212,58 @@ export default function Appointments() {
 
   // Per-doctor slots for Emergency and Quick booking modes
   const [doctorSlotsMap, setDoctorSlotsMap] = useState<Record<string, { slots: TimeSlot[]; loading: boolean }>>({});
+
+  // Phase 2 Feature #3: Insurance expiry warning hook
+  const insuranceExpiryWarning = useInsuranceExpiryWarning(selectedDate);
+
+  // Phase 2 Feature #2: Fetch estimated copay when doctor is selected
+  const { data: estimatedCopayData, isLoading: loadingEstimatedCopay } = useQuery({
+    queryKey: ['estimated-copay', selectedDoctor],
+    queryFn: async () => {
+      // Get patient's insurance
+      const insuranceResponse = await patientPortalApi.getInsurance();
+      const insurances = insuranceResponse.data?.data || insuranceResponse.data || [];
+      const primaryInsurance = insurances.find((ins: any) => ins.isPrimary && ins.isActive) ||
+                              insurances.find((ins: any) => ins.isActive);
+      
+      // Get selected doctor's consultation fee
+      const selectedDoctorInfo = (doctors || []).find((d: Doctor) => d.id === selectedDoctor);
+      const consultationFee = selectedDoctorInfo?.consultationFee || 150;
+      
+      if (!primaryInsurance) {
+        // Self-pay - full amount
+        return {
+          estimatedCopay: consultationFee,
+          breakdown: {
+            serviceFee: consultationFee,
+            insuranceCoverage: 0,
+            insuranceCoveragePercent: 0,
+            patientResponsibility: consultationFee,
+          },
+          isSelfPay: true,
+        };
+      }
+      
+      // Calculate copay based on insurance coverage
+      const copay = primaryInsurance.copay ? Number(primaryInsurance.copay) : null;
+      const coveragePercent = copay ? Math.round((1 - copay / consultationFee) * 100) : 80;
+      const insuranceCoverage = Math.round(consultationFee * coveragePercent / 100);
+      const patientResponsibility = consultationFee - insuranceCoverage;
+      
+      return {
+        estimatedCopay: patientResponsibility,
+        breakdown: {
+          serviceFee: consultationFee,
+          insuranceCoverage,
+          insuranceCoveragePercent: coveragePercent,
+          patientResponsibility,
+        },
+        isSelfPay: false,
+        insuranceProvider: primaryInsurance.providerName,
+      };
+    },
+    enabled: !!selectedDoctor && showBookModal && bookingStep >= 2,
+  });
 
   // Fetch appointments
   const { data: appointmentsData, isLoading, refetch } = useQuery({
@@ -1456,6 +1509,15 @@ export default function Appointments() {
                     {/* Step 1: Select Department (for Quick and Standard modes) */}
                     {bookingStep === 1 && bookingMode !== 'emergency' && (
                       <div className="space-y-4">
+                        {/* Phase 2 Feature #1: Insurance Status Card - Show BEFORE booking */}
+                        <InsuranceStatusCard
+                          compact={bookingMode === 'quick'}
+                          showUpdateButton={true}
+                          onUpdateInsurance={() => {
+                            window.location.href = '/patient-portal/profile?tab=insurance';
+                          }}
+                        />
+
                         {/* AI Recommendation Banner */}
                         {isAiGuidedBooking && aiRecommendedDepartment && (
                           <div className="p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl border border-purple-200">
@@ -1521,6 +1583,41 @@ export default function Appointments() {
                     {bookingStep === 2 && bookingMode === 'standard' && (
                       <div className="space-y-4">
                         <h4 className="font-semibold text-gray-900">Select Doctor</h4>
+                        
+                        {/* Phase 2 Feature #2: Show Estimated Copay BEFORE Selecting Slot */}
+                        {selectedDoctor && estimatedCopayData && (
+                          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <CreditCardIcon className="h-5 w-5 text-blue-600" />
+                                <span className="font-medium text-gray-900">Estimated Copay</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-2xl font-bold text-blue-600">
+                                  AED {estimatedCopayData.estimatedCopay.toFixed(0)}
+                                </span>
+                                {!estimatedCopayData.isSelfPay && estimatedCopayData.insuranceProvider && (
+                                  <p className="text-xs text-gray-500">
+                                    {estimatedCopayData.breakdown.insuranceCoveragePercent}% covered by {estimatedCopayData.insuranceProvider}
+                                  </p>
+                                )}
+                                {estimatedCopayData.isSelfPay && (
+                                  <p className="text-xs text-amber-600">Self-pay (no insurance)</p>
+                                )}
+                              </div>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-2">
+                              * Final amount confirmed at booking based on your insurance status.
+                            </p>
+                          </div>
+                        )}
+                        {loadingEstimatedCopay && selectedDoctor && (
+                          <div className="flex items-center gap-2 text-gray-500 text-sm py-2">
+                            <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                            Calculating estimated copay...
+                          </div>
+                        )}
+                        
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto">
                           {(doctors || []).map((doctor: Doctor) => (
                             <button
@@ -1574,6 +1671,40 @@ export default function Appointments() {
                             max={format(addDays(new Date(), 30), 'yyyy-MM-dd')}
                             className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           />
+                          
+                          {/* Phase 2 Feature #3: Insurance Expiry Warning */}
+                          {insuranceExpiryWarning && (
+                            <div className="mt-3 p-3 bg-amber-50 rounded-xl border border-amber-200">
+                              <div className="flex items-start gap-2">
+                                <ExclamationTriangleIcon className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium text-amber-800">Insurance Expires Before Appointment</p>
+                                  <p className="text-xs text-amber-600 mt-1">
+                                    ⚠️ Your insurance ({insuranceExpiryWarning.providerName}) expires on {insuranceExpiryWarning.insuranceExpiry}, 
+                                    before your appointment on {insuranceExpiryWarning.appointmentDateFormatted}.
+                                  </p>
+                                  <p className="text-xs text-amber-600 mt-1">
+                                    You may need to pay the full amount or update your insurance.
+                                  </p>
+                                  <div className="flex gap-2 mt-2">
+                                    <button
+                                      onClick={() => window.location.href = '/patient-portal/profile?tab=insurance'}
+                                      className="text-xs font-medium text-amber-700 underline hover:text-amber-800"
+                                    >
+                                      Update Insurance
+                                    </button>
+                                    <span className="text-xs text-amber-400">or</span>
+                                    <button
+                                      onClick={() => {}} // Continue as is
+                                      className="text-xs font-medium text-amber-700 underline hover:text-amber-800"
+                                    >
+                                      Continue Anyway
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         {selectedDate && (

@@ -133,24 +133,35 @@ router.get(
     const patientId = req.patient?.patientId || '';
     const appointmentId = req.params.id;
 
-    const copayInfo = await appointmentCopayService.getCopayInfo(hospitalId, patientId, appointmentId);
+    // Phase 2: Get full receipt data
+    const receiptData = await appointmentCopayService.getReceiptData(hospitalId, patientId, appointmentId);
 
-    if (!copayInfo.transactionId) {
+    if (!receiptData) {
       return res.status(404).json({
         success: false,
         message: 'No payment found for this appointment',
       });
     }
 
-    // For now return receipt info - PDF generation can be added
-    sendSuccess(res, {
-      receiptNumber: copayInfo.transactionId,
-      appointmentId,
-      amount: copayInfo.copayAmount,
-      paymentMethod: copayInfo.paymentMethod,
-      paidAt: copayInfo.paidAt,
-      receiptUrl: copayInfo.receiptUrl,
-    }, 'Receipt retrieved');
+    sendSuccess(res, receiptData, 'Receipt retrieved');
+  })
+);
+
+/**
+ * Phase 2 Feature #5: Email payment receipt
+ * POST /api/v1/patient-portal/appointments/:id/copay/email-receipt
+ */
+router.post(
+  '/appointments/:id/copay/email-receipt',
+  patientAuthenticate,
+  asyncHandler(async (req: PatientAuthenticatedRequest, res: Response) => {
+    const hospitalId = req.patient?.hospitalId || '';
+    const patientId = req.patient?.patientId || '';
+    const appointmentId = req.params.id;
+
+    await appointmentCopayService.resendReceiptEmail(hospitalId, patientId, appointmentId);
+
+    sendSuccess(res, { sent: true }, 'Receipt sent to your email');
   })
 );
 

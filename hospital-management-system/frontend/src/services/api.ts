@@ -1716,6 +1716,9 @@ export const patientPortalApi = {
     api.post(`/patient-portal/appointments/${appointmentId}/copay/decide-later`),
   getCopayReceipt: (appointmentId: string) =>
     api.get(`/patient-portal/appointments/${appointmentId}/copay/receipt`),
+  // Phase 2 Feature #5: Email receipt
+  emailCopayReceipt: (appointmentId: string) =>
+    api.post(`/patient-portal/appointments/${appointmentId}/copay/email-receipt`),
 
   // Insurance Claims
   getInsuranceClaims: (params?: { status?: string; page?: number; limit?: number }) =>

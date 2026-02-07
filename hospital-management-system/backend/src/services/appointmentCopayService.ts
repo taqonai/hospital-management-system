@@ -2,6 +2,9 @@ import prisma from '../config/database';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler';
 import { paymentGatewayService } from './paymentGatewayService';
 import { Decimal } from '@prisma/client/runtime/library';
+import { sendEmail } from './emailService';
+import { format } from 'date-fns';
+import logger from '../utils/logger';
 
 export enum CopayPaymentStatus {
   PENDING = 'pending',           // No selection made yet
@@ -407,8 +410,10 @@ class AppointmentCopayService {
       },
     });
 
+    const receiptNumber = `RCP-${Date.now()}`;
+    
     // Create CopayPayment record
-    await prisma.copayPayment.create({
+    const copayPayment = await prisma.copayPayment.create({
       data: {
         patientId: appointment.patientId,
         appointmentId: appointment.id,
@@ -417,7 +422,7 @@ class AppointmentCopayService {
         insuranceProvider: patientInsurance?.providerName || 'Self-Pay',
         policyNumber: patientInsurance?.policyNumber || 'N/A',
         collectedBy: 'ONLINE_PAYMENT',
-        receiptNumber: `RCP-${Date.now()}`,
+        receiptNumber,
       },
     });
 
@@ -429,6 +434,25 @@ class AppointmentCopayService {
         copayAmount: transaction.amount,
       },
     });
+
+    // Phase 2 Feature #5: Send receipt email
+    try {
+      await this.sendPaymentReceiptEmail(
+        hospitalId,
+        appointment.patientId,
+        appointmentId,
+        {
+          transactionId,
+          receiptNumber,
+          amount: Number(transaction.amount),
+          paymentMethod: 'CREDIT_CARD',
+          paidAt: new Date(),
+        }
+      );
+    } catch (emailError) {
+      // Don't fail the payment if email fails
+      logger.error('Failed to send payment receipt email:', emailError);
+    }
 
     return this.getCopayInfo(hospitalId, appointment.patientId, appointmentId);
   }
@@ -662,6 +686,324 @@ class AppointmentCopayService {
         copayAmount: apt.copayAmount ? Number(apt.copayAmount) : 
                     (apt.doctor?.consultationFee ? Number(apt.doctor.consultationFee) * 0.2 : 50),
       }));
+  }
+
+  /**
+   * Phase 2 Feature #5: Send payment receipt email to patient
+   */
+  async sendPaymentReceiptEmail(
+    hospitalId: string,
+    patientId: string,
+    appointmentId: string,
+    paymentDetails: {
+      transactionId: string;
+      receiptNumber: string;
+      amount: number;
+      paymentMethod: string;
+      paidAt: Date;
+    }
+  ): Promise<void> {
+    // Get patient info
+    const patient = await prisma.patient.findUnique({
+      where: { id: patientId },
+      select: {
+        firstName: true,
+        lastName: true,
+        email: true,
+      },
+    });
+
+    if (!patient?.email) {
+      logger.warn(`Cannot send receipt email - patient ${patientId} has no email`);
+      return;
+    }
+
+    // Get appointment details
+    const appointment = await prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: {
+        doctor: {
+          include: {
+            user: { select: { firstName: true, lastName: true } },
+            department: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    if (!appointment) {
+      throw new NotFoundError('Appointment not found');
+    }
+
+    // Get hospital info
+    const hospital = await prisma.hospital.findUnique({
+      where: { id: hospitalId },
+      select: { name: true, address: true, phone: true },
+    });
+
+    // Get patient's insurance for breakdown
+    const patientInsurance = await prisma.patientInsurance.findFirst({
+      where: { patientId, isActive: true },
+    });
+
+    const doctorName = `Dr. ${appointment.doctor.user.firstName} ${appointment.doctor.user.lastName}`;
+    const departmentName = appointment.doctor.department?.name || '';
+    const appointmentDate = format(appointment.appointmentDate, 'MMMM d, yyyy');
+    const appointmentTime = appointment.startTime || '';
+
+    // Build email HTML
+    const receiptHtml = this.buildReceiptEmailHtml({
+      patientName: `${patient.firstName} ${patient.lastName}`,
+      transactionId: paymentDetails.transactionId,
+      receiptNumber: paymentDetails.receiptNumber,
+      amount: paymentDetails.amount,
+      paymentMethod: paymentDetails.paymentMethod,
+      paidAt: paymentDetails.paidAt,
+      doctorName,
+      departmentName,
+      appointmentDate,
+      appointmentTime,
+      appointmentId,
+      insuranceProvider: patientInsurance?.providerName,
+      policyNumber: patientInsurance?.policyNumber,
+      hospitalName: hospital?.name || 'Spetaar Healthcare',
+      hospitalAddress: hospital?.address,
+      hospitalPhone: hospital?.phone,
+    });
+
+    // Send email
+    await sendEmail({
+      to: patient.email,
+      subject: `Payment Receipt - ${appointmentDate}`,
+      html: receiptHtml,
+      text: `Payment Receipt\n\nTransaction ID: ${paymentDetails.transactionId}\nAmount: AED ${paymentDetails.amount.toFixed(2)}\nDate: ${format(paymentDetails.paidAt, 'MMMM d, yyyy h:mm a')}\n\nDoctor: ${doctorName}\nAppointment: ${appointmentDate} at ${appointmentTime}\n\nThank you for your payment!`,
+    });
+
+    logger.info(`Payment receipt email sent to ${patient.email} for appointment ${appointmentId}`);
+  }
+
+  /**
+   * Build HTML email template for payment receipt
+   */
+  private buildReceiptEmailHtml(data: {
+    patientName: string;
+    transactionId: string;
+    receiptNumber: string;
+    amount: number;
+    paymentMethod: string;
+    paidAt: Date;
+    doctorName: string;
+    departmentName: string;
+    appointmentDate: string;
+    appointmentTime: string;
+    appointmentId: string;
+    insuranceProvider?: string;
+    policyNumber?: string;
+    hospitalName: string;
+    hospitalAddress?: string;
+    hospitalPhone?: string;
+  }): string {
+    const paymentMethodLabels: Record<string, string> = {
+      CREDIT_CARD: 'Credit Card',
+      DEBIT_CARD: 'Debit Card',
+      CASH: 'Cash',
+      NET_BANKING: 'Net Banking',
+      UPI: 'UPI',
+    };
+
+    return `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333333; margin: 0; padding: 0; background-color: #f4f4f4; }
+          .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
+          .header { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; padding: 30px 20px; text-align: center; }
+          .header h1 { margin: 0; font-size: 28px; font-weight: 600; }
+          .success-icon { font-size: 48px; margin-bottom: 10px; }
+          .content { padding: 40px 30px; }
+          .amount-box { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 2px solid #10b981; border-radius: 12px; padding: 25px; text-align: center; margin: 25px 0; }
+          .amount { font-size: 42px; font-weight: bold; color: #059669; }
+          .info-box { background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 20px; margin: 20px 0; border-radius: 0 8px 8px 0; }
+          .info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e2e8f0; }
+          .info-row:last-child { border-bottom: none; }
+          .info-label { color: #64748b; font-weight: 500; }
+          .info-value { color: #1e293b; font-weight: 600; }
+          .footer { background-color: #f1f5f9; padding: 25px 20px; text-align: center; font-size: 12px; color: #64748b; }
+          .divider { height: 1px; background-color: #e2e8f0; margin: 25px 0; }
+          .note { background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0; border-radius: 0 8px 8px 0; font-size: 13px; color: #1e40af; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div class="success-icon">✓</div>
+            <h1>Payment Successful</h1>
+            <p style="margin: 10px 0 0 0; opacity: 0.9;">Thank you for your payment</p>
+          </div>
+          
+          <div class="content">
+            <p>Dear ${data.patientName},</p>
+            <p>Your copay payment has been successfully processed. Here are the details:</p>
+            
+            <div class="amount-box">
+              <p style="margin: 0 0 5px 0; color: #059669; font-size: 14px;">Amount Paid</p>
+              <div class="amount">AED ${data.amount.toFixed(2)}</div>
+              <p style="margin: 10px 0 0 0; color: #6b7280; font-size: 13px;">
+                ${format(data.paidAt, 'MMMM d, yyyy')} at ${format(data.paidAt, 'h:mm a')}
+              </p>
+            </div>
+            
+            <div class="info-box">
+              <div class="info-row">
+                <span class="info-label">Transaction ID</span>
+                <span class="info-value">${data.transactionId}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Receipt Number</span>
+                <span class="info-value">${data.receiptNumber}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Payment Method</span>
+                <span class="info-value">${paymentMethodLabels[data.paymentMethod] || data.paymentMethod}</span>
+              </div>
+              ${data.insuranceProvider ? `
+              <div class="info-row">
+                <span class="info-label">Insurance</span>
+                <span class="info-value">${data.insuranceProvider}</span>
+              </div>
+              ` : ''}
+            </div>
+            
+            <div class="divider"></div>
+            
+            <h3 style="color: #1e40af; margin-bottom: 15px;">Appointment Details</h3>
+            <div class="info-box">
+              <div class="info-row">
+                <span class="info-label">Doctor</span>
+                <span class="info-value">${data.doctorName}</span>
+              </div>
+              ${data.departmentName ? `
+              <div class="info-row">
+                <span class="info-label">Department</span>
+                <span class="info-value">${data.departmentName}</span>
+              </div>
+              ` : ''}
+              <div class="info-row">
+                <span class="info-label">Date</span>
+                <span class="info-value">${data.appointmentDate}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Time</span>
+                <span class="info-value">${data.appointmentTime}</span>
+              </div>
+            </div>
+            
+            <div class="note">
+              <strong>💡 Pro Tip:</strong> Show this receipt at check-in for faster service. Your copay is already paid!
+            </div>
+          </div>
+          
+          <div class="footer">
+            <p style="font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 5px;">${data.hospitalName}</p>
+            ${data.hospitalAddress ? `<p style="margin: 5px 0;">${data.hospitalAddress}</p>` : ''}
+            ${data.hospitalPhone ? `<p style="margin: 5px 0;">Phone: ${data.hospitalPhone}</p>` : ''}
+            <div class="divider"></div>
+            <p>This is an automated receipt. Please keep it for your records.</p>
+            <p>&copy; ${new Date().getFullYear()} ${data.hospitalName}. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Phase 2 Feature #5: Get receipt data for an appointment
+   */
+  async getReceiptData(
+    hospitalId: string,
+    patientId: string,
+    appointmentId: string
+  ): Promise<{
+    transactionId: string;
+    receiptNumber: string;
+    amount: number;
+    paymentMethod: string;
+    paidAt: Date;
+    doctorName: string;
+    departmentName?: string;
+    appointmentDate: string;
+    appointmentTime: string;
+    insuranceProvider?: string;
+    policyNumber?: string;
+  } | null> {
+    const copayPayment = await prisma.copayPayment.findFirst({
+      where: {
+        appointmentId,
+        patientId,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!copayPayment) {
+      return null;
+    }
+
+    const appointment = await prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: {
+        doctor: {
+          include: {
+            user: { select: { firstName: true, lastName: true } },
+            department: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    if (!appointment) {
+      return null;
+    }
+
+    return {
+      transactionId: copayPayment.id,
+      receiptNumber: copayPayment.receiptNumber || `RCP-${copayPayment.id.slice(0, 8)}`,
+      amount: Number(copayPayment.amount),
+      paymentMethod: copayPayment.paymentMethod,
+      paidAt: copayPayment.paymentDate,
+      doctorName: `Dr. ${appointment.doctor.user.firstName} ${appointment.doctor.user.lastName}`,
+      departmentName: appointment.doctor.department?.name,
+      appointmentDate: format(appointment.appointmentDate, 'MMMM d, yyyy'),
+      appointmentTime: appointment.startTime || '',
+      insuranceProvider: copayPayment.insuranceProvider !== 'Self-Pay' ? copayPayment.insuranceProvider : undefined,
+      policyNumber: copayPayment.policyNumber !== 'N/A' ? copayPayment.policyNumber : undefined,
+    };
+  }
+
+  /**
+   * Phase 2 Feature #5: Resend receipt email
+   */
+  async resendReceiptEmail(
+    hospitalId: string,
+    patientId: string,
+    appointmentId: string
+  ): Promise<void> {
+    const receiptData = await this.getReceiptData(hospitalId, patientId, appointmentId);
+
+    if (!receiptData) {
+      throw new NotFoundError('No payment found for this appointment');
+    }
+
+    await this.sendPaymentReceiptEmail(hospitalId, patientId, appointmentId, {
+      transactionId: receiptData.transactionId,
+      receiptNumber: receiptData.receiptNumber,
+      amount: receiptData.amount,
+      paymentMethod: receiptData.paymentMethod,
+      paidAt: receiptData.paidAt,
+    });
   }
 }
 
