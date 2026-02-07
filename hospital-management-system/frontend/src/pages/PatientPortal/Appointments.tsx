@@ -809,8 +809,10 @@ export default function Appointments() {
               </button>
             )}
 
-            {/* Pay Copay Button - Issue #1 Fix: Show for unpaid copay appointments */}
-            {['SCHEDULED', 'CONFIRMED'].includes(appointment.status) && !appointment.copayCollected && (
+            {/* Pay Copay Button - P2 Fix: Show for unpaid copay appointments
+                Condition: SCHEDULED/CONFIRMED status + copay not collected + copay exists or is unknown */}
+            {['SCHEDULED', 'CONFIRMED'].includes(appointment.status) && 
+             appointment.copayCollected !== true && (
               <button
                 onClick={() => {
                   setCopayAppointment(appointment);
@@ -819,7 +821,11 @@ export default function Appointments() {
                 className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium bg-green-50 text-green-600 border border-green-200 hover:bg-green-100 transition-colors"
               >
                 <CreditCardIcon className="h-4 w-4" />
-                Pay Copay
+                {appointment.copayAmount ? (
+                  <>Pay Copay (AED {Number(appointment.copayAmount).toFixed(0)})</>
+                ) : (
+                  <>Pay Copay</>
+                )}
               </button>
             )}
 
@@ -1584,45 +1590,11 @@ export default function Appointments() {
                       <div className="space-y-4">
                         <h4 className="font-semibold text-gray-900">Select Doctor</h4>
                         
-                        {/* Phase 2 Feature #2: Show Estimated Copay BEFORE Selecting Slot */}
-                        {selectedDoctor && estimatedCopayData && (
-                          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <CreditCardIcon className="h-5 w-5 text-blue-600" />
-                                <span className="font-medium text-gray-900">Estimated Copay</span>
-                              </div>
-                              <div className="text-right">
-                                <span className="text-2xl font-bold text-blue-600">
-                                  AED {estimatedCopayData.estimatedCopay.toFixed(0)}
-                                </span>
-                                {!estimatedCopayData.isSelfPay && estimatedCopayData.insuranceProvider && (
-                                  <p className="text-xs text-gray-500">
-                                    {estimatedCopayData.breakdown.insuranceCoveragePercent}% covered by {estimatedCopayData.insuranceProvider}
-                                  </p>
-                                )}
-                                {estimatedCopayData.isSelfPay && (
-                                  <p className="text-xs text-amber-600">Self-pay (no insurance)</p>
-                                )}
-                              </div>
-                            </div>
-                            <p className="text-xs text-gray-500 mt-2">
-                              * Final amount confirmed at booking based on your insurance status.
-                            </p>
-                          </div>
-                        )}
-                        {loadingEstimatedCopay && selectedDoctor && (
-                          <div className="flex items-center gap-2 text-gray-500 text-sm py-2">
-                            <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                            Calculating estimated copay...
-                          </div>
-                        )}
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[300px] overflow-y-auto">
                           {(doctors || []).map((doctor: Doctor) => (
                             <button
                               key={doctor.id}
-                              onClick={() => { setSelectedDoctor(doctor.id); setBookingStep(3); }}
+                              onClick={() => setSelectedDoctor(doctor.id)}
                               className={`p-4 rounded-xl border-2 text-left transition-all hover:shadow-md ${
                                 selectedDoctor === doctor.id
                                   ? 'border-blue-500 bg-blue-50'
@@ -1655,6 +1627,71 @@ export default function Appointments() {
                             </div>
                           )}
                         </div>
+
+                        {/* Phase 2 Feature #2 (P0 Fix): Show Estimated Copay BEFORE Selecting Time Slot */}
+                        {selectedDoctor && (
+                          <div className="mt-4 space-y-4">
+                            {loadingEstimatedCopay ? (
+                              <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                                <div className="flex items-center gap-2 text-gray-500">
+                                  <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                                  <span>Calculating your estimated copay...</span>
+                                </div>
+                              </div>
+                            ) : estimatedCopayData ? (
+                              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200 shadow-sm">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <CreditCardIcon className="h-5 w-5 text-blue-600" />
+                                    <span className="font-medium text-gray-900">Your Estimated Copay</span>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="text-2xl font-bold text-blue-600">
+                                      AED {estimatedCopayData.estimatedCopay.toFixed(0)}
+                                    </span>
+                                    {!estimatedCopayData.isSelfPay && estimatedCopayData.insuranceProvider && (
+                                      <p className="text-xs text-gray-500">
+                                        {estimatedCopayData.breakdown.insuranceCoveragePercent}% covered by {estimatedCopayData.insuranceProvider}
+                                      </p>
+                                    )}
+                                    {estimatedCopayData.isSelfPay && (
+                                      <p className="text-xs text-amber-600">Self-pay (no insurance)</p>
+                                    )}
+                                  </div>
+                                </div>
+                                {estimatedCopayData.breakdown && (
+                                  <div className="mt-3 pt-3 border-t border-blue-100 text-sm text-gray-600 space-y-1">
+                                    <div className="flex justify-between">
+                                      <span>Consultation Fee:</span>
+                                      <span>AED {estimatedCopayData.breakdown.serviceFee}</span>
+                                    </div>
+                                    {!estimatedCopayData.isSelfPay && (
+                                      <div className="flex justify-between text-green-600">
+                                        <span>Insurance Coverage:</span>
+                                        <span>-AED {estimatedCopayData.breakdown.insuranceCoverage}</span>
+                                      </div>
+                                    )}
+                                    <div className="flex justify-between font-semibold text-blue-700 pt-1 border-t border-blue-100">
+                                      <span>You Pay:</span>
+                                      <span>AED {estimatedCopayData.breakdown.patientResponsibility}</span>
+                                    </div>
+                                  </div>
+                                )}
+                                <p className="text-xs text-gray-500 mt-2">
+                                  * Final amount confirmed at booking based on your insurance status.
+                                </p>
+                              </div>
+                            ) : null}
+                            
+                            <button
+                              onClick={() => setBookingStep(3)}
+                              className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg flex items-center justify-center gap-2"
+                            >
+                              Continue to Select Date & Time
+                              <ChevronRightIcon className="h-5 w-5" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
 

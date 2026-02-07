@@ -563,6 +563,8 @@ export default function OPD() {
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [showCopayModal, setShowCopayModal] = useState(false);
   const [selectedAppointmentForCopay, setSelectedAppointmentForCopay] = useState<QueueItem | null>(null);
+  // Track which appointment is currently being checked in (for loading state)
+  const [checkingInAppointmentId, setCheckingInAppointmentId] = useState<string | null>(null);
   // Payment status tracking for appointments
   const [paymentStatuses, setPaymentStatuses] = useState<Record<string, { status: PaymentStatus; amount: number }>>({});
   const { data: healthStatus } = useAIHealth();
@@ -698,7 +700,11 @@ export default function OPD() {
   };
 
   // Phase 3 Feature #7: Handle patient check-in with copay lock
+  // P1 Fix: Added proper loading state and error handling for timeout issues
   const handleCheckIn = async (appointmentId: string) => {
+    // Set loading state for this specific appointment
+    setCheckingInAppointmentId(appointmentId);
+    
     try {
       // Find the appointment from queue or todayAppointments
       const appointment = 
@@ -707,13 +713,25 @@ export default function OPD() {
 
       if (!appointment) {
         toast.error('Appointment not found');
+        setCheckingInAppointmentId(null);
         return;
       }
 
-      // Phase 3: Check copay eligibility first via API
+      // Phase 3: Check copay eligibility first via API with timeout
+      let eligibilityCheckPassed = false;
+      let eligibility: any = null;
+      
       try {
-        const eligibilityResponse = await staffCopayApi.canCheckIn(appointmentId);
-        const eligibility = eligibilityResponse.data?.data || eligibilityResponse.data;
+        // Create a race between the API call and a timeout
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Eligibility check timed out')), 8000)
+        );
+        const eligibilityResponse = await Promise.race([
+          staffCopayApi.canCheckIn(appointmentId),
+          timeoutPromise
+        ]) as any;
+        
+        eligibility = eligibilityResponse.data?.data || eligibilityResponse.data;
         
         if (eligibility.allowed) {
           // Copay paid, waived, or not required - proceed to check-in
@@ -723,44 +741,67 @@ export default function OPD() {
             toast.success('Patient checked in successfully (payment already received)');
             const response = await opdApi.getQueue();
             setQueue(response.data.data || []);
+            setCheckingInAppointmentId(null);
             return;
           } else if (eligibility.copayWaived) {
             await opdApi.checkIn(appointmentId);
             toast.success('Patient checked in successfully (copay waived)');
             const response = await opdApi.getQueue();
             setQueue(response.data.data || []);
+            setCheckingInAppointmentId(null);
             return;
           }
+          eligibilityCheckPassed = true;
         }
         
         // If copay is required but not paid/waived, show the copay modal
         if (eligibility.copayRequired && !eligibility.copayPaid && !eligibility.copayWaived) {
-          // Store eligibility info for the modal - cast to any for copay data
+          // Store eligibility info for the modal
           setSelectedAppointmentForCopay(appointment);
-          // Note: copayAmount will be fetched in the modal via API
           setShowCopayModal(true);
+          setCheckingInAppointmentId(null);
           return;
         }
-      } catch (eligError) {
-        console.warn('Could not check copay eligibility, falling back to payment status:', eligError);
+      } catch (eligError: any) {
+        // Handle timeout or API errors gracefully
+        const isTimeout = eligError.message?.includes('timed out') || eligError.code === 'ECONNABORTED';
+        console.warn('Copay eligibility check issue:', isTimeout ? 'timed out' : eligError.message);
+        
+        if (isTimeout) {
+          toast('Copay check timed out, using cached status', { icon: '⚠️' });
+        }
+        // Fall through to use local payment status
       }
 
-      // Fallback: Check local payment status
+      // Fallback: Check local payment status (used when API times out or eligibility passes)
       const paymentInfo = paymentStatuses[appointmentId];
       if (paymentInfo && isPaymentComplete(paymentInfo.status)) {
         await opdApi.checkIn(appointmentId);
         toast.success('Patient checked in successfully (payment already received)');
         const response = await opdApi.getQueue();
         setQueue(response.data.data || []);
+        setCheckingInAppointmentId(null);
+        return;
+      }
+
+      // If eligibility check passed but no payment info, allow check-in
+      if (eligibilityCheckPassed && eligibility?.allowed) {
+        await opdApi.checkIn(appointmentId);
+        toast.success('Patient checked in successfully');
+        const response = await opdApi.getQueue();
+        setQueue(response.data.data || []);
+        setCheckingInAppointmentId(null);
         return;
       }
 
       // Set selected appointment and open copay modal
       setSelectedAppointmentForCopay(appointment);
       setShowCopayModal(true);
+      setCheckingInAppointmentId(null);
     } catch (error: any) {
       console.error('Failed to initiate check-in:', error);
       toast.error(error.response?.data?.message || 'Failed to initiate check-in');
+      setCheckingInAppointmentId(null);
     }
   };
 
@@ -1026,10 +1067,25 @@ export default function OPD() {
                           {(patient.status === 'SCHEDULED' || patient.status === 'CONFIRMED') && canCheckIn && (
                             <button
                               onClick={() => handleCheckIn(patient.id)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-md shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-105 transition-all duration-300"
+                              disabled={checkingInAppointmentId === patient.id}
+                              className={clsx(
+                                "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-white shadow-md transition-all duration-300",
+                                checkingInAppointmentId === patient.id
+                                  ? "bg-gray-400 cursor-wait"
+                                  : "bg-gradient-to-r from-blue-500 to-cyan-500 shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-105"
+                              )}
                             >
-                              <CheckIcon className="h-3.5 w-3.5" />
-                              Check In
+                              {checkingInAppointmentId === patient.id ? (
+                                <>
+                                  <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
+                                  Checking...
+                                </>
+                              ) : (
+                                <>
+                                  <CheckIcon className="h-3.5 w-3.5" />
+                                  Check In
+                                </>
+                              )}
                             </button>
                           )}
                           {/* View Booking Button */}
@@ -1230,10 +1286,25 @@ export default function OPD() {
                       {(appointment.status === 'SCHEDULED' || appointment.status === 'CONFIRMED') && canCheckIn && (
                         <button
                           onClick={() => handleCheckIn(appointment.id)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-md hover:scale-105 transition-all duration-300"
+                          disabled={checkingInAppointmentId === appointment.id}
+                          className={clsx(
+                            "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-white shadow-md transition-all duration-300",
+                            checkingInAppointmentId === appointment.id
+                              ? "bg-gray-400 cursor-wait"
+                              : "bg-gradient-to-r from-blue-500 to-cyan-500 hover:scale-105"
+                          )}
                         >
-                          <CheckIcon className="h-3.5 w-3.5" />
-                          Check In
+                          {checkingInAppointmentId === appointment.id ? (
+                            <>
+                              <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
+                              Checking...
+                            </>
+                          ) : (
+                            <>
+                              <CheckIcon className="h-3.5 w-3.5" />
+                              Check In
+                            </>
+                          )}
                         </button>
                       )}
                     </div>

@@ -455,7 +455,26 @@ export default function CopayReconciliation() {
               </div>
             )}
           </>
-        ) : null}
+        ) : (
+          /* P1 Fix: Empty state when no reconciliation data is available */
+          <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+            <ChartBarIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-lg font-medium text-gray-900">No Reconciliation Data</p>
+            <p className="text-gray-500 mt-1">
+              No copay data found for the selected date range ({startDate} to {endDate}).
+            </p>
+            <p className="text-sm text-gray-400 mt-2">
+              This could mean no appointments with copay requirements were scheduled for this period.
+            </p>
+            <button
+              onClick={() => refetch()}
+              className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-50 text-blue-600 font-medium hover:bg-blue-100 transition-colors"
+            >
+              <ArrowPathIcon className="h-4 w-4" />
+              Refresh Data
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
